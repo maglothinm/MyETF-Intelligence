@@ -9,3 +9,13 @@ dashboard/secrets.toml
 trades_dbt/dbt_profiles
 frontend/node_modules
 frontend/public
+
+# >>> MyETF government trade tracker >>>
+.trade-tracker/
+legislative-result.json
+executive-result.json
+oge-listings.json
+legislative-latest-purchases.csv
+executive-latest-purchases.csv
+oge-diagnostics/
+# <<< MyETF government trade tracker <<<

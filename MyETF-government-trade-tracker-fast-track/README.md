@@ -42,11 +42,3 @@ Executive-branch coverage is necessarily partial. OGE centrally reviews only a s
 ## Legal-use boundary
 
 House, Senate, and OGE disclosure systems display statutory use restrictions. The workflows will not run until the repository variable `DISCLOSURE_TERMS_ACKNOWLEDGED` is explicitly set to `true`. Review those restrictions and the intended use before activation, especially before any commercial, automated-investment, or redistribution use.
-
-<!-- MYETF-GOVERNMENT-TRADE-TRACKER:START -->
-## Government purchase disclosure tracker
-
-The operational House, Senate, and OGE monitoring path is documented in
-[`README_GOVERNMENT_TRADES.md`](README_GOVERNMENT_TRADES.md). It runs independently
-of the historical dashboard and writes durable JSONL ledgers plus latest-purchase CSVs.
-<!-- MYETF-GOVERNMENT-TRADE-TRACKER:END -->
