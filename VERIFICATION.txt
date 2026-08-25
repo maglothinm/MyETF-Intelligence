@@ -1,0 +1,19 @@
+MyETF government trade tracker verification
+UTC: 2026-08-25T13:58:08Z
+Python: Python 3.13.5
+
+[pass] shell syntax
+[pass] Python compilation
+.......................                                                  [100%]
+23 passed in 0.22s
+[pass] 23 parser, source, state, ledger, and OGE-table tests
+[pass] workflow YAML, schedules, current action majors, state restoration, and secret scoping
+[pass] clean mock-repository install, obsolete-file removal, preservation, and idempotency
+2026-08-25 13:58:17,190 INFO Scanning new OGE listing for Synthetic Official
+2026-08-25 13:58:17,190 WARNING Notification suppressed (--no-notify): Government filing needs review: Synthetic Official — Synthetic Official • Oge
+OGE Form 278-T is listed, but access requires an OGE Form 201 request or no direct PDF was published
+2026-08-25 13:58:17,191 INFO Tracking succeeded: visible={'oge': 1} new={'oge': 1} purchases={'oge': 0} pending={'oge': 1}
+2026-08-25 13:58:18,148 INFO Tracking succeeded: visible={'oge': 1} new={'oge': 0} purchases={'oge': 0} pending={'oge': 0}
+[pass] end-to-end Executive request queue, durable state, and no-duplicate second run
+
+VERIFICATION PASSED
