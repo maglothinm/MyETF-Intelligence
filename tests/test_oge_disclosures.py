@@ -37,3 +37,63 @@ def test_parse_oge_table_ignores_loading_row() -> None:
     <tbody><tr><td>Loading</td><td>Loading</td><td>Loading</td><td>Loading</td><td>Loading</td><td>Loading</td></tr></tbody></table>
     """
     assert parse_oge_table_html(html) == []
+
+
+class _FakeOverlay:
+    def __init__(self, *, blocking: bool = True) -> None:
+        self.blocking = blocking
+        self.clicked = False
+
+    @property
+    def first(self):
+        return self
+
+    def wait_for(self, **_kwargs) -> None:
+        return None
+
+    def count(self) -> int:
+        return 1
+
+    def evaluate(self, script: str):
+        if "element.click()" in script:
+            self.clicked = True
+            self.blocking = False
+            return None
+        return self.blocking
+
+    def text_content(self) -> str:
+        return "By clicking this banner, I affirm: I am aware of these prohibitions and wish to proceed."
+
+    def is_visible(self) -> bool:
+        return self.blocking
+
+
+class _FakePage:
+    def __init__(self, overlay: _FakeOverlay) -> None:
+        self.overlay = overlay
+
+    def locator(self, selector: str):
+        assert selector == "#overlay"
+        return self.overlay
+
+    def wait_for_function(self, _script: str, **_kwargs) -> None:
+        assert not self.overlay.blocking
+
+
+def test_dismiss_terms_overlay_invokes_oge_click_handler() -> None:
+    from scripts.oge_disclosures import _dismiss_terms_overlay
+
+    overlay = _FakeOverlay()
+    page = _FakePage(overlay)
+    assert _dismiss_terms_overlay(page, wait_ms=1_000) is True
+    assert overlay.clicked is True
+    assert overlay.blocking is False
+
+
+def test_dismiss_terms_overlay_ignores_inactive_overlay() -> None:
+    from scripts.oge_disclosures import _dismiss_terms_overlay
+
+    overlay = _FakeOverlay(blocking=False)
+    page = _FakePage(overlay)
+    assert _dismiss_terms_overlay(page) is False
+    assert overlay.clicked is False

@@ -228,25 +228,117 @@ def _visible(locator: Any) -> bool:
         return False
 
 
+def _overlay_is_blocking(overlay: Any) -> bool:
+    """Return True when OGE's acknowledgement overlay can intercept pointer events."""
+    try:
+        return bool(
+            overlay.evaluate(
+                """element => {
+                    const style = window.getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== 'none'
+                        && style.visibility !== 'hidden'
+                        && style.pointerEvents !== 'none'
+                        && rect.width > 0
+                        && rect.height > 0;
+                }"""
+            )
+        )
+    except Exception:
+        try:
+            return overlay.is_visible()
+        except Exception:
+            return False
+
+
+def _dismiss_terms_overlay(page: Any, *, wait_ms: int = 0) -> bool:
+    """Affirm OGE's statutory-use banner through the page's own click handler."""
+    overlay = page.locator("#overlay").first
+    if wait_ms > 0:
+        try:
+            overlay.wait_for(state="attached", timeout=wait_ms)
+        except Exception:
+            return False
+    try:
+        if overlay.count() == 0 or not _overlay_is_blocking(overlay):
+            return False
+        text = normalize_text(overlay.text_content() or "")
+    except Exception:
+        return False
+
+    if not re.search(
+        r"(?:By clicking this banner.*I affirm|I am aware of these prohibitions|"
+        r"unlawful for any person to obtain or use a report)",
+        text,
+        re.IGNORECASE,
+    ):
+        raise SourceChangedError(
+            "A visible OGE overlay is blocking the collection, but it does not match the statutory-use acknowledgement"
+        )
+
+    # OGE currently implements the acknowledgement as <div id="overlay" onclick="off()">.
+    # DOM click invokes that first-party handler without trying to click controls hidden beneath it.
+    overlay.evaluate("element => element.click()")
+    try:
+        page.wait_for_function(
+            """() => {
+                const element = document.querySelector('#overlay');
+                if (!element) return true;
+                const style = window.getComputedStyle(element);
+                const rect = element.getBoundingClientRect();
+                return style.display === 'none'
+                    || style.visibility === 'hidden'
+                    || style.pointerEvents === 'none'
+                    || rect.width === 0
+                    || rect.height === 0;
+            }""",
+            timeout=10_000,
+        )
+    except Exception as exc:
+        raise SourceChangedError(
+            "OGE statutory-use acknowledgement was activated, but its overlay remained active"
+        ) from exc
+    LOGGER.info("Accepted OGE statutory-use acknowledgement overlay")
+    return True
+
+
 def _affirm_terms(page: Any) -> None:
     """Click OGE's acknowledgement banner without guessing a hidden endpoint."""
+    # The overlay may be present before it is considered visible by accessibility locators.
+    # Address its stable DOM id first, and wait briefly because OGE initializes it client-side.
+    if _dismiss_terms_overlay(page, wait_ms=10_000):
+        return
+
     candidates = [
         page.get_by_role("button", name=re.compile(r"affirm|proceed|agree|accept|continue", re.I)),
-        page.get_by_text(re.compile(r"By clicking this banner, I affirm", re.I)),
+        page.get_by_text(re.compile(r"By clicking this banner.*I affirm", re.I)),
         page.get_by_text(re.compile(r"I am aware of these prohibitions", re.I)),
         page.locator("[role='dialog'] button"),
         page.locator(".modal button"),
         page.locator(".alert").filter(has_text=re.compile(r"wish to proceed", re.I)),
     ]
     for locator in candidates:
-        if _visible(locator):
-            locator.first.click(timeout=10_000)
-            page.wait_for_timeout(1_000)
-            return
-    # The banner may already have been accepted via a retained browser context/cookie.
+        try:
+            count = locator.count()
+        except Exception:
+            continue
+        for index in range(min(count, 10)):
+            try:
+                node = locator.nth(index)
+                if not node.is_visible():
+                    continue
+                node.click(timeout=10_000)
+                page.wait_for_timeout(1_000)
+                _dismiss_terms_overlay(page)
+                return
+            except Exception:
+                continue
+
+    # The banner may already have been accepted or may not be active for this session.
+    # Do not treat a generic Loading row as proof: that allowed a delayed overlay to survive.
     body_text = normalize_text(page.locator("body").inner_text())
-    if "Loading" in body_text or "Officials’ Individual Disclosures" in body_text:
-        LOGGER.info("OGE acknowledgement banner was not visible; continuing with rendered collection")
+    if re.search(r"Officials[’']? Individual Disclosures", body_text, re.IGNORECASE):
+        LOGGER.info("OGE acknowledgement overlay is not active; continuing with rendered collection")
         return
     raise SourceChangedError("Could not locate or confirm the OGE statutory-use acknowledgement banner")
 
@@ -331,6 +423,8 @@ def scrape_oge_listings(
             page.goto(collection_url, wait_until="domcontentloaded", timeout=timeout_ms)
             _affirm_terms(page)
             _wait_for_rendered_table(page, timeout_ms)
+            # OGE can activate the acknowledgement overlay after DOMContentLoaded.
+            _dismiss_terms_overlay(page)
 
             search_input = _find_search_input(page)
             search_terms = ("278-T", "Periodic Transaction") if search_input is not None else ("",)
@@ -338,6 +432,7 @@ def scrape_oge_listings(
 
             for search_term in search_terms:
                 if search_input is not None:
+                    _dismiss_terms_overlay(page)
                     search_input.fill(search_term)
                     page.wait_for_timeout(1_500)
                 page_number = 0
@@ -361,7 +456,14 @@ def scrape_oge_listings(
                     if next_button is None:
                         break
                     before = normalize_text(page.locator("table").first.inner_text())
-                    next_button.click()
+                    _dismiss_terms_overlay(page)
+                    try:
+                        next_button.click(timeout=min(timeout_ms, 15_000))
+                    except PlaywrightTimeoutError:
+                        # A late OGE acknowledgement overlay can appear between discovery and click.
+                        if not _dismiss_terms_overlay(page):
+                            raise
+                        next_button.click(timeout=min(timeout_ms, 15_000))
                     try:
                         page.wait_for_function(
                             "before => document.querySelector('table') && "
