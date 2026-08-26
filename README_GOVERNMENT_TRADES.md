@@ -1,8 +1,8 @@
-# Government purchase tracker
+# Government disclosure tracker and review dashboard
 
 ## Operational objective
 
-This component detects newly published purchase disclosures from official U.S. government sources, preserves normalized records, and sends prompt alerts. It is deliberately independent of the repository's older database and dashboard so collection can operate before the application stack is repaired.
+This component detects newly published financial-disclosure filings from official U.S. government sources, preserves a complete filing inventory and normalized transaction records, sends prompt alerts, and publishes a searchable static review dashboard. It remains independent of the repository's older Flask/PostgreSQL/dbt/React stack so collection and reporting do not depend on that incomplete deployment.
 
 ## Coverage
 
@@ -29,23 +29,52 @@ This is not complete coverage of every Executive-branch public filer. OGE direct
 
 ## What is recorded
 
-Only transaction rows normalized as `Purchase` are written to the purchase ledger. Each record contains:
+The tracker now retains three complementary datasets for each branch:
+
+1. **Filing inventory** — every filing currently visible to the source collector, including previously baselined filings.
+2. **All parsed transactions** — purchases, sales, sale subtypes, and exchanges.
+3. **Purchase ledger** — a backward-compatible purchase-only subset used by existing integrations.
+
+Each parsed transaction contains:
 
 - branch, source, report ID, filer, chamber/title/agency where available;
 - owner (`Self`, `Spouse`, `Joint`, or `Dependent Child` where disclosed);
 - asset, ticker, asset type, and an `equity_like` classification;
-- transaction date, notification date where available, filing date, and disclosed value range;
-- official source URL, raw row text, parser confidence, and stable trade ID;
-- UTC observation timestamp.
+- transaction type, transaction date, notification date where available, filing date, and disclosed value range;
+- official source URL, raw row text, parser confidence, stable trade ID, and UTC observation timestamp.
 
-Files:
+Each filing record contains the filer, filing date, official link, source, role or jurisdiction, access method, processing status, transaction counts, and any review reason. A status of `cataloged` means that the filing is visible and linked but predates transaction backfill; it must not be interpreted as fully parsed.
 
-| Branch | Durable ledger | Review queue | Latest CSV | Run result |
-|---|---|---|---|---|
-| Legislative | `.trade-tracker/legislative/purchases.jsonl` | `.trade-tracker/legislative/pending-review.jsonl` | `legislative-latest-purchases.csv` | `legislative-result.json` |
-| Executive | `.trade-tracker/executive/purchases.jsonl` | `.trade-tracker/executive/pending-review.jsonl` | `executive-latest-purchases.csv` | `executive-result.json` |
+Durable files:
 
-The state and ledgers are uploaded as retained GitHub Actions artifacts and restored on later runs. The CSV and result JSON are run artifacts, not committed repository data.
+| Data | Legislative | Executive |
+|---|---|---|
+| Filing inventory | `.trade-tracker/legislative/filings.jsonl` | `.trade-tracker/executive/filings.jsonl` |
+| All transactions | `.trade-tracker/legislative/transactions.jsonl` | `.trade-tracker/executive/transactions.jsonl` |
+| Purchase-only compatibility ledger | `.trade-tracker/legislative/purchases.jsonl` | `.trade-tracker/executive/purchases.jsonl` |
+| Review queue | `.trade-tracker/legislative/pending-review.jsonl` | `.trade-tracker/executive/pending-review.jsonl` |
+| Run history | `.trade-tracker/legislative/runs.jsonl` | `.trade-tracker/executive/runs.jsonl` |
+
+The state directories are uploaded as retained GitHub Actions artifacts and restored on later runs. Each run also publishes latest-filings, latest-transactions, and latest-purchases CSV files.
+
+## Searchable review dashboard
+
+The `Publish government trade dashboard` workflow restores the newest Legislative and Executive state artifacts, combines them, and deploys a static GitHub Pages site. The dashboard provides:
+
+- current House, Senate, and OGE collector status;
+- a searchable inventory of all cataloged filings with direct official links;
+- all retained purchases, sales, and exchanges;
+- a manual-review queue;
+- retained run history and errors;
+- downloadable CSV exports for each view.
+
+For this repository, the expected URL is:
+
+```text
+https://maglothinm.github.io/MyETF/
+```
+
+GitHub Pages must be enabled once under **Settings → Pages → Build and deployment → Source → GitHub Actions**. The dashboard workflow then runs automatically after either tracker finishes and can also be started manually.
 
 ## GitHub configuration
 
@@ -136,7 +165,8 @@ Repository/workflow environment variables:
 
 | Variable | Default | Effect |
 |---|---:|---|
-| `NOTIFY_EQUITY_ONLY` | `true` | Alerts only on equity-like purchases; all purchases remain in the ledger. |
+| `NOTIFY_EQUITY_ONLY` | `true` | Applies to legacy purchase-only alert mode. |
+| `NOTIFY_ALL_FILINGS` | `true` in the workflows | Sends one alert for every newly parsed filing, including sales and exchanges. |
 | `NOTIFY_PENDING_REVIEWS` | `true` | Alerts when a paper form or Form 201 request needs review. |
 | `WATCHLIST` | empty | Optional comma-separated ticker/company filter for alerts only. |
 | `SENATE_LOOKBACK_DAYS` | `180` | Search horizon used to rebuild the visible Senate filing set. |
@@ -164,7 +194,8 @@ python -m pip install -r requirements-tracker.txt pytest==9.0.2
 python -m pytest -q \
   tests/test_monitor_disclosures.py \
   tests/test_government_trade_tracker.py \
-  tests/test_oge_disclosures.py
+  tests/test_oge_disclosures.py \
+  tests/test_trade_dashboard.py
 ```
 
 A local Legislative source check without notifications requires an explicit terms acknowledgement and explicit state initialization:
@@ -209,6 +240,8 @@ The tracker exits nonzero when:
 
 Known paper forms and request-required Executive listings are different: they are recorded in `pending-review.jsonl`, alerted once, marked seen, and left for human follow-through.
 
-## Dashboard work intentionally deferred
+## Historical coverage boundary
 
-The historical Flask/PostgreSQL/dbt/React path contains separate deployment and API defects. Coupling tracker recovery to that stack would make source monitoring slower to restore and harder to diagnose. The durable JSONL/CSV output is a stable ingestion contract for a later dashboard repair.
+The reporting upgrade catalogs all filings visible during the first post-upgrade run, including those that were silently baselined during initial activation. It does not retroactively download and parse every baselined document. Those records are displayed as `Cataloged only` with their official links. New filings are fully processed and retained. A separate historical backfill remains appropriate if transaction-level analysis of the baseline period is required.
+
+The historical Flask/PostgreSQL/dbt/React path remains deferred because it contains separate deployment and API defects. The static dashboard deliberately avoids that dependency while providing a usable review interface now.

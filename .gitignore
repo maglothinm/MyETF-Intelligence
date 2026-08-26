@@ -19,3 +19,8 @@ legislative-latest-purchases.csv
 executive-latest-purchases.csv
 oge-diagnostics/
 # <<< MyETF government trade tracker <<<
+
+# Generated government-trade dashboard files
+dashboard-input/
+trade-dashboard-site/
+.pytest_cache/

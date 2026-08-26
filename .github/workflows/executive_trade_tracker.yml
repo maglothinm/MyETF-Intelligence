@@ -29,13 +29,20 @@ concurrency:
 env:
   STATE_FILE: ".trade-tracker/executive/state.json"
   LEDGER_FILE: ".trade-tracker/executive/purchases.jsonl"
+  TRANSACTIONS_FILE: ".trade-tracker/executive/transactions.jsonl"
+  FILINGS_FILE: ".trade-tracker/executive/filings.jsonl"
+  RUN_HISTORY_FILE: ".trade-tracker/executive/runs.jsonl"
   PENDING_FILE: ".trade-tracker/executive/pending-review.jsonl"
   RESULT_FILE: "executive-result.json"
   LATEST_CSV: "executive-latest-purchases.csv"
+  LATEST_TRANSACTIONS_CSV: "executive-latest-transactions.csv"
+  LATEST_FILINGS_CSV: "executive-latest-filings.csv"
   OGE_LISTINGS_FILE: "oge-listings.json"
   REQUIRE_PUSHOVER: "true"
   NOTIFY_EQUITY_ONLY: "true"
   NOTIFY_PENDING_REVIEWS: "true"
+  NOTIFY_ALL_FILINGS: "true"
+  DASHBOARD_URL: "https://maglothinm.github.io/MyETF/"
   ALLOW_EMPTY_SOURCES: "false"
   DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
 
@@ -128,7 +135,8 @@ jobs:
           python -m pytest -q \
             tests/test_monitor_disclosures.py \
             tests/test_government_trade_tracker.py \
-            tests/test_oge_disclosures.py
+            tests/test_oge_disclosures.py \
+            tests/test_trade_dashboard.py
 
       - name: Discover OGE Form 278-T listings
         id: discovery
@@ -171,6 +179,8 @@ jobs:
             oge-listings.json
             executive-result.json
             executive-latest-purchases.csv
+            executive-latest-transactions.csv
+            executive-latest-filings.csv
             oge-diagnostics/
           if-no-files-found: warn
           include-hidden-files: true

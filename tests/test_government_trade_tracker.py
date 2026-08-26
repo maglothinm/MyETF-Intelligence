@@ -9,7 +9,10 @@ import pytest
 from scripts.government_trade_tracker import (
     PaperFilingError,
     TrackerConfig,
+    TrackerResult,
     TrackerState,
+    catalog_visible_filings,
+    commit_filing_outcome,
     is_equity_like,
     load_state,
     make_trade,
@@ -230,9 +233,14 @@ def _tracker_config(tmp_path: Path, *, initialize: bool, bootstrap: bool = False
         legislative_source="all",
         state_path=tmp_path / "state.json",
         ledger_path=tmp_path / "purchases.jsonl",
+        transactions_path=tmp_path / "transactions.jsonl",
+        filings_path=tmp_path / "filings.jsonl",
+        run_history_path=tmp_path / "runs.jsonl",
         pending_path=tmp_path / "pending.jsonl",
         result_path=tmp_path / "result.json",
         latest_csv_path=tmp_path / "latest.csv",
+        latest_transactions_csv_path=tmp_path / "latest-transactions.csv",
+        latest_filings_csv_path=tmp_path / "latest-filings.csv",
         oge_listings_path=tmp_path / "oge.json",
         bootstrap_alerts=bootstrap,
         no_notify=True,
@@ -245,6 +253,7 @@ def _tracker_config(tmp_path: Path, *, initialize: bool, bootstrap: bool = False
         require_pushover=False,
         notify_equity_only=True,
         notify_pending_reviews=True,
+        notify_all_filings=True,
         watchlist=(),
         allow_empty_sources=False,
         allow_state_initialization=initialize,
@@ -268,3 +277,100 @@ def test_incomplete_existing_state_cannot_silently_baseline_source(tmp_path: Pat
 def test_mutual_fund_ticker_is_not_classified_as_stock_like() -> None:
     assert is_equity_like("Vanguard 500 Index Fund (VFIAX)", "Mutual Fund", "VFIAX") is False
     assert is_equity_like("Vanguard S&P 500 ETF (VOO)", "ETF", "VOO") is True
+
+
+def test_seen_baseline_is_cataloged_for_dashboard_without_being_reprocessed(tmp_path: Path) -> None:
+    config = _tracker_config(tmp_path, initialize=False)
+    config = replace(config, branch="legislative")
+    state = TrackerState()
+    report = house_report("20039999")
+    state.mark_filing_seen("house", report.report_id, "2026-08-25T10:00:00Z")
+    result = TrackerResult(branch="legislative", started_utc="2026-08-26T10:00:00Z")
+    index: dict[str, dict[str, object]] = {}
+
+    catalog_visible_filings(
+        config=config,
+        state=state,
+        result=result,
+        source="house",
+        reports=[report],
+        filing_index=index,
+        treat_unseen_as_new=True,
+    )
+
+    rows = [json.loads(line) for line in config.filings_path.read_text().splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["status"] == "cataloged"
+    assert rows[0]["filer"] == "Hon. David J. Taylor"
+    assert rows[0]["source_url"].endswith("20039999.pdf")
+    assert result.filings == []
+    assert result.cataloged_filing_counts == {"house": 1}
+
+
+def test_commit_records_all_transactions_but_purchase_ledger_stays_purchase_only(tmp_path: Path) -> None:
+    config = replace(_tracker_config(tmp_path, initialize=True), branch="legislative")
+    state = TrackerState()
+    report = house_report("20040000")
+    state.mark_filing_seen("house", "house:prior", "2026-08-25T10:00:00Z")
+    result = TrackerResult(branch="legislative", started_utc="2026-08-26T10:00:00Z")
+    result.transaction_counts["house"] = 0
+    result.purchase_counts["house"] = 0
+    result.pending_review_counts["house"] = 0
+    result.alerted_filing_counts["house"] = 0
+
+    purchase = make_trade(
+        branch="legislative",
+        source="house",
+        report=report,
+        owner="SELF",
+        asset="NVIDIA Corporation (NVDA) [ST]",
+        ticker="",
+        asset_type="ST",
+        transaction_type="P",
+        transaction_date="08/20/2026",
+        notification_date="08/25/2026",
+        amount="$1,001 - $15,000",
+        raw_row="purchase",
+        confidence="high",
+    )
+    sale = make_trade(
+        branch="legislative",
+        source="house",
+        report=report,
+        owner="SP",
+        asset="Microsoft Corporation (MSFT) [ST]",
+        ticker="",
+        asset_type="ST",
+        transaction_type="S",
+        transaction_date="08/20/2026",
+        notification_date="08/25/2026",
+        amount="$15,001 - $50,000",
+        raw_row="sale",
+        confidence="high",
+    )
+
+    commit_filing_outcome(
+        session=object(),  # no network use because --no-notify semantics are active
+        config=config,
+        state=state,
+        result=result,
+        source="house",
+        filing=report,
+        filing_id=report.report_id,
+        filing_label="House PTR",
+        trades=[purchase, sale],
+        review=None,
+        filing_index={},
+    )
+
+    transactions = [json.loads(line) for line in config.transactions_path.read_text().splitlines()]
+    purchases = [json.loads(line) for line in config.ledger_path.read_text().splitlines()]
+    filings = [json.loads(line) for line in config.filings_path.read_text().splitlines()]
+    assert {row["transaction_type"] for row in transactions} == {"Purchase", "Sale"}
+    assert [row["transaction_type"] for row in purchases] == ["Purchase"]
+    assert filings[-1]["status"] == "processed"
+    assert filings[-1]["transaction_count"] == 2
+    assert filings[-1]["purchase_count"] == 1
+    assert filings[-1]["sale_count"] == 1
+    assert result.transaction_counts["house"] == 2
+    assert result.purchase_counts["house"] == 1

@@ -50,3 +50,15 @@ The operational House, Senate, and OGE monitoring path is documented in
 [`README_GOVERNMENT_TRADES.md`](README_GOVERNMENT_TRADES.md). It runs independently
 of the historical dashboard and writes durable JSONL ledgers plus latest-purchase CSVs.
 <!-- MYETF-GOVERNMENT-TRADE-TRACKER:END -->
+
+<!-- MYETF-REPORTING-DASHBOARD:START -->
+
+## Government disclosure dashboard
+
+The official-source filing inventory, parsed transactions, manual-review queue, and collector status are published at:
+
+**https://maglothinm.github.io/MyETF/**
+
+The dashboard is rebuilt after the Legislative or Executive tracker completes. See [`README_REPORTING_DASHBOARD.md`](README_REPORTING_DASHBOARD.md) for activation and coverage details.
+
+<!-- MYETF-REPORTING-DASHBOARD:END -->

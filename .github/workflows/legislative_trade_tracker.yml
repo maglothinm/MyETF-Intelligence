@@ -29,13 +29,20 @@ concurrency:
 env:
   STATE_FILE: ".trade-tracker/legislative/state.json"
   LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
+  TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
+  FILINGS_FILE: ".trade-tracker/legislative/filings.jsonl"
+  RUN_HISTORY_FILE: ".trade-tracker/legislative/runs.jsonl"
   PENDING_FILE: ".trade-tracker/legislative/pending-review.jsonl"
   RESULT_FILE: "legislative-result.json"
   LATEST_CSV: "legislative-latest-purchases.csv"
+  LATEST_TRANSACTIONS_CSV: "legislative-latest-transactions.csv"
+  LATEST_FILINGS_CSV: "legislative-latest-filings.csv"
   SENATE_LOOKBACK_DAYS: "180"
   REQUIRE_PUSHOVER: "true"
   NOTIFY_EQUITY_ONLY: "true"
   NOTIFY_PENDING_REVIEWS: "true"
+  NOTIFY_ALL_FILINGS: "true"
+  DASHBOARD_URL: "https://maglothinm.github.io/MyETF/"
   ALLOW_EMPTY_SOURCES: "false"
   DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
 
@@ -124,7 +131,8 @@ jobs:
           python -m pytest -q \
             tests/test_monitor_disclosures.py \
             tests/test_government_trade_tracker.py \
-            tests/test_oge_disclosures.py
+            tests/test_oge_disclosures.py \
+            tests/test_trade_dashboard.py
 
       - name: Track House and Senate purchases
         id: tracker
@@ -161,6 +169,8 @@ jobs:
           path: |
             legislative-result.json
             legislative-latest-purchases.csv
+            legislative-latest-transactions.csv
+            legislative-latest-filings.csv
           if-no-files-found: warn
           retention-days: 30
 

@@ -77,12 +77,22 @@ DEFAULT_LEGISLATIVE_STATE = Path(".trade-tracker/legislative/state.json")
 DEFAULT_EXECUTIVE_STATE = Path(".trade-tracker/executive/state.json")
 DEFAULT_LEGISLATIVE_LEDGER = Path(".trade-tracker/legislative/purchases.jsonl")
 DEFAULT_EXECUTIVE_LEDGER = Path(".trade-tracker/executive/purchases.jsonl")
+DEFAULT_LEGISLATIVE_TRANSACTIONS = Path(".trade-tracker/legislative/transactions.jsonl")
+DEFAULT_EXECUTIVE_TRANSACTIONS = Path(".trade-tracker/executive/transactions.jsonl")
+DEFAULT_LEGISLATIVE_FILINGS = Path(".trade-tracker/legislative/filings.jsonl")
+DEFAULT_EXECUTIVE_FILINGS = Path(".trade-tracker/executive/filings.jsonl")
+DEFAULT_LEGISLATIVE_RUN_HISTORY = Path(".trade-tracker/legislative/runs.jsonl")
+DEFAULT_EXECUTIVE_RUN_HISTORY = Path(".trade-tracker/executive/runs.jsonl")
 DEFAULT_LEGISLATIVE_PENDING = Path(".trade-tracker/legislative/pending-review.jsonl")
 DEFAULT_EXECUTIVE_PENDING = Path(".trade-tracker/executive/pending-review.jsonl")
 DEFAULT_LEGISLATIVE_RESULT = Path("legislative-result.json")
 DEFAULT_EXECUTIVE_RESULT = Path("executive-result.json")
 DEFAULT_LEGISLATIVE_CSV = Path("legislative-latest-purchases.csv")
 DEFAULT_EXECUTIVE_CSV = Path("executive-latest-purchases.csv")
+DEFAULT_LEGISLATIVE_TRANSACTIONS_CSV = Path("legislative-latest-transactions.csv")
+DEFAULT_EXECUTIVE_TRANSACTIONS_CSV = Path("executive-latest-transactions.csv")
+DEFAULT_LEGISLATIVE_FILINGS_CSV = Path("legislative-latest-filings.csv")
+DEFAULT_EXECUTIVE_FILINGS_CSV = Path("executive-latest-filings.csv")
 DEFAULT_SENATE_LOOKBACK_DAYS = 180
 DEFAULT_MAX_SEEN_FILINGS = 50_000
 DEFAULT_MAX_SEEN_TRADES = 250_000
@@ -197,6 +207,32 @@ class Trade:
 
 
 @dataclass(frozen=True)
+class FilingRecord:
+    filing_key: str
+    first_seen_utc: str
+    updated_at_utc: str
+    branch: str
+    source: str
+    report_id: str
+    filer: str
+    filed_date: str
+    source_url: str
+    document_format: str
+    chamber: str
+    title: str
+    agency: str
+    district: str
+    report_type: str
+    access_mode: str
+    status: str
+    transaction_count: int
+    purchase_count: int
+    sale_count: int
+    exchange_count: int
+    review_reason: str
+
+
+@dataclass(frozen=True)
 class PendingReview:
     review_id: str
     observed_at_utc: str
@@ -248,9 +284,14 @@ class TrackerConfig:
     legislative_source: str
     state_path: Path
     ledger_path: Path
+    transactions_path: Path
+    filings_path: Path
+    run_history_path: Path
     pending_path: Path
     result_path: Path
     latest_csv_path: Path
+    latest_transactions_csv_path: Path
+    latest_filings_csv_path: Path
     oge_listings_path: Path | None
     bootstrap_alerts: bool
     no_notify: bool
@@ -263,6 +304,7 @@ class TrackerConfig:
     require_pushover: bool
     notify_equity_only: bool
     notify_pending_reviews: bool
+    notify_all_filings: bool
     watchlist: tuple[str, ...]
     allow_empty_sources: bool
     allow_state_initialization: bool
@@ -276,10 +318,14 @@ class TrackerResult:
     finished_utc: str = ""
     source_counts: dict[str, int] = field(default_factory=dict)
     new_filing_counts: dict[str, int] = field(default_factory=dict)
+    cataloged_filing_counts: dict[str, int] = field(default_factory=dict)
     baseline_counts: dict[str, int] = field(default_factory=dict)
+    transaction_counts: dict[str, int] = field(default_factory=dict)
     purchase_counts: dict[str, int] = field(default_factory=dict)
     alerted_filing_counts: dict[str, int] = field(default_factory=dict)
     pending_review_counts: dict[str, int] = field(default_factory=dict)
+    filings: list[dict[str, Any]] = field(default_factory=list)
+    transactions: list[dict[str, Any]] = field(default_factory=list)
     purchases: list[dict[str, Any]] = field(default_factory=list)
     pending_reviews: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -469,6 +515,106 @@ def make_trade(
         raw_row=normalize_text(raw_row),
         equity_like=is_equity_like(asset, asset_type, ticker),
         parse_confidence=confidence,
+    )
+
+
+def filing_key(source: str, report_id: str) -> str:
+    return f"{normalize_text(source).casefold()}|{normalize_text(report_id)}"
+
+
+def _filing_source_fields(
+    report: Report | Mapping[str, Any],
+    *,
+    source: str,
+) -> dict[str, str]:
+    if isinstance(report, Report):
+        metadata = report.metadata
+        return {
+            "report_id": report.report_id,
+            "filer": report.filer,
+            "filed_date": report.filed_date,
+            "source_url": report.url,
+            "document_format": report.format,
+            "chamber": report.source.title() if report.source in {"house", "senate"} else "",
+            "title": metadata.get("title", ""),
+            "agency": metadata.get("agency", ""),
+            "district": metadata.get("district", ""),
+            "report_type": metadata.get("report_type", "Periodic Transaction Report"),
+            "access_mode": "direct",
+        }
+
+    report_id = str(report.get("listing_id") or report.get("report_id") or "")
+    source_url = str(
+        report.get("document_url")
+        or report.get("request_url")
+        or report.get("url")
+        or ""
+    )
+    access_mode = normalize_text(str(report.get("access_mode") or "unknown")).casefold()
+    if access_mode == "direct" or source_url.casefold().endswith(".pdf"):
+        document_format = "pdf"
+    elif access_mode == "request":
+        document_format = "request"
+    else:
+        document_format = "unknown"
+    return {
+        "report_id": report_id,
+        "filer": str(report.get("name") or report.get("filer") or "Unknown filer"),
+        "filed_date": str(report.get("date") or report.get("filed_date") or "Unknown"),
+        "source_url": source_url,
+        "document_format": document_format,
+        "chamber": str(report.get("chamber") or ""),
+        "title": str(report.get("title") or ""),
+        "agency": str(report.get("agency") or ""),
+        "district": str(report.get("district") or ""),
+        "report_type": str(
+            report.get("document_type")
+            or report.get("report_type")
+            or "Periodic Transaction Report"
+        ),
+        "access_mode": access_mode,
+    }
+
+
+def make_filing_record(
+    report: Report | Mapping[str, Any],
+    *,
+    branch: str,
+    source: str,
+    status: str,
+    first_seen_utc: str | None = None,
+    transactions: Sequence[Trade] = (),
+    review: PendingReview | None = None,
+) -> FilingRecord:
+    fields = _filing_source_fields(report, source=source)
+    report_id = fields["report_id"]
+    now = iso_utc()
+    purchase_count = sum(tx.transaction_type == "Purchase" for tx in transactions)
+    sale_count = sum(tx.transaction_type.startswith("Sale") for tx in transactions)
+    exchange_count = sum(tx.transaction_type == "Exchange" for tx in transactions)
+    return FilingRecord(
+        filing_key=filing_key(source, report_id),
+        first_seen_utc=first_seen_utc or now,
+        updated_at_utc=now,
+        branch=normalize_text(branch),
+        source=normalize_text(source).casefold(),
+        report_id=report_id,
+        filer=normalize_text(fields["filer"]),
+        filed_date=normalize_date(fields["filed_date"]),
+        source_url=fields["source_url"],
+        document_format=normalize_text(fields["document_format"]).casefold(),
+        chamber=normalize_text(fields["chamber"]),
+        title=normalize_text(fields["title"]),
+        agency=normalize_text(fields["agency"]),
+        district=normalize_text(fields["district"]),
+        report_type=normalize_text(fields["report_type"]),
+        access_mode=normalize_text(fields["access_mode"]).casefold(),
+        status=normalize_text(status).casefold().replace(" ", "_"),
+        transaction_count=len(transactions),
+        purchase_count=purchase_count,
+        sale_count=sale_count,
+        exchange_count=exchange_count,
+        review_reason=review.reason if review else "",
     )
 
 
@@ -893,6 +1039,110 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def latest_records(path: Path, key_field: str) -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for record in read_jsonl(path):
+        key = str(record.get(key_field) or "")
+        if key:
+            latest[key] = record
+    return latest
+
+
+def _filing_record_equivalent(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    ignored = {"updated_at_utc"}
+    left_payload = {key: value for key, value in left.items() if key not in ignored}
+    right_payload = {key: value for key, value in right.items() if key not in ignored}
+    return left_payload == right_payload
+
+
+def upsert_filing_record(
+    path: Path,
+    index: dict[str, dict[str, Any]],
+    record: FilingRecord,
+) -> bool:
+    payload = asdict(record)
+    existing = index.get(record.filing_key)
+    if existing:
+        # A routine catalog pass must never erase a parsed or review-required outcome.
+        if record.status in {"cataloged", "detected"} and str(existing.get("status")) in {
+            "processed",
+            "review_required",
+        }:
+            payload.update(
+                {
+                    "first_seen_utc": existing.get("first_seen_utc", record.first_seen_utc),
+                    "status": existing.get("status", record.status),
+                    "transaction_count": existing.get("transaction_count", 0),
+                    "purchase_count": existing.get("purchase_count", 0),
+                    "sale_count": existing.get("sale_count", 0),
+                    "exchange_count": existing.get("exchange_count", 0),
+                    "review_reason": existing.get("review_reason", ""),
+                }
+            )
+        elif existing.get("first_seen_utc"):
+            payload["first_seen_utc"] = existing["first_seen_utc"]
+        if _filing_record_equivalent(existing, payload):
+            return False
+    append_jsonl(path, (payload,))
+    index[record.filing_key] = payload
+    return True
+
+
+def catalog_visible_filings(
+    *,
+    config: TrackerConfig,
+    state: TrackerState,
+    result: TrackerResult,
+    source: str,
+    reports: Sequence[Report | Mapping[str, Any]],
+    filing_index: dict[str, dict[str, Any]],
+    treat_unseen_as_new: bool,
+) -> None:
+    cataloged = 0
+    for report in reports:
+        fields = _filing_source_fields(report, source=source)
+        report_id = fields["report_id"]
+        unseen = not state.is_filing_seen(source, report_id)
+        status = "detected" if unseen and treat_unseen_as_new else "cataloged"
+        key = filing_key(source, report_id)
+        existing = filing_index.get(key)
+        record = make_filing_record(
+            report,
+            branch=config.branch,
+            source=source,
+            status=status,
+            first_seen_utc=(str(existing.get("first_seen_utc")) if existing else None),
+        )
+        if upsert_filing_record(config.filings_path, filing_index, record):
+            cataloged += 1
+        if unseen and treat_unseen_as_new:
+            # The final processed/review record replaces this provisional record in the UI.
+            result.filings.append(asdict(record))
+    result.cataloged_filing_counts[source] = cataloged
+
+
+def write_records_csv(
+    records: Sequence[Mapping[str, Any]],
+    output_path: Path,
+    fieldnames: Sequence[str],
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        newline="",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(fieldnames), extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(records)
+        temp_name = handle.name
+    Path(temp_name).replace(output_path)
+
+
 def write_latest_csv(ledger_path: Path, output_path: Path, max_rows: int = DEFAULT_LATEST_CSV_ROWS) -> None:
     rows = read_jsonl(ledger_path)
     rows.sort(
@@ -922,8 +1172,55 @@ def write_latest_csv(ledger_path: Path, output_path: Path, max_rows: int = DEFAU
     Path(temp_name).replace(output_path)
 
 
+def write_latest_filings_csv(
+    filings_path: Path,
+    output_path: Path,
+    max_rows: int = 10_000,
+) -> None:
+    rows = list(latest_records(filings_path, "filing_key").values())
+    rows.sort(
+        key=lambda row: (
+            str(row.get("filed_date", "")),
+            str(row.get("updated_at_utc", "")),
+            str(row.get("filing_key", "")),
+        ),
+        reverse=True,
+    )
+    fieldnames = [field.name for field in FilingRecord.__dataclass_fields__.values()]
+    write_records_csv(rows[:max_rows], output_path, fieldnames)
+
+
 def write_result(path: Path, result: TrackerResult) -> None:
     atomic_write_text(path, json.dumps(asdict(result), indent=2, sort_keys=True) + "\n")
+
+
+def append_run_history(path: Path, result: TrackerResult) -> None:
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    repository = os.environ.get("GITHUB_REPOSITORY", "").strip("/")
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    run_url = f"{server}/{repository}/actions/runs/{run_id}" if repository and run_id else ""
+    record = {
+        "run_key": f"{run_id}:{run_attempt}" if run_id else stable_id(
+            "run", (result.branch, result.started_utc, result.finished_utc)
+        ),
+        "branch": result.branch,
+        "started_utc": result.started_utc,
+        "finished_utc": result.finished_utc,
+        "success": result.success,
+        "source_counts": result.source_counts,
+        "new_filing_counts": result.new_filing_counts,
+        "cataloged_filing_counts": result.cataloged_filing_counts,
+        "baseline_counts": result.baseline_counts,
+        "transaction_counts": result.transaction_counts,
+        "purchase_counts": result.purchase_counts,
+        "pending_review_counts": result.pending_review_counts,
+        "errors": result.errors,
+        "run_url": run_url,
+        "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "run_attempt": run_attempt,
+    }
+    append_jsonl(path, (record,))
 
 
 def _selected_legislative_sources(value: str) -> tuple[str, ...]:
@@ -939,7 +1236,7 @@ def scan_house_report(session: Session, report: Report, config: TrackerConfig) -
     )
     try:
         text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
-        return purchases_only(parse_house_transactions(text, report)), None
+        return parse_house_transactions(text, report), None
     except PaperFilingError as exc:
         review = make_pending_review(
             branch="legislative",
@@ -994,7 +1291,7 @@ def scan_senate_report(session: Session, report: Report, config: TrackerConfig) 
                 source="senate",
                 paper_is_pending=True,
             )
-            return purchases_only(transactions), None
+            return transactions, None
         except PaperFilingError as exc:
             return [], make_pending_review(
                 branch="legislative",
@@ -1007,7 +1304,7 @@ def scan_senate_report(session: Session, report: Report, config: TrackerConfig) 
             )
 
     html = data.decode(response.encoding or "utf-8", errors="replace")
-    return purchases_only(parse_senate_html_transactions(html, report)), None
+    return parse_senate_html_transactions(html, report), None
 
 
 def make_pending_review(
@@ -1128,7 +1425,7 @@ def scan_oge_listing(
             source="oge",
             paper_is_pending=True,
         )
-        return purchases_only(transactions), None
+        return transactions, None
     except PaperFilingError as exc:
         return [], make_pending_review(
             branch="executive",
@@ -1238,6 +1535,59 @@ def send_purchase_notification(
     return True
 
 
+def send_filing_notification(
+    session: Session,
+    config: TrackerConfig,
+    filing_label: str,
+    transactions: Sequence[Trade],
+) -> bool:
+    if not config.notify_all_filings:
+        return send_purchase_notification(
+            session,
+            config,
+            filing_label,
+            purchases_only(transactions),
+        )
+    if not transactions:
+        return False
+
+    filer = transactions[0].filer
+    source = transactions[0].source.title()
+    purchases = sum(tx.transaction_type == "Purchase" for tx in transactions)
+    sales = sum(tx.transaction_type.startswith("Sale") for tx in transactions)
+    exchanges = sum(tx.transaction_type == "Exchange" for tx in transactions)
+    summary_parts = []
+    if purchases:
+        summary_parts.append(f"{purchases} purchase{'s' if purchases != 1 else ''}")
+    if sales:
+        summary_parts.append(f"{sales} sale{'s' if sales != 1 else ''}")
+    if exchanges:
+        summary_parts.append(f"{exchanges} exchange{'s' if exchanges != 1 else ''}")
+    if not summary_parts:
+        summary_parts.append(f"{len(transactions)} transaction{'s' if len(transactions) != 1 else ''}")
+
+    lines = [f"{filer} • {source} • {', '.join(summary_parts)}"]
+    for trade in transactions[:7]:
+        asset_label = trade.ticker or _truncate(trade.asset, 28)
+        owner = f" • {trade.owner}" if trade.owner and trade.owner != "Self" else ""
+        lines.append(
+            f"{trade.transaction_type}: {asset_label} • {trade.amount} • "
+            f"{trade.transaction_date}{owner}"
+        )
+    if len(transactions) > 7:
+        lines.append(f"+{len(transactions) - 7} more transaction(s)")
+
+    _pushover_post(
+        session,
+        config,
+        title=f"Government filing: {filer}",
+        message="\n".join(lines),
+        url=transactions[0].source_url,
+        url_title=f"Open {filing_label}",
+    )
+    return True
+
+
 def send_pending_notification(
     session: Session,
     config: TrackerConfig,
@@ -1264,30 +1614,69 @@ def commit_filing_outcome(
     state: TrackerState,
     result: TrackerResult,
     source: str,
+    filing: Report | Mapping[str, Any],
     filing_id: str,
     filing_label: str,
     trades: Sequence[Trade],
     review: PendingReview | None,
+    filing_index: dict[str, dict[str, Any]],
 ) -> None:
-    fresh_trades = [trade for trade in trades if trade.trade_id not in state.seen_trades]
+    fresh_transactions = [trade for trade in trades if trade.trade_id not in state.seen_trades]
+    fresh_purchases = purchases_only(fresh_transactions)
     alerted = False
-    if fresh_trades:
-        alerted = send_purchase_notification(session, config, filing_label, fresh_trades)
+    if fresh_transactions:
+        alerted = send_filing_notification(
+            session,
+            config,
+            filing_label,
+            fresh_transactions,
+        )
     if review and review.review_id not in state.seen_reviews:
         alerted = send_pending_notification(session, config, review) or alerted
 
     timestamp = iso_utc()
-    if fresh_trades:
-        append_jsonl(config.ledger_path, (asdict(trade) for trade in fresh_trades))
-        for trade in fresh_trades:
+    if fresh_transactions:
+        append_jsonl(
+            config.transactions_path,
+            (asdict(trade) for trade in fresh_transactions),
+        )
+        for trade in fresh_transactions:
             state.seen_trades[trade.trade_id] = timestamp
-            result.purchases.append(asdict(trade))
-        result.purchase_counts[source] = result.purchase_counts.get(source, 0) + len(fresh_trades)
+            result.transactions.append(asdict(trade))
+        result.transaction_counts[source] = (
+            result.transaction_counts.get(source, 0) + len(fresh_transactions)
+        )
+
+    if fresh_purchases:
+        append_jsonl(config.ledger_path, (asdict(trade) for trade in fresh_purchases))
+        result.purchases.extend(asdict(trade) for trade in fresh_purchases)
+        result.purchase_counts[source] = (
+            result.purchase_counts.get(source, 0) + len(fresh_purchases)
+        )
+
     if review and review.review_id not in state.seen_reviews:
         append_jsonl(config.pending_path, (asdict(review),))
         state.seen_reviews[review.review_id] = timestamp
         result.pending_reviews.append(asdict(review))
         result.pending_review_counts[source] = result.pending_review_counts.get(source, 0) + 1
+
+    key = filing_key(source, filing_id)
+    existing = filing_index.get(key)
+    filing_record = make_filing_record(
+        filing,
+        branch=config.branch,
+        source=source,
+        status="review_required" if review else "processed",
+        first_seen_utc=(str(existing.get("first_seen_utc")) if existing else None),
+        transactions=trades,
+        review=review,
+    )
+    upsert_filing_record(config.filings_path, filing_index, filing_record)
+    result.filings = [
+        item for item in result.filings if str(item.get("filing_key")) != filing_record.filing_key
+    ]
+    result.filings.append(asdict(filing_record))
+
     if alerted:
         result.alerted_filing_counts[source] = result.alerted_filing_counts.get(source, 0) + 1
     state.mark_filing_seen(source, filing_id, timestamp)
@@ -1337,6 +1726,7 @@ def run_legislative(
     state: TrackerState,
     result: TrackerResult,
     session: Session,
+    filing_index: dict[str, dict[str, Any]],
 ) -> None:
     current_year = utc_now().year
     for source in _selected_legislative_sources(config.legislative_source):
@@ -1355,6 +1745,7 @@ def run_legislative(
             scanner = scan_senate_report
 
         result.source_counts[source] = len(reports)
+        result.transaction_counts[source] = 0
         result.purchase_counts[source] = 0
         result.pending_review_counts[source] = 0
         result.alerted_filing_counts[source] = 0
@@ -1366,11 +1757,21 @@ def run_legislative(
         result.new_filing_counts[source] = len(unseen)
         result.baseline_counts[source] = 0
 
+        catalog_visible_filings(
+            config=config,
+            state=state,
+            result=result,
+            source=source,
+            reports=reports,
+            filing_index=filing_index,
+            treat_unseen_as_new=not (source_bootstrap and not config.bootstrap_alerts),
+        )
+
         if source_bootstrap and not config.bootstrap_alerts:
             _baseline_source(state, source, (report.report_id for report in reports), result)
             state.last_counts[source] = len(reports)
             save_state(config.state_path, state)
-            LOGGER.info("Baselined %s existing %s PTRs", len(reports), source)
+            LOGGER.info("Baselined and cataloged %s existing %s PTRs", len(reports), source)
             continue
 
         for report in unseen:
@@ -1382,10 +1783,12 @@ def run_legislative(
                 state=state,
                 result=result,
                 source=source,
+                filing=report,
                 filing_id=report.report_id,
                 filing_label=f"{source.title()} PTR",
                 trades=trades,
                 review=review,
+                filing_index=filing_index,
             )
         state.last_counts[source] = len(reports)
 
@@ -1395,12 +1798,14 @@ def run_executive(
     state: TrackerState,
     result: TrackerResult,
     session: Session,
+    filing_index: dict[str, dict[str, Any]],
 ) -> None:
     if config.oge_listings_path is None:
         raise ValueError("--oge-listings-file is required for the executive branch")
     listings = load_oge_listings(config.oge_listings_path)
     source = "oge"
     result.source_counts[source] = len(listings)
+    result.transaction_counts[source] = 0
     result.purchase_counts[source] = 0
     result.pending_review_counts[source] = 0
     result.alerted_filing_counts[source] = 0
@@ -1412,11 +1817,21 @@ def run_executive(
     result.new_filing_counts[source] = len(unseen)
     result.baseline_counts[source] = 0
 
+    catalog_visible_filings(
+        config=config,
+        state=state,
+        result=result,
+        source=source,
+        reports=listings,
+        filing_index=filing_index,
+        treat_unseen_as_new=not (source_bootstrap and not config.bootstrap_alerts),
+    )
+
     if source_bootstrap and not config.bootstrap_alerts:
         _baseline_source(state, source, (str(item["listing_id"]) for item in listings), result)
         state.last_counts[source] = len(listings)
         save_state(config.state_path, state)
-        LOGGER.info("Baselined %s existing OGE 278-T listings", len(listings))
+        LOGGER.info("Baselined and cataloged %s existing OGE 278-T listings", len(listings))
         return
 
     for listing in unseen:
@@ -1429,12 +1844,18 @@ def run_executive(
             state=state,
             result=result,
             source=source,
+            filing=listing,
             filing_id=listing_id,
             filing_label="OGE Form 278-T",
             trades=trades,
             review=review,
+            filing_index=filing_index,
         )
     state.last_counts[source] = len(listings)
+
+
+def _markdown_cell(value: Any) -> str:
+    return normalize_text(str(value or "")).replace("|", "\\|").replace("\n", " ")
 
 
 def _write_step_summary(result: TrackerResult) -> None:
@@ -1442,23 +1863,113 @@ def _write_step_summary(result: TrackerResult) -> None:
     if not summary_path:
         return
     lines = [
-        "## Government purchase tracker",
+        "## Government filing tracker",
         "",
-        f"- Branch: {result.branch}",
-        f"- Success: {str(result.success).lower()}",
-        f"- Started: {result.started_utc}",
-        f"- Finished: {result.finished_utc}",
+        f"- Branch: **{_markdown_cell(result.branch.title())}**",
+        f"- Success: **{str(result.success).lower()}**",
+        f"- Started: `{result.started_utc}`",
+        f"- Finished: `{result.finished_utc}`",
     ]
+    dashboard_url = os.environ.get("DASHBOARD_URL", "").strip()
+    if dashboard_url:
+        lines.append(f"- Review dashboard: [{dashboard_url}]({dashboard_url})")
+
+    lines.extend(
+        [
+            "",
+            "### Source summary",
+            "",
+            "| Source | Visible | New filings | Transactions | Purchases | Review items | Newly cataloged | Baselined |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
     for source in sorted(result.source_counts):
         lines.append(
-            f"- {source.title()}: {result.source_counts[source]} visible, "
-            f"{result.new_filing_counts.get(source, 0)} new filings, "
-            f"{result.purchase_counts.get(source, 0)} purchases, "
-            f"{result.pending_review_counts.get(source, 0)} review items, "
-            f"{result.baseline_counts.get(source, 0)} baselined"
+            f"| {source.title()} | {result.source_counts[source]} | "
+            f"{result.new_filing_counts.get(source, 0)} | "
+            f"{result.transaction_counts.get(source, 0)} | "
+            f"{result.purchase_counts.get(source, 0)} | "
+            f"{result.pending_review_counts.get(source, 0)} | "
+            f"{result.cataloged_filing_counts.get(source, 0)} | "
+            f"{result.baseline_counts.get(source, 0)} |"
         )
+
+    if result.filings:
+        lines.extend(
+            [
+                "",
+                "### Newly detected filings",
+                "",
+                "| Source | Filer | Filed | Status | Official filing |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for filing in result.filings[:25]:
+            url = str(filing.get("source_url") or "")
+            link = f"[Open]({url})" if url else "Unavailable"
+            lines.append(
+                f"| {_markdown_cell(str(filing.get('source', '')).title())} | "
+                f"{_markdown_cell(filing.get('filer'))} | "
+                f"{_markdown_cell(filing.get('filed_date'))} | "
+                f"{_markdown_cell(str(filing.get('status', '')).replace('_', ' ').title())} | "
+                f"{link} |"
+            )
+        if len(result.filings) > 25:
+            lines.append(
+                f"\n_And {len(result.filings) - 25} more filing(s) in the output artifact/dashboard._"
+            )
+    elif result.success:
+        lines.extend(["", "### Newly detected filings", "", "No new filings were detected in this run."])
+
+    if result.transactions:
+        lines.extend(
+            [
+                "",
+                "### Newly disclosed transactions",
+                "",
+                "| Type | Filer | Owner | Ticker / asset | Amount | Transaction date | Filing |",
+                "|---|---|---|---|---|---|---|",
+            ]
+        )
+        for trade in result.transactions[:25]:
+            asset = trade.get("ticker") or trade.get("asset") or ""
+            url = str(trade.get("source_url") or "")
+            link = f"[Open]({url})" if url else "Unavailable"
+            lines.append(
+                f"| {_markdown_cell(trade.get('transaction_type'))} | "
+                f"{_markdown_cell(trade.get('filer'))} | "
+                f"{_markdown_cell(trade.get('owner'))} | "
+                f"{_markdown_cell(asset)} | "
+                f"{_markdown_cell(trade.get('amount'))} | "
+                f"{_markdown_cell(trade.get('transaction_date'))} | {link} |"
+            )
+        if len(result.transactions) > 25:
+            lines.append(
+                f"\n_And {len(result.transactions) - 25} more transaction(s) in the output artifact/dashboard._"
+            )
+
+    if result.pending_reviews:
+        lines.extend(
+            [
+                "",
+                "### Manual review required",
+                "",
+                "| Source | Filer | Filed | Reason | Filing/request page |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for review in result.pending_reviews[:25]:
+            url = str(review.get("source_url") or "")
+            link = f"[Open]({url})" if url else "Unavailable"
+            lines.append(
+                f"| {_markdown_cell(str(review.get('source', '')).title())} | "
+                f"{_markdown_cell(review.get('filer'))} | "
+                f"{_markdown_cell(review.get('filed_date'))} | "
+                f"{_markdown_cell(review.get('reason'))} | {link} |"
+            )
+
     if result.errors:
-        lines.extend(["", "### Errors", *[f"- {error}" for error in result.errors]])
+        lines.extend(["", "### Errors", *[f"- {_markdown_cell(error)}" for error in result.errors]])
     Path(summary_path).open("a", encoding="utf-8").write("\n".join(lines) + "\n")
 
 
@@ -1489,13 +2000,13 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
         state, _brand_new_state = load_state(config.state_path)
         state.last_attempt_utc = started
         save_state(config.state_path, state)
+        filing_index = latest_records(config.filings_path, "filing_key")
         if config.branch == "legislative":
-            run_legislative(config, state, result, session)
+            run_legislative(config, state, result, session, filing_index)
         else:
-            run_executive(config, state, result, session)
+            run_executive(config, state, result, session, filing_index)
         state.last_success_utc = iso_utc()
         save_state(config.state_path, state)
-        write_latest_csv(config.ledger_path, config.latest_csv_path)
         result.success = True
         return result
     except Exception as exc:
@@ -1503,6 +2014,22 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
         raise
     finally:
         result.finished_utc = iso_utc()
+        # Produce human-readable/exportable snapshots even when a later source fails.
+        try:
+            write_latest_csv(config.ledger_path, config.latest_csv_path)
+            write_latest_csv(
+                config.transactions_path,
+                config.latest_transactions_csv_path,
+            )
+            write_latest_filings_csv(
+                config.filings_path,
+                config.latest_filings_csv_path,
+            )
+            append_run_history(config.run_history_path, result)
+        except Exception as output_exc:  # pragma: no cover - defensive secondary failure path
+            LOGGER.exception("Could not finalize tracker reporting outputs")
+            result.errors.append(f"ReportingError: {output_exc}")
+            result.success = False
         write_result(config.result_path, result)
         _write_step_summary(result)
 
@@ -1513,15 +2040,25 @@ def build_config(args: argparse.Namespace) -> TrackerConfig:
     if branch == "legislative":
         default_state = DEFAULT_LEGISLATIVE_STATE
         default_ledger = DEFAULT_LEGISLATIVE_LEDGER
+        default_transactions = DEFAULT_LEGISLATIVE_TRANSACTIONS
+        default_filings = DEFAULT_LEGISLATIVE_FILINGS
+        default_run_history = DEFAULT_LEGISLATIVE_RUN_HISTORY
         default_pending = DEFAULT_LEGISLATIVE_PENDING
         default_result = DEFAULT_LEGISLATIVE_RESULT
         default_csv = DEFAULT_LEGISLATIVE_CSV
+        default_transactions_csv = DEFAULT_LEGISLATIVE_TRANSACTIONS_CSV
+        default_filings_csv = DEFAULT_LEGISLATIVE_FILINGS_CSV
     else:
         default_state = DEFAULT_EXECUTIVE_STATE
         default_ledger = DEFAULT_EXECUTIVE_LEDGER
+        default_transactions = DEFAULT_EXECUTIVE_TRANSACTIONS
+        default_filings = DEFAULT_EXECUTIVE_FILINGS
+        default_run_history = DEFAULT_EXECUTIVE_RUN_HISTORY
         default_pending = DEFAULT_EXECUTIVE_PENDING
         default_result = DEFAULT_EXECUTIVE_RESULT
         default_csv = DEFAULT_EXECUTIVE_CSV
+        default_transactions_csv = DEFAULT_EXECUTIVE_TRANSACTIONS_CSV
+        default_filings_csv = DEFAULT_EXECUTIVE_FILINGS_CSV
 
     user_agent = env.get(
         "DISCLOSURE_USER_AGENT",
@@ -1534,9 +2071,23 @@ def build_config(args: argparse.Namespace) -> TrackerConfig:
         legislative_source=args.source,
         state_path=Path(args.state_file or env.get("STATE_FILE", default_state)),
         ledger_path=Path(args.ledger_file or env.get("LEDGER_FILE", default_ledger)),
+        transactions_path=Path(
+            args.transactions_file or env.get("TRANSACTIONS_FILE", default_transactions)
+        ),
+        filings_path=Path(args.filings_file or env.get("FILINGS_FILE", default_filings)),
+        run_history_path=Path(
+            args.run_history_file or env.get("RUN_HISTORY_FILE", default_run_history)
+        ),
         pending_path=Path(args.pending_file or env.get("PENDING_FILE", default_pending)),
         result_path=Path(args.result_file or env.get("RESULT_FILE", default_result)),
         latest_csv_path=Path(args.latest_csv or env.get("LATEST_CSV", default_csv)),
+        latest_transactions_csv_path=Path(
+            args.latest_transactions_csv
+            or env.get("LATEST_TRANSACTIONS_CSV", default_transactions_csv)
+        ),
+        latest_filings_csv_path=Path(
+            args.latest_filings_csv or env.get("LATEST_FILINGS_CSV", default_filings_csv)
+        ),
         oge_listings_path=(
             Path(args.oge_listings_file or env["OGE_LISTINGS_FILE"])
             if (args.oge_listings_file or env.get("OGE_LISTINGS_FILE"))
@@ -1558,6 +2109,7 @@ def build_config(args: argparse.Namespace) -> TrackerConfig:
         require_pushover=parse_bool(env.get("REQUIRE_PUSHOVER"), default=False),
         notify_equity_only=parse_bool(env.get("NOTIFY_EQUITY_ONLY"), default=True),
         notify_pending_reviews=parse_bool(env.get("NOTIFY_PENDING_REVIEWS"), default=True),
+        notify_all_filings=parse_bool(env.get("NOTIFY_ALL_FILINGS"), default=False),
         watchlist=parse_watchlist(args.watchlist or env.get("WATCHLIST")),
         allow_empty_sources=parse_bool(env.get("ALLOW_EMPTY_SOURCES"), default=False),
         allow_state_initialization=parse_bool(
@@ -1582,9 +2134,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--oge-listings-file", help="JSON produced by oge_disclosures.py")
     parser.add_argument("--state-file")
     parser.add_argument("--ledger-file")
+    parser.add_argument("--transactions-file")
+    parser.add_argument("--filings-file")
+    parser.add_argument("--run-history-file")
     parser.add_argument("--pending-file")
     parser.add_argument("--result-file")
     parser.add_argument("--latest-csv")
+    parser.add_argument("--latest-transactions-csv")
+    parser.add_argument("--latest-filings-csv")
     parser.add_argument("--watchlist", help="Optional comma-separated ticker/company alert filter")
     parser.add_argument("--senate-lookback-days", type=int)
     parser.add_argument("--bootstrap-alerts", action="store_true")
