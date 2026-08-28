@@ -400,7 +400,7 @@ def test_dashboard_includes_ai_candidates_and_paper_portfolio(tmp_path: Path) ->
     build_site(payload, output)
     index = (output / "index.html").read_text(encoding="utf-8")
     app = (output / "app.js").read_text(encoding="utf-8")
-    assert "AI-ranked purchase candidates" in index
+    assert "AI-ranked directional signals" in index
     assert "Paper-research portfolio" in index
     assert "ai-analyses.json" in app
     assert (output / "data/ai-analyses.csv").exists()

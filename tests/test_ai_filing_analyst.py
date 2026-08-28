@@ -15,13 +15,16 @@ from scripts.ai_filing_analyst import (
     analysis_needs_market_refresh,
     build_entry_plan,
     deterministic_score,
+    eligible_trade,
     is_official_disclosure_url,
     load_rules,
     open_paper_position,
     openai_analyze,
     parse_form4_transactions,
     refresh_analysis_market,
+    repeated_same_direction_count,
     run_analyst,
+    signal_direction,
     update_paper_positions,
 )
 
@@ -166,6 +169,71 @@ def test_deterministic_score_and_entry_plan_are_bounded() -> None:
     assert plan["review_band_low"] < plan["review_band_high"]
     assert plan["position_allocation_percent"] == 1.0
     assert plan["paper_only"] is True
+
+
+
+def test_sale_is_bearish_signal_and_never_opens_paper_position() -> None:
+    root = Path(__file__).resolve().parents[1]
+    rules = load_rules(root / "config/signal_rules.yml")
+    sale = sample_trade()
+    sale.update(
+        {
+            "trade_id": "trade:sale",
+            "transaction_type": "Sale (Partial)",
+            "transaction_date": "2026-08-24",
+        }
+    )
+    earlier_sale = dict(sale)
+    earlier_sale.update(
+        {
+            "trade_id": "trade:sale-earlier",
+            "transaction_date": "2026-08-20",
+        }
+    )
+    market = {
+        "current_price": 99.0,
+        "transaction_date_close": 100.0,
+        "atr_14": 2.0,
+        "average_volume_20d": 2_000_000,
+    }
+
+    assert eligible_trade(sale, rules) is True
+    assert signal_direction(sale) == "bearish"
+    assert repeated_same_direction_count(sale, [earlier_sale, sale]) == 1
+
+    scored = deterministic_score(
+        sale,
+        sample_ai_payload(),
+        market,
+        [earlier_sale, sale],
+        rules,
+    )
+    assert scored["signal_direction"] == "bearish"
+    assert scored["repeated_same_direction_count_90d"] == 1
+    assert not any(
+        item["reason"] == "Transaction is not a purchase"
+        for item in scored["hard_caps"]
+    )
+
+    plan = build_entry_plan(sale, market, scored["score"], rules)
+    assert plan["signal_direction"] == "bearish"
+    assert plan["entry_status"] == "bearish_caution"
+    assert plan["position_allocation_percent"] == 0.0
+
+    analysis = {
+        "trade_id": sale["trade_id"],
+        "analysis_id": "analysis:sale",
+        "ticker": sale["ticker"],
+        "filer": sale["filer"],
+        "owner": sale["owner"],
+        "source_url": sale["source_url"],
+        "score": scored["score"],
+        "classification": scored["classification"],
+        "transaction_type": sale["transaction_type"],
+        "signal_direction": "bearish",
+        "entry_plan": plan,
+    }
+    assert open_paper_position(analysis, AIState(), rules) is None
 
 
 def test_contextual_score_requires_external_evidence() -> None:

@@ -56,6 +56,7 @@ TRANSACTION_FIELDS = (
     "ticker",
     "asset_type",
     "transaction_type",
+    "signal_direction",
     "transaction_date",
     "notification_date",
     "filed_date",
@@ -411,6 +412,19 @@ def build_payload(
     classification_counts = Counter(
         str(item.get("classification") or "unknown") for item in analyses
     )
+    direction_counts = Counter(
+        str(item.get("signal_direction") or "unknown") for item in analyses
+    )
+    high_priority_bullish_count = sum(
+        str(item.get("classification") or "") == "high_priority"
+        and str(item.get("signal_direction") or "") == "bullish"
+        for item in analyses
+    )
+    high_priority_bearish_count = sum(
+        str(item.get("classification") or "") == "high_priority"
+        and str(item.get("signal_direction") or "") == "bearish"
+        for item in analyses
+    )
     open_positions = [item for item in portfolio if str(item.get("status") or "") == "open"]
     closed_positions = [item for item in portfolio if str(item.get("status") or "") == "closed"]
     open_paper_pnl = sum(float(item.get("unrealized_pnl") or 0) for item in open_positions)
@@ -441,7 +455,10 @@ def build_payload(
         "run_count": len(runs),
         "analysis_count": len(analyses),
         "high_priority_count": classification_counts.get("high_priority", 0),
+        "high_priority_bullish_count": high_priority_bullish_count,
+        "high_priority_bearish_count": high_priority_bearish_count,
         "watchlist_count": classification_counts.get("watchlist", 0),
+        "direction_counts": dict(sorted(direction_counts.items())),
         "open_paper_position_count": len(open_positions),
         "closed_paper_position_count": len(closed_positions),
         "open_paper_pnl": round(open_paper_pnl, 2),
@@ -507,7 +524,7 @@ INDEX_HTML = r'''<!doctype html>
       <article class="metric-card"><span>Purchases</span><strong id="purchase-count">—</strong></article>
       <article class="metric-card"><span>Review queue</span><strong id="review-count">—</strong></article>
       <article class="metric-card"><span>AI analyses</span><strong id="analysis-count">—</strong></article>
-      <article class="metric-card"><span>High-priority candidates</span><strong id="high-priority-count">—</strong></article>
+      <article class="metric-card"><span>High-priority signals</span><strong id="high-priority-count">—</strong></article>
       <article class="metric-card"><span>Open paper positions</span><strong id="open-position-count">—</strong></article>
       <article class="metric-card"><span>Open paper P&amp;L</span><strong id="paper-pnl">—</strong></article>
     </section>
@@ -524,7 +541,7 @@ INDEX_HTML = r'''<!doctype html>
     </section>
 
     <nav class="tabs" aria-label="Dashboard sections">
-      <button class="tab active" data-panel="ai" type="button">AI candidates</button>
+      <button class="tab active" data-panel="ai" type="button">AI signals</button>
       <button class="tab" data-panel="portfolio" type="button">Paper portfolio</button>
       <button class="tab" data-panel="filings" type="button">Filings</button>
       <button class="tab" data-panel="transactions" type="button">Transactions</button>
@@ -534,7 +551,7 @@ INDEX_HTML = r'''<!doctype html>
 
     <section id="panel-ai" class="panel active">
       <div class="panel-header">
-        <div><h2>AI-ranked purchase candidates</h2><p>Evidence-constrained rankings for human review. Scores combine deterministic rules, market data, SEC context, and structured AI analysis.</p></div>
+        <div><h2>AI-ranked directional signals</h2><p>Purchases are bullish candidates; sales are bearish/caution signals. Scores measure signal strength using deterministic rules, market data, SEC context, and structured AI analysis.</p></div>
         <a class="download-link" href="data/ai-analyses.csv">Download CSV</a>
       </div>
       <div class="notice compact"><strong>Paper research only:</strong><span>No brokerage orders are created. Open the official filing and supporting evidence before acting.</span></div>
@@ -544,7 +561,7 @@ INDEX_HTML = r'''<!doctype html>
         <label>Source<select id="ai-source"><option value="">All sources</option></select></label>
       </div>
       <p id="ai-count-label" class="result-count"></p>
-      <div class="table-wrap"><table><thead><tr><th>Analyzed</th><th>Candidate</th><th>Score</th><th>Filer / owner</th><th>Disclosure</th><th>Market / entry review</th><th>Analysis</th><th>Evidence</th></tr></thead><tbody id="ai-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Analyzed</th><th>Signal</th><th>Direction</th><th>Score</th><th>Filer / owner</th><th>Disclosure</th><th>Market / entry review</th><th>Analysis</th><th>Evidence</th></tr></thead><tbody id="ai-body"></tbody></table></div>
       <button id="ai-more" class="more-button" type="button">Show more</button>
     </section>
 
@@ -685,7 +702,7 @@ WALLBOARD_HTML = r'''<!doctype html>
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Primary decision queue</p>
-          <h2 id="candidates-title">AI-ranked candidates</h2>
+          <h2 id="candidates-title">AI-ranked signals</h2>
         </div>
         <span id="candidate-count" class="section-count">—</span>
       </div>
@@ -1270,9 +1287,9 @@ function renderCandidates() {
     .filter(row => ["high_priority", "watchlist", "weak_signal"].includes(String(row.classification || "")))
     .sort((a, b) => classificationRank(a.classification) - classificationRank(b.classification) || Number(b.score || 0) - Number(a.score || 0) || String(b.analyzed_at_utc || "").localeCompare(String(a.analyzed_at_utc || "")));
   const rows = analyses.slice(0, 6);
-  el("candidate-count").textContent = `${number(state.data.summary.high_priority_count)} high · ${number(state.data.summary.watchlist_count)} watch`;
+  el("candidate-count").textContent = `${number(state.data.summary.high_priority_bullish_count)} bullish high · ${number(state.data.summary.high_priority_bearish_count)} bearish high · ${number(state.data.summary.watchlist_count)} watch`;
   if (!rows.length) {
-    el("candidate-list").innerHTML = `<div class="empty-state">No AI-ranked candidates are available yet. This panel will populate after a qualifying new purchase is parsed and analyzed.</div>`;
+    el("candidate-list").innerHTML = `<div class="empty-state">No AI-ranked directional signals are available yet. This panel will populate after a qualifying purchase or sale is parsed and analyzed.</div>`;
     return;
   }
   el("candidate-list").innerHTML = rows.map(row => {
@@ -1511,6 +1528,9 @@ tbody tr:hover { background: rgba(105, 183, 255, .055); }
 .badge.high_priority { color: var(--success); border-color: rgba(112, 214, 161, .5); }
 .badge.watchlist { color: var(--accent-2); border-color: rgba(105, 183, 255, .5); }
 .badge.weak_signal { color: var(--warning); border-color: rgba(242, 200, 121, .5); }
+.badge.bullish { color: var(--success); border-color: rgba(112, 214, 161, .6); }
+.badge.bearish { color: var(--danger); border-color: rgba(255, 140, 140, .6); }
+.badge.neutral { color: var(--muted); }
 .analysis-summary { min-width: 310px; max-width: 520px; line-height: 1.45; }
 .analysis-summary small { display: block; margin-top: 6px; color: var(--muted); }
 .evidence-links { min-width: 150px; }
@@ -1686,6 +1706,7 @@ function renderAnalyses() {
     return `<tr>
       <td>${formatDate(row.analyzed_at_utc)}</td>
       <td class="asset-cell"><strong>${escapeHtml(row.ticker || "Unknown")}</strong><small>${escapeHtml(row.asset || "")}</small></td>
+      <td><span class="badge ${escapeHtml(row.signal_direction || "neutral")}">${escapeHtml(titleCase(row.signal_direction || "neutral"))}</span><small>${escapeHtml(row.transaction_type || "Unknown")}</small></td>
       <td><span class="score ${escapeHtml(row.classification || "archive")}">${number(row.score)}</span><small><span class="badge ${escapeHtml(row.classification || "archive")}">${escapeHtml(titleCase(row.classification || "archive"))}</span></small></td>
       <td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.owner,row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small></td>
       <td>${formatDate(row.transaction_date)}<small>${escapeHtml(row.amount || "—")} • filed ${formatDate(row.filed_date)}</small></td>

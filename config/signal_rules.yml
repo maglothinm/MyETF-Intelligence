@@ -2,6 +2,9 @@ version: 1
 analysis:
   eligible_transaction_types:
     - Purchase
+    - Sale
+    - Sale (Full)
+    - Sale (Partial)
   eligible_equity_only: true
   max_document_characters: 50000
   sec_lookback_days: 180

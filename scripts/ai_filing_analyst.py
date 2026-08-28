@@ -72,7 +72,7 @@ except ImportError:  # pragma: no cover - direct execution path
 LOGGER = logging.getLogger("myetf-ai-analyst")
 
 AI_STATE_VERSION = 1
-PROMPT_VERSION = "2026-08-26.1"
+PROMPT_VERSION = "2026-08-28.2"
 DEFAULT_AI_DIR = Path(".trade-tracker/ai")
 DEFAULT_RESULT_FILE = Path("ai-analysis-result.json")
 DEFAULT_ANALYSES_CSV = Path("ai-latest-analyses.csv")
@@ -384,6 +384,47 @@ def eligible_trade(trade: Mapping[str, Any], rules: Mapping[str, Any]) -> bool:
     return bool(ticker and re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,9}", ticker))
 
 
+
+def signal_direction(trade: Mapping[str, Any]) -> str:
+    """Return the investment-information direction of a disclosed transaction."""
+    transaction_type = normalize_text(str(trade.get("transaction_type") or "")).casefold()
+    if transaction_type == "purchase":
+        return "bullish"
+    if transaction_type.startswith("sale"):
+        return "bearish"
+    return "neutral"
+
+
+def repeated_same_direction_count(
+    trade: Mapping[str, Any],
+    all_transactions: Sequence[Mapping[str, Any]],
+    *,
+    days: int = 90,
+) -> int:
+    """Count prior same-filer/same-ticker disclosures in the same direction."""
+    ticker = str(trade.get("ticker") or "").upper()
+    filer = normalize_text(str(trade.get("filer") or "")).casefold()
+    current_date = parse_date(str(trade.get("transaction_date") or ""))
+    direction = signal_direction(trade)
+    if not ticker or not filer or current_date is None or direction == "neutral":
+        return 0
+
+    count = 0
+    for other in all_transactions:
+        if signal_direction(other) != direction:
+            continue
+        if str(other.get("ticker") or "").upper() != ticker:
+            continue
+        if normalize_text(str(other.get("filer") or "")).casefold() != filer:
+            continue
+        other_date = parse_date(str(other.get("transaction_date") or ""))
+        if other_date is None:
+            continue
+        delta = (current_date - other_date).days
+        if 0 <= delta <= days:
+            count += 1
+    return max(0, count - 1)
+
 def analysis_id_for_trade(
     trade: Mapping[str, Any], *, model: str, rules_hash: str
 ) -> str:
@@ -485,7 +526,7 @@ def amount_pattern_score(
 ) -> tuple[int, int, int]:
     _, upper = amount_bounds(str(trade.get("amount") or ""))
     amount_points = table_points(upper or 0, rules.get("amount_points") or [], "maximum_amount")
-    repeats = repeated_purchase_count(trade, all_transactions)
+    repeats = repeated_same_direction_count(trade, all_transactions)
     repeat_points = min(5, repeats * 2)
     novelty_points = 1 if repeats == 0 else 0
     return min(15, amount_points + repeat_points + novelty_points), repeats, amount_points
@@ -563,8 +604,12 @@ def deterministic_score(
         cap("Ticker could not be resolved", int(caps.get("missing_ticker", 20)))
     if not bool(trade.get("equity_like")):
         cap("Transaction is not confidently equity-like", int(caps.get("non_equity", 25)))
-    if str(trade.get("transaction_type") or "") != "Purchase":
-        cap("Transaction is not a purchase", int(caps.get("non_purchase", 35)))
+    direction = signal_direction(trade)
+    if direction == "neutral":
+        cap(
+            "Transaction direction is unsupported or neutral",
+            int(caps.get("non_purchase", 35)),
+        )
     if is_broad_fund(trade):
         cap("Broad or diversified fund signal", int(caps.get("broad_fund", 49)))
     if str(trade.get("parse_confidence") or "").casefold() == "low":
@@ -609,8 +654,10 @@ def deterministic_score(
             "liquidity": liquidity,
         },
         "hard_caps": hard_caps,
+        "signal_direction": direction,
         "transaction_age_days": age_days,
-        "repeated_purchase_count_90d": repeats,
+        "repeated_purchase_count_90d": repeats if direction == "bullish" else 0,
+        "repeated_same_direction_count_90d": repeats,
         "amount_size_points": base_amount_points,
     }
 
@@ -685,6 +732,18 @@ def build_entry_plan(
         "position_allocation_percent": 0.0,
         "paper_only": True,
     }
+    direction = signal_direction(trade)
+    result["signal_direction"] = direction
+
+    if direction != "bullish":
+        result["entry_status"] = (
+            "bearish_caution" if direction == "bearish" else "no_entry_signal"
+        )
+        result["position_allocation_percent"] = 0.0
+        if current and tx_close:
+            result["chase_percent"] = round(((current / tx_close) - 1.0) * 100.0, 2)
+        return result
+
     thresholds = rules.get("thresholds") or {}
     portfolio = rules.get("paper_portfolio") or {}
     if score >= int(thresholds.get("high_priority", 80)):
@@ -1336,12 +1395,14 @@ def validate_ai_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 ANALYST_INSTRUCTIONS = """You are the evidence-constrained analyst inside MyETF, a public-disclosure research and paper-trading system.
 
-Assess the significance of one publicly disclosed equity purchase. You are not placing an order and must not present the result as certain or as personal financial advice. Separate facts from inference. Do not infer undisclosed trades, private associates, criminal conduct, or motives. A political, committee, regulatory, contracting, donor, employer, or family relationship is relevant only when supported by supplied or publicly retrieved evidence.
+Assess the significance and direction of one publicly disclosed equity transaction. You are not placing an order and must not present the result as certain or as personal financial advice. Separate facts from inference. Do not infer undisclosed trades, private associates, criminal conduct, or motives. A political, committee, regulatory, contracting, donor, employer, or family relationship is relevant only when supported by supplied or publicly retrieved evidence.
 
 Apply these scoring limits exactly:
 - filer_relevance_score: 0-20. Score authority, committee/agency jurisdiction, and demonstrated relevance to the issuer. Lack of evidence must score low.
 - policy_contract_relevance_score: 0-15. Score concrete public legislative, regulatory, procurement, grant, enforcement, or budget relevance. General sector overlap is weak evidence.
-- market_confirmation_score: 0-10. Score directional public corroboration such as same-direction corporate-insider activity, repeated government-household accumulation, or an identifiable public catalyst. The mere existence of an SEC filing is neutral unless its details support the direction.
+- market_confirmation_score: 0-10. Score directional public corroboration such as same-direction corporate-insider activity, repeated government-household accumulation or disposition, or an identifiable public catalyst. The mere existence of an SEC filing is neutral unless its details support the direction.
+
+A disclosed purchase is bullish-direction evidence. A disclosed sale is bearish/caution evidence. Score the significance and evidentiary strength of either direction; never convert a sale into a buy recommendation.
 
 Classify routine portfolio maintenance conservatively. Treat broad funds, dividend reinvestments, automatic plans, grants, vesting, transfers, and ambiguous rows as weak. Consider the transaction owner, size range, repetition, filing delay, price movement, liquidity, contradictory evidence, and whether the market has already moved.
 
@@ -1377,7 +1438,7 @@ def openai_analyze(
             "format": {
                 "type": "json_schema",
                 "name": "government_trade_analysis",
-                "description": "Evidence-constrained analysis of a disclosed government equity purchase",
+                "description": "Evidence-constrained directional analysis of a disclosed government equity transaction",
                 "schema": dict(schema),
                 "strict": True,
             }
@@ -1427,10 +1488,15 @@ def build_analysis_context(
         if str(item.get("ticker") or "").upper() == str(trade.get("ticker") or "").upper()
     ][-25:]
     return {
-        "purpose": "Rank for human review and a paper-research portfolio; no real order execution",
+        "purpose": (
+            "Rank directional significance for human review. Only bullish purchases may "
+            "enter the paper-research portfolio; bearish sales remain caution signals. "
+            "No real order execution."
+        ),
         "analysis_timestamp_utc": iso_utc(),
         "prompt_version": PROMPT_VERSION,
         "candidate_transaction": dict(trade),
+        "signal_direction": signal_direction(trade),
         "filing_record": dict(filing),
         "all_transactions_in_filing": same_filing,
         "recent_same_ticker_disclosures": same_ticker,
@@ -1560,6 +1626,7 @@ def build_analysis_record(
         "asset": str(trade.get("asset") or ""),
         "asset_type": str(trade.get("asset_type") or ""),
         "transaction_type": str(trade.get("transaction_type") or ""),
+        "signal_direction": scored["signal_direction"],
         "transaction_date": str(trade.get("transaction_date") or ""),
         "filed_date": str(trade.get("filed_date") or filing.get("filed_date") or ""),
         "observed_at_utc": str(trade.get("observed_at_utc") or ""),
@@ -1575,6 +1642,7 @@ def build_analysis_record(
         "hard_caps": scored["hard_caps"],
         "transaction_age_days": scored["transaction_age_days"],
         "repeated_purchase_count_90d": scored["repeated_purchase_count_90d"],
+        "repeated_same_direction_count_90d": scored["repeated_same_direction_count_90d"],
         "market": dict(market),
         "sec": dict(sec),
         "ai": ai_result.payload,
@@ -1611,10 +1679,12 @@ def refresh_analysis_market(
             "score": scored["score"],
             "raw_score": scored["raw_score"],
             "classification": scored["classification"],
+            "signal_direction": scored["signal_direction"],
             "score_components": scored["components"],
             "hard_caps": scored["hard_caps"],
             "transaction_age_days": scored["transaction_age_days"],
             "repeated_purchase_count_90d": scored["repeated_purchase_count_90d"],
+            "repeated_same_direction_count_90d": scored["repeated_same_direction_count_90d"],
             "entry_plan": build_entry_plan(trade, market, int(scored["score"]), rules),
             "market_refreshed_at_utc": iso_utc(),
             "analysis_revision": int(analysis.get("analysis_revision") or 1) + 1,
@@ -1634,6 +1704,14 @@ def should_refresh_portfolio(state: AIState, rules: Mapping[str, Any]) -> bool:
 def open_paper_position(
     analysis: Mapping[str, Any], state: AIState, rules: Mapping[str, Any]
 ) -> dict[str, Any] | None:
+    transaction_type = str(analysis.get("transaction_type") or "")
+    explicit_direction = str(analysis.get("signal_direction") or "")
+    if transaction_type.startswith("Sale") or explicit_direction == "bearish":
+        return None
+    if explicit_direction and explicit_direction != "bullish":
+        return None
+    if transaction_type and transaction_type != "Purchase":
+        return None
     entry = analysis.get("entry_plan") or {}
     allocation_pct = float(entry.get("position_allocation_percent") or 0)
     current = float(entry.get("current_price") or 0)
@@ -1783,6 +1861,8 @@ def write_latest_outputs(config: AnalystConfig, analyses: Sequence[Mapping[str, 
         "asset",
         "filer",
         "owner",
+        "transaction_type",
+        "signal_direction",
         "transaction_date",
         "filed_date",
         "amount",
@@ -1874,7 +1954,7 @@ def write_step_summary(result: AnalystRunResult) -> None:
         "## MyETF AI filing analyst",
         "",
         f"- Status: **{'success' if result.success else 'failed'}**",
-        f"- Eligible parsed purchases: **{result.eligible_transaction_count}**",
+        f"- Eligible parsed directional transactions: **{result.eligible_transaction_count}**",
         f"- New analyses completed: **{result.completed_count}**",
         f"- High priority: **{result.high_priority_count}**",
         f"- Watchlist: **{result.watchlist_count}**",
