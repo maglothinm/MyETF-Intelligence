@@ -34,7 +34,7 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 2
 fi
 
-CURRENT_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+CURRENT_REPO="${MYETF_SOURCE_REPO:-maglothinm/MyETF}"
 if [[ -z "$OWNER" ]]; then
   OWNER="$(gh api user --jq .login)"
 fi
