@@ -24,7 +24,7 @@ from scripts.government_trade_tracker import (
     should_baseline_source,
     write_latest_csv,
 )
-from scripts.monitor_disclosures import MonitorError, Report
+from scripts.monitor_disclosures import MonitorError, Report, normalize_text
 
 
 def house_report(doc_id: str = "20035289") -> Report:
@@ -89,6 +89,49 @@ def test_parse_house_electronic_ptr_extracts_all_rows_and_purchases() -> None:
     assert all(trade.equity_like for trade in purchases)
     assert trades[3].transaction_type == "Sale"
     assert trades[3].amount == "$15,001 - $50,000"
+
+
+
+def test_parse_house_partial_sale_with_house_pdf_control_chars() -> None:
+    text = """
+    P\x00\x00 T\x00 R
+    Name: Hon. Michael Rulli
+    Status: Member
+    State/District: OH06
+    ID Owner Asset Transaction
+    Type
+    Date Notification
+    Date
+    Amount Cap.
+    Gains >
+    $200?
+    Alphabet Inc. - Class A Common
+    Stock (GOOGL) [ST]
+    S (partial) 08/24/2026 08/24/2026 $50,001 -
+    $100,000
+    F S: New
+    S O: Merrill Lynch Roth IRA
+    * For the complete list of asset type abbreviations
+    """
+    report = replace(
+        house_report("20035309"),
+        filer="Hon. Michael Rulli",
+        filed_date="08/25/2026",
+    )
+
+    assert "\x00" not in normalize_text(text)
+
+    trades = parse_house_transactions(text, report)
+    assert len(trades) == 1
+
+    trade = trades[0]
+    assert trade.ticker == "GOOGL"
+    assert trade.asset_type == "ST"
+    assert trade.transaction_type == "Sale (Partial)"
+    assert trade.transaction_date == "2026-08-24"
+    assert trade.notification_date == "2026-08-24"
+    assert trade.amount == "$50,001 - $100,000"
+    assert trade.equity_like is True
 
 
 def test_parse_house_owner_and_wrapped_asset() -> None:

@@ -259,7 +259,7 @@ def response_bytes(
 
 
 def normalize_text(value: str) -> str:
-    normalized = unicodedata.normalize("NFKC", value)
+    normalized = unicodedata.normalize("NFKC", value).replace("\x00", " ")
     return re.sub(r"\s+", " ", normalized).strip()
 
 

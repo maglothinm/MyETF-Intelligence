@@ -115,6 +115,8 @@ TRANSACTION_LABELS = {
     "PURCHASE": "Purchase",
     "BUY": "Purchase",
     "S": "Sale",
+    "S (FULL)": "Sale (Full)",
+    "S (PARTIAL)": "Sale (Partial)",
     "SALE": "Sale",
     "SALE (FULL)": "Sale (Full)",
     "SALE (PARTIAL)": "Sale (Partial)",
@@ -123,7 +125,7 @@ TRANSACTION_LABELS = {
 }
 
 HOUSE_TRANSACTION_RE = re.compile(
-    r"(?<![A-Z0-9])(?P<type>P|S|E)\s+"
+    r"(?<![A-Z0-9])(?P<type>P|E|S(?:\s*\((?:Full|Partial)\))?)\s+"
     r"(?P<date>\d{1,2}/\d{1,2}/\d{2,4})\s+"
     r"(?P<notification>\d{1,2}/\d{1,2}/\d{2,4})\s+"
     r"(?P<amount>(?:Over\s+)?\$[\d,]+(?:\.\d{2})?(?:\s*[-–—]\s*\$?[\d,]+(?:\.\d{2})?)?)",
