@@ -128,6 +128,10 @@ class AnalystError(MonitorError):
     """Raised when the AI research process cannot complete safely."""
 
 
+class OpenAIQuotaError(AnalystError):
+    """Raised when OpenAI reports exhausted or unavailable API quota."""
+
+
 @dataclass
 class AIState:
     version: int = AI_STATE_VERSION
@@ -1428,7 +1432,12 @@ def openai_analyze(
                 "The openai Python package is not installed; install requirements-ai.txt"
             ) from exc
         client_factory = OpenAI
-    client = client_factory(api_key=config.openai_api_key)
+    # MyETF owns retry policy explicitly. The OpenAI SDK otherwise retries
+    # 429 responses automatically, including non-recoverable insufficient_quota.
+    client = client_factory(
+        api_key=config.openai_api_key,
+        max_retries=0,
+    )
     kwargs: dict[str, Any] = {
         "model": config.model,
         "instructions": ANALYST_INSTRUCTIONS,
@@ -1448,7 +1457,72 @@ def openai_analyze(
     }
     if config.web_search_enabled:
         kwargs["tools"] = [{"type": "web_search"}]
-    response = client.responses.create(**kwargs)
+    response = None
+    maximum_attempts = 3
+
+    for attempt in range(maximum_attempts):
+        try:
+            response = client.responses.create(**kwargs)
+            break
+        except Exception as exc:  # noqa: BLE001 - normalized below
+            message = str(exc)
+            message_lower = message.casefold()
+            status_code = getattr(exc, "status_code", None)
+
+            body = getattr(exc, "body", None)
+            error_code = ""
+            if isinstance(body, Mapping):
+                nested = body.get("error")
+                payload = nested if isinstance(nested, Mapping) else body
+                error_code = normalize_text(
+                    str(payload.get("code") or payload.get("type") or "")
+                ).casefold()
+
+            if (
+                error_code == "insufficient_quota"
+                or "insufficient_quota" in message_lower
+            ):
+                raise OpenAIQuotaError(
+                    "OpenAI API quota is exhausted or unavailable; "
+                    "check project/organization billing and limits before retrying"
+                ) from exc
+
+            retryable_status = (
+                status_code in {408, 409, 429}
+                or (
+                    isinstance(status_code, int)
+                    and status_code >= 500
+                )
+            )
+            retryable_exception = type(exc).__name__ in {
+                "APIConnectionError",
+                "APITimeoutError",
+                "InternalServerError",
+            }
+
+            if (
+                not (retryable_status or retryable_exception)
+                or attempt >= maximum_attempts - 1
+            ):
+                raise
+
+            delay = min(8.0, float(2 ** attempt))
+            LOGGER.warning(
+                "Transient OpenAI API error (%s, status=%s); "
+                "retrying in %.1fs (attempt %s/%s)",
+                type(exc).__name__,
+                status_code,
+                delay,
+                attempt + 2,
+                maximum_attempts,
+            )
+            time.sleep(delay)
+
+    if response is None:
+        raise AnalystError(
+            "OpenAI request ended without a response or exception"
+        )
+
     output_text = str(getattr(response, "output_text", "") or "")
     if not output_text:
         raise AnalystError("OpenAI returned no structured output text")
@@ -2052,7 +2126,7 @@ def run_analyst(
             continue
         pending.append(trade)
     pending = pending[: config.max_analyses]
-    result.attempted_count = len(pending)
+    result.attempted_count = 0
 
     session = session or build_session(config.repository_url or "MyETF AI filing analyst")
     ticker_map = load_sec_ticker_map(config, session, result.warnings)
@@ -2117,6 +2191,7 @@ def run_analyst(
             )
 
     for trade in pending:
+        result.attempted_count += 1
         try:
             filing = filing_for_trade(trade, filings)
             market = market_context(trade, config, session, result.warnings)
@@ -2182,6 +2257,24 @@ def run_analyst(
             if opened:
                 append_jsonl(config.ai_dir / "paper-portfolio.jsonl", [opened])
             save_state(state_path, state)
+        except OpenAIQuotaError as exc:
+            message = (
+                f"{str(trade.get('ticker') or 'unknown')} / "
+                f"{str(trade.get('trade_id') or '')}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            LOGGER.error(
+                "AI batch stopped after non-retryable OpenAI quota failure: %s",
+                message,
+            )
+            result.errors.append(message)
+            result.warnings.append(
+                "Remaining AI analyses were not attempted because OpenAI "
+                "reported insufficient_quota. They remain pending for the "
+                "next workflow run after quota or billing is restored."
+            )
+            break
+
         except Exception as exc:  # noqa: BLE001 - error is preserved for retry
             message = (
                 f"{str(trade.get('ticker') or 'unknown')} / {str(trade.get('trade_id') or '')}: "

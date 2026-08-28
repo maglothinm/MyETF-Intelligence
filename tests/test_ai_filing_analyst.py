@@ -11,6 +11,7 @@ from scripts.ai_filing_analyst import (
     AnalystConfig,
     AIState,
     OpenAIResult,
+    OpenAIQuotaError,
     analysis_id_for_trade,
     analysis_needs_market_refresh,
     build_entry_plan,
@@ -357,6 +358,180 @@ def test_openai_call_uses_responses_structured_output() -> None:
     assert text["format"]["type"] == "json_schema"
     assert text["format"]["strict"] is True
     assert captured["store"] is False
+
+
+
+def test_openai_insufficient_quota_is_not_retried() -> None:
+    calls = {"count": 0}
+
+    class FakeQuotaError(Exception):
+        status_code = 429
+        body = {
+            "message": "You exceeded your current quota",
+            "type": "insufficient_quota",
+            "code": "insufficient_quota",
+        }
+
+    class FakeResponses:
+        def create(self, **kwargs: object) -> object:
+            calls["count"] += 1
+            raise FakeQuotaError("429 insufficient_quota")
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            assert kwargs["max_retries"] == 0
+            self.responses = FakeResponses()
+
+    cfg = config_for(Path("/tmp"))
+    schema = json.loads(
+        cfg.schema_path.read_text(encoding="utf-8")
+    )
+
+    with pytest.raises(OpenAIQuotaError, match="quota"):
+        openai_analyze(
+            {"candidate_transaction": sample_trade()},
+            cfg,
+            schema,
+            client_factory=FakeClient,
+        )
+
+    assert calls["count"] == 1
+
+
+def test_openai_transient_429_is_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"count": 0}
+    sleeps: list[float] = []
+
+    class FakeRateLimitError(Exception):
+        status_code = 429
+        body = {
+            "message": "Requests per minute exceeded",
+            "type": "rate_limit_exceeded",
+            "code": "rate_limit_exceeded",
+        }
+
+    class FakeResponses:
+        def create(self, **kwargs: object) -> object:
+            calls["count"] += 1
+            if calls["count"] < 3:
+                raise FakeRateLimitError(
+                    "429 rate_limit_exceeded"
+                )
+            return SimpleNamespace(
+                id="resp_retry",
+                output_text=json.dumps(
+                    sample_ai_payload()
+                ),
+                usage=SimpleNamespace(
+                    input_tokens=10,
+                    output_tokens=5,
+                ),
+            )
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            assert kwargs["max_retries"] == 0
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr(
+        "scripts.ai_filing_analyst.time.sleep",
+        lambda seconds: sleeps.append(
+            float(seconds)
+        ),
+    )
+
+    cfg = config_for(Path("/tmp"))
+    schema = json.loads(
+        cfg.schema_path.read_text(encoding="utf-8")
+    )
+
+    result = openai_analyze(
+        {"candidate_transaction": sample_trade()},
+        cfg,
+        schema,
+        client_factory=FakeClient,
+    )
+
+    assert result.response_id == "resp_retry"
+    assert calls["count"] == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_ai_batch_stops_after_first_quota_failure(
+    tmp_path: Path,
+) -> None:
+    cfg = config_for(tmp_path)
+
+    first = sample_trade()
+    second = dict(first)
+    second.update(
+        {
+            "trade_id": "trade:second",
+            "ticker": "EX2",
+            "asset": (
+                "Example Two Corporation "
+                "Common Stock (EX2)"
+            ),
+        }
+    )
+
+    write_jsonl(
+        cfg.legislative_dir / "transactions.jsonl",
+        [first, second],
+    )
+    write_jsonl(
+        cfg.legislative_dir / "filings.jsonl",
+        [sample_filing()],
+    )
+
+    (
+        cfg.legislative_dir / "state.json"
+    ).write_text("{}", encoding="utf-8")
+
+    cfg.executive_dir.mkdir(parents=True)
+
+    (
+        cfg.executive_dir / "state.json"
+    ).write_text("{}", encoding="utf-8")
+
+    calls = {"count": 0}
+
+    class FakeQuotaError(Exception):
+        status_code = 429
+        body = {
+            "message": "You exceeded your current quota",
+            "type": "insufficient_quota",
+            "code": "insufficient_quota",
+        }
+
+    class FakeResponses:
+        def create(self, **kwargs: object) -> object:
+            calls["count"] += 1
+            raise FakeQuotaError(
+                "429 insufficient_quota"
+            )
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.responses = FakeResponses()
+
+    result = run_analyst(
+        cfg,
+        client_factory=FakeClient,
+    )
+
+    assert result.success is False
+    assert result.attempted_count == 1
+    assert calls["count"] == 1
+    assert len(result.errors) == 1
+    assert "quota" in result.errors[0].casefold()
+    assert any(
+        "remaining ai analyses were not attempted"
+        in item.casefold()
+        for item in result.warnings
+    )
 
 
 def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
