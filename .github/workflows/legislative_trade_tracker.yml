@@ -38,7 +38,7 @@ env:
   LATEST_TRANSACTIONS_CSV: "legislative-latest-transactions.csv"
   LATEST_FILINGS_CSV: "legislative-latest-filings.csv"
   SENATE_LOOKBACK_DAYS: "180"
-  REQUIRE_PUSHOVER: "true"
+  REQUIRE_PUSHOVER: "false"
   NOTIFY_EQUITY_ONLY: "true"
   NOTIFY_PENDING_REVIEWS: "true"
   NOTIFY_ALL_FILINGS: "true"
