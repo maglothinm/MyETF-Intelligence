@@ -6,7 +6,7 @@ analysis:
     - Sale (Full)
     - Sale (Partial)
   eligible_equity_only: true
-  max_document_characters: 50000
+  max_document_characters: 8000
   sec_lookback_days: 180
   sec_form4_documents: 4
   max_market_refreshes_per_run: 50
