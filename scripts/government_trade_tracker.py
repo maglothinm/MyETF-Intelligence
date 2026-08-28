@@ -696,6 +696,37 @@ def parse_house_transactions(text: str, report: Report) -> list[Trade]:
         match = HOUSE_TRANSACTION_RE.search(combined)
         if match:
             asset_prefix = combined[: match.start()].strip()
+            amount_value = match.group("amount")
+
+            # Some House PDFs interleave the second half of the asset description
+            # between the lower and upper values of the disclosed amount range:
+            #
+            #   Alphabet Inc. - Class A Common
+            #   S (partial) 08/24/2026 08/24/2026 $50,001 -
+            #   Stock (GOOGL) [ST]
+            #   $100,000
+            #
+            # Do not finalize the row until the upper bound is available.
+            trailing = combined[match.end():].strip()
+            if trailing[:1] in {"-", "–", "—"}:
+                remainder = trailing[1:].strip()
+                upper_match = re.search(
+                    r"\$?[\d,]+(?:\.\d{2})?\s*$",
+                    remainder,
+                )
+                if upper_match is None:
+                    index += 1
+                    continue
+
+                asset_suffix = remainder[: upper_match.start()].strip()
+                if asset_suffix:
+                    asset_prefix = normalize_text(
+                        f"{asset_prefix} {asset_suffix}"
+                    )
+                amount_value = normalize_amount(
+                    f"{amount_value} - {upper_match.group(0)}"
+                )
+
             owner_code = ""
             owner_match = re.match(r"^(SP|JT|DC)\s+", asset_prefix, re.IGNORECASE)
             if owner_match:
@@ -714,7 +745,7 @@ def parse_house_transactions(text: str, report: Report) -> list[Trade]:
                 transaction_type=match.group("type"),
                 transaction_date=match.group("date"),
                 notification_date=match.group("notification"),
-                amount=match.group("amount"),
+                amount=amount_value,
                 raw_row=combined,
                 confidence="high",
             )
@@ -1264,8 +1295,19 @@ def _senate_pdf_from_viewer(
     soup = BeautifulSoup(data, "html.parser")
     link = soup.find("a", href=re.compile(r"\.pdf(?:$|\?)", re.IGNORECASE))
     if not link or not link.get("href"):
-        excerpt = normalize_text(soup.get_text(" ", strip=True))[:300]
-        raise SourceChangedError(f"Senate paper PTR page contains no PDF link: {excerpt!r}")
+        page_text = normalize_text(soup.get_text(" ", strip=True))
+        if (
+            "filing document - print view" in page_text.casefold()
+            and re.search(r"\bpage\s+\d+\s+of\s+\d+\b", page_text, re.IGNORECASE)
+        ):
+            raise PaperFilingError(
+                "Senate paper PTR is rendered as page images and exposes no direct PDF; "
+                "manual review is required"
+            )
+        excerpt = page_text[:300]
+        raise SourceChangedError(
+            f"Senate paper PTR page contains no PDF link: {excerpt!r}"
+        )
     pdf_url = urljoin(response.url, str(link["href"]))
     pdf_response = checked_response(
         session.get(pdf_url, timeout=DEFAULT_TIMEOUT),
@@ -1283,7 +1325,21 @@ def scan_senate_report(session: Session, report: Report, config: TrackerConfig) 
     content_type = response.headers.get("Content-Type", "").lower()
 
     if report.format == "pdf" or data.startswith(b"%PDF") or "application/pdf" in content_type:
-        pdf_bytes, _pdf_url = _senate_pdf_from_viewer(session, response, data, config)
+        try:
+            pdf_bytes, _pdf_url = _senate_pdf_from_viewer(
+                session, response, data, config
+            )
+        except PaperFilingError as exc:
+            return [], make_pending_review(
+                branch="legislative",
+                source="senate",
+                report_id=report.report_id,
+                filer=report.filer,
+                filed_date=report.filed_date,
+                source_url=report.url,
+                reason=str(exc),
+            )
+
         try:
             text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
             transactions = parse_generic_transactions_text(

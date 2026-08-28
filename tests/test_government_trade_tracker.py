@@ -5,12 +5,14 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from requests import Response
 
 from scripts.government_trade_tracker import (
     PaperFilingError,
     TrackerConfig,
     TrackerResult,
     TrackerState,
+    _senate_pdf_from_viewer,
     catalog_visible_filings,
     commit_filing_outcome,
     is_equity_like,
@@ -134,6 +136,48 @@ def test_parse_house_partial_sale_with_house_pdf_control_chars() -> None:
     assert trade.equity_like is True
 
 
+
+def test_house_partial_sale_with_interleaved_asset_suffix() -> None:
+    text = """
+    P T R
+    Name: Hon. Michael Rulli
+    Status: Member
+    State/District: OH06
+    ID Owner Asset Transaction
+    Type
+    Date Notification
+    Date
+    Amount Cap.
+    Gains >
+    $200?
+    Alphabet Inc. - Class A Common
+    S (partial) 08/24/2026 08/24/2026 $50,001 -
+    Stock (GOOGL) [ST]
+    $100,000
+    F S: New
+    S O: Merrill Lynch Roth IRA
+    * For the complete list of asset type abbreviations
+    """
+
+    report = replace(
+        house_report("20035309"),
+        filer="Hon. Michael Rulli",
+        filed_date="08/25/2026",
+    )
+
+    trades = parse_house_transactions(text, report)
+    assert len(trades) == 1
+
+    trade = trades[0]
+    assert trade.ticker == "GOOGL"
+    assert trade.asset_type == "ST"
+    assert trade.transaction_type == "Sale (Partial)"
+    assert trade.transaction_date == "2026-08-24"
+    assert trade.notification_date == "2026-08-24"
+    assert trade.amount == "$50,001 - $100,000"
+    assert "Stock (GOOGL) [ST]" in trade.asset
+
+
 def test_parse_house_owner_and_wrapped_asset() -> None:
     text = """
     Transactions
@@ -198,6 +242,38 @@ def test_parse_senate_electronic_html() -> None:
     assert purchase.owner == "Joint"
     assert purchase.asset_type == "Stock"
     assert purchase.equity_like is True
+
+
+
+def test_senate_page_image_viewer_routes_to_manual_review(tmp_path: Path) -> None:
+    response = Response()
+    response.status_code = 200
+    response.url = (
+        "https://efdsearch.senate.gov/search/view/paper/"
+        "ec20cd93-6702-4a29-b3a6-983f4b17f365/"
+    )
+    response.headers["Content-Type"] = "text/html"
+    response._content = b"""
+        <html><body>
+          <h1>Filing Document - Print View</h1>
+          <div>Page 1 of 4</div>
+          <div>Rotate (from original position)</div>
+          <div>Printer-Friendly</div>
+        </body></html>
+    """
+
+    config = _tracker_config(tmp_path, initialize=False)
+
+    with pytest.raises(
+        PaperFilingError,
+        match="rendered as page images",
+    ):
+        _senate_pdf_from_viewer(
+            object(),
+            response,
+            response.content,
+            config,
+        )
 
 
 def test_parse_oge_style_text_keeps_purchase_only_filter_separate() -> None:
