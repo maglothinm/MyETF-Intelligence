@@ -188,6 +188,8 @@ jobs:
 
       - name: Run offline tests
         shell: bash
+        env:
+          AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS: "0"
         run: |
           export GITHUB_STEP_SUMMARY=/tmp/myetf-offline-test-summary
           python -m pytest -q \
