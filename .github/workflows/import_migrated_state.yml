@@ -1,0 +1,145 @@
+name: Import migrated MyETF state
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_tag:
+        description: "Private release tag created by create_private_standalone_repo.sh"
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: import-migrated-myETF-state
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Download migration release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIGRATION_TAG: ${{ inputs.migration_tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$MIGRATION_TAG" =~ ^state-migration-[0-9]{8}T[0-9]{6}Z$ ]]; then
+            echo "Unexpected migration tag format: $MIGRATION_TAG" >&2
+            exit 2
+          fi
+          mkdir -p migration-assets
+          gh release download "$MIGRATION_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir migration-assets
+          find migration-assets -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Normalize migrated state
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          normalize_artifact() {
+            local artifact_name="$1"
+            local output_dir="migrated-state/${artifact_name}"
+            local archive="migration-assets/${artifact_name}.zip"
+            if [[ ! -s "$archive" ]]; then
+              echo "No migration asset for ${artifact_name}; skipping."
+              return 0
+            fi
+
+            local temp_dir
+            temp_dir="$(mktemp -d)"
+            unzip -q "$archive" -d "$temp_dir"
+            local state_file
+            state_file="$(find "$temp_dir" -type f -name state.json -print -quit)"
+            if [[ -z "$state_file" ]]; then
+              echo "${archive} contains no state.json." >&2
+              exit 1
+            fi
+            mkdir -p "$output_dir"
+            cp -R "$(dirname "$state_file")/." "$output_dir/"
+            python - "$output_dir/state.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          if not isinstance(payload, dict):
+              raise SystemExit(f"Migrated state is not an object: {path}")
+          print(f"Validated {path}: {len(payload)} top-level keys")
+          PY
+          }
+
+          normalize_artifact legislative-tracker-state
+          normalize_artifact executive-tracker-state
+          normalize_artifact ai-analysis-state
+
+          [[ -s migrated-state/legislative-tracker-state/state.json ]] && echo "legislative=true" >> "$GITHUB_OUTPUT" || true
+          [[ -s migrated-state/executive-tracker-state/state.json ]] && echo "executive=true" >> "$GITHUB_OUTPUT" || true
+          [[ -s migrated-state/ai-analysis-state/state.json ]] && echo "ai=true" >> "$GITHUB_OUTPUT" || true
+
+          if [[ ! -s migrated-state/legislative-tracker-state/state.json && \
+                ! -s migrated-state/executive-tracker-state/state.json && \
+                ! -s migrated-state/ai-analysis-state/state.json ]]; then
+            echo "No usable state artifacts were found in the migration release." >&2
+            exit 1
+          fi
+
+      - name: Upload Legislative tracker state
+        if: ${{ steps.normalize.outputs.legislative == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: legislative-tracker-state
+          path: migrated-state/legislative-tracker-state
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload Executive tracker state
+        if: ${{ steps.normalize.outputs.executive == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: executive-tracker-state
+          path: migrated-state/executive-tracker-state
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload AI analysis state
+        if: ${{ steps.normalize.outputs.ai == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-analysis-state
+          path: migrated-state/ai-analysis-state
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write migration summary
+        shell: bash
+        env:
+          MIGRATION_TAG: ${{ inputs.migration_tag }}
+        run: |
+          {
+            echo "## MyETF state migration"
+            echo
+            echo "Imported private release: \`${MIGRATION_TAG}\`"
+            echo
+            echo "| Durable state | Imported |"
+            echo "|---|---:|"
+            echo "| Legislative | ${{ steps.normalize.outputs.legislative == 'true' }} |"
+            echo "| Executive | ${{ steps.normalize.outputs.executive == 'true' }} |"
+            echo "| AI / paper portfolio | ${{ steps.normalize.outputs.ai == 'true' }} |"
+            echo
+            echo "Run each restored workflow manually with initialization disabled. The first successful run will also create a repository-local Actions cache."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -64,3 +64,7 @@ runs.jsonl
 ```
 
 The dashboard workflow downloads the newest unexpired Legislative and Executive state artifacts, builds the site in memory, and deploys only the generated static files. Tracker data is not committed to the Git branch.
+
+## AI candidate and paper-portfolio layer
+
+When `AI_ANALYSIS_ENABLED=true`, the dashboard also publishes evidence-constrained candidate rankings and a simulated paper portfolio. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md) for configuration, scoring, market-data requirements, and first activation.

@@ -1,0 +1,2 @@
+-r requirements-tracker.txt
+openai>=2.45.0,<3

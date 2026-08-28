@@ -24,3 +24,16 @@ oge-diagnostics/
 dashboard-input/
 trade-dashboard-site/
 .pytest_cache/
+
+# Generated AI filing-analysis and paper-portfolio files
+.trade-tracker/ai/
+tracker-input/
+ai-analysis-result.json
+ai-latest-analyses.csv
+ai-paper-portfolio.csv
+
+# MyETF generated tracker, dashboard, AI, and state files
+legislative-latest-transactions.csv
+executive-latest-transactions.csv
+legislative-latest-filings.csv
+executive-latest-filings.csv

@@ -1,0 +1,78 @@
+version: 1
+analysis:
+  eligible_transaction_types:
+    - Purchase
+  eligible_equity_only: true
+  max_document_characters: 50000
+  sec_lookback_days: 180
+  sec_form4_documents: 4
+  max_market_refreshes_per_run: 50
+
+thresholds:
+  high_priority: 80
+  watchlist: 65
+  weak_signal: 50
+
+weights:
+  filer_relevance_max: 20
+  transaction_quality_max: 20
+  amount_and_pattern_max: 15
+  policy_contract_relevance_max: 15
+  recency_max: 15
+  market_confirmation_max: 10
+  liquidity_max: 5
+
+amount_points:
+  - maximum_amount: 15000
+    points: 2
+  - maximum_amount: 50000
+    points: 4
+  - maximum_amount: 100000
+    points: 5
+  - maximum_amount: 250000
+    points: 6
+  - maximum_amount: 500000
+    points: 7
+  - maximum_amount: 1000000
+    points: 8
+  - maximum_amount: null
+    points: 9
+
+recency_points:
+  - maximum_days: 3
+    points: 15
+  - maximum_days: 7
+    points: 12
+  - maximum_days: 14
+    points: 9
+  - maximum_days: 30
+    points: 5
+  - maximum_days: 45
+    points: 2
+  - maximum_days: null
+    points: 0
+
+hard_caps:
+  missing_ticker: 20
+  non_equity: 25
+  non_purchase: 35
+  broad_fund: 49
+  low_parse_confidence: 49
+  missing_current_market_price: 59
+  ai_confidence_below_0_45: 59
+  contextual_score_without_external_evidence: 64
+
+entry_rules:
+  maximum_chase_percent: 8.0
+  review_band_atr_below: 0.35
+  review_band_atr_above: 0.20
+  reentry_band_atr_below_ceiling: 0.50
+  fallback_atr_percent: 2.5
+  signal_expiration_calendar_days: 10
+
+paper_portfolio:
+  notional_usd: 100000
+  maximum_position_percent: 1.0
+  watchlist_position_percent: 0.5
+  evaluation_horizon_calendar_days: 30
+  quote_refresh_minutes: 60

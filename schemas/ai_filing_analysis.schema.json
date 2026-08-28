@@ -1,0 +1,110 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "analysis_summary": {
+      "type": "string"
+    },
+    "transaction_intent": {
+      "type": "string",
+      "enum": [
+        "likely_discretionary",
+        "possibly_discretionary",
+        "likely_routine",
+        "unclear"
+      ]
+    },
+    "owner_significance": {
+      "type": "string",
+      "enum": [
+        "direct_household",
+        "joint_household",
+        "spouse",
+        "dependent_child",
+        "trust_or_entity",
+        "unknown"
+      ]
+    },
+    "filer_relevance_score": {
+      "type": "integer"
+    },
+    "policy_contract_relevance_score": {
+      "type": "integer"
+    },
+    "market_confirmation_score": {
+      "type": "integer"
+    },
+    "confidence": {
+      "type": "number"
+    },
+    "positive_factors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "negative_factors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "contradictory_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "published_date": {
+            "type": "string"
+          },
+          "claim": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "published_date",
+          "claim"
+        ]
+      }
+    },
+    "external_context_status": {
+      "type": "string",
+      "enum": [
+        "not_requested",
+        "found",
+        "limited",
+        "none",
+        "error"
+      ]
+    }
+  },
+  "required": [
+    "analysis_summary",
+    "transaction_intent",
+    "owner_significance",
+    "filer_relevance_score",
+    "policy_contract_relevance_score",
+    "market_confirmation_score",
+    "confidence",
+    "positive_factors",
+    "negative_factors",
+    "contradictory_evidence",
+    "evidence_sources",
+    "external_context_status"
+  ]
+}

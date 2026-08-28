@@ -42,7 +42,7 @@ env:
   NOTIFY_EQUITY_ONLY: "true"
   NOTIFY_PENDING_REVIEWS: "true"
   NOTIFY_ALL_FILINGS: "true"
-  DASHBOARD_URL: "https://maglothinm.github.io/MyETF/"
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
   ALLOW_EMPTY_SOURCES: "false"
   DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
 

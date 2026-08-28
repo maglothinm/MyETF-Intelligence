@@ -245,3 +245,7 @@ Known paper forms and request-required Executive listings are different: they ar
 The reporting upgrade catalogs all filings visible during the first post-upgrade run, including those that were silently baselined during initial activation. It does not retroactively download and parse every baselined document. Those records are displayed as `Cataloged only` with their official links. New filings are fully processed and retained. A separate historical backfill remains appropriate if transaction-level analysis of the baseline period is required.
 
 The historical Flask/PostgreSQL/dbt/React path remains deferred because it contains separate deployment and API defects. The static dashboard deliberately avoids that dependency while providing a usable review interface now.
+
+## AI analysis after collection
+
+The optional AI workflow is isolated from collection. It restores successful tracker artifacts, analyzes newly parsed public-equity purchases, and publishes paper-research candidates without placing orders. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md).

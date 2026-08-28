@@ -6,6 +6,7 @@ on:
     workflows:
       - Legislative purchase tracker
       - Executive purchase tracker
+      - AI filing analyst and paper portfolio
     types:
       - completed
 
@@ -80,6 +81,7 @@ jobs:
 
           restore_state_artifact legislative legislative-tracker-state
           restore_state_artifact executive executive-tracker-state
+          restore_state_artifact ai ai-analysis-state
 
       - name: Build searchable dashboard
         shell: bash
@@ -87,6 +89,7 @@ jobs:
           python scripts/build_trade_dashboard.py \
             --legislative-dir dashboard-input/legislative \
             --executive-dir dashboard-input/executive \
+            --ai-dir dashboard-input/ai \
             --output-dir trade-dashboard-site
 
       - name: Validate generated dashboard
@@ -94,9 +97,14 @@ jobs:
         run: |
           set -euo pipefail
           test -s trade-dashboard-site/index.html
+          test -s trade-dashboard-site/wallboard.html
+          test -s trade-dashboard-site/wallboard.css
+          test -s trade-dashboard-site/wallboard.js
           test -s trade-dashboard-site/data/summary.json
           test -s trade-dashboard-site/data/filings.csv
           test -s trade-dashboard-site/data/transactions.csv
+          test -s trade-dashboard-site/data/ai-analyses.csv
+          test -s trade-dashboard-site/data/paper-portfolio.csv
           python - <<'PY'
           import json
           from pathlib import Path
@@ -105,9 +113,15 @@ jobs:
               "Dashboard dataset:",
               summary.get("filing_count", 0), "filings,",
               summary.get("transaction_count", 0), "transactions,",
-              summary.get("review_count", 0), "review items",
+              summary.get("review_count", 0), "review items,",
+              summary.get("analysis_count", 0), "AI analyses,",
+              summary.get("open_paper_position_count", 0), "open paper positions",
           )
           PY
+          if command -v node >/dev/null 2>&1; then
+            node --check trade-dashboard-site/app.js
+            node --check trade-dashboard-site/wallboard.js
+          fi
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6.0.0

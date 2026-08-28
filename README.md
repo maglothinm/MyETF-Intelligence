@@ -44,21 +44,33 @@ Executive-branch coverage is necessarily partial. OGE centrally reviews only a s
 House, Senate, and OGE disclosure systems display statutory use restrictions. The workflows will not run until the repository variable `DISCLOSURE_TERMS_ACKNOWLEDGED` is explicitly set to `true`. Review those restrictions and the intended use before activation, especially before any commercial, automated-investment, or redistribution use.
 
 <!-- MYETF-GOVERNMENT-TRADE-TRACKER:START -->
-## Government purchase disclosure tracker
 
-The operational House, Senate, and OGE monitoring path is documented in
-[`README_GOVERNMENT_TRADES.md`](README_GOVERNMENT_TRADES.md). It runs independently
-of the historical dashboard and writes durable JSONL ledgers plus latest-purchase CSVs.
+## Government financial-disclosure collectors
+
+The fail-closed House, Senate, and OGE collectors, durable state, official-filing links, failure semantics, and disclosure-use restrictions are documented in [`README_GOVERNMENT_TRADES.md`](README_GOVERNMENT_TRADES.md).
+
 <!-- MYETF-GOVERNMENT-TRADE-TRACKER:END -->
 
 <!-- MYETF-REPORTING-DASHBOARD:START -->
 
-## Government disclosure dashboard
+## Searchable filing-review dashboard
 
-The official-source filing inventory, parsed transactions, manual-review queue, and collector status are published at:
-
-**https://maglothinm.github.io/MyETF/**
-
-The dashboard is rebuilt after the Legislative or Executive tracker completes. See [`README_REPORTING_DASHBOARD.md`](README_REPORTING_DASHBOARD.md) for activation and coverage details.
+The repository publishes a filing inventory, complete parsed transaction ledger, manual-review queue, tracker health, AI analyses, and paper portfolio. GitHub Actions calculates the Pages URL from the current repository; see [`README_REPORTING_DASHBOARD.md`](README_REPORTING_DASHBOARD.md).
 
 <!-- MYETF-REPORTING-DASHBOARD:END -->
+
+<!-- MYETF-AI-FILING-ANALYST:START -->
+
+## AI filing analyst and paper portfolio
+
+New parsed equity purchases can be enriched with market and SEC evidence, analyzed through a strict OpenAI JSON schema, deterministically scored, and evaluated in a paper-only portfolio. The implementation has no brokerage or order-submission path. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md).
+
+<!-- MYETF-AI-FILING-ANALYST:END -->
+
+<!-- MYETF-CHG90-WALLBOARD:START -->
+
+## CHG90 portrait and super-ultrawide wallboard
+
+The dashboard includes `wallboard.html`, optimized for the Samsung CHG90 at 1,080 × 3,840 portrait and 3,840 × 1,080 landscape. The private standalone-repository migration preserves current state artifacts and retains the old fork as a rollback remote. See [`README_WALLBOARD_PRIVATE_REPO.md`](README_WALLBOARD_PRIVATE_REPO.md).
+
+<!-- MYETF-CHG90-WALLBOARD:END -->

@@ -4,7 +4,7 @@ import csv
 import json
 from pathlib import Path
 
-from scripts.build_trade_dashboard import build_payload, build_site, load_branch
+from scripts.build_trade_dashboard import build_payload, build_site, load_ai, load_branch
 
 
 def write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -233,6 +233,9 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
         "404.html",
         "styles.css",
         "app.js",
+        "wallboard.html",
+        "wallboard.css",
+        "wallboard.js",
         ".nojekyll",
         "data/summary.json",
         "data/filings.json",
@@ -243,12 +246,28 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
         "data/transactions.csv",
         "data/pending-reviews.csv",
         "data/runs.csv",
+        "data/ai-analyses.json",
+        "data/paper-portfolio.json",
+        "data/ai-runs.json",
+        "data/ai-analyses.csv",
+        "data/paper-portfolio.csv",
+        "data/ai-runs.csv",
     ):
         assert (output_dir / relative).exists(), relative
 
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+    wallboard_html = (output_dir / "wallboard.html").read_text(encoding="utf-8")
+    wallboard_css = (output_dir / "wallboard.css").read_text(encoding="utf-8")
+    wallboard_js = (output_dir / "wallboard.js").read_text(encoding="utf-8")
     assert "MyETF Government Trade Monitor" in index_html
+    assert 'href="wallboard.html"' in index_html
     assert "Content-Security-Policy" in index_html
+    assert "MyETF Intelligence Wallboard" in wallboard_html
+    assert "Portrait wallboard" in wallboard_html
+    assert "orientation: portrait" in wallboard_css
+    assert "min-aspect-ratio: 12/5" in wallboard_css
+    assert "DEFAULT_REFRESH_SECONDS = 300" in wallboard_js
+    assert "requestWakeLock" in wallboard_js
     with (output_dir / "data/transactions.csv").open(encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
     assert {row["ticker"] for row in csv_rows} == {"EXM", "SEC", "OLD"}
@@ -261,3 +280,128 @@ def test_dashboard_handles_missing_branch_artifacts(tmp_path: Path) -> None:
     assert missing["reviews"] == []
     assert missing["runs"] == []
     assert missing["state"] == {}
+
+
+def test_dashboard_includes_ai_candidates_and_paper_portfolio(tmp_path: Path) -> None:
+    ai_dir = tmp_path / "ai"
+    write_jsonl(
+        ai_dir / "analyses.jsonl",
+        [
+            {
+                "analysis_id": "analysis:one",
+                "trade_id": "trade:one",
+                "analyzed_at_utc": "2026-08-26T12:00:00Z",
+                "model": "gpt-5.6-terra",
+                "source": "house",
+                "filer": "Example Representative",
+                "owner": "Self",
+                "ticker": "EXM",
+                "asset": "Example Corporation",
+                "transaction_date": "2026-08-24",
+                "filed_date": "2026-08-25",
+                "amount": "$100,001 - $250,000",
+                "source_url": "https://example.test/filing.pdf",
+                "score": 86,
+                "raw_score": 86,
+                "classification": "high_priority",
+                "market": {"current_price": 101.0, "return_since_transaction_percent": 1.0},
+                "entry_plan": {
+                    "entry_status": "review_now",
+                    "review_band_low": 100.3,
+                    "review_band_high": 101.4,
+                    "position_allocation_percent": 1.0,
+                },
+                "ai": {
+                    "analysis_summary": "Evidence-supported candidate for immediate human review.",
+                    "positive_factors": ["Recent direct purchase"],
+                    "negative_factors": [],
+                    "evidence_sources": [],
+                },
+                "paper_only": True,
+            }
+        ],
+    )
+    write_jsonl(
+        ai_dir / "paper-portfolio.jsonl",
+        [
+            {
+                "event_id": "event:open",
+                "event_type": "open",
+                "position_id": "paper:one",
+                "trade_id": "trade:one",
+                "analysis_id": "analysis:one",
+                "ticker": "EXM",
+                "filer": "Example Representative",
+                "owner": "Self",
+                "source_url": "https://example.test/filing.pdf",
+                "score": 86,
+                "classification": "high_priority",
+                "status": "open",
+                "opened_at_utc": "2026-08-26T12:00:00Z",
+                "evaluation_horizon_utc": "2026-09-25T12:00:00Z",
+                "entry_price": 101.0,
+                "current_price": 103.0,
+                "quantity": 9.90099,
+                "initial_notional": 1000.0,
+                "market_value": 1019.8,
+                "unrealized_pnl": 19.8,
+                "return_percent": 1.98,
+                "last_updated_utc": "2026-08-26T13:00:00Z",
+                "paper_only": True,
+            }
+        ],
+    )
+    write_jsonl(
+        ai_dir / "runs.jsonl",
+        [
+            {
+                "run_key": "200:1",
+                "started_utc": "2026-08-26T12:00:00Z",
+                "finished_utc": "2026-08-26T12:01:00Z",
+                "success": True,
+                "enabled": True,
+                "eligible_transaction_count": 1,
+                "completed_count": 1,
+                "high_priority_count": 1,
+                "watchlist_count": 0,
+                "errors": [],
+                "warnings": [],
+                "run_url": "https://github.com/example/MyETF/actions/runs/200",
+            }
+        ],
+    )
+    (ai_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "completed_analysis_ids": {"analysis:one": "2026-08-26T12:00:00Z"},
+                "positions": {},
+                "last_success_utc": "2026-08-26T12:01:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ai = load_ai(ai_dir)
+    payload = build_payload(
+        load_branch(None, "legislative"),
+        load_branch(None, "executive"),
+        repository_url="https://github.com/example/MyETF",
+        ai=ai,
+    )
+    assert payload["summary"]["analysis_count"] == 1
+    assert payload["summary"]["high_priority_count"] == 1
+    assert payload["summary"]["open_paper_position_count"] == 1
+    assert payload["summary"]["open_paper_pnl"] == 19.8
+    assert payload["analyses"][0]["ticker"] == "EXM"
+    assert payload["portfolio"][0]["status"] == "open"
+
+    output = tmp_path / "site-ai"
+    build_site(payload, output)
+    index = (output / "index.html").read_text(encoding="utf-8")
+    app = (output / "app.js").read_text(encoding="utf-8")
+    assert "AI-ranked purchase candidates" in index
+    assert "Paper-research portfolio" in index
+    assert "ai-analyses.json" in app
+    assert (output / "data/ai-analyses.csv").exists()
+    assert (output / "data/paper-portfolio.csv").exists()
