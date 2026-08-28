@@ -20,7 +20,7 @@ on:
         type: string
   workflow_run:
     workflows:
-      - Legislative purchase tracker
+      - Legislative purchase tracker v2
       - Executive purchase tracker
     types:
       - completed
