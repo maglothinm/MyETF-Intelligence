@@ -664,14 +664,71 @@ def parse_house_transactions(text: str, report: Report) -> list[Trade]:
 
     lines = _house_transaction_region(text)
 
-    # Descriptive D: notes belong to the preceding holding.  They may contain
-    # unrelated ticker symbols (for example SPGI in a spinoff explanation) and
-    # must never be accumulated into the following transaction's asset.
-    lines = [
-        line
-        for line in lines
-        if not line.casefold().startswith("d:")
-    ]
+    def _house_metadata_or_header(line: str) -> bool:
+        value = normalize_text(line)
+        lowered = value.casefold()
+        return (
+            bool(re.match(r"^(?:F\s*S|S\s*O|D)\s*:", value, re.IGNORECASE))
+            or lowered.startswith(
+                ("filing status:", "subholding of:", "id owner asset", "type date gains")
+            )
+            or value == "$200?"
+        )
+
+    # pdfplumber may place the transaction columns before the trailing asset
+    # text/ticker. Reassemble those physical lines into one logical row before
+    # the existing transaction parser sees them.
+    prepared: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+
+        if _house_metadata_or_header(line):
+            index += 1
+            continue
+
+        match = HOUSE_TRANSACTION_RE.search(line)
+        if match and line[: match.start()].strip():
+            continuation: list[str] = []
+            next_index = index + 1
+
+            while next_index < len(lines):
+                candidate = lines[next_index]
+                if (
+                    _house_metadata_or_header(candidate)
+                    or HOUSE_TRANSACTION_RE.search(candidate)
+                ):
+                    break
+                continuation.append(candidate)
+                next_index += 1
+
+            if continuation:
+                asset = line[: match.start()].strip()
+                transaction = line[match.start() :].strip()
+
+                # Example:
+                # "$15,001 -" + "Shares (ACN) [ST] $50,000"
+                if re.search(r"[-–—]\s*$", transaction):
+                    upper = re.search(
+                        r"(\$[\d,]+(?:\.\d{2})?)\s*$",
+                        continuation[-1],
+                    )
+                    if upper:
+                        transaction = f"{transaction} {upper.group(1)}"
+                        continuation[-1] = continuation[-1][: upper.start()].strip()
+
+                asset = normalize_text(
+                    " ".join([asset, *[part for part in continuation if part]])
+                )
+                line = f"{asset} {transaction}"
+                index = next_index
+                prepared.append(line)
+                continue
+
+        prepared.append(line)
+        index += 1
+
+    lines = prepared
     transactions: list[Trade] = []
     buffer: list[str] = []
     skip_prefixes = (

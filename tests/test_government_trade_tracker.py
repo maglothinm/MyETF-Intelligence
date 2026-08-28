@@ -551,3 +551,31 @@ def test_parse_house_morrison_spinoff_tickers_and_owners() -> None:
     assert trades[2].amount == "$15,001 - $50,000"
     assert "SPGI" not in {t.ticker for t in trades}
     assert all(t.asset_type == "ST" for t in trades)
+
+def test_house_pdfplumber_transaction_before_asset_continuation() -> None:
+    text = """
+    Transactions
+    SP Accenture plc Class A Ordinary S 08/11/2026 08/11/2026 $15,001 -
+    Shares (ACN) [ST] $50,000
+    F S : New
+    S O : Trust 8
+    SP Mobility Global Inc. Common Stock S 08/11/2026 08/11/2026 $1,001 - $15,000
+    (MBGL) [ST]
+    F S : New
+    S O : Trust 8
+    D : Asset acquired through a S&P Global (SPGI) spinoff.
+    SP Solstice Advanced Materials Inc. - S 08/11/2026 08/11/2026 $1,001 - $15,000
+    Common Stock (SOLS) [ST]
+    F S : New
+    S O : Trust 2
+    * For the complete list of asset type abbreviations
+    """
+
+    trades = parse_house_transactions(text, house_report("20035244"))
+
+    assert [(t.ticker, t.owner, t.amount) for t in trades] == [
+        ("ACN", "Spouse", "$15,001 - $50,000"),
+        ("MBGL", "Spouse", "$1,001 - $15,000"),
+        ("SOLS", "Spouse", "$1,001 - $15,000"),
+    ]
+    assert all("SPGI" not in t.asset for t in trades)
