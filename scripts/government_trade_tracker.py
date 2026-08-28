@@ -381,7 +381,7 @@ def extract_ticker(asset: str, explicit: str = "") -> str:
     if explicit not in {"", "--", "N/A", "NONE"} and re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,7}", explicit):
         return explicit
     matches = TICKER_RE.findall(asset.upper())
-    return matches[-1] if matches else ""
+    return matches[0] if matches else ""
 
 
 def infer_asset_type(asset: str, explicit: str = "") -> str:
@@ -663,6 +663,15 @@ def parse_house_transactions(text: str, report: Report) -> list[Trade]:
         raise PaperFilingError("House filing is a paper/scanned PTR; checkbox semantics require review")
 
     lines = _house_transaction_region(text)
+
+    # Descriptive D: notes belong to the preceding holding.  They may contain
+    # unrelated ticker symbols (for example SPGI in a spinoff explanation) and
+    # must never be accumulated into the following transaction's asset.
+    lines = [
+        line
+        for line in lines
+        if not line.casefold().startswith("d:")
+    ]
     transactions: list[Trade] = []
     buffer: list[str] = []
     skip_prefixes = (

@@ -493,3 +493,61 @@ def test_commit_records_all_transactions_but_purchase_ledger_stays_purchase_only
     assert filings[-1]["sale_count"] == 1
     assert result.transaction_counts["house"] == 2
     assert result.purchase_counts["house"] == 1
+
+def test_parse_house_morrison_spinoff_tickers_and_owners() -> None:
+    text = """
+    Transactions
+    SP Accenture plc Class A Ordinary
+    Shares (ACN) [ST]
+    S 08/11/2026 08/11/2026 $1,001 - $15,000
+    F S: New
+    S O: Trust 2
+    Accenture plc Class A Ordinary
+    Shares (ACN) [ST]
+    S 08/11/2026 08/11/2026 $1,001 - $15,000
+    F S: New
+    S O: Trust 1
+    SP Accenture plc Class A Ordinary
+    Shares (ACN) [ST]
+    S 08/11/2026 08/11/2026 $15,001 -
+    $50,000
+    F S: New
+    S O: Trust 8
+    SP Mobility Global Inc. Common Stock
+    (MBGL) [ST]
+    S 08/11/2026 08/11/2026 $1,001 - $15,000
+    F S: New
+    S O: Trust 8
+    D: Asset acquired through a S&P Global (SPGI) spinoff.
+    SP Mobility Global Inc. Common Stock
+    (MBGL) [ST]
+    S 08/11/2026 08/11/2026 $1,001 - $15,000
+    F S: New
+    S O: Trust 2
+    D: Asset acquired through a S&P Global (SPGI) spinoff.
+    Mobility Global Inc. Common Stock
+    (MBGL) [ST]
+    S 08/11/2026 08/11/2026 $1,001 - $15,000
+    F S: New
+    S O: Trust 1
+    D: Asset acquired through a S&P Global (SPGI) spinoff.
+    SP Solstice Advanced Materials Inc. -
+    Common Stock (SOLS) [ST]
+    S 08/11/2026 08/11/2026 $1,001 - $15,000
+    * For the complete list of asset type abbreviations
+    """
+
+    trades = parse_house_transactions(text, house_report("20035244"))
+
+    assert [(t.ticker, t.owner) for t in trades] == [
+        ("ACN", "Spouse"),
+        ("ACN", "Self"),
+        ("ACN", "Spouse"),
+        ("MBGL", "Spouse"),
+        ("MBGL", "Spouse"),
+        ("MBGL", "Self"),
+        ("SOLS", "Spouse"),
+    ]
+    assert trades[2].amount == "$15,001 - $50,000"
+    assert "SPGI" not in {t.ticker for t in trades}
+    assert all(t.asset_type == "ST" for t in trades)
