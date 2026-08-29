@@ -45,7 +45,7 @@ After committing the reporting files:
 Legacy Pages URL, retained until the GitHub repository rename and private-wallboard cutover:
 
 ```text
-https://maglothinm.github.io/MyETF/
+https://maglothinm.github.io/MyETF-Intelligence/
 ```
 
 No tracker reinitialization is required. Existing durable state is preserved.

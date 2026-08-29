@@ -1,0 +1,167 @@
+name: Manual Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: "Synthetic filing date (YYYY-MM-DD); leave blank to use today's UTC date"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: manual-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: Build isolated dashboard preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AI_ANALYSIS_ENABLED: "false"
+      AI_SUPPRESS_ALERTS: "true"
+      AI_REQUIRE_PUSHOVER: "false"
+      AI_PAPER_TRADING_ONLY: "true"
+      INVESTOR_EDGE_ENABLED: "false"
+      REQUIRE_PUSHOVER: "false"
+      PUSHOVER_API_TOKEN: ""
+      PUSHOVER_USER_KEY: ""
+      OPENAI_API_KEY: ""
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Prepare run-specific temporary paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TEMP}/polititrack-manual-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "MANUAL_TEST_INPUT_DIR=${root}/input"
+            echo "MANUAL_TEST_TRACKER_DIR=${root}/tracker"
+            echo "MANUAL_TEST_SITE_DIR=${root}/site"
+            echo "MANUAL_TEST_SUMMARY=${root}/manual-test-summary.json"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore latest durable artifacts into isolated inputs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$MANUAL_TEST_INPUT_DIR"
+
+          restore_state_artifact() {
+            local branch="$1"
+            local artifact_name="$2"
+            local artifact_id
+            artifact_id="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${artifact_name}&per_page=100" \
+                --jq '[.artifacts[] | select(.expired == false)] | max_by(.created_at) | .id // empty'
+            )"
+
+            if [[ -z "$artifact_id" ]]; then
+              echo "No unexpired ${artifact_name} artifact is available; continuing without ${branch} input."
+              return 0
+            fi
+
+            local download_dir
+            download_dir="$(mktemp -d)"
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+              > "${download_dir}/state.zip"
+            mkdir -p "${download_dir}/unpacked"
+            unzip -q "${download_dir}/state.zip" -d "${download_dir}/unpacked"
+
+            local state_file
+            state_file="$(find "${download_dir}/unpacked" -type f -name state.json -print -quit)"
+            if [[ -z "$state_file" ]]; then
+              echo "Artifact ${artifact_id} (${artifact_name}) contains no state.json." >&2
+              exit 1
+            fi
+
+            mkdir -p "$MANUAL_TEST_INPUT_DIR/${branch}"
+            cp -R "$(dirname "$state_file")/." "$MANUAL_TEST_INPUT_DIR/${branch}/"
+            echo "Restored ${branch} input from artifact ${artifact_id}."
+          }
+
+          restore_state_artifact legislative legislative-tracker-state
+          restore_state_artifact executive executive-tracker-state
+          restore_state_artifact ai ai-analysis-state
+
+          if [[ ! -s "$MANUAL_TEST_INPUT_DIR/legislative/state.json" && \
+                ! -s "$MANUAL_TEST_INPUT_DIR/executive/state.json" ]]; then
+            echo "Manual Test needs at least one Legislative or Executive durable state artifact." >&2
+            exit 1
+          fi
+
+      - name: Create temporary test filing
+        shell: bash
+        env:
+          AS_OF_INPUT: ${{ inputs.as_of }}
+        run: |
+          set -euo pipefail
+          args=(--output-dir "$MANUAL_TEST_TRACKER_DIR")
+
+          if [[ -s "$MANUAL_TEST_INPUT_DIR/legislative/state.json" ]]; then
+            args+=(--legislative-dir "$MANUAL_TEST_INPUT_DIR/legislative")
+          fi
+          if [[ -s "$MANUAL_TEST_INPUT_DIR/executive/state.json" ]]; then
+            args+=(--executive-dir "$MANUAL_TEST_INPUT_DIR/executive")
+          fi
+          if [[ -n "$AS_OF_INPUT" ]]; then
+            args+=(--as-of "$AS_OF_INPUT")
+          fi
+
+          python scripts/create_manual_test_filing.py "${args[@]}" | tee "$MANUAL_TEST_SUMMARY"
+
+      - name: Build separate preview site
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_trade_dashboard.py \
+            --legislative-dir "$MANUAL_TEST_TRACKER_DIR/legislative" \
+            --executive-dir "$MANUAL_TEST_TRACKER_DIR/executive" \
+            --ai-dir "$MANUAL_TEST_INPUT_DIR/ai" \
+            --output-dir "$MANUAL_TEST_SITE_DIR"
+          cp "$MANUAL_TEST_SUMMARY" "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json"
+
+      - name: Validate generated dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$MANUAL_TEST_SITE_DIR/index.html"
+          test -s "$MANUAL_TEST_SITE_DIR/wallboard.html"
+          test -s "$MANUAL_TEST_SITE_DIR/investor-edge.html"
+          test -s "$MANUAL_TEST_SITE_DIR/data/summary.json"
+          test -s "$MANUAL_TEST_SITE_DIR/data/filings.csv"
+          test -s "$MANUAL_TEST_SITE_DIR/data/transactions.csv"
+          test -s "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json"
+          python -m json.tool "$MANUAL_TEST_SITE_DIR/data/summary.json" >/dev/null
+          python -m json.tool "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json" >/dev/null
+          node --check "$MANUAL_TEST_SITE_DIR/app.js"
+          node --check "$MANUAL_TEST_SITE_DIR/wallboard.js"
+          node --check "$MANUAL_TEST_SITE_DIR/investor-edge.js"
+
+      - name: Upload temporary dashboard preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-test-dashboard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/polititrack-manual-${{ github.run_id }}-${{ github.run_attempt }}/site
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1

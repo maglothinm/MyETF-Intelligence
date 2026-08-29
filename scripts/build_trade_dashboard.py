@@ -44,6 +44,9 @@ FILING_FIELDS = (
     "sale_count",
     "exchange_count",
     "review_reason",
+    "is_synthetic_test",
+    "is_temporary",
+    "test_metadata",
 )
 
 TRANSACTION_FIELDS = (
@@ -70,6 +73,9 @@ TRANSACTION_FIELDS = (
     "raw_row",
     "equity_like",
     "parse_confidence",
+    "is_synthetic_test",
+    "is_temporary",
+    "test_metadata",
 )
 
 REVIEW_FIELDS = (
@@ -414,6 +420,10 @@ def build_payload(
     purchase_count = sum(
         str(item.get("transaction_type") or "") == "Purchase" for item in transactions
     )
+    manual_test_filing_count = sum(bool(item.get("is_synthetic_test")) for item in filings)
+    manual_test_transaction_count = sum(
+        bool(item.get("is_synthetic_test")) for item in transactions
+    )
     classification_counts = Counter(
         str(item.get("classification") or "unknown") for item in analyses
     )
@@ -456,6 +466,8 @@ def build_payload(
         "filing_count": len(filings),
         "transaction_count": len(transactions),
         "purchase_count": purchase_count,
+        "manual_test_filing_count": manual_test_filing_count,
+        "manual_test_transaction_count": manual_test_transaction_count,
         "review_count": len(reviews),
         "run_count": len(runs),
         "analysis_count": len(analyses),
@@ -521,6 +533,11 @@ INDEX_HTML = r'''<!doctype html>
       <strong>Coverage note:</strong>
       <span id="coverage-note">Loading…</span>
       <span>Government disclosures may be published weeks after the underlying transaction.</span>
+    </section>
+
+    <section id="manual-test-notice" class="notice" aria-label="Manual Test notice" hidden>
+      <strong>Manual Test preview:</strong>
+      <span id="manual-test-note">This temporary dashboard contains synthetic test data.</span>
     </section>
 
     <section class="summary-grid" aria-label="Summary">
@@ -1159,7 +1176,11 @@ const percent = value => {
 };
 const parseDate = value => {
   if (!value) return null;
-  const date = new Date(value);
+  const raw = String(value);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  const date = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date;
 };
 const formatDate = value => {
@@ -1598,8 +1619,12 @@ const percent = value => {
 };
 const formatDate = value => {
   if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? escapeHtml(value) : d.toLocaleString([], { dateStyle: "medium", timeStyle: String(value).includes("T") ? "short" : undefined });
+  const raw = String(value);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(raw);
+  return Number.isNaN(d.getTime()) ? escapeHtml(raw) : d.toLocaleString([], { dateStyle: "medium", timeStyle: raw.includes("T") ? "short" : undefined });
 };
 const dictTotal = value => Object.values(value || {}).reduce((sum, item) => sum + Number(item || 0), 0);
 const link = (url, text="Open") => { const clean = safeUrl(url); return clean ? `<a href="${escapeHtml(clean)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>` : "—"; };
@@ -1661,6 +1686,11 @@ function renderSummary() {
   pnlElement.textContent = currency(pnl);
   pnlElement.className = pnlClass(pnl);
   el("coverage-note").textContent = `${summary.coverage_note} `;
+  const manualTestNotice = el("manual-test-notice");
+  const manualTestFilings = Number(summary.manual_test_filing_count || 0);
+  const manualTestTransactions = Number(summary.manual_test_transaction_count || 0);
+  manualTestNotice.hidden = manualTestFilings === 0;
+  el("manual-test-note").textContent = `${number(manualTestFilings)} synthetic filing(s) and ${number(manualTestTransactions)} cloned transaction(s) are included for this isolated test only. Production state and alerts are unchanged.`;
   el("updated-at").textContent = `Dashboard generated ${formatDate(summary.generated_utc)}${summary.ai_last_success_utc ? ` • AI last succeeded ${formatDate(summary.ai_last_success_utc)}` : ""}`;
   el("repository-link").href = safeUrl(summary.repository_url) || "#";
   el("source-cards").innerHTML = Object.values(summary.sources || {}).map(source => {
@@ -1760,7 +1790,8 @@ function renderFilings() {
   setTable("filings-body", rows, row => {
     const role = [row.title, row.agency, row.district].filter(Boolean);
     const counts = `${number(row.transaction_count)} total / ${number(row.purchase_count)} buys / ${number(row.sale_count)} sales`;
-    return `<tr><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml(row.report_type || "")}</small></td><td>${escapeHtml(role.join(" • ") || "—")}</td><td><span class="badge ${escapeHtml(row.status || "")}">${escapeHtml(titleCase(row.status || "unknown"))}</span>${row.review_reason ? `<small>${escapeHtml(row.review_reason)}</small>` : ""}</td><td>${escapeHtml(counts)}</td><td>${link(row.source_url)}</td></tr>`;
+    const testLabel = row.is_synthetic_test ? `<small>Temporary Manual Test • ${escapeHtml(row.report_id || "TEST")}</small>` : "";
+    return `<tr><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml(row.report_type || "")}</small></td><td>${escapeHtml(role.join(" • ") || "—")}</td><td><span class="badge ${escapeHtml(row.status || "")}">${escapeHtml(titleCase(row.status || "unknown"))}</span>${testLabel}${row.review_reason ? `<small>${escapeHtml(row.review_reason)}</small>` : ""}</td><td>${escapeHtml(counts)}</td><td>${link(row.source_url)}</td></tr>`;
   }, "filings");
 }
 
@@ -1772,7 +1803,7 @@ function filteredTransactions() {
 }
 function renderTransactions() {
   const rows = filteredTransactions();
-  setTable("transactions-body", rows, row => `<tr><td>${formatDate(row.transaction_date)}</td><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small></td><td>${escapeHtml(row.owner || "Unknown")}</td><td><span class="badge">${escapeHtml(row.transaction_type || "Unknown")}</span></td><td class="asset-cell"><strong>${escapeHtml(row.ticker || row.asset || "Unknown")}</strong>${row.ticker ? `<small>${escapeHtml(row.asset || "")}</small>` : ""}</td><td>${escapeHtml(row.amount || "—")}</td><td>${link(row.source_url)}</td></tr>`, "transactions");
+  setTable("transactions-body", rows, row => `<tr><td>${formatDate(row.transaction_date)}</td><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small>${row.is_synthetic_test ? `<small>Temporary Manual Test</small>` : ""}</td><td>${escapeHtml(row.owner || "Unknown")}</td><td><span class="badge">${escapeHtml(row.transaction_type || "Unknown")}</span></td><td class="asset-cell"><strong>${escapeHtml(row.ticker || row.asset || "Unknown")}</strong>${row.ticker ? `<small>${escapeHtml(row.asset || "")}</small>` : ""}</td><td>${escapeHtml(row.amount || "—")}</td><td>${link(row.source_url)}</td></tr>`, "transactions");
 }
 
 function filteredReviews() {
@@ -1873,7 +1904,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--repository-url",
         default=(
             f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}/"
-            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/MyETF').strip('/')}"
+            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/MyETF-Intelligence').strip('/')}"
         ),
     )
     return parser

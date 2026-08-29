@@ -73,6 +73,12 @@ New parsed equity purchases can be enriched with market and SEC evidence, analyz
 
 The optional, paper-research-only Investor Edge layer measures historical benchmark-relative outcomes for each filer and disclosed owner, applies a bounded modifier without defeating hard caps, and publishes a dedicated heat map. It is disabled by default; see [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md) for methodology and activation guidance.
 
+## Manual Test preview
+
+Use **Actions → Manual Test → Run workflow** to choose a random previously processed filing and copy it into a temporary dashboard as though it were filed today. Leave `as_of` blank for today's UTC date, or enter a specific `YYYY-MM-DD` test date. When the run finishes, download and unzip the uniquely named `manual-test-dashboard-<run-id>-<attempt>` artifact. From the unzipped directory, run `python -m http.server 8765`, then open `http://127.0.0.1:8765/`.
+
+Manual Test reads the latest durable Legislative, Executive, and AI artifacts, but creates the synthetic filing and dashboard only in run-specific temporary directories. It does not send alerts, run or persist AI analysis, save caches, replace production artifacts, or deploy GitHub Pages. The preview artifact expires after one day.
+
 <!-- MYETF-CHG90-WALLBOARD:START -->
 
 ## CHG90 portrait and super-ultrawide wallboard
