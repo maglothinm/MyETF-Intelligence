@@ -18,11 +18,13 @@ import logging
 import math
 import os
 import re
+import smtplib
 import tempfile
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence
 from urllib.parse import urlparse
@@ -99,6 +101,8 @@ DEFAULT_MAX_DOWNLOAD_BYTES_AI = 25 * 1024 * 1024
 DEFAULT_MAX_OCR_PAGES_AI = 75
 DEFAULT_REQUEST_TIMEOUT = (15.0, 60.0)
 DEFAULT_DASHBOARD_URL = "https://maglothinm.github.io/MyETF/"
+MAX_CANDIDATE_ALERT_RETRIES_PER_RUN = 100
+MAX_COMPLETED_CANDIDATE_ALERT_DELIVERIES = 100_000
 
 AMOUNT_RE = re.compile(r"\$?([\d,]+(?:\.\d{1,2})?)")
 BROAD_FUND_TERMS = (
@@ -146,6 +150,7 @@ class OpenAIQuotaError(AnalystError):
 class AIState:
     version: int = AI_STATE_VERSION
     completed_analysis_ids: dict[str, str] = field(default_factory=dict)
+    candidate_alert_deliveries: dict[str, dict[str, Any]] = field(default_factory=dict)
     positions: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_attempt_utc: str | None = None
     last_success_utc: str | None = None
@@ -157,6 +162,38 @@ class AIState:
                 self.completed_analysis_ids.items(), key=lambda item: item[1], reverse=True
             )
             self.completed_analysis_ids = dict(ordered[:250_000])
+        completed_deliveries: list[tuple[str, dict[str, Any]]] = []
+        pending_deliveries: dict[str, dict[str, Any]] = {}
+        for delivery_id, delivery in self.candidate_alert_deliveries.items():
+            requested = {
+                str(channel) for channel in (delivery.get("requested_channels") or [])
+            }
+            delivered_value = delivery.get("delivered_channels") or {}
+            delivered = (
+                {str(channel) for channel, timestamp in delivered_value.items() if timestamp}
+                if isinstance(delivered_value, Mapping)
+                else set()
+            )
+            if requested and requested <= delivered:
+                completed_deliveries.append((delivery_id, delivery))
+            else:
+                pending_deliveries[delivery_id] = delivery
+        if len(completed_deliveries) > MAX_COMPLETED_CANDIDATE_ALERT_DELIVERIES:
+            completed_deliveries.sort(
+                key=lambda item: str(
+                    item[1].get("last_attempt_utc")
+                    or item[1].get("created_at_utc")
+                    or ""
+                ),
+                reverse=True,
+            )
+            completed_deliveries = completed_deliveries[
+                :MAX_COMPLETED_CANDIDATE_ALERT_DELIVERIES
+            ]
+            self.candidate_alert_deliveries = {
+                **pending_deliveries,
+                **dict(completed_deliveries),
+            }
 
 
 @dataclass(frozen=True)
@@ -191,6 +228,8 @@ class AnalystConfig:
     max_download_bytes: int
     max_ocr_pages: int
     request_timeout: tuple[float, float]
+    gmail_address: str = ""
+    gmail_app_password: str = ""
 
 
 @dataclass
@@ -302,12 +341,22 @@ def load_state(path: Path) -> tuple[AIState, bool]:
         )
     positions = raw.get("positions") or {}
     completed = raw.get("completed_analysis_ids") or {}
-    if not isinstance(positions, dict) or not isinstance(completed, dict):
-        raise AnalystError("AI state has invalid positions or completed-analysis data")
+    alert_deliveries = raw.get("candidate_alert_deliveries") or {}
+    if (
+        not isinstance(positions, dict)
+        or not isinstance(completed, dict)
+        or not isinstance(alert_deliveries, dict)
+    ):
+        raise AnalystError(
+            "AI state has invalid positions, completed-analysis, or alert-delivery data"
+        )
     return (
         AIState(
             version=AI_STATE_VERSION,
             completed_analysis_ids={str(k): str(v) for k, v in completed.items()},
+            candidate_alert_deliveries={
+                str(k): dict(v) for k, v in alert_deliveries.items() if isinstance(v, dict)
+            },
             positions={str(k): dict(v) for k, v in positions.items() if isinstance(v, dict)},
             last_attempt_utc=raw.get("last_attempt_utc"),
             last_success_utc=raw.get("last_success_utc"),
@@ -1725,6 +1774,416 @@ def build_analysis_context(
     }
 
 
+def _optional_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _optional_int(value: Any) -> int | None:
+    number = _optional_float(value)
+    return int(number) if number is not None else None
+
+
+def _first_metric(mapping: Mapping[str, Any], *names: str) -> Any:
+    for name in names:
+        value = mapping.get(name)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _sector_edge_alpha(profile: Mapping[str, Any]) -> float | None:
+    direct = _optional_float(
+        _first_metric(
+            profile,
+            "sector_alpha",
+            "current_sector_alpha",
+            "relevant_sector_alpha",
+            "sector_edge_alpha",
+        )
+    )
+    if direct is not None:
+        return direct
+
+    current = profile.get("current_sector") or {}
+    current_name = ""
+    current_benchmark = ""
+    if isinstance(current, Mapping):
+        current_name = normalize_text(str(current.get("sector") or current.get("name") or ""))
+        current_benchmark = normalize_text(str(current.get("benchmark") or ""))
+        direct = _optional_float(
+            _first_metric(current, "alpha_percent", "followable_alpha", "alpha")
+        )
+        if direct is not None:
+            return direct
+
+    rows = profile.get("sector_performance") or []
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        return None
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        row_name = normalize_text(str(row.get("sector") or row.get("name") or ""))
+        row_benchmark = normalize_text(str(row.get("benchmark") or ""))
+        if current_name and row_name.casefold() != current_name.casefold():
+            continue
+        if not current_name and current_benchmark and row_benchmark != current_benchmark:
+            continue
+        if not current_name and not current_benchmark:
+            continue
+        value = _optional_float(
+            _first_metric(
+                row,
+                "followable_alpha",
+                "weighted_followable_alpha",
+                "alpha_percent",
+                "alpha",
+            )
+        )
+        if value is not None:
+            return value
+    return None
+
+
+def _relevant_followable_alpha(profile: Mapping[str, Any]) -> tuple[str, float | None]:
+    direct = _optional_float(
+        _first_metric(
+            profile,
+            "relevant_followable_alpha",
+            "current_sector_followable_alpha",
+        )
+    )
+    if direct is not None:
+        return "relevant", direct
+    horizons = profile.get("followable_alpha_by_horizon") or {}
+    if isinstance(horizons, Mapping):
+        for horizon in ("20", "5", "60", "120"):
+            value = _optional_float(horizons.get(horizon))
+            if value is not None:
+                return f"{horizon}D", value
+    return "overall", _optional_float(profile.get("followable_alpha"))
+
+
+def _edge_summary_fields(
+    profile: Mapping[str, Any], *, status: str
+) -> dict[str, Any]:
+    observations = _optional_int(
+        _first_metric(profile, "sample_count", "observation_count", "completed_observation_count")
+    )
+    has_observations = bool(observations and observations > 0)
+    alpha_label, relevant_alpha = _relevant_followable_alpha(profile)
+    hit_rate = _optional_float(
+        _first_metric(
+            profile,
+            "weighted_followable_hit_rate_percent",
+            "hit_rate_percent",
+            "followable_hit_rate_percent",
+        )
+    )
+    current_lag = _optional_float(profile.get("current_disclosure_lag_days"))
+    average_lag = _optional_float(
+        _first_metric(profile, "average_disclosure_lag_days", "median_disclosure_lag_days")
+    )
+    strongest = profile.get("strongest_sector") or {}
+    strongest_name = ""
+    if isinstance(strongest, Mapping):
+        strongest_name = normalize_text(
+            str(strongest.get("sector") or strongest.get("name") or "")
+        )
+    return {
+        "investor_edge_score": (
+            _optional_float(profile.get("edge_score")) if has_observations else None
+        ),
+        "investor_edge_confidence": (
+            _optional_float(
+                _first_metric(profile, "confidence", "identity_confidence")
+            )
+            if has_observations
+            else None
+        ),
+        "investor_edge_confidence_label": (
+            normalize_text(
+                str(
+                    _first_metric(
+                        profile, "confidence_label", "identity_confidence_label"
+                    )
+                    or ""
+                )
+            )
+            if has_observations
+            else ""
+        ),
+        "investor_edge_observation_count": observations,
+        "investor_edge_relevant_alpha_label": alpha_label if relevant_alpha is not None else "",
+        "investor_edge_relevant_followable_alpha": (
+            relevant_alpha if has_observations else None
+        ),
+        "investor_edge_followable_alpha": (
+            _optional_float(profile.get("followable_alpha")) if has_observations else None
+        ),
+        "investor_edge_hit_rate_percent": hit_rate if has_observations else None,
+        "investor_edge_sector_alpha": (
+            _sector_edge_alpha(profile) if has_observations else None
+        ),
+        "investor_edge_current_disclosure_lag_days": current_lag,
+        "investor_edge_average_disclosure_lag_days": average_lag if has_observations else None,
+        "investor_edge_strongest_sector": strongest_name,
+        "investor_edge_status": status,
+    }
+
+
+def _redact_edge_error(runtime: Any, exc: Exception) -> str:
+    message = normalize_text(f"{type(exc).__name__}: {exc}")
+    provider = getattr(runtime, "provider", None)
+    for attribute in ("alphavantage_api_key", "finnhub_api_key"):
+        secret = str(getattr(provider, attribute, "") or "")
+        if secret:
+            message = message.replace(secret, "[redacted]")
+    message = re.sub(
+        r"(?i)(apikey|api_key|token|password)=([^&\s]+)",
+        r"\1=[redacted]",
+        message,
+    )
+    return message[:500]
+
+
+def apply_investor_edge_fail_open(
+    analysis: Mapping[str, Any],
+    trade: Mapping[str, Any],
+    all_transactions: Sequence[Mapping[str, Any]],
+    rules: Mapping[str, Any],
+    runtime: InvestorEdgeRuntime | None,
+) -> dict[str, Any]:
+    """Apply the production Edge runtime without losing an otherwise valid analysis.
+
+    The persisted status and scalar summary fields let dashboards and alerts distinguish
+    a real neutral result from disabled, missing-history, and failed calculations.
+    """
+
+    base = dict(analysis)
+    base_score = _optional_int(base.get("score"))
+    base_raw = _optional_int(base.get("raw_score"))
+    base.update(
+        {
+            "base_score": base_score,
+            "base_raw_score": base_raw,
+            "final_score": base_score,
+            "investor_edge_modifier": 0,
+            "investor_edge": {},
+            "investor_edge_error": "",
+            "score_method_version": EDGE_VERSION,
+        }
+    )
+
+    if runtime is None:
+        profile = {
+            "status": "unavailable",
+            "trade_results": [],
+            "data_errors": [],
+        }
+        base["investor_edge"] = profile
+        base.update(_edge_summary_fields(profile, status="unavailable"))
+        return base
+
+    if not runtime.enabled:
+        profile = {"status": "disabled", "trade_results": [], "data_errors": []}
+        base["investor_edge"] = profile
+        base.update(_edge_summary_fields(profile, status="disabled"))
+        return base
+
+    try:
+        profile_value = runtime.profile_for_trade(trade, all_transactions)
+        if not isinstance(profile_value, Mapping):
+            raise AnalystError("Investor Edge returned a non-object profile")
+        profile = dict(profile_value)
+        observations = _optional_int(
+            _first_metric(
+                profile, "sample_count", "observation_count", "completed_observation_count"
+            )
+        )
+        status = "scored" if observations and observations > 0 else "neutral"
+        profile["status"] = status
+        updated = apply_profile_to_analysis(base, profile, rules)
+        updated["final_score"] = _optional_int(updated.get("score"))
+        updated["investor_edge_error"] = ""
+        updated["investor_edge"] = profile
+        updated.update(_edge_summary_fields(profile, status=status))
+        return updated
+    except Exception as exc:  # noqa: BLE001 - the base analysis must remain publishable
+        error = _redact_edge_error(runtime, exc)
+        LOGGER.warning("Investor Edge failed open for %s: %s", trade.get("trade_id"), error)
+        profile = {
+            "status": "error",
+            "edge_score": None,
+            "modifier": 0,
+            "sample_count": None,
+            "trade_results": [],
+            "data_errors": [error],
+        }
+        base["investor_edge"] = profile
+        base["investor_edge_error"] = error
+        base.update(_edge_summary_fields(profile, status="error"))
+        return base
+
+
+def _format_optional(value: Any, *, decimals: int = 0, signed: bool = False) -> str:
+    number = _optional_float(value)
+    if number is None:
+        return "—"
+    sign = "+" if signed and number > 0 else ""
+    return f"{sign}{number:.{decimals}f}"
+
+
+def _alert_label(value: Any, *, fallback: str = "—") -> str:
+    text = normalize_text(str(value or ""))
+    return text.replace("_", " ").title() if text else fallback
+
+
+def _alert_review_band(entry: Mapping[str, Any]) -> str:
+    low = _optional_float(entry.get("review_band_low"))
+    high = _optional_float(entry.get("review_band_high"))
+    if low is None or high is None:
+        return "—"
+    return f"${low:,.2f}–${high:,.2f}"
+
+
+def _concise_alert_summary(value: Any, *, limit: int = 220) -> str:
+    text = normalize_text(str(value or ""))
+    if not text:
+        return "—"
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def format_candidate_alert(
+    analysis: Mapping[str, Any], dashboard_url: str = ""
+) -> dict[str, str]:
+    """Return the side-effect-free candidate alert used by every delivery path."""
+
+    profile = analysis.get("investor_edge") or {}
+    if not isinstance(profile, Mapping):
+        profile = {}
+    status = normalize_text(
+        str(analysis.get("investor_edge_status") or profile.get("status") or "unavailable")
+    )
+    summary = _edge_summary_fields(profile, status=status)
+    for key in tuple(summary):
+        if analysis.get(key) is not None and analysis.get(key) != "":
+            summary[key] = analysis.get(key)
+    if not (
+        (_optional_int(summary.get("investor_edge_observation_count")) or 0) > 0
+    ):
+        for key in (
+            "investor_edge_score",
+            "investor_edge_confidence",
+            "investor_edge_confidence_label",
+            "investor_edge_relevant_alpha_label",
+            "investor_edge_relevant_followable_alpha",
+            "investor_edge_followable_alpha",
+            "investor_edge_hit_rate_percent",
+            "investor_edge_sector_alpha",
+            "investor_edge_average_disclosure_lag_days",
+        ):
+            summary[key] = "" if key.endswith(("_label",)) else None
+
+    ticker = normalize_text(str(analysis.get("ticker") or "Unknown"))
+    filer = normalize_text(str(analysis.get("filer") or "Unknown filer"))
+    owner = normalize_text(str(analysis.get("owner") or "Unknown owner"))
+    classification = _alert_label(analysis.get("classification"), fallback="Unclassified")
+    amount = normalize_text(str(analysis.get("amount") or "Undisclosed amount"))
+    entry_value = analysis.get("entry_plan") or {}
+    entry = entry_value if isinstance(entry_value, Mapping) else {}
+    entry_status = _alert_label(entry.get("entry_status"), fallback="Unknown")
+    review_band = _alert_review_band(entry)
+    ai_value = analysis.get("ai") or {}
+    ai = ai_value if isinstance(ai_value, Mapping) else {}
+    ai_summary = _concise_alert_summary(ai.get("analysis_summary"))
+    final_score = _first_metric(analysis, "final_score", "score")
+    base_score = analysis.get("base_score")
+    modifier = analysis.get("investor_edge_modifier")
+    edge_score = summary.get("investor_edge_score")
+    confidence = _optional_float(summary.get("investor_edge_confidence"))
+    confidence_label = normalize_text(
+        str(summary.get("investor_edge_confidence_label") or "")
+    )
+    observations = summary.get("investor_edge_observation_count")
+    alpha_label = normalize_text(
+        str(summary.get("investor_edge_relevant_alpha_label") or "followable")
+    )
+    alpha = summary.get("investor_edge_relevant_followable_alpha")
+    hit = summary.get("investor_edge_hit_rate_percent")
+    lag = _first_metric(
+        summary,
+        "investor_edge_current_disclosure_lag_days",
+        "investor_edge_average_disclosure_lag_days",
+    )
+    simulation = bool(analysis.get("is_synthetic_test") or analysis.get("test_metadata"))
+    prefix = "SIMULATION — " if simulation else ""
+
+    confidence_text = "—"
+    if confidence is not None:
+        confidence_text = f"{confidence * 100:.0f}%"
+        if confidence_label:
+            confidence_text = f"{confidence_label} {confidence_text}"
+    lines = [
+        f"{prefix}{filer} ({owner}) · {ticker}",
+        f"Classification {classification} · Amount {amount}",
+        (
+            f"Final {_format_optional(final_score)} · Base {_format_optional(base_score)} · "
+            f"Edge {_format_optional(edge_score, decimals=1)} "
+            f"({_format_optional(modifier, signed=True)} modifier)"
+        ),
+        (
+            f"Confidence {confidence_text} · Observations {_format_optional(observations)} · "
+            f"{alpha_label} alpha {_format_optional(alpha, decimals=2, signed=True)}%"
+        ),
+        (
+            f"Hit {_format_optional(hit, decimals=1)}% · "
+            f"Disclosure lag {_format_optional(lag, decimals=1)}d · Status {status or 'unavailable'}"
+        ),
+        f"Entry status {entry_status} · Review band {review_band}",
+        f"AI summary: {ai_summary}",
+    ]
+    url = normalize_text(dashboard_url)
+    if url:
+        lines.append(f"Dashboard: {url}")
+    title = f"{prefix}PolitiTrack: {ticker} {_format_optional(final_score)}/100"
+    return {"title": title[:250], "message": "\n".join(lines), "url": url}
+
+
+def _send_candidate_email(config: AnalystConfig, alert: Mapping[str, str]) -> bool:
+    address = config.gmail_address.strip()
+    password = config.gmail_app_password.strip()
+    if not address and not password:
+        return False
+    if not address or not password:
+        LOGGER.warning(
+            "Gmail candidate alert skipped because GMAIL_ADDRESS/GMAIL_APP_PASSWORD are incomplete"
+        )
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = str(alert.get("title") or "PolitiTrack candidate")[:250]
+    message["From"] = address
+    message["To"] = address
+    message.set_content(str(alert.get("message") or ""))
+    timeout = max(float(item) for item in config.request_timeout)
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=timeout) as server:
+            server.login(address, password)
+            server.send_message(message)
+    except Exception as exc:  # noqa: BLE001 - report configured-channel delivery failure
+        detail = normalize_text(str(exc)).replace(password, "[redacted]")
+        raise AnalystError(
+            f"Gmail candidate alert failed: {type(exc).__name__}: {detail[:400]}"
+        ) from exc
+    return True
+
+
 def _notification_post(
     config: AnalystConfig,
     *,
@@ -1733,11 +2192,11 @@ def _notification_post(
     url: str,
     url_title: str,
     priority: int = 0,
-) -> None:
+) -> bool:
     if not config.pushover_api_token or not config.pushover_user_key:
         if config.require_pushover:
             raise AnalystError("Pushover credentials are required but not configured")
-        return
+        return False
     response = requests.post(
         PUSHOVER_MESSAGES_URL,
         data={
@@ -1755,48 +2214,255 @@ def _notification_post(
         raise AnalystError(
             f"Pushover notification failed with HTTP {response.status_code}: {response.text[:300]}"
         )
+    return True
 
 
-def notify_candidate(config: AnalystConfig, analysis: Mapping[str, Any]) -> None:
-    if config.suppress_alerts:
-        return
-    score = int(analysis.get("score") or 0)
-    classification = str(analysis.get("classification") or "")
-    ticker = str(analysis.get("ticker") or "Unknown")
-    filer = str(analysis.get("filer") or "Unknown filer")
-    owner = str(analysis.get("owner") or "Unknown owner")
-    amount = str(analysis.get("amount") or "Undisclosed amount")
+def _candidate_alert_delivery_id(analysis: Mapping[str, Any]) -> str:
     entry = analysis.get("entry_plan") or {}
-    band_low = entry.get("review_band_low")
-    band_high = entry.get("review_band_high")
-    band = (
-        f" Review band ${float(band_low):,.2f}-${float(band_high):,.2f}."
-        if band_low and band_high
-        else ""
+    entry_status = str(entry.get("entry_status") or "") if isinstance(entry, Mapping) else ""
+    return stable_id(
+        "candidate-alert",
+        (
+            str(analysis.get("analysis_id") or ""),
+            str(analysis.get("trade_id") or ""),
+            str(analysis.get("analysis_revision") or 1),
+            str(analysis.get("analyzed_at_utc") or ""),
+            str(analysis.get("classification") or ""),
+            entry_status,
+        ),
     )
-    summary = str((analysis.get("ai") or {}).get("analysis_summary") or "")
-    edge = analysis.get("investor_edge") or {}
-    if isinstance(edge, Mapping) and edge:
-        summary = (
-            f"Investor Edge {float(edge.get('edge_score') or 50):.0f}/100 "
-            f"({int(edge.get('modifier') or 0):+d} score, "
-            f"{int(edge.get('sample_count') or 0)} prior scored trades; "
-            f"{str(edge.get('confidence_label') or 'Low')} confidence). "
-            + summary
-        )
-    message = (
-        f"{classification.replace('_', ' ').title()} — {filer} ({owner}) disclosed "
-        f"{ticker} {amount}. Entry status: {entry.get('entry_status', 'unknown')}.{band} "
-        f"{summary}"
+
+
+def _requested_candidate_channels(config: AnalystConfig) -> list[str]:
+    channels: list[str] = []
+    if config.require_pushover or (
+        config.pushover_api_token and config.pushover_user_key
+    ):
+        channels.append("pushover")
+    if config.gmail_address and config.gmail_app_password:
+        channels.append("gmail")
+    return channels
+
+
+def _queue_candidate_alert(
+    config: AnalystConfig,
+    analysis: Mapping[str, Any],
+    state: AIState,
+) -> str | None:
+    """Add one immutable alert snapshot to state before any channel is attempted."""
+
+    if config.suppress_alerts:
+        return None
+    requested_channels = _requested_candidate_channels(config)
+    if not requested_channels:
+        return None
+    delivery_id = _candidate_alert_delivery_id(analysis)
+    existing = state.candidate_alert_deliveries.get(delivery_id)
+    if isinstance(existing, dict):
+        return delivery_id
+    alert = format_candidate_alert(analysis, config.dashboard_url)
+    state.candidate_alert_deliveries[delivery_id] = {
+        "delivery_id": delivery_id,
+        "analysis_id": str(analysis.get("analysis_id") or ""),
+        "trade_id": str(analysis.get("trade_id") or ""),
+        "analysis_revision": int(_optional_int(analysis.get("analysis_revision")) or 1),
+        "created_at_utc": iso_utc(),
+        "requested_channels": requested_channels,
+        "delivered_channels": {},
+        "channel_errors": {},
+        "alert": alert,
+        "source_url": normalize_text(str(analysis.get("source_url") or "")),
+    }
+    return delivery_id
+
+
+def _candidate_alert_pending(delivery: Mapping[str, Any]) -> bool:
+    requested = {
+        str(channel)
+        for channel in (delivery.get("requested_channels") or [])
+        if str(channel) in {"pushover", "gmail"}
+    }
+    delivered_value = delivery.get("delivered_channels") or {}
+    delivered = (
+        {str(channel) for channel, timestamp in delivered_value.items() if timestamp}
+        if isinstance(delivered_value, Mapping)
+        else set()
     )
-    _notification_post(
+    return bool(requested - delivered)
+
+
+def _candidate_alert_error_detail(config: AnalystConfig, exc: Exception) -> str:
+    detail = normalize_text(str(exc))
+    for secret in (
+        config.pushover_api_token,
+        config.pushover_user_key,
+        config.gmail_app_password,
+    ):
+        if secret:
+            detail = detail.replace(secret, "[redacted]")
+    return f"{type(exc).__name__}: {detail[:400]}"
+
+
+def _persist_candidate_alert_state(
+    state: AIState | None, state_path: Path | None
+) -> None:
+    if state is not None and state_path is not None:
+        save_state(state_path, state)
+
+
+def _deliver_queued_candidate_alert(
+    config: AnalystConfig,
+    delivery: MutableMapping[str, Any],
+    *,
+    state: AIState | None,
+    state_path: Path | None,
+) -> bool:
+    """Attempt only unfinished channels, persisting each accepted send immediately."""
+
+    if config.suppress_alerts:
+        return False
+    alert_value = delivery.get("alert") or {}
+    if not isinstance(alert_value, Mapping):
+        raise AnalystError("Queued candidate alert has an invalid alert snapshot")
+    alert = {
+        "title": str(alert_value.get("title") or "PolitiTrack candidate"),
+        "message": str(alert_value.get("message") or ""),
+        "url": str(alert_value.get("url") or ""),
+    }
+    requested = {
+        str(channel)
+        for channel in (delivery.get("requested_channels") or [])
+        if str(channel) in {"pushover", "gmail"}
+    }
+    delivered_value = delivery.get("delivered_channels") or {}
+    delivered = dict(delivered_value) if isinstance(delivered_value, Mapping) else {}
+    errors_value = delivery.get("channel_errors") or {}
+    errors = dict(errors_value) if isinstance(errors_value, Mapping) else {}
+    delivered_now = False
+
+    if "pushover" in requested and not delivered.get("pushover"):
+        delivery["last_attempt_utc"] = iso_utc()
+        try:
+            accepted = _notification_post(
+                config,
+                title=alert["title"],
+                message=alert["message"],
+                url=alert["url"] or str(delivery.get("source_url") or ""),
+                url_title="Open PolitiTrack analysis",
+                priority=0,
+            )
+        except Exception as exc:  # noqa: BLE001 - required behavior is handled below
+            error = _candidate_alert_error_detail(config, exc)
+            errors["pushover"] = error
+            delivery["channel_errors"] = errors
+            _persist_candidate_alert_state(state, state_path)
+            if config.require_pushover:
+                raise
+            LOGGER.warning("Optional Pushover candidate alert failed: %s", error)
+        else:
+            if accepted:
+                delivered["pushover"] = iso_utc()
+                errors.pop("pushover", None)
+                delivery["delivered_channels"] = delivered
+                delivery["channel_errors"] = errors
+                _persist_candidate_alert_state(state, state_path)
+                delivered_now = True
+            else:
+                errors["pushover"] = "Pushover credentials are not currently configured"
+                delivery["channel_errors"] = errors
+                _persist_candidate_alert_state(state, state_path)
+
+    if "gmail" in requested and not delivered.get("gmail"):
+        delivery["last_attempt_utc"] = iso_utc()
+        try:
+            accepted = _send_candidate_email(config, alert)
+        except Exception as exc:  # noqa: BLE001 - Gmail is an optional channel
+            error = _candidate_alert_error_detail(config, exc)
+            errors["gmail"] = error
+            delivery["channel_errors"] = errors
+            _persist_candidate_alert_state(state, state_path)
+            LOGGER.warning("Optional Gmail candidate alert failed: %s", error)
+        else:
+            if accepted:
+                delivered["gmail"] = iso_utc()
+                errors.pop("gmail", None)
+                delivery["delivered_channels"] = delivered
+                delivery["channel_errors"] = errors
+                _persist_candidate_alert_state(state, state_path)
+                delivered_now = True
+            else:
+                errors["gmail"] = "Gmail credentials are not currently configured"
+                delivery["channel_errors"] = errors
+                _persist_candidate_alert_state(state, state_path)
+
+    return delivered_now
+
+
+def notify_candidate(
+    config: AnalystConfig,
+    analysis: Mapping[str, Any],
+    *,
+    state: AIState | None = None,
+    state_path: Path | None = None,
+) -> bool:
+    """Deliver a candidate once per configured channel and report new delivery.
+
+    Production callers pass ``state`` and ``state_path``. The immutable alert snapshot
+    and each successful channel are then persisted independently, so later runs retry
+    only unfinished channels without repeating the analysis or an accepted send.
+    Required Pushover is attempted before Gmail and retains its blocking semantics.
+    """
+
+    if config.suppress_alerts:
+        return False
+    delivery_state = state or AIState()
+    delivery_id = _queue_candidate_alert(config, analysis, delivery_state)
+    if delivery_id is None:
+        return False
+    _persist_candidate_alert_state(state, state_path)
+    delivery = delivery_state.candidate_alert_deliveries[delivery_id]
+    return _deliver_queued_candidate_alert(
         config,
-        title=f"PolitiTrack AI: {ticker} {score}/100",
-        message=message,
-        url=config.dashboard_url or str(analysis.get("source_url") or ""),
-        url_title="Open PolitiTrack analysis",
-        priority=0,
+        delivery,
+        state=state,
+        state_path=state_path,
     )
+
+
+def _retry_pending_candidate_alerts(
+    config: AnalystConfig,
+    state: AIState,
+    state_path: Path,
+) -> tuple[int, list[str]]:
+    if config.suppress_alerts:
+        return 0, []
+    delivered_count = 0
+    errors: list[str] = []
+    attempted_count = 0
+    for delivery_id in sorted(state.candidate_alert_deliveries):
+        delivery = state.candidate_alert_deliveries[delivery_id]
+        if not _candidate_alert_pending(delivery):
+            continue
+        if attempted_count >= MAX_CANDIDATE_ALERT_RETRIES_PER_RUN:
+            LOGGER.warning(
+                "Candidate alert retry limit reached; remaining deliveries stay queued"
+            )
+            break
+        attempted_count += 1
+        try:
+            if _deliver_queued_candidate_alert(
+                config,
+                delivery,
+                state=state,
+                state_path=state_path,
+            ):
+                delivered_count += 1
+        except Exception as exc:  # noqa: BLE001 - preserve required-channel run failure
+            error = _candidate_alert_error_detail(config, exc)
+            errors.append(f"Candidate alert retry {delivery_id}: {error}")
+            if config.require_pushover:
+                break
+    return delivered_count, errors
 
 
 def build_analysis_record(
@@ -1812,14 +2478,22 @@ def build_analysis_record(
     rules_hash: str,
     config: AnalystConfig,
     investor_edge: InvestorEdgeRuntime | None = None,
+    scoring_now: datetime | None = None,
 ) -> dict[str, Any]:
-    scored = deterministic_score(trade, ai_result.payload, market, all_transactions, rules)
+    scored = deterministic_score(
+        trade,
+        ai_result.payload,
+        market,
+        all_transactions,
+        rules,
+        now=scoring_now,
+    )
     entry_plan = build_entry_plan(trade, market, int(scored["score"]), rules)
     analysis_id = analysis_id_for_trade(trade, model=config.model, rules_hash=rules_hash)
     record = {
         "analysis_id": analysis_id,
         "trade_id": str(trade.get("trade_id") or ""),
-        "analyzed_at_utc": iso_utc(),
+        "analyzed_at_utc": iso_utc(scoring_now),
         "analysis_status": "complete",
         "prompt_version": PROMPT_VERSION,
         "rules_version": rules.get("version"),
@@ -1865,16 +2539,36 @@ def build_analysis_record(
         "ai": ai_result.payload,
         "entry_plan": entry_plan,
         "paper_only": True,
+        "is_synthetic_test": bool(
+            trade.get("is_synthetic_test") or filing.get("is_synthetic_test")
+        ),
+        "is_temporary": bool(trade.get("is_temporary") or filing.get("is_temporary")),
+        "test_metadata": dict(
+            (
+                trade.get("test_metadata")
+                if isinstance(trade.get("test_metadata"), Mapping)
+                else (
+                    filing.get("test_metadata")
+                    if isinstance(filing.get("test_metadata"), Mapping)
+                    else {}
+                )
+            )
+            or {}
+        ),
     }
-    if investor_edge is not None and investor_edge.enabled:
-        profile = investor_edge.profile_for_trade(trade, all_transactions)
-        record = apply_profile_to_analysis(record, profile, rules)
-        record["entry_plan"] = build_entry_plan(
-            trade,
-            record.get("market") or {},
-            int(record.get("score") or 0),
-            rules,
-        )
+    record = apply_investor_edge_fail_open(
+        record,
+        trade,
+        all_transactions,
+        rules,
+        investor_edge,
+    )
+    record["entry_plan"] = build_entry_plan(
+        trade,
+        record.get("market") or {},
+        int(record.get("score") or 0),
+        rules,
+    )
     return record
 
 
@@ -1904,8 +2598,22 @@ def refresh_analysis_market(
     for field in (
         "base_score",
         "base_raw_score",
+        "final_score",
         "investor_edge",
+        "investor_edge_error",
         "investor_edge_modifier",
+        "investor_edge_score",
+        "investor_edge_confidence",
+        "investor_edge_confidence_label",
+        "investor_edge_observation_count",
+        "investor_edge_relevant_alpha_label",
+        "investor_edge_relevant_followable_alpha",
+        "investor_edge_followable_alpha",
+        "investor_edge_hit_rate_percent",
+        "investor_edge_sector_alpha",
+        "investor_edge_average_disclosure_lag_days",
+        "investor_edge_strongest_sector",
+        "investor_edge_status",
         "score_method_version",
     ):
         updated.pop(field, None)
@@ -1926,15 +2634,19 @@ def refresh_analysis_market(
             "analysis_revision": int(analysis.get("analysis_revision") or 1) + 1,
         }
     )
-    if investor_edge is not None and investor_edge.enabled:
-        profile = investor_edge.profile_for_trade(trade, all_transactions)
-        updated = apply_profile_to_analysis(updated, profile, rules)
-        updated["entry_plan"] = build_entry_plan(
-            trade,
-            updated.get("market") or {},
-            int(updated.get("score") or 0),
-            rules,
-        )
+    updated = apply_investor_edge_fail_open(
+        updated,
+        trade,
+        all_transactions,
+        rules,
+        investor_edge,
+    )
+    updated["entry_plan"] = build_entry_plan(
+        trade,
+        updated.get("market") or {},
+        int(updated.get("score") or 0),
+        rules,
+    )
     return updated
 
 
@@ -2112,13 +2824,33 @@ def write_latest_outputs(config: AnalystConfig, analyses: Sequence[Mapping[str, 
         "filed_date",
         "amount",
         "score",
+        "base_score",
+        "final_score",
         "classification",
+        "investor_edge_status",
+        "investor_edge_error",
+        "investor_edge_modifier",
+        "investor_edge_score",
+        "investor_edge_confidence",
+        "investor_edge_confidence_label",
+        "investor_edge_observation_count",
+        "investor_edge_relevant_alpha_label",
+        "investor_edge_relevant_followable_alpha",
+        "investor_edge_followable_alpha",
+        "investor_edge_hit_rate_percent",
+        "investor_edge_sector_alpha",
+        "investor_edge_average_disclosure_lag_days",
+        "investor_edge_strongest_sector",
+        "investor_edge",
         "market",
         "entry_plan",
         "ai",
         "source_url",
         "analysis_id",
         "trade_id",
+        "is_synthetic_test",
+        "is_temporary",
+        "test_metadata",
     )
     portfolio_fields = (
         "position_id",
@@ -2268,6 +3000,12 @@ def run_analyst(
         write_step_summary(result)
         return result
 
+    retried_alerts, alert_retry_errors = _retry_pending_candidate_alerts(
+        config, state, state_path
+    )
+    result.alerted_count += retried_alerts
+    result.errors.extend(alert_retry_errors)
+
     rules = load_rules(config.rules_path)
     schema = load_schema(config.schema_path)
     rules_hash = json_hash(rules)
@@ -2363,9 +3101,7 @@ def run_analyst(
             )
             if upgraded:
                 result.market_signal_upgrades += 1
-                notify_candidate(config, refreshed)
-                if not config.suppress_alerts:
-                    result.alerted_count += 1
+                _queue_candidate_alert(config, refreshed, state)
             opened = open_paper_position(refreshed, state, rules)
             if opened:
                 opened["event_id"] = stable_id(
@@ -2376,6 +3112,13 @@ def run_analyst(
                 result.paper_positions_opened += 1
             append_jsonl(config.ai_dir / "analyses.jsonl", [refreshed])
             save_state(state_path, state)
+            if upgraded and notify_candidate(
+                config,
+                refreshed,
+                state=state,
+                state_path=state_path,
+            ):
+                result.alerted_count += 1
         except Exception as exc:  # noqa: BLE001 - refresh retries on later runs
             result.warnings.append(
                 f"Market refresh {str(prior.get('ticker') or 'unknown')} / {trade_id}: "
@@ -2430,10 +3173,9 @@ def run_analyst(
                 result.weak_signal_count += 1
             else:
                 result.archive_count += 1
-            if classification in {"high_priority", "watchlist"}:
-                notify_candidate(config, record)
-                if not config.suppress_alerts:
-                    result.alerted_count += 1
+            should_alert = classification in {"high_priority", "watchlist"}
+            if should_alert:
+                _queue_candidate_alert(config, record, state)
             opened = open_paper_position(record, state, rules)
             if opened:
                 opened["event_id"] = stable_id(
@@ -2450,6 +3192,13 @@ def run_analyst(
             if opened:
                 append_jsonl(config.ai_dir / "paper-portfolio.jsonl", [opened])
             save_state(state_path, state)
+            if should_alert and notify_candidate(
+                config,
+                record,
+                state=state,
+                state_path=state_path,
+            ):
+                result.alerted_count += 1
         except OpenAIQuotaError as exc:
             message = (
                 f"{str(trade.get('ticker') or 'unknown')} / "
@@ -2491,7 +3240,13 @@ def run_analyst(
         except Exception as exc:  # Preserve the core analyst result and retry Edge later.
             LOGGER.exception("Investor Edge profile refresh failed")
             result.warnings.append(f"Investor Edge refresh: {type(exc).__name__}: {exc}")
-            investor_edge.save()
+            try:
+                investor_edge.save()
+            except Exception as save_exc:  # noqa: BLE001 - fail open through persistence too
+                LOGGER.exception("Investor Edge fallback persistence failed")
+                result.warnings.append(
+                    f"Investor Edge persistence: {type(save_exc).__name__}: {save_exc}"
+                )
 
     result.finished_utc = iso_utc()
     result.success = not result.errors
@@ -2541,7 +3296,7 @@ def build_config(args: argparse.Namespace) -> AnalystConfig:
         sec_user_agent=os.environ.get("SEC_USER_AGENT", "").strip(),
         pushover_api_token=os.environ.get("PUSHOVER_API_TOKEN", "").strip(),
         pushover_user_key=os.environ.get("PUSHOVER_USER_KEY", "").strip(),
-        require_pushover=parse_bool(os.environ.get("AI_REQUIRE_PUSHOVER"), default=True),
+        require_pushover=parse_bool(os.environ.get("AI_REQUIRE_PUSHOVER"), default=False),
         dashboard_url=os.environ.get("DASHBOARD_URL", DEFAULT_DASHBOARD_URL).strip(),
         repository_url=(
             f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}/"
@@ -2552,6 +3307,8 @@ def build_config(args: argparse.Namespace) -> AnalystConfig:
         ),
         max_ocr_pages=int(os.environ.get("AI_MAX_OCR_PAGES", DEFAULT_MAX_OCR_PAGES_AI)),
         request_timeout=timeout,
+        gmail_address=os.environ.get("GMAIL_ADDRESS", "").strip(),
+        gmail_app_password=os.environ.get("GMAIL_APP_PASSWORD", "").strip(),
     )
 
 

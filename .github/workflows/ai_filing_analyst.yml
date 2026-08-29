@@ -9,14 +9,14 @@ on:
         default: false
         type: boolean
       suppress_alerts:
-        description: "Write analyses and paper positions without sending candidate Pushover alerts"
+        description: "Write analyses and paper positions without sending candidate alerts"
         required: false
         default: false
         type: boolean
       investor_edge_enabled:
         description: "Enable Investor Edge for this manual run"
         required: false
-        default: false
+        default: true
         type: boolean
       max_analyses:
         description: "Maximum purchases to analyze in this run"
@@ -46,8 +46,8 @@ env:
   AI_FETCH_DOCUMENT_TEXT: ${{ vars.AI_FETCH_DOCUMENT_TEXT || 'true' }}
   AI_MAX_ANALYSES_PER_RUN: ${{ vars.AI_MAX_ANALYSES_PER_RUN || '20' }}
   AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS: ${{ vars.AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS || '65' }}
-  AI_REQUIRE_PUSHOVER: ${{ vars.AI_REQUIRE_PUSHOVER || 'true' }}
-  INVESTOR_EDGE_ENABLED: ${{ vars.INVESTOR_EDGE_ENABLED || 'false' }}
+  AI_REQUIRE_PUSHOVER: ${{ vars.AI_REQUIRE_PUSHOVER || 'false' }}
+  INVESTOR_EDGE_ENABLED: ${{ vars.INVESTOR_EDGE_ENABLED || 'true' }}
   OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.6-terra' }}
   OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'medium' }}
   SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
@@ -203,7 +203,9 @@ jobs:
             tests/test_government_trade_tracker.py \
             tests/test_oge_disclosures.py \
             tests/test_ai_filing_analyst.py \
-            tests/test_trade_dashboard.py
+            tests/test_trade_dashboard.py \
+            tests/test_investor_edge.py \
+            tests/test_investor_edge_surfaces.py
 
       - name: Analyze new filing purchases
         id: analyst
@@ -214,12 +216,17 @@ jobs:
           ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
           PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           REANALYZE_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.reanalyze_existing || false }}
           SUPPRESS_ALERTS: ${{ github.event_name == 'workflow_dispatch' && inputs.suppress_alerts || false }}
-          INVESTOR_EDGE_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.investor_edge_enabled || vars.INVESTOR_EDGE_ENABLED || 'false' }}
+          INVESTOR_EDGE_MANUAL_INPUT: ${{ inputs.investor_edge_enabled }}
           MAX_ANALYSES_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_analyses || '' }}
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            export INVESTOR_EDGE_ENABLED="$INVESTOR_EDGE_MANUAL_INPUT"
+          fi
           args=(
             --legislative-dir tracker-input/legislative
             --executive-dir tracker-input/executive

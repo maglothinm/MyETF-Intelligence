@@ -136,6 +136,9 @@ ANALYSIS_FIELDS = (
     "source_url",
     "score",
     "raw_score",
+    "base_score",
+    "base_raw_score",
+    "final_score",
     "classification",
     "score_components",
     "hard_caps",
@@ -145,7 +148,27 @@ ANALYSIS_FIELDS = (
     "sec",
     "ai",
     "entry_plan",
+    "investor_edge_status",
+    "investor_edge_error",
+    "investor_edge_modifier",
+    "investor_edge_score",
+    "investor_edge_confidence",
+    "investor_edge_confidence_label",
+    "investor_edge_observation_count",
+    "investor_edge_relevant_alpha_label",
+    "investor_edge_relevant_followable_alpha",
+    "investor_edge_followable_alpha",
+    "investor_edge_hit_rate_percent",
+    "investor_edge_sector_alpha",
+    "investor_edge_current_disclosure_lag_days",
+    "investor_edge_average_disclosure_lag_days",
+    "investor_edge_strongest_sector",
+    "investor_edge",
+    "score_method_version",
     "paper_only",
+    "is_synthetic_test",
+    "is_temporary",
+    "test_metadata",
 )
 
 PORTFOLIO_FIELDS = (
@@ -312,6 +335,167 @@ def load_ai(directory: Path | None) -> dict[str, Any]:
     }
 
 
+def _optional_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number and number not in {float("inf"), float("-inf")} else None
+
+
+def _first_present(mapping: Mapping[str, Any], *names: str) -> Any:
+    for name in names:
+        value = mapping.get(name)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _relevant_edge_alpha(profile: Mapping[str, Any]) -> tuple[str, float | None]:
+    direct = _optional_number(
+        _first_present(
+            profile,
+            "relevant_followable_alpha",
+            "current_sector_followable_alpha",
+        )
+    )
+    if direct is not None:
+        return "relevant", direct
+    horizons = profile.get("followable_alpha_by_horizon") or {}
+    if isinstance(horizons, Mapping):
+        for horizon in ("20", "5", "60", "120"):
+            value = _optional_number(horizons.get(horizon))
+            if value is not None:
+                return f"{horizon}D", value
+    return "overall", _optional_number(profile.get("followable_alpha"))
+
+
+def _current_sector_alpha(profile: Mapping[str, Any]) -> float | None:
+    direct = _optional_number(
+        _first_present(
+            profile,
+            "sector_alpha",
+            "current_sector_alpha",
+            "relevant_sector_alpha",
+            "sector_edge_alpha",
+        )
+    )
+    if direct is not None:
+        return direct
+    current = profile.get("current_sector") or {}
+    current_sector = ""
+    current_benchmark = ""
+    if isinstance(current, Mapping):
+        current_sector = str(current.get("sector") or current.get("name") or "")
+        current_benchmark = str(current.get("benchmark") or "")
+    rows = profile.get("sector_performance") or []
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        return None
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        row_sector = str(row.get("sector") or row.get("name") or "")
+        row_benchmark = str(row.get("benchmark") or "")
+        if current_sector and row_sector.casefold() != current_sector.casefold():
+            continue
+        if not current_sector and current_benchmark and row_benchmark != current_benchmark:
+            continue
+        if not current_sector and not current_benchmark:
+            continue
+        value = _optional_number(
+            _first_present(
+                row,
+                "followable_alpha",
+                "weighted_followable_alpha",
+                "alpha_percent",
+                "alpha",
+            )
+        )
+        if value is not None:
+            return value
+    return None
+
+
+def analysis_export_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Feature-detect and flatten Edge values without inventing missing metrics."""
+
+    result = dict(record)
+    raw_profile = result.get("investor_edge") or {}
+    profile = dict(raw_profile) if isinstance(raw_profile, Mapping) else {}
+    observations = _optional_number(
+        _first_present(
+            result,
+            "investor_edge_observation_count",
+        )
+    )
+    if observations is None:
+        observations = _optional_number(
+            _first_present(
+                profile,
+                "sample_count",
+                "observation_count",
+                "completed_observation_count",
+            )
+        )
+    has_observations = bool(observations is not None and observations > 0)
+    alpha_label, alpha = _relevant_edge_alpha(profile)
+    strongest = profile.get("strongest_sector") or {}
+    strongest_name = ""
+    if isinstance(strongest, Mapping):
+        strongest_name = str(strongest.get("sector") or strongest.get("name") or "")
+
+    result["final_score"] = _first_present(result, "final_score", "score")
+    result["investor_edge_status"] = str(
+        _first_present(result, "investor_edge_status")
+        or profile.get("status")
+        or profile.get("profile_status")
+        or ("unavailable" if not profile else ("scored" if has_observations else "neutral"))
+    )
+    if result.get("investor_edge_modifier") is None and profile:
+        result["investor_edge_modifier"] = _optional_number(profile.get("modifier"))
+    result["investor_edge_observation_count"] = observations
+
+    derived = {
+        "investor_edge_score": _optional_number(profile.get("edge_score")),
+        "investor_edge_confidence": _optional_number(
+            _first_present(profile, "confidence", "identity_confidence")
+        ),
+        "investor_edge_confidence_label": str(
+            _first_present(profile, "confidence_label", "identity_confidence_label") or ""
+        ),
+        "investor_edge_relevant_alpha_label": alpha_label if alpha is not None else "",
+        "investor_edge_relevant_followable_alpha": alpha,
+        "investor_edge_followable_alpha": _optional_number(profile.get("followable_alpha")),
+        "investor_edge_hit_rate_percent": _optional_number(
+            _first_present(
+                profile,
+                "weighted_followable_hit_rate_percent",
+                "hit_rate_percent",
+                "followable_hit_rate_percent",
+            )
+        ),
+        "investor_edge_sector_alpha": _current_sector_alpha(profile),
+        "investor_edge_current_disclosure_lag_days": _optional_number(
+            profile.get("current_disclosure_lag_days")
+        ),
+        "investor_edge_average_disclosure_lag_days": _optional_number(
+            _first_present(
+                profile,
+                "average_disclosure_lag_days",
+                "median_disclosure_lag_days",
+            )
+        ),
+        "investor_edge_strongest_sector": strongest_name,
+    }
+    for field, value in derived.items():
+        if result.get(field) in (None, ""):
+            if field == "investor_edge_current_disclosure_lag_days":
+                result[field] = value
+            else:
+                result[field] = value if has_observations else ("" if isinstance(value, str) else None)
+    return result
+
+
 def _flatten_for_csv(record: Mapping[str, Any], fieldnames: Sequence[str]) -> dict[str, Any]:
     flattened: dict[str, Any] = {}
     for field in fieldnames:
@@ -391,7 +575,10 @@ def build_payload(
     reviews = legislative["reviews"] + executive["reviews"]
     runs = legislative["runs"] + executive["runs"]
     ai = ai or {"analyses": [], "portfolio": [], "runs": [], "state": {}}
-    analyses = latest_by(ai.get("analyses", []), "trade_id")
+    analyses = [
+        analysis_export_record(item)
+        for item in latest_by(ai.get("analyses", []), "trade_id")
+    ]
     portfolio = latest_by(ai.get("portfolio", []), "position_id")
     ai_runs = latest_by(ai.get("runs", []), "run_key")
 
@@ -535,8 +722,8 @@ INDEX_HTML = r'''<!doctype html>
       <span>Government disclosures may be published weeks after the underlying transaction.</span>
     </section>
 
-    <section id="manual-test-notice" class="notice" aria-label="Manual Test notice" hidden>
-      <strong>Manual Test preview:</strong>
+    <section id="manual-test-notice" class="notice" aria-label="Run Simulation notice" hidden>
+      <strong>Run Simulation preview:</strong>
       <span id="manual-test-note">This temporary dashboard contains synthetic test data.</span>
     </section>
 
@@ -583,7 +770,7 @@ INDEX_HTML = r'''<!doctype html>
         <label>Source<select id="ai-source"><option value="">All sources</option></select></label>
       </div>
       <p id="ai-count-label" class="result-count"></p>
-      <div class="table-wrap"><table><thead><tr><th>Analyzed</th><th>Signal</th><th>Direction</th><th>Score</th><th>Filer / owner</th><th>Disclosure</th><th>Market / entry review</th><th>Analysis</th><th>Evidence</th></tr></thead><tbody id="ai-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Analyzed</th><th>Signal</th><th>Direction</th><th>Score</th><th>Investor Edge</th><th>Filer / owner</th><th>Disclosure</th><th>Market / entry review</th><th>Analysis</th><th>Evidence</th></tr></thead><tbody id="ai-body"></tbody></table></div>
       <button id="ai-more" class="more-button" type="button">Show more</button>
     </section>
 
@@ -999,6 +1186,17 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .candidate-title strong { font-size: 1.35rem; color: var(--text); }
 .candidate-title span { overflow: hidden; color: var(--muted); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
 .candidate-meta { margin-top: .15rem; color: var(--blue-soft); font-size: .69rem; }
+.candidate-edge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .18rem .42rem;
+  margin-top: .22rem;
+  color: var(--muted);
+  font-size: .63rem;
+  line-height: 1.25;
+}
+.candidate-edge strong { color: var(--blue-soft); }
+.candidate-edge span { min-width: 0; }
 .candidate-summary {
   display: -webkit-box;
   margin: .28rem 0 0;
@@ -1174,6 +1372,45 @@ const percent = value => {
   if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "—";
   return `${Number(value).toFixed(2)}%`;
 };
+const hasEdgeValue = value => value !== null && value !== undefined && value !== "";
+const firstEdgeValue = (...values) => values.find(hasEdgeValue);
+const edgeMetric = (value, digits=1, suffix="", signed=false) => {
+  if (!hasEdgeValue(value) || Number.isNaN(Number(value))) return "—";
+  const numeric = Number(value);
+  return `${signed && numeric > 0 ? "+" : ""}${numeric.toFixed(digits)}${suffix}`;
+};
+function candidateEdge(row) {
+  const profile = row.investor_edge && typeof row.investor_edge === "object" ? row.investor_edge : {};
+  const observations = firstEdgeValue(row.investor_edge_observation_count, profile.sample_count, profile.observation_count, profile.completed_observation_count);
+  const hasObservations = hasEdgeValue(observations) && Number(observations) > 0;
+  const horizons = profile.followable_alpha_by_horizon && typeof profile.followable_alpha_by_horizon === "object" ? profile.followable_alpha_by_horizon : {};
+  let alpha = row.investor_edge_relevant_followable_alpha;
+  let alphaLabel = row.investor_edge_relevant_alpha_label || "";
+  if (!hasEdgeValue(alpha)) {
+    for (const horizon of ["20", "5", "60", "120"]) {
+      if (hasEdgeValue(horizons[horizon])) { alpha = horizons[horizon]; alphaLabel = `${horizon}D`; break; }
+    }
+  }
+  if (!hasEdgeValue(alpha)) { alpha = profile.followable_alpha; alphaLabel = hasEdgeValue(alpha) ? "overall" : ""; }
+  const confidence = firstEdgeValue(row.investor_edge_confidence, profile.confidence, profile.identity_confidence);
+  const confidenceLabel = firstEdgeValue(row.investor_edge_confidence_label, profile.confidence_label, profile.identity_confidence_label, "");
+  return {
+    status: firstEdgeValue(row.investor_edge_status, profile.status, profile.profile_status, Object.keys(profile).length ? (hasObservations ? "scored" : "neutral") : "unavailable"),
+    observations,
+    score: hasObservations ? firstEdgeValue(row.investor_edge_score, profile.edge_score) : null,
+    confidence: hasObservations ? confidence : null,
+    confidenceLabel: hasObservations ? confidenceLabel : "",
+    alpha: hasObservations ? alpha : null,
+    alphaLabel: hasObservations ? alphaLabel : "",
+    hit: hasObservations ? firstEdgeValue(row.investor_edge_hit_rate_percent, profile.weighted_followable_hit_rate_percent, profile.hit_rate_percent, profile.followable_hit_rate_percent) : null,
+    sectorAlpha: hasObservations ? firstEdgeValue(row.investor_edge_sector_alpha, profile.sector_alpha, profile.current_sector_alpha) : null,
+    lag: firstEdgeValue(row.investor_edge_current_disclosure_lag_days, profile.current_disclosure_lag_days, hasObservations ? row.investor_edge_average_disclosure_lag_days : null, hasObservations ? profile.average_disclosure_lag_days : null, hasObservations ? profile.median_disclosure_lag_days : null),
+    modifier: firstEdgeValue(row.investor_edge_modifier, profile.modifier),
+    base: row.base_score,
+    final: firstEdgeValue(row.final_score, row.score),
+  };
+}
+const candidateConfidence = edge => hasEdgeValue(edge.confidence) ? `${edge.confidenceLabel ? `${edge.confidenceLabel} ` : ""}${edgeMetric(Number(edge.confidence) * 100, 0, "%")}` : "—";
 const parseDate = value => {
   if (!value) return null;
   const raw = String(value);
@@ -1321,16 +1558,18 @@ function renderCandidates() {
   el("candidate-list").innerHTML = rows.map(row => {
     const entry = row.entry_plan || {};
     const market = row.market || {};
+    const edge = candidateEdge(row);
     const filingUrl = safeUrl(row.source_url);
     const band = entry.review_band_low && entry.review_band_high ? `${price(entry.review_band_low)}–${price(entry.review_band_high)}` : "No review band";
     const entryStatus = titleCase(entry.entry_status || "review pending");
-    const meta = [row.filer, row.owner, row.amount, row.source ? titleCase(row.source) : ""].filter(Boolean).join(" · ");
+    const meta = [row.is_synthetic_test ? "RUN SIMULATION" : "", row.filer, row.owner, row.amount, row.source ? titleCase(row.source) : ""].filter(Boolean).join(" · ");
     const summary = row.ai?.analysis_summary || "Analysis summary pending.";
     return `<article class="candidate-card ${escapeHtml(row.classification || "archive")}">
       <div class="candidate-score"><strong>${number(row.score)}</strong><span>${escapeHtml(titleCase(row.classification || "archive"))}</span></div>
       <div class="candidate-body">
         <div class="candidate-title"><strong>${escapeHtml(row.ticker || "?")}</strong><span>${escapeHtml(row.asset || "Unresolved asset")}</span></div>
         <div class="candidate-meta">${escapeHtml(meta || "Unknown filer")}</div>
+        <div class="candidate-edge"><strong>Edge ${edgeMetric(edge.score, 1)}</strong><span>Conf ${escapeHtml(candidateConfidence(edge))} · n ${edgeMetric(edge.observations, 0)} · ${escapeHtml(edge.alphaLabel || "followable")} α ${edgeMetric(edge.alpha, 2, "%", true)} · hit ${edgeMetric(edge.hit, 1, "%")} · sector ${edgeMetric(edge.sectorAlpha, 2, "%", true)} · lag ${edgeMetric(edge.lag, 1, "d")} · base ${edgeMetric(edge.base, 0)} ${edgeMetric(edge.modifier, 0, "", true)} → final ${edgeMetric(edge.final, 0)} · ${escapeHtml(titleCase(edge.status || "unavailable"))}</span></div>
         <p class="candidate-summary">${escapeHtml(summary)}</p>
       </div>
       <div class="candidate-entry">
@@ -1559,6 +1798,11 @@ tbody tr:hover { background: rgba(105, 183, 255, .055); }
 .badge.neutral { color: var(--muted); }
 .analysis-summary { min-width: 310px; max-width: 520px; line-height: 1.45; }
 .analysis-summary small { display: block; margin-top: 6px; color: var(--muted); }
+.edge-cell { min-width: 250px; line-height: 1.35; }
+.edge-cell strong { display: block; color: var(--accent-2); }
+.edge-cell small { display: block; margin-top: 4px; color: var(--muted); }
+.edge-cell .edge-status { color: var(--warning); font-weight: 700; }
+.simulation-label { color: var(--warning); font-weight: 800; }
 .evidence-links { min-width: 150px; }
 .evidence-links a { display: block; margin-bottom: 5px; }
 .money-positive { color: var(--success); font-weight: 750; }
@@ -1617,6 +1861,52 @@ const percent = value => {
   if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "—";
   return `${Number(value).toFixed(2)}%`;
 };
+const hasValue = value => value !== null && value !== undefined && value !== "";
+const firstValue = (...values) => values.find(hasValue);
+const metric = (value, digits=1, suffix="", signed=false) => {
+  if (!hasValue(value) || Number.isNaN(Number(value))) return "—";
+  const numeric = Number(value);
+  const sign = signed && numeric > 0 ? "+" : "";
+  return `${sign}${numeric.toFixed(digits)}${suffix}`;
+};
+function edgeDetails(row) {
+  const profile = row.investor_edge && typeof row.investor_edge === "object" ? row.investor_edge : {};
+  const observations = firstValue(row.investor_edge_observation_count, profile.sample_count, profile.observation_count, profile.completed_observation_count);
+  const hasObservations = hasValue(observations) && Number(observations) > 0;
+  const horizons = profile.followable_alpha_by_horizon && typeof profile.followable_alpha_by_horizon === "object" ? profile.followable_alpha_by_horizon : {};
+  let alpha = row.investor_edge_relevant_followable_alpha;
+  let alphaLabel = row.investor_edge_relevant_alpha_label || "";
+  if (!hasValue(alpha)) {
+    for (const horizon of ["20", "5", "60", "120"]) {
+      if (hasValue(horizons[horizon])) { alpha = horizons[horizon]; alphaLabel = `${horizon}D`; break; }
+    }
+  }
+  if (!hasValue(alpha)) { alpha = profile.followable_alpha; alphaLabel = hasValue(alpha) ? "overall" : ""; }
+  const current = profile.current_sector && typeof profile.current_sector === "object" ? profile.current_sector : {};
+  let sectorAlpha = row.investor_edge_sector_alpha;
+  if (!hasValue(sectorAlpha) && Array.isArray(profile.sector_performance)) {
+    const match = profile.sector_performance.find(item => item && ((current.sector && item.sector === current.sector) || (!current.sector && current.benchmark && item.benchmark === current.benchmark)));
+    if (match) sectorAlpha = firstValue(match.followable_alpha, match.weighted_followable_alpha, match.alpha_percent, match.alpha);
+  }
+  const confidence = firstValue(row.investor_edge_confidence, profile.confidence, profile.identity_confidence);
+  const confidenceLabel = firstValue(row.investor_edge_confidence_label, profile.confidence_label, profile.identity_confidence_label, "");
+  return {
+    status: firstValue(row.investor_edge_status, profile.status, profile.profile_status, Object.keys(profile).length ? (hasObservations ? "scored" : "neutral") : "unavailable"),
+    observations,
+    score: hasObservations ? firstValue(row.investor_edge_score, profile.edge_score) : null,
+    confidence: hasObservations ? confidence : null,
+    confidenceLabel: hasObservations ? confidenceLabel : "",
+    alpha: hasObservations ? alpha : null,
+    alphaLabel: hasObservations ? alphaLabel : "",
+    hit: hasObservations ? firstValue(row.investor_edge_hit_rate_percent, profile.weighted_followable_hit_rate_percent, profile.hit_rate_percent, profile.followable_hit_rate_percent) : null,
+    sectorAlpha: hasObservations ? sectorAlpha : null,
+    lag: firstValue(row.investor_edge_current_disclosure_lag_days, profile.current_disclosure_lag_days, hasObservations ? row.investor_edge_average_disclosure_lag_days : null, hasObservations ? profile.average_disclosure_lag_days : null, hasObservations ? profile.median_disclosure_lag_days : null),
+    modifier: firstValue(row.investor_edge_modifier, profile.modifier),
+    base: row.base_score,
+    final: firstValue(row.final_score, row.score),
+  };
+}
+const edgeConfidence = edge => hasValue(edge.confidence) ? `${edge.confidenceLabel ? `${edge.confidenceLabel} ` : ""}${metric(Number(edge.confidence) * 100, 0, "%")}` : "—";
 const formatDate = value => {
   if (!value) return "—";
   const raw = String(value);
@@ -1690,7 +1980,7 @@ function renderSummary() {
   const manualTestFilings = Number(summary.manual_test_filing_count || 0);
   const manualTestTransactions = Number(summary.manual_test_transaction_count || 0);
   manualTestNotice.hidden = manualTestFilings === 0;
-  el("manual-test-note").textContent = `${number(manualTestFilings)} synthetic filing(s) and ${number(manualTestTransactions)} cloned transaction(s) are included for this isolated test only. Production state and alerts are unchanged.`;
+  el("manual-test-note").textContent = `${number(manualTestFilings)} synthetic filing(s) and ${number(manualTestTransactions)} cloned transaction(s) are included in this isolated Run Simulation. Production state and real alerts are unchanged.`;
   el("updated-at").textContent = `Dashboard generated ${formatDate(summary.generated_utc)}${summary.ai_last_success_utc ? ` • AI last succeeded ${formatDate(summary.ai_last_success_utc)}` : ""}`;
   el("repository-link").href = safeUrl(summary.repository_url) || "#";
   el("source-cards").innerHTML = Object.values(summary.sources || {}).map(source => {
@@ -1735,6 +2025,7 @@ function renderAnalyses() {
   setTable("ai-body", rows, row => {
     const entry = row.entry_plan || {};
     const market = row.market || {};
+    const edge = edgeDetails(row);
     const band = entry.review_band_low && entry.review_band_high ? `${price(entry.review_band_low)}–${price(entry.review_band_high)}` : "No calculated band";
     const marketText = `${price(market.current_price)} current${market.return_since_transaction_percent !== null && market.return_since_transaction_percent !== undefined ? ` • ${percent(market.return_since_transaction_percent)} since trade` : ""}`;
     const factors = [...(row.ai?.positive_factors || []).slice(0, 2), ...(row.ai?.negative_factors || []).slice(0, 1).map(item => `Caution: ${item}`)];
@@ -1743,7 +2034,8 @@ function renderAnalyses() {
       <td class="asset-cell"><strong>${escapeHtml(row.ticker || "Unknown")}</strong><small>${escapeHtml(row.asset || "")}</small></td>
       <td><span class="badge ${escapeHtml(row.signal_direction || "neutral")}">${escapeHtml(titleCase(row.signal_direction || "neutral"))}</span><small>${escapeHtml(row.transaction_type || "Unknown")}</small></td>
       <td><span class="score ${escapeHtml(row.classification || "archive")}">${number(row.score)}</span><small><span class="badge ${escapeHtml(row.classification || "archive")}">${escapeHtml(titleCase(row.classification || "archive"))}</span></small></td>
-      <td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.owner,row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small></td>
+      <td class="edge-cell"><strong>Edge ${metric(edge.score, 1)}</strong><small>Confidence ${escapeHtml(edgeConfidence(edge))} • Observations ${metric(edge.observations, 0)}</small><small>${escapeHtml(edge.alphaLabel || "Followable")} alpha ${metric(edge.alpha, 2, "%", true)} • Hit ${metric(edge.hit, 1, "%")}</small><small>Sector edge ${metric(edge.sectorAlpha, 2, "%", true)} • Lag ${metric(edge.lag, 1, "d")}</small><small>Base ${metric(edge.base, 0)} • Modifier ${metric(edge.modifier, 0, "", true)} • Final ${metric(edge.final, 0)} • <span class="edge-status">${escapeHtml(titleCase(edge.status || "unavailable"))}</span></small></td>
+      <td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.owner,row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small>${row.is_synthetic_test ? `<small class="simulation-label">Run Simulation</small>` : ""}</td>
       <td>${formatDate(row.transaction_date)}<small>${escapeHtml(row.amount || "—")} • filed ${formatDate(row.filed_date)}</small></td>
       <td class="entry-cell"><strong>${escapeHtml(titleCase(entry.entry_status || "unknown"))}</strong><small>${escapeHtml(marketText)}</small><small>${escapeHtml(band)}</small><small>Chase: ${escapeHtml(percent(entry.chase_percent))}</small></td>
       <td class="analysis-summary">${escapeHtml(row.ai?.analysis_summary || "—")}<small>${escapeHtml(factors.join(" • "))}</small></td>
@@ -1790,7 +2082,7 @@ function renderFilings() {
   setTable("filings-body", rows, row => {
     const role = [row.title, row.agency, row.district].filter(Boolean);
     const counts = `${number(row.transaction_count)} total / ${number(row.purchase_count)} buys / ${number(row.sale_count)} sales`;
-    const testLabel = row.is_synthetic_test ? `<small>Temporary Manual Test • ${escapeHtml(row.report_id || "TEST")}</small>` : "";
+    const testLabel = row.is_synthetic_test ? `<small>Temporary Run Simulation • ${escapeHtml(row.report_id || "TEST")}</small>` : "";
     return `<tr><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml(row.report_type || "")}</small></td><td>${escapeHtml(role.join(" • ") || "—")}</td><td><span class="badge ${escapeHtml(row.status || "")}">${escapeHtml(titleCase(row.status || "unknown"))}</span>${testLabel}${row.review_reason ? `<small>${escapeHtml(row.review_reason)}</small>` : ""}</td><td>${escapeHtml(counts)}</td><td>${link(row.source_url)}</td></tr>`;
   }, "filings");
 }
@@ -1803,7 +2095,7 @@ function filteredTransactions() {
 }
 function renderTransactions() {
   const rows = filteredTransactions();
-  setTable("transactions-body", rows, row => `<tr><td>${formatDate(row.transaction_date)}</td><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small>${row.is_synthetic_test ? `<small>Temporary Manual Test</small>` : ""}</td><td>${escapeHtml(row.owner || "Unknown")}</td><td><span class="badge">${escapeHtml(row.transaction_type || "Unknown")}</span></td><td class="asset-cell"><strong>${escapeHtml(row.ticker || row.asset || "Unknown")}</strong>${row.ticker ? `<small>${escapeHtml(row.asset || "")}</small>` : ""}</td><td>${escapeHtml(row.amount || "—")}</td><td>${link(row.source_url)}</td></tr>`, "transactions");
+  setTable("transactions-body", rows, row => `<tr><td>${formatDate(row.transaction_date)}</td><td>${formatDate(row.filed_date)}</td><td>${escapeHtml(titleCase(row.source))}</td><td class="filer-cell"><strong>${escapeHtml(row.filer || "Unknown")}</strong><small>${escapeHtml([row.title,row.agency,row.chamber].filter(Boolean).join(" • "))}</small>${row.is_synthetic_test ? `<small>Temporary Run Simulation</small>` : ""}</td><td>${escapeHtml(row.owner || "Unknown")}</td><td><span class="badge">${escapeHtml(row.transaction_type || "Unknown")}</span></td><td class="asset-cell"><strong>${escapeHtml(row.ticker || row.asset || "Unknown")}</strong>${row.ticker ? `<small>${escapeHtml(row.asset || "")}</small>` : ""}</td><td>${escapeHtml(row.amount || "—")}</td><td>${link(row.source_url)}</td></tr>`, "transactions");
 }
 
 function filteredReviews() {

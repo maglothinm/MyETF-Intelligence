@@ -19,6 +19,7 @@ from scripts.ai_filing_analyst import (
     deterministic_score,
     eligible_trade,
     is_official_disclosure_url,
+    load_state,
     load_rules,
     open_paper_position,
     openai_analyze,
@@ -26,6 +27,7 @@ from scripts.ai_filing_analyst import (
     refresh_analysis_market,
     repeated_same_direction_count,
     run_analyst,
+    save_state,
     signal_direction,
     update_paper_positions,
 )
@@ -536,7 +538,7 @@ def test_ai_batch_stops_after_first_quota_failure(
 
 
 def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = config_for(tmp_path)
+    cfg = replace(config_for(tmp_path), suppress_alerts=False)
     monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "true")
     write_jsonl(cfg.legislative_dir / "transactions.jsonl", [sample_trade()])
     write_jsonl(cfg.legislative_dir / "filings.jsonl", [sample_filing()])
@@ -588,6 +590,7 @@ def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkey
     assert first.success is True
     assert first.completed_count == 1
     assert first.high_priority_count == 1
+    assert first.alerted_count == 0
     assert first.paper_positions_opened == 1
     analyses = [json.loads(line) for line in (cfg.ai_dir / "analyses.jsonl").read_text().splitlines()]
     assert analyses[0]["ticker"] == "EXM"
@@ -604,6 +607,160 @@ def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkey
     assert second.success is True
     assert second.completed_count == 0
     assert second.skipped_existing_count == 1
+
+
+def test_candidate_delivery_retries_only_failed_channel_without_reanalysis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = replace(
+        config_for(tmp_path),
+        suppress_alerts=False,
+        pushover_api_token="app-token",
+        pushover_user_key="user-key",
+        require_pushover=True,
+        gmail_address="alerts@example.test",
+        gmail_app_password="app-password",
+    )
+    monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "false")
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", [sample_trade()])
+    write_jsonl(cfg.legislative_dir / "filings.jsonl", [sample_filing()])
+    (cfg.legislative_dir / "state.json").write_text("{}", encoding="utf-8")
+    cfg.executive_dir.mkdir(parents=True)
+    (cfg.executive_dir / "state.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "scripts.ai_filing_analyst.market_context",
+        lambda *args, **kwargs: {
+            "ticker": "EXM",
+            "providers": ["test"],
+            "current_price": 101.0,
+            "transaction_date_close": 100.0,
+            "atr_14": 2.0,
+            "average_volume_20d": 2_000_000,
+            "data_status": "complete",
+            "errors": [],
+        },
+    )
+    monkeypatch.setattr(
+        "scripts.ai_filing_analyst.load_sec_ticker_map", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        "scripts.ai_filing_analyst.sec_context",
+        lambda *args, **kwargs: {
+            "ticker": "EXM",
+            "status": "complete",
+            "company": "Example Corporation",
+            "recent_filings": [],
+            "form4_transactions": [],
+            "errors": [],
+        },
+    )
+
+    openai_calls = {"count": 0}
+    pushover_calls = {"count": 0}
+    smtp_attempts = {"count": 0}
+    email_sends = {"count": 0}
+
+    class FakeResponses:
+        def create(self, **kwargs: object) -> object:
+            openai_calls["count"] += 1
+            return SimpleNamespace(
+                id="resp_delivery_retry",
+                output_text=json.dumps(sample_ai_payload()),
+                usage=SimpleNamespace(input_tokens=100, output_tokens=50),
+            )
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.responses = FakeResponses()
+
+    def fake_pushover(*_args: object, **_kwargs: object) -> object:
+        pushover_calls["count"] += 1
+        return SimpleNamespace(status_code=200, text="ok")
+
+    class FlakySMTP:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            smtp_attempts["count"] += 1
+            if smtp_attempts["count"] == 1:
+                raise OSError("temporary SMTP outage")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def login(self, address: str, password: str) -> None:
+            assert (address, password) == ("alerts@example.test", "app-password")
+
+        def send_message(self, _message: object) -> None:
+            email_sends["count"] += 1
+
+    monkeypatch.setattr("scripts.ai_filing_analyst.requests.post", fake_pushover)
+    monkeypatch.setattr("scripts.ai_filing_analyst.smtplib.SMTP_SSL", FlakySMTP)
+
+    first = run_analyst(cfg, client_factory=FakeClient)
+    assert first.success is True
+    assert first.completed_count == 1
+    assert first.alerted_count == 1
+    assert openai_calls["count"] == 1
+    assert pushover_calls["count"] == 1
+    assert smtp_attempts["count"] == 1
+    assert email_sends["count"] == 0
+
+    first_state = json.loads((cfg.ai_dir / "state.json").read_text(encoding="utf-8"))
+    assert len(first_state["candidate_alert_deliveries"]) == 1
+    first_delivery = next(iter(first_state["candidate_alert_deliveries"].values()))
+    assert set(first_delivery["delivered_channels"]) == {"pushover"}
+    assert "gmail" in first_delivery["channel_errors"]
+
+    second = run_analyst(cfg, client_factory=FakeClient)
+    assert second.success is True
+    assert second.completed_count == 0
+    assert second.skipped_existing_count == 1
+    assert second.alerted_count == 1
+    assert openai_calls["count"] == 1
+    assert pushover_calls["count"] == 1
+    assert smtp_attempts["count"] == 2
+    assert email_sends["count"] == 1
+
+    second_state = json.loads((cfg.ai_dir / "state.json").read_text(encoding="utf-8"))
+    second_delivery = next(iter(second_state["candidate_alert_deliveries"].values()))
+    assert set(second_delivery["delivered_channels"]) == {"pushover", "gmail"}
+    assert second_delivery["channel_errors"] == {}
+
+    third = run_analyst(cfg, client_factory=FakeClient)
+    assert third.success is True
+    assert third.completed_count == 0
+    assert third.alerted_count == 0
+    assert openai_calls["count"] == 1
+    assert pushover_calls["count"] == 1
+    assert smtp_attempts["count"] == 2
+    assert email_sends["count"] == 1
+
+
+def test_ai_state_loads_without_alert_delivery_field(tmp_path: Path) -> None:
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "completed_analysis_ids": {"analysis:old": "2026-08-20T00:00:00Z"},
+                "positions": {},
+                "last_attempt_utc": None,
+                "last_success_utc": None,
+                "last_portfolio_refresh_utc": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state, loaded = load_state(state_path)
+    assert loaded is True
+    assert state.candidate_alert_deliveries == {}
+    save_state(state_path, state)
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["candidate_alert_deliveries"] == {}
 
 
 def test_market_refresh_reuses_ai_payload_and_can_upgrade_signal(

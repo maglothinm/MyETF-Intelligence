@@ -30,7 +30,8 @@ The normal review dashboard has a **Wallboard** button. The wallboard provides:
 - system state, source health, clock, data age, and refresh countdown at the top;
 - large high-priority/watchlist metrics;
 - the largest screen allocation for AI-ranked candidates;
-- current price, calculated review band, transaction age, score, owner, filer, and official-filing link;
+- current price, calculated review band, transaction age, final/base score, owner, filer, and official-filing link;
+- a compact Investor Edge line with modifier, confidence, observation count, relevant followable alpha, followable hit rate, sector alpha, and disclosure lag; unavailable observations use an em dash;
 - open paper positions and paper P&L;
 - newest official filings;
 - latest Legislative, Executive, and AI runs;
@@ -112,6 +113,8 @@ OPENAI_API_KEY
 FINNHUB_API_KEY
 ALPHAVANTAGE_API_KEY
 AI_HEALTHCHECKS_PING_URL
+GMAIL_ADDRESS
+GMAIL_APP_PASSWORD
 ```
 
 Do not enable both old and new production workflows while they share the same Healthchecks URLs; otherwise one logical check receives pings from two repositories.
@@ -126,12 +129,12 @@ OPENAI_REASONING_EFFORT=medium
 AI_WEB_SEARCH_ENABLED=true
 AI_FETCH_DOCUMENT_TEXT=true
 AI_MAX_ANALYSES_PER_RUN=20
-AI_REQUIRE_PUSHOVER=true
-INVESTOR_EDGE_ENABLED=false
+AI_REQUIRE_PUSHOVER=false
+INVESTOR_EDGE_ENABLED=true
 SEC_USER_AGENT=PolitiTrack research contact <monitored-email-address>
 ```
 
-The tracker workflows now calculate the GitHub Pages URL from the current repository automatically. Create a `DASHBOARD_URL` variable only when using a custom or authenticated dashboard address.
+The tracker workflows now calculate the GitHub Pages URL from the current repository automatically. Create a `DASHBOARD_URL` variable only when using a custom or authenticated dashboard address. `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD` are optional and should be recreated only when Gmail candidate alerts are wanted; Pushover and collector-alert behavior remain independent.
 
 ## Cutover sequence
 

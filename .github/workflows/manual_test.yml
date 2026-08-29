@@ -1,4 +1,4 @@
-name: Manual Test
+name: Run Simulation
 
 on:
   workflow_dispatch:
@@ -14,12 +14,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: manual-test-${{ github.ref }}
+  group: run-simulation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  preview:
-    name: Build isolated dashboard preview
+  simulate:
+    name: Run isolated Investor Edge simulation
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -27,11 +27,17 @@ jobs:
       AI_SUPPRESS_ALERTS: "true"
       AI_REQUIRE_PUSHOVER: "false"
       AI_PAPER_TRADING_ONLY: "true"
-      INVESTOR_EDGE_ENABLED: "false"
+      INVESTOR_EDGE_ENABLED: "true"
       REQUIRE_PUSHOVER: "false"
       PUSHOVER_API_TOKEN: ""
       PUSHOVER_USER_KEY: ""
+      GMAIL_ADDRESS: ""
+      GMAIL_APP_PASSWORD: ""
       OPENAI_API_KEY: ""
+      FINNHUB_API_KEY: ""
+      ALPHAVANTAGE_API_KEY: ""
+      ALPHAVANTAGE_ENTITLEMENT: ""
+      SEC_USER_AGENT: ""
 
     steps:
       - name: Check out repository
@@ -42,16 +48,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install analyst and dashboard dependencies
+        shell: bash
+        run: python -m pip install --requirement requirements-ai.txt
+
       - name: Prepare run-specific temporary paths
         shell: bash
         run: |
           set -euo pipefail
-          root="${RUNNER_TEMP}/polititrack-manual-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          root="${RUNNER_TEMP}/polititrack-simulation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           {
             echo "MANUAL_TEST_INPUT_DIR=${root}/input"
             echo "MANUAL_TEST_TRACKER_DIR=${root}/tracker"
+            echo "MANUAL_TEST_AI_DIR=${root}/ai"
             echo "MANUAL_TEST_SITE_DIR=${root}/site"
             echo "MANUAL_TEST_SUMMARY=${root}/manual-test-summary.json"
+            echo "MANUAL_TEST_SIMULATION_RESULT=${root}/simulation-result.json"
           } >> "$GITHUB_ENV"
 
       - name: Restore latest durable artifacts into isolated inputs
@@ -105,17 +117,25 @@ jobs:
 
           if [[ ! -s "$MANUAL_TEST_INPUT_DIR/legislative/state.json" && \
                 ! -s "$MANUAL_TEST_INPUT_DIR/executive/state.json" ]]; then
-            echo "Manual Test needs at least one Legislative or Executive durable state artifact." >&2
+            echo "Run Simulation needs at least one Legislative or Executive durable state artifact." >&2
             exit 1
           fi
 
-      - name: Create temporary test filing
+          mkdir -p "$MANUAL_TEST_AI_DIR"
+          if [[ -d "$MANUAL_TEST_INPUT_DIR/ai" ]]; then
+            cp -R "$MANUAL_TEST_INPUT_DIR/ai/." "$MANUAL_TEST_AI_DIR/"
+          fi
+
+      - name: Create temporary synthetic filing
         shell: bash
         env:
           AS_OF_INPUT: ${{ inputs.as_of }}
         run: |
           set -euo pipefail
-          args=(--output-dir "$MANUAL_TEST_TRACKER_DIR")
+          args=(
+            --output-dir "$MANUAL_TEST_TRACKER_DIR"
+            --require-investor-edge-history
+          )
 
           if [[ -s "$MANUAL_TEST_INPUT_DIR/legislative/state.json" ]]; then
             args+=(--legislative-dir "$MANUAL_TEST_INPUT_DIR/legislative")
@@ -129,16 +149,27 @@ jobs:
 
           python scripts/create_manual_test_filing.py "${args[@]}" | tee "$MANUAL_TEST_SUMMARY"
 
-      - name: Build separate preview site
+      - name: Run production-path scoring simulation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_investor_edge_simulation.py \
+            --legislative-dir "$MANUAL_TEST_TRACKER_DIR/legislative" \
+            --executive-dir "$MANUAL_TEST_TRACKER_DIR/executive" \
+            --ai-dir "$MANUAL_TEST_AI_DIR" \
+            --result-file "$MANUAL_TEST_SIMULATION_RESULT"
+
+      - name: Build separate simulation site
         shell: bash
         run: |
           set -euo pipefail
           python scripts/build_trade_dashboard.py \
             --legislative-dir "$MANUAL_TEST_TRACKER_DIR/legislative" \
             --executive-dir "$MANUAL_TEST_TRACKER_DIR/executive" \
-            --ai-dir "$MANUAL_TEST_INPUT_DIR/ai" \
+            --ai-dir "$MANUAL_TEST_AI_DIR" \
             --output-dir "$MANUAL_TEST_SITE_DIR"
           cp "$MANUAL_TEST_SUMMARY" "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json"
+          cp "$MANUAL_TEST_SIMULATION_RESULT" "$MANUAL_TEST_SITE_DIR/data/simulation-result.json"
 
       - name: Validate generated dashboard
         shell: bash
@@ -148,20 +179,35 @@ jobs:
           test -s "$MANUAL_TEST_SITE_DIR/wallboard.html"
           test -s "$MANUAL_TEST_SITE_DIR/investor-edge.html"
           test -s "$MANUAL_TEST_SITE_DIR/data/summary.json"
+          test -s "$MANUAL_TEST_SITE_DIR/data/investor-edge.json"
           test -s "$MANUAL_TEST_SITE_DIR/data/filings.csv"
           test -s "$MANUAL_TEST_SITE_DIR/data/transactions.csv"
+          test -s "$MANUAL_TEST_SITE_DIR/data/ai-analyses.csv"
           test -s "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json"
+          test -s "$MANUAL_TEST_SITE_DIR/data/simulation-result.json"
           python -m json.tool "$MANUAL_TEST_SITE_DIR/data/summary.json" >/dev/null
           python -m json.tool "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json" >/dev/null
+          python -m json.tool "$MANUAL_TEST_SITE_DIR/data/simulation-result.json" >/dev/null
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path(os.environ["MANUAL_TEST_SIMULATION_RESULT"]).read_text())
+          if not result.get("verification", {}).get("passed"):
+              raise SystemExit("Investor Edge simulation verification did not pass")
+          if not result.get("alert_preview"):
+              raise SystemExit("Investor Edge simulation did not produce an alert preview")
+          PY
           node --check "$MANUAL_TEST_SITE_DIR/app.js"
           node --check "$MANUAL_TEST_SITE_DIR/wallboard.js"
           node --check "$MANUAL_TEST_SITE_DIR/investor-edge.js"
 
-      - name: Upload temporary dashboard preview
+      - name: Upload temporary simulation dashboard
         uses: actions/upload-artifact@v7
         with:
-          name: manual-test-dashboard-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/polititrack-manual-${{ github.run_id }}-${{ github.run_attempt }}/site
+          name: run-simulation-dashboard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/polititrack-simulation-${{ github.run_id }}-${{ github.run_attempt }}/site
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 1

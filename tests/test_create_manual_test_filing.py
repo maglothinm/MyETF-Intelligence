@@ -257,8 +257,8 @@ def test_generator_copies_full_inputs_and_appends_one_consistent_test_clone(
     rendered_summary = json.loads((site_dir / "data" / "summary.json").read_text())
     rendered_filings_csv = (site_dir / "data" / "filings.csv").read_text(encoding="utf-8")
     assert "app.js" in rendered_index
-    assert "Manual Test preview" in rendered_index
-    assert "Temporary Manual Test" in rendered_app
+    assert "Run Simulation preview" in rendered_index
+    assert "Temporary Run Simulation" in rendered_app
     assert any(row["filing_key"] == test_filing["filing_key"] for row in rendered_filings)
     assert rendered_summary["manual_test_filing_count"] == 1
     assert rendered_summary["manual_test_transaction_count"] == 2
@@ -288,6 +288,56 @@ def test_generator_supports_one_input_and_purchase_only_historical_records(
     assert manifest["cloned_purchase_rows"] == 1
     assert not (tmp_path / "output" / "executive").exists()
     assert len(read_jsonl(tmp_path / "output" / "legislative" / "purchases.jsonl")) == 2
+
+
+def test_generator_builds_isolated_edge_history_when_retained_history_is_sparse(
+    tmp_path: Path,
+) -> None:
+    legislative = tmp_path / "legislative"
+    legislative.mkdir()
+    write_jsonl(legislative / "filings.jsonl", [filing()])
+    write_jsonl(legislative / "purchases.jsonl", [trade("trade:only", "Purchase")])
+    (legislative / "state.json").write_text(json.dumps(tracker_state()), encoding="utf-8")
+
+    output = tmp_path / "output"
+    manifest = generate_manual_test(
+        legislative_dir=legislative,
+        executive_dir=None,
+        output_dir=output,
+        as_of=date(2026, 8, 29),
+        chooser=lambda candidates: candidates[0],
+        token_factory=lambda: "edgefixture",
+        now=datetime(2026, 8, 29, 12, tzinfo=timezone.utc),
+        require_investor_edge_history=True,
+    )
+
+    assert manifest["investor_edge_history_required"] is True
+    assert manifest["investor_edge_history_source"] == "synthetic_fixture"
+    assert manifest["investor_edge_history_count"] == 1
+    assert manifest["investor_edge_candidate_trade_id"]
+    assert manifest["synthetic_prior_trade_id"]
+    assert manifest["investor_edge_candidate_trade_id"] != manifest["synthetic_prior_trade_id"]
+
+    synthetic_rows = [
+        row
+        for row in read_jsonl(output / "legislative" / "purchases.jsonl")
+        if row.get("is_synthetic_test")
+    ]
+    by_role = {row["test_metadata"]["investor_edge_fixture_role"]: row for row in synthetic_rows}
+    assert set(by_role) == {"candidate", "prior_history"}
+    candidate = by_role["candidate"]
+    prior = by_role["prior_history"]
+    assert candidate["trade_id"] == manifest["investor_edge_candidate_trade_id"]
+    assert candidate["test_metadata"]["investor_edge_candidate"] is True
+    assert prior["trade_id"] == manifest["synthetic_prior_trade_id"]
+    assert prior["test_metadata"]["investor_edge_candidate"] is False
+    assert date.fromisoformat(prior["transaction_date"]) < date.fromisoformat(
+        candidate["transaction_date"]
+    )
+    assert date.fromisoformat(prior["filed_date"]) < date.fromisoformat(candidate["filed_date"])
+
+    copied_state = json.loads((output / "legislative" / "state.json").read_text())
+    assert set(manifest["test_trade_ids"]).issubset(copied_state["seen_trades"])
 
 
 def test_generator_fails_clearly_without_eligible_filing_and_leaves_no_output(

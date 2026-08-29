@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 from scripts.investor_edge import (
     MAX_MODIFIER_LIMIT,
@@ -215,14 +217,16 @@ def test_invalid_ticker_cannot_escape_market_cache(tmp_path: Path) -> None:
     assert not (tmp_path.parent / "outside-daily.json").exists()
 
 
-def test_feature_is_disabled_by_default_but_supports_valid_override(
+def test_feature_is_enabled_by_default_but_supports_valid_override(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     missing = tmp_path / "missing.yml"
     monkeypatch.delenv("INVESTOR_EDGE_ENABLED", raising=False)
-    assert load_config(missing)["enabled"] is False
+    assert load_config(missing)["enabled"] is True
     monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "true")
     assert load_config(missing)["enabled"] is True
+    monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "false")
+    assert load_config(missing)["enabled"] is False
     monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "sometimes")
     with pytest.raises(ValueError, match="boolean"):
         load_config(missing)
@@ -243,6 +247,235 @@ def test_dashboard_addon_writes_heatmap_and_native_link(tmp_path: Path) -> None:
     assert (out / "investor-edge.css").exists()
     assert (out / "data/investor-edge.json").exists()
     assert "Investor Edge" in (out / "index.html").read_text(encoding="utf-8")
+
+
+def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
+    tmp_path: Path,
+) -> None:
+    ai_dir = tmp_path / "ai"
+    ai_dir.mkdir()
+    profile = {
+        "investor_key": "bioguide-id-x1|self",
+        "identity": {"investor_key": "bioguide-id-x1|self"},
+        "filer": "A <script>alert('unsafe')</script>",
+        "owner": "Self & Joint",
+        "owner_raw": "Brokerage <One>",
+        "edge_score": 71.5,
+        "modifier": 5,
+        "confidence": 0.6,
+        "confidence_label": "Medium",
+        "sample_count": 2,
+        "followable_alpha_by_horizon": {
+            "5": 2.25,
+            "20": -1.5,
+            "60": 0.0,
+            "120": None,
+        },
+        "weighted_followable_hit_rate_percent": 62.5,
+        "average_disclosure_lag_days": 9.5,
+        "strongest_sector": {
+            "sector": "Technology & services",
+            "followable_alpha": 4.5,
+            "sample_count": 2,
+        },
+        "trade_results": [
+            {
+                "trade_id": "trade:scored",
+                "ticker": "AAA",
+                "asset": "Alpha <em>Holdings</em>",
+                "transaction_date": "2025-01-02",
+                "filed_date": "2025-01-10",
+                "disclosure_lag_days": 8,
+                "owner": "Self",
+                "amount": "$15,001 - $50,000",
+                "benchmark": "XLK",
+                "source_url": "https://example.test/filing?id=1&view=public",
+                "status": "scored",
+                "eligible": True,
+                "excluded_reasons": [],
+                "quality_warnings": ["medium_parse_confidence"],
+                "picker_outcomes": {
+                    "5": {
+                        "stock_entry_price": 100.0,
+                        "stock_return_percent": 5.0,
+                        "benchmark_return_percent": 1.0,
+                        "alpha_percent": 4.0,
+                    }
+                },
+                "followable_outcomes": {
+                    "5": {
+                        "stock_entry_price": 105.0,
+                        "stock_return_percent": 2.0,
+                        "benchmark_return_percent": -1.0,
+                        "alpha_percent": 3.0,
+                    }
+                },
+                "picker_stock_return_by_horizon": {"20": 7.0},
+                "picker_benchmark_return_by_horizon": {"20": 2.0},
+                "picker_alpha_by_horizon": {"20": 5.0},
+                "followable_stock_return_by_horizon": {"20": 4.0},
+                "followable_benchmark_return_by_horizon": {"20": 1.5},
+                "followable_alpha_by_horizon": {"20": 2.5},
+            },
+            {
+                "trade_id": "trade:excluded",
+                "ticker": "BBB",
+                "transaction_date": "2024-01-02",
+                "filed_date": "2024-01-05",
+                "status": "excluded",
+                "eligible": False,
+                "excluded_reasons": ["likely_routine", "<unsafe reason>"],
+                "source_url": "javascript:alert('unsafe')",
+            },
+        ],
+    }
+    (ai_dir / "investor-edge-leaderboard.json").write_text(
+        json.dumps(
+            {
+                "generated_utc": "2026-08-29T10:00:00Z",
+                "investors": [profile],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    build_dashboard_addon(ai_dir, output)
+
+    page = (output / "investor-edge.html").read_text(encoding="utf-8")
+    soup = BeautifulSoup(page, "html.parser")
+    headers = [item.get_text(" ", strip=True) for item in soup.select("#edge-table > thead th")]
+    assert headers == [
+        "Investor identity / key",
+        "Filer",
+        "Owner / account",
+        "Edge",
+        "Confidence",
+        "Observations",
+        "5D followable α",
+        "20D followable α",
+        "60D followable α",
+        "120D followable α",
+        "Hit rate",
+        "Avg disclosure lag",
+        "Strongest sector",
+    ]
+    main = soup.select_one("tr.investor-row[data-edge-group='investor-0']")
+    detail = soup.select_one("tr.detail-row[data-edge-group='investor-0']")
+    assert main is not None and detail is not None
+    assert "low-sample" in (main.get("class") or [])
+    cells = main.find_all("td", recursive=False)
+    assert len(cells) == 13
+    assert cells[0].get_text(" ", strip=True) == "bioguide-id-x1|self"
+    assert cells[1].get_text(" ", strip=True) == "A <script>alert('unsafe')</script>"
+    assert "Self & Joint" in cells[2].get_text(" ", strip=True)
+    assert "Brokerage <One>" in cells[2].get_text(" ", strip=True)
+    assert cells[3].get_text(" ", strip=True) == "71.5 +5 modifier"
+    assert "heat-pos-3" in (cells[3].get("class") or [])
+    assert cells[4].get_text(" ", strip=True) == "60.0% Medium"
+    assert cells[5].get_text(" ", strip=True) == "2"
+    assert [cells[index].get_text(" ", strip=True) for index in range(6, 10)] == [
+        "+2.25%",
+        "-1.50%",
+        "+0.00%",
+        "—",
+    ]
+    assert "heat-pos-1" in (cells[6].get("class") or [])
+    assert "heat-neg-1" in (cells[7].get("class") or [])
+    assert "heat-neutral" in (cells[8].get("class") or [])
+    assert cells[10].get_text(" ", strip=True) == "62.5%"
+    assert "heat-pos-3" in (cells[10].get("class") or [])
+    assert cells[11].get_text(" ", strip=True) == "9.5d"
+    assert cells[12].get_text(" ", strip=True) == "Technology & services +4.50% · n=2"
+
+    disclosure = detail.find("details")
+    assert disclosure is not None
+    assert disclosure.find("summary") is not None
+    cards = detail.select("article.trade-card")
+    assert len(cards) == 2
+    first_card_text = cards[0].get_text(" ", strip=True)
+    assert "Actual public disclosure 2025-01-10" in first_card_text
+    assert "Transaction entry $100" in first_card_text
+    assert "Disclosure entry $105" in first_card_text
+    assert "Benchmark XLK" in first_card_text
+    assert "Counts toward Edge Yes" in first_card_text
+    assert "Exclusions None recorded" in first_card_text
+    safe_link = cards[0].find("a", string="Official filing")
+    assert safe_link is not None
+    assert safe_link["href"] == "https://example.test/filing?id=1&view=public"
+    assert safe_link["rel"] == ["noopener", "noreferrer"]
+
+    outcome_rows = cards[0].select("table.outcome-table tbody tr")
+    assert len(outcome_rows) == 8
+    assert [value.get_text(" ", strip=True) for value in outcome_rows[0].find_all(["th", "td"])] == [
+        "5D",
+        "Transaction",
+        "+5.00%",
+        "+1.00%",
+        "+4.00%",
+    ]
+    assert [value.get_text(" ", strip=True) for value in outcome_rows[3].find_all(["th", "td"])] == [
+        "20D",
+        "Disclosure",
+        "+4.00%",
+        "+1.50%",
+        "+2.50%",
+    ]
+    excluded_text = cards[1].get_text(" ", strip=True)
+    assert "Counts toward Edge No" in excluded_text
+    assert "likely_routine; <unsafe reason>" in excluded_text
+    assert cards[1].find("a") is None
+
+    assert "<script>alert('unsafe')</script>" not in page
+    assert "javascript:alert" not in page
+    assert "default-src 'self'" in page
+    script = (output / "investor-edge.js").read_text(encoding="utf-8")
+    assert "const groupedRows = new Map()" in script
+    assert "row.dataset.edgeGroup" in script
+    assert "for (const row of rows) row.hidden = !visible" in script
+
+
+def test_dashboard_addon_uses_em_dash_for_unavailable_neutral_metrics(
+    tmp_path: Path,
+) -> None:
+    ai_dir = tmp_path / "ai"
+    ai_dir.mkdir()
+    (ai_dir / "investor-edge-leaderboard.json").write_text(
+        json.dumps(
+            {
+                "investors": [
+                    {
+                        "investor_key": "example|self",
+                        "filer": "Example",
+                        "owner": "Self",
+                        "edge_score": 50,
+                        "modifier": 0,
+                        "sample_count": 0,
+                        "hit_rate_percent": 50,
+                        "followable_alpha_by_horizon": {},
+                        "trade_results": [],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    build_dashboard_addon(ai_dir, output)
+
+    soup = BeautifulSoup(
+        (output / "investor-edge.html").read_text(encoding="utf-8"), "html.parser"
+    )
+    main = soup.select_one("tr.investor-row")
+    assert main is not None
+    cells = main.find_all("td", recursive=False)
+    assert cells[3].get_text(" ", strip=True) == "—"
+    assert cells[4].get_text(" ", strip=True) == "—"
+    assert cells[5].get_text(" ", strip=True) == "0"
+    assert all(cells[index].get_text(" ", strip=True) == "—" for index in range(6, 10))
+    assert cells[10].get_text(" ", strip=True) == "—"
+    assert cells[11].get_text(" ", strip=True) == "—"
+    assert cells[12].get_text(" ", strip=True) == "—"
+    assert "low-sample" in (main.get("class") or [])
 
 
 def test_native_dashboard_build_always_publishes_investor_edge_page(tmp_path: Path) -> None:
