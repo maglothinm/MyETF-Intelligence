@@ -17,7 +17,7 @@ import logging
 import os
 import re
 import tempfile
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -730,6 +730,7 @@ def parse_house_transactions(text: str, report: Report) -> list[Trade]:
 
     lines = prepared
     transactions: list[Trade] = []
+    trade_id_occurrences: dict[str, int] = {}
     buffer: list[str] = []
     skip_prefixes = (
         "f s:",
@@ -815,6 +816,21 @@ def parse_house_transactions(text: str, report: Report) -> list[Trade]:
                 raw_row=combined,
                 confidence="high",
             )
+            base_trade_id = trade.trade_id
+            occurrence = trade_id_occurrences.get(base_trade_id, 0) + 1
+            trade_id_occurrences[base_trade_id] = occurrence
+
+            # A filing may legitimately contain two otherwise-identical
+            # transactions from different accounts/trusts. Preserve both.
+            if occurrence > 1:
+                trade = replace(
+                    trade,
+                    trade_id=stable_id(
+                        "trade",
+                        (base_trade_id, f"occurrence:{occurrence}"),
+                    ),
+                )
+
             transactions.append(trade)
             buffer = []
         elif len(combined) > 5_000:

@@ -579,3 +579,26 @@ def test_house_pdfplumber_transaction_before_asset_continuation() -> None:
         ("SOLS", "Spouse", "$1,001 - $15,000"),
     ]
     assert all("SPGI" not in t.asset for t in trades)
+
+def test_house_preserves_identical_transactions_from_separate_accounts() -> None:
+    text = """
+    Transactions
+    SP Mobility Global Inc. Common Stock S 08/11/2026 08/11/2026 $1,001 - $15,000
+    (MBGL) [ST]
+    F S : New
+    S O : Trust 8
+    D : Asset acquired through a S&P Global (SPGI) spinoff.
+    SP Mobility Global Inc. Common Stock S 08/11/2026 08/11/2026 $1,001 - $15,000
+    (MBGL) [ST]
+    F S : New
+    S O : Trust 2
+    D : Asset acquired through a S&P Global (SPGI) spinoff.
+    * For the complete list of asset type abbreviations
+    """
+
+    trades = parse_house_transactions(text, house_report("20035244"))
+
+    assert len(trades) == 2
+    assert [t.ticker for t in trades] == ["MBGL", "MBGL"]
+    assert [t.owner for t in trades] == ["Spouse", "Spouse"]
+    assert len({t.trade_id for t in trades}) == 2
