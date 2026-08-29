@@ -1,4 +1,4 @@
-# MyETF filing-review dashboard
+# PolitiTrack filing-review dashboard
 
 ## Purpose
 
@@ -35,14 +35,14 @@ This upgrade does not silently claim historical transaction coverage. A separate
 
 After committing the reporting files:
 
-1. Open **Settings** in the MyETF repository.
+1. Open **Settings** in the PolitiTrack repository.
 2. Open **Pages**.
 3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
 4. Open **Actions → Legislative purchase tracker → Run workflow** and run it with both boxes unchecked.
 5. Do the same for **Executive purchase tracker**.
 6. The `Publish government trade dashboard` workflow will run after each tracker. It can also be run manually.
 
-Expected site URL:
+Legacy Pages URL, retained until the GitHub repository rename and private-wallboard cutover:
 
 ```text
 https://maglothinm.github.io/MyETF/

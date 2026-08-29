@@ -158,7 +158,7 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
                 "purchase_counts": {"house": 1, "senate": 0},
                 "pending_review_counts": {"house": 0, "senate": 1},
                 "errors": [],
-                "run_url": "https://github.com/example/MyETF/actions/runs/100",
+                "run_url": "https://github.com/example/PolitiTrack/actions/runs/100",
                 "event_name": "schedule",
                 "run_attempt": "1",
             }
@@ -216,7 +216,7 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
     payload = build_payload(
         legislative,
         executive,
-        repository_url="https://github.com/example/MyETF",
+        repository_url="https://github.com/example/PolitiTrack",
     )
     assert payload["summary"]["filing_count"] == 2
     assert payload["summary"]["transaction_count"] == 3
@@ -259,10 +259,10 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
     wallboard_html = (output_dir / "wallboard.html").read_text(encoding="utf-8")
     wallboard_css = (output_dir / "wallboard.css").read_text(encoding="utf-8")
     wallboard_js = (output_dir / "wallboard.js").read_text(encoding="utf-8")
-    assert "MyETF Government Trade Monitor" in index_html
+    assert "PolitiTrack Government Trade Monitor" in index_html
     assert 'href="wallboard.html"' in index_html
     assert "Content-Security-Policy" in index_html
-    assert "MyETF Intelligence Wallboard" in wallboard_html
+    assert "PolitiTrack Intelligence Wallboard" in wallboard_html
     assert "Portrait wallboard" in wallboard_html
     assert "orientation: portrait" in wallboard_css
     assert "min-aspect-ratio: 12/5" in wallboard_css
@@ -366,7 +366,7 @@ def test_dashboard_includes_ai_candidates_and_paper_portfolio(tmp_path: Path) ->
                 "watchlist_count": 0,
                 "errors": [],
                 "warnings": [],
-                "run_url": "https://github.com/example/MyETF/actions/runs/200",
+                "run_url": "https://github.com/example/PolitiTrack/actions/runs/200",
             }
         ],
     )
@@ -386,7 +386,7 @@ def test_dashboard_includes_ai_candidates_and_paper_portfolio(tmp_path: Path) ->
     payload = build_payload(
         load_branch(None, "legislative"),
         load_branch(None, "executive"),
-        repository_url="https://github.com/example/MyETF",
+        repository_url="https://github.com/example/PolitiTrack",
         ai=ai,
     )
     assert payload["summary"]["analysis_count"] == 1

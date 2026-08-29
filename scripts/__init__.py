@@ -1,1 +1,1 @@
-"""MyETF automation scripts."""
+"""PolitiTrack automation scripts."""

@@ -17,7 +17,7 @@ for command in git gh python unzip; do
 done
 
 if [[ ! -d .git ]]; then
-  echo "Run this script from the root of the current MyETF Git repository." >&2
+  echo "Run this script from the root of the current PolitiTrack Git repository." >&2
   exit 2
 fi
 if [[ ! -f .github/workflows/import_migrated_state.yml ]]; then
@@ -166,7 +166,7 @@ if (( ${#artifact_assets[@]} > 0 )); then
   echo "Uploading exported state to a private migration release..."
   gh release create "$MIGRATION_TAG" "${artifact_assets[@]}" \
     --repo "$TARGET_REPO" \
-    --title "MyETF state migration $TIMESTAMP" \
+    --title "PolitiTrack state migration $TIMESTAMP" \
     --notes "Private one-time migration assets exported from ${CURRENT_REPO}. Keep until the imported workflows have completed successfully."
 
   for attempt in 1 2 3 4 5; do

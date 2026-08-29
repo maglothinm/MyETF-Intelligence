@@ -15,7 +15,7 @@ test('renders the trades dashboard after loading data', async () => {
   render(<App />);
 
   expect(
-    await screen.findByRole('heading', { name: /congress trades/i })
+    await screen.findByRole('heading', { name: /polititrack/i })
   ).toBeInTheDocument();
   expect(axios.get).toHaveBeenCalledWith('http://127.0.0.1:5000/trades');
 });

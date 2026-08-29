@@ -302,7 +302,7 @@ jobs:
             curl --fail --silent --show-error --max-time 20 --retry 3 \
               --form-string "token=$PUSHOVER_API_TOKEN" \
               --form-string "user=$PUSHOVER_USER_KEY" \
-              --form-string "title=MyETF AI filing analyst failed" \
+              --form-string "title=PolitiTrack AI filing analyst failed" \
               --form-string "message=The filing collectors remain independent. Open the AI workflow for the failed analysis and retry details." \
               --form-string "url=$run_url" \
               --form-string "url_title=Open failed AI workflow" \

@@ -1,6 +1,8 @@
-# MyETF government trade tracker — fast-track overlay
+# PolitiTrack government trade tracker
 
-This bundle installs a narrow, operational monitoring layer into the public `maglothinm/MyETF` repository. It does **not** attempt to revive the older PostgreSQL/dbt/React dashboard before data collection works.
+PolitiTrack monitors public government financial disclosures, preserves their evidence, and supports review, alerts, and paper-only research. The product currently lives in the legacy-named private repository `maglothinm/MyETF-Intelligence`; the older public `maglothinm/MyETF` repository is retained only as historical context and a rollback source.
+
+See [`BRANDING_MIGRATION.md`](BRANDING_MIGRATION.md) for the legacy identifiers intentionally preserved until the repository and durable-state cutover.
 
 The overlay:
 
@@ -14,7 +16,7 @@ The overlay:
 
 ## Package contents
 
-- `repo-files/` — files copied into the MyETF repository.
+- `repo-files/` — compatibility overlay files copied into a PolitiTrack checkout.
 - `apply.sh` — idempotent installer.
 - `verify.sh` — offline verification and clean-repository smoke test.
 - `VERIFICATION.txt` — generated verification record.
@@ -25,13 +27,13 @@ The overlay:
 unzip MyETF-government-trade-tracker-fast-track.zip
 cd MyETF-government-trade-tracker-fast-track
 ./verify.sh
-./apply.sh /path/to/MyETF
-cd /path/to/MyETF
+./apply.sh /path/to/PolitiTrack
+cd /path/to/PolitiTrack
 git diff --check
 git status --short
 ```
 
-Then follow `README_GOVERNMENT_TRADES.md` in the repository. GitHub authentication is required only to commit and push the installed files.
+The archive name above is retained for compatibility with the original distribution. Then follow `README_GOVERNMENT_TRADES.md` in the repository. GitHub authentication is required only to commit and push the installed files.
 
 ## Scope boundary
 

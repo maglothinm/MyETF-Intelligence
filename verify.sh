@@ -9,7 +9,7 @@ trap 'rm -rf "$TEMP_ROOT"' EXIT
 
 exec > >(tee "$REPORT") 2>&1
 
-echo "MyETF government trade tracker verification"
+echo "PolitiTrack government trade tracker verification"
 echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Python: $(python --version 2>&1)"
 echo
@@ -77,9 +77,9 @@ for filename, (expected_cron, expected_timezone) in expected.items():
 print("[pass] workflow YAML, schedules, current action majors, state restoration, and secret scoping")
 PY
 
-MOCK_REPO="$TEMP_ROOT/MyETF"
+MOCK_REPO="$TEMP_ROOT/PolitiTrack"
 mkdir -p "$MOCK_REPO/.git" "$MOCK_REPO/scripts" "$MOCK_REPO/.github/workflows"
-printf '# Mock MyETF\n' > "$MOCK_REPO/README.md"
+printf '# Mock PolitiTrack\n' > "$MOCK_REPO/README.md"
 printf '# Old report\n\nAssessment date: 2026-07-22\n' > "$MOCK_REPO/RECOVERY_REPORT.md"
 printf 'print("obsolete")\n' > "$MOCK_REPO/scripts/check_house_disclosures.py"
 printf 'print("obsolete")\n' > "$MOCK_REPO/scripts/parse_unh_disclosures.py"

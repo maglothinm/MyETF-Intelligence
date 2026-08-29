@@ -6,7 +6,7 @@ SOURCE_DIR="$SCRIPT_DIR/repo-files"
 TARGET_DIR="${1:-}"
 
 usage() {
-  echo "Usage: $0 /path/to/MyETF" >&2
+  echo "Usage: $0 /path/to/PolitiTrack" >&2
 }
 
 if [[ -z "$TARGET_DIR" ]]; then
@@ -22,7 +22,7 @@ if [[ ! -d "$TARGET_DIR" ]]; then
   exit 1
 fi
 if [[ ! -d "$TARGET_DIR/scripts" ]]; then
-  echo "Target does not look like MyETF: missing $TARGET_DIR/scripts" >&2
+  echo "Target does not look like PolitiTrack: missing $TARGET_DIR/scripts" >&2
   exit 1
 fi
 
@@ -90,7 +90,7 @@ The operational House, Senate, and OGE monitoring path is documented in
 of the historical dashboard and writes durable JSONL ledgers plus latest-purchase CSVs.
 <!-- MYETF-GOVERNMENT-TRADE-TRACKER:END -->
 """
-text = path.read_text(encoding="utf-8") if path.exists() else "# MyETF\n"
+text = path.read_text(encoding="utf-8") if path.exists() else "# PolitiTrack\n"
 if start in text and end in text:
     before, remainder = text.split(start, 1)
     _, after = remainder.split(end, 1)

@@ -6,7 +6,7 @@ const Header = () => {
         <div className="header">
             <div className="header-left">
                 <img src={logo} alt="Logo" className="logo" />
-                <h1>Congress Trades</h1>
+                <h1>PolitiTrack</h1>
             </div>
             <div className="header-right">
                 {/* Search bar component */}

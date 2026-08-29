@@ -68,7 +68,7 @@ The `Publish government trade dashboard` workflow restores the newest Legislativ
 - retained run history and errors;
 - downloadable CSV exports for each view.
 
-For this repository, the expected URL is:
+While the GitHub repository retains its legacy name, the expected URL is:
 
 ```text
 https://maglothinm.github.io/MyETF/

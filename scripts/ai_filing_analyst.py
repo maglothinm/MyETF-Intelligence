@@ -1397,7 +1397,7 @@ def validate_ai_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-ANALYST_INSTRUCTIONS = """You are the evidence-constrained analyst inside MyETF, a public-disclosure research and paper-trading system.
+ANALYST_INSTRUCTIONS = """You are the evidence-constrained analyst inside PolitiTrack, a public-disclosure research and paper-trading system.
 
 Assess the significance and direction of one publicly disclosed equity transaction. You are not placing an order and must not present the result as certain or as personal financial advice. Separate facts from inference. Do not infer undisclosed trades, private associates, criminal conduct, or motives. A political, committee, regulatory, contracting, donor, employer, or family relationship is relevant only when supported by supplied or publicly retrieved evidence.
 
@@ -1469,7 +1469,7 @@ def openai_analyze(
                 "The openai Python package is not installed; install requirements-ai.txt"
             ) from exc
         client_factory = OpenAI
-    # MyETF owns retry policy explicitly. The OpenAI SDK otherwise retries
+    # PolitiTrack owns retry policy explicitly. The OpenAI SDK otherwise retries
     # 429 responses automatically, including non-recoverable insufficient_quota.
     client = client_factory(
         api_key=config.openai_api_key,
@@ -1772,10 +1772,10 @@ def notify_candidate(config: AnalystConfig, analysis: Mapping[str, Any]) -> None
     )
     _notification_post(
         config,
-        title=f"MyETF AI: {ticker} {score}/100",
+        title=f"PolitiTrack AI: {ticker} {score}/100",
         message=message,
         url=config.dashboard_url or str(analysis.get("source_url") or ""),
-        url_title="Open MyETF analysis",
+        url_title="Open PolitiTrack analysis",
         priority=0,
     )
 
@@ -2148,7 +2148,7 @@ def write_step_summary(result: AnalystRunResult) -> None:
     if not path:
         return
     lines = [
-        "## MyETF AI filing analyst",
+        "## PolitiTrack AI filing analyst",
         "",
         f"- Status: **{'success' if result.success else 'failed'}**",
         f"- Eligible parsed directional transactions: **{result.eligible_transaction_count}**",
@@ -2251,7 +2251,7 @@ def run_analyst(
     pending = pending[: config.max_analyses]
     result.attempted_count = 0
 
-    session = session or build_session(config.repository_url or "MyETF AI filing analyst")
+    session = session or build_session(config.repository_url or "PolitiTrack AI filing analyst")
     ticker_map = load_sec_ticker_map(config, session, result.warnings)
     new_analysis_records: list[dict[str, Any]] = []
     paper_events: list[dict[str, Any]] = []

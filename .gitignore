@@ -32,7 +32,7 @@ ai-analysis-result.json
 ai-latest-analyses.csv
 ai-paper-portfolio.csv
 
-# MyETF generated tracker, dashboard, AI, and state files
+# PolitiTrack generated tracker, dashboard, AI, and state files
 legislative-latest-transactions.csv
 executive-latest-transactions.csv
 legislative-latest-filings.csv

@@ -11,7 +11,7 @@ CORS(app)
 
 @app.route('/')
 def home():
-    return 'Welcome to the Congress Trades API'
+    return 'Welcome to the PolitiTrack API'
 
 @app.route('/politicians/<id>')
 def politicians(id):

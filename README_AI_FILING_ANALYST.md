@@ -1,4 +1,4 @@
-# MyETF AI filing analyst and paper-research portfolio
+# PolitiTrack AI filing analyst and paper-research portfolio
 
 This layer runs after the Legislative or Executive collector completes successfully. It reviews newly parsed public-equity purchases, enriches them with market and SEC information, requests a constrained structured analysis from the OpenAI Responses API, applies deterministic scoring and entry-review rules, and publishes the result on the GitHub Pages dashboard.
 
@@ -50,7 +50,7 @@ Create these under **Settings → Secrets and variables → Actions → Variable
 | `AI_FETCH_DOCUMENT_TEXT` | `true` | Reads the official filing document rather than relying only on parsed rows. |
 | `AI_MAX_ANALYSES_PER_RUN` | `20` | Cost and runtime limit. |
 | `AI_REQUIRE_PUSHOVER` | `true` | Treat candidate-alert delivery as required. |
-| `SEC_USER_AGENT` | `MyETF research contact your-email@example.com` | SEC fair-access identification. Replace with an actual monitored contact address. |
+| `SEC_USER_AGENT` | `PolitiTrack research contact your-email@example.com` | SEC fair-access identification. Replace with an actual monitored contact address. |
 | `ALPHAVANTAGE_ENTITLEMENT` | blank unless supplied | Optional Alpha Vantage entitlement. |
 
 `AI_PAPER_TRADING_ONLY` is hard-coded to `true` in the workflow. There is no brokerage credential or order endpoint in this implementation.
@@ -151,7 +151,7 @@ Default simulated portfolio values:
 - evaluation horizon: `30` calendar days;
 - quote refresh: no more than once per hour.
 
-Positions close at the evaluation horizon using the next available quote. This creates a prospective dataset based on the first price observable after MyETF detection—not the official's earlier transaction price.
+Positions close at the evaluation horizon using the next available quote. This creates a prospective dataset based on the first price observable after PolitiTrack detection—not the official's earlier transaction price.
 
 ## Cost controls
 

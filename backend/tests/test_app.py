@@ -46,7 +46,7 @@ def client(app):
 
 def test_home_route(client):
     response = client.get('/')
-    assert b'Welcome to the Congress Trades API' in response.data
+    assert b'Welcome to the PolitiTrack API' in response.data
 
 def test_politicians_route_shows_all_politicians(client):
     response = client.get('/politicians')

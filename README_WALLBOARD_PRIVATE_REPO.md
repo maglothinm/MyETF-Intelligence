@@ -1,4 +1,4 @@
-# MyETF CHG90 wallboard and standalone private repository
+# PolitiTrack CHG90 wallboard and standalone private repository
 
 ## Display target
 
@@ -19,7 +19,7 @@ After dashboard deployment, open:
 https://<github-user>.github.io/<repository>/wallboard.html
 ```
 
-For a private repository named `MyETF-Intelligence`, the default public Pages address would be:
+For the current legacy-named private repository `MyETF-Intelligence`, the default public Pages address is:
 
 ```text
 https://maglothinm.github.io/MyETF-Intelligence/wallboard.html
@@ -127,7 +127,7 @@ AI_WEB_SEARCH_ENABLED=true
 AI_FETCH_DOCUMENT_TEXT=true
 AI_MAX_ANALYSES_PER_RUN=20
 AI_REQUIRE_PUSHOVER=true
-SEC_USER_AGENT=MyETF research contact <monitored-email-address>
+SEC_USER_AGENT=PolitiTrack research contact <monitored-email-address>
 ```
 
 The tracker workflows now calculate the GitHub Pages URL from the current repository automatically. Create a `DASHBOARD_URL` variable only when using a custom or authenticated dashboard address.

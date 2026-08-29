@@ -138,7 +138,7 @@ def config_for(tmp_path: Path) -> AnalystConfig:
         pushover_user_key="",
         require_pushover=False,
         dashboard_url="https://example.test/dashboard/",
-        repository_url="https://github.com/example/MyETF",
+        repository_url="https://github.com/example/PolitiTrack",
         max_download_bytes=25 * 1024 * 1024,
         max_ocr_pages=75,
         request_timeout=(1.0, 1.0),

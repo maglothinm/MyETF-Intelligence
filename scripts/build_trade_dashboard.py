@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a static, searchable review dashboard from MyETF tracker state artifacts."""
+"""Build a static, searchable review dashboard from PolitiTrack state artifacts."""
 
 from __future__ import annotations
 
@@ -493,15 +493,15 @@ INDEX_HTML = r'''<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
-  <meta name="description" content="MyETF official government financial disclosure filing review dashboard">
-  <title>MyETF Government Trade Monitor</title>
+  <meta name="description" content="PolitiTrack official government financial disclosure filing review dashboard">
+  <title>PolitiTrack Government Trade Monitor</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
     <div>
       <p class="eyebrow">Official-source disclosure monitor</p>
-      <h1>MyETF Government Trade Monitor</h1>
+      <h1>PolitiTrack Government Trade Monitor</h1>
       <p class="subtitle">House, Senate, and Executive-branch filing inventory, transactions, review items, and tracker health.</p>
     </div>
     <div class="header-actions">
@@ -567,7 +567,7 @@ INDEX_HTML = r'''<!doctype html>
 
     <section id="panel-portfolio" class="panel">
       <div class="panel-header">
-        <div><h2>Paper-research portfolio</h2><p>Simulated positions opened only when deterministic score and entry rules qualify. Performance is measured from the first investable quote seen by MyETF.</p></div>
+        <div><h2>Paper-research portfolio</h2><p>Simulated positions opened only when deterministic score and entry rules qualify. Performance is measured from the first investable quote seen by PolitiTrack.</p></div>
         <a class="download-link" href="data/paper-portfolio.csv">Download CSV</a>
       </div>
       <div class="controls">
@@ -649,15 +649,15 @@ WALLBOARD_HTML = r'''<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
-  <meta name="description" content="MyETF portrait and ultrawide government trade intelligence wallboard">
-  <title>MyETF Intelligence Wallboard</title>
+  <meta name="description" content="PolitiTrack portrait and ultrawide government trade intelligence wallboard">
+  <title>PolitiTrack Intelligence Wallboard</title>
   <link rel="stylesheet" href="wallboard.css">
 </head>
 <body>
   <header class="wall-header">
     <div class="identity">
       <p class="eyebrow">Official-source monitoring · AI research queue</p>
-      <h1>MyETF Intelligence Wallboard</h1>
+      <h1>PolitiTrack Intelligence Wallboard</h1>
       <p class="subtitle">New filings, ranked purchase candidates, simulated positions, and agent health.</p>
     </div>
     <div id="overall-state" class="overall-state unknown" aria-live="polite">

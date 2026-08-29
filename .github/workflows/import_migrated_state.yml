@@ -131,7 +131,7 @@ jobs:
           MIGRATION_TAG: ${{ inputs.migration_tag }}
         run: |
           {
-            echo "## MyETF state migration"
+            echo "## PolitiTrack state migration"
             echo
             echo "Imported private release: \`${MIGRATION_TAG}\`"
             echo

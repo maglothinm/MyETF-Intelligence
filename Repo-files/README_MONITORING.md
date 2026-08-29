@@ -19,8 +19,8 @@ This replacement consolidates the House and Senate checks into one fail-closed m
 From the extracted recovery bundle:
 
 ```bash
-./apply.sh /path/to/MyETF
-cd /path/to/MyETF
+./apply.sh /path/to/PolitiTrack
+cd /path/to/PolitiTrack
 git diff --check
 git status --short
 ```
