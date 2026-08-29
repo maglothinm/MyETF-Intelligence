@@ -22,8 +22,11 @@ The static site contains:
 - **Transactions** — purchases, sales, and exchanges with owner, ticker or asset, amount range, dates, and official link.
 - **Review queue** — paper reports, request-only OGE records, and parser exceptions that require human review.
 - **Run history** — retained tracker successes, source counts, new-record counts, and errors.
+- **AI candidates** — final/base score, class, evidence, review band, source links, and the candidate's Investor Edge score, modifier, confidence, observation count, relevant followable alpha, followable hit rate, sector alpha, and disclosure lag.
+- **Investor Edge** — a heat map of normalized filer/owner histories with 5/20/60/120-session outcomes and a per-investor drilldown into identity, sector evidence, eligibility, and prior-trade picker/followable return details.
+- **Paper portfolio** — simulated entries and exits used only for prospective research evaluation.
 
-Each view is searchable and exportable to CSV.
+The principal views are searchable and exportable to CSV. `data/ai-analyses.csv` contains flattened Investor Edge display fields; full profiles and trade outcomes remain in JSON. Missing historical observations display as an em dash and export blank rather than being represented as zero.
 
 ## Coverage status
 
@@ -67,4 +70,4 @@ The dashboard workflow downloads the newest unexpired Legislative and Executive 
 
 ## AI candidate and paper-portfolio layer
 
-When `AI_ANALYSIS_ENABLED=true`, the dashboard also publishes evidence-constrained candidate rankings and a simulated paper portfolio. The build always includes an `investor-edge.html` heat-map shell, which populates after the optional feature is enabled and profiles exist. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md) for the analyst and [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md) for the bounded historical-performance modifier.
+When `AI_ANALYSIS_ENABLED=true`, the dashboard also publishes evidence-constrained candidate rankings and a simulated paper portfolio. Every build includes `investor-edge.html` and `data/investor-edge.json`; the view populates as eligible profiles and completed horizons become available. Normal AI runs enable Investor Edge by default. Low-confidence histories are visually de-emphasized, and the drilldown should be reviewed before treating leaderboard differences as meaningful. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md) for the analyst and [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md) for the bounded historical-performance modifier, backfill limits, and interpretation caveats.

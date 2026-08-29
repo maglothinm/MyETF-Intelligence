@@ -17,9 +17,18 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
+
+try:  # Support package imports and direct workflow execution.
+    from .investor_edge import history_trade_eligibility, investor_key, matching_investor_records
+except ImportError:  # pragma: no cover - direct execution path
+    from investor_edge import (  # type: ignore
+        history_trade_eligibility,
+        investor_key,
+        matching_investor_records,
+    )
 
 
 FILINGS_FILE = "filings.jsonl"
@@ -149,6 +158,85 @@ def find_candidates(
     return candidates
 
 
+def _record_date(record: Mapping[str, Any], field: str) -> date | None:
+    raw = str(record.get(field) or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _all_trade_rows(inputs: Mapping[str, Path]) -> list[dict[str, Any]]:
+    """Return de-duplicated tracker rows used by the production Edge identity rules."""
+
+    rows: list[dict[str, Any]] = []
+    for source_dir in inputs.values():
+        for filename in (TRANSACTIONS_FILE, PURCHASES_FILE):
+            rows.extend(_read_jsonl(source_dir / filename))
+    return list({_row_identity(row): row for row in rows}.values())
+
+
+def _candidate_edge_history_count(
+    candidate: Candidate,
+    historical_rows: Sequence[Mapping[str, Any]],
+    *,
+    as_of: date,
+) -> int:
+    """Count usable prior observations for the candidate's best eligible purchase."""
+
+    count, _ = _candidate_edge_history_details(
+        candidate, historical_rows, as_of=as_of
+    )
+    return count
+
+
+def _candidate_edge_history_details(
+    candidate: Candidate,
+    historical_rows: Sequence[Mapping[str, Any]],
+    *,
+    as_of: date,
+) -> tuple[int, str]:
+    """Return the best prior count and the exact candidate-row identity it supports."""
+
+    candidate_rows = list(
+        {
+            _row_identity(row): row
+            for row in (*candidate.transactions, *candidate.purchases)
+        }.values()
+    )
+    best = 0
+    best_identity = ""
+    for current in candidate_rows:
+        if not history_trade_eligibility(current).get("eligible"):
+            continue
+        current_key = investor_key(current)
+        current_date = _record_date(current, "transaction_date")
+        if not current_key or current_date is None:
+            continue
+        count = 0
+        for prior in matching_investor_records(current, historical_rows):
+            if _row_identity(prior) == _row_identity(current):
+                continue
+            prior_date = _record_date(prior, "transaction_date")
+            public_date = _record_date(prior, "observed_at_utc") or _record_date(
+                prior, "filed_date"
+            )
+            if (
+                prior_date is not None
+                and prior_date < current_date
+                and public_date is not None
+                and public_date < as_of
+                and history_trade_eligibility(prior).get("eligible")
+            ):
+                count += 1
+        if count > best or (count == best and not best_identity):
+            best = count
+            best_identity = _row_identity(current)
+    return best, best_identity
+
+
 def _row_identity(row: Mapping[str, Any]) -> str:
     trade_id = str(row.get("trade_id") or "")
     if trade_id:
@@ -262,6 +350,7 @@ def _clone_trade(
     as_of: date,
     observed_at_utc: str,
     base_metadata: Mapping[str, Any],
+    row_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     cloned = copy.deepcopy(dict(row))
     original_trade_id = str(row.get("trade_id") or "")
@@ -276,6 +365,7 @@ def _clone_trade(
             "test_metadata": {
                 **base_metadata,
                 "original_trade_id": original_trade_id,
+                **dict(row_metadata or {}),
             },
         }
     )
@@ -391,6 +481,7 @@ def generate_manual_test(
     chooser: Callable[[Sequence[Candidate]], Candidate] = secrets.choice,
     token_factory: Callable[[], str] = lambda: secrets.token_hex(12),
     now: datetime | None = None,
+    require_investor_edge_history: bool = False,
 ) -> dict[str, Any]:
     """Generate one isolated synthetic filing and return its manifest."""
 
@@ -404,15 +495,74 @@ def generate_manual_test(
     }
     _validate_paths(inputs, output_dir)
     candidates = find_candidates(inputs, as_of=as_of)
+    history_counts: dict[tuple[str, str], int] = {}
+    history_details: dict[tuple[str, str], tuple[int, str]] = {}
+    synthetic_history_needed = False
+    if require_investor_edge_history:
+        historical_rows = _all_trade_rows(inputs)
+        for item in candidates:
+            identity = (item.branch, str(item.filing.get("filing_key") or ""))
+            details = _candidate_edge_history_details(
+                item,
+                historical_rows,
+                as_of=as_of,
+            )
+            history_details[identity] = details
+            history_counts[identity] = details[0]
+        retained_history_candidates = [
+            item
+            for item in candidates
+            if history_counts.get(
+                (item.branch, str(item.filing.get("filing_key") or "")), 0
+            )
+            > 0
+        ]
+        if retained_history_candidates:
+            candidates = retained_history_candidates
+        else:
+            # Some real artifact sets have no repeated filer/owner history yet.
+            # Keep Run Simulation operational by adding one isolated prior fixture.
+            candidates = [
+                item
+                for item in candidates
+                if history_details.get(
+                    (item.branch, str(item.filing.get("filing_key") or "")),
+                    (0, ""),
+                )[1]
+            ]
+            synthetic_history_needed = bool(candidates)
     if not candidates:
         supplied = ", ".join(f"{branch}={path}" for branch, path in inputs.items())
+        history_requirement = (
+            " and an Investor Edge-eligible purchase for prior-history construction"
+            if require_investor_edge_history
+            else ""
+        )
         raise ManualTestError(
             "No eligible historical processed filing with associated transaction data "
-            f"was found before {as_of.isoformat()} in: {supplied}"
+            f"{history_requirement} was found before {as_of.isoformat()} in: {supplied}"
         )
 
     candidate = chooser(candidates)
     all_rows = [*candidate.transactions, *candidate.purchases]
+    unique_rows = {
+        _row_identity(row): row for row in all_rows
+    }
+    candidate_identity = (candidate.branch, str(candidate.filing.get("filing_key") or ""))
+    edge_history_count, selected_edge_row_identity = history_details.get(
+        candidate_identity, (0, "")
+    )
+    if not selected_edge_row_identity:
+        selected_edge_row_identity = next(
+            (
+                identity
+                for identity, row in unique_rows.items()
+                if history_trade_eligibility(row).get("eligible")
+            ),
+            next(iter(unique_rows), ""),
+        )
+    if synthetic_history_needed:
+        edge_history_count = 1
     row_identities = list(dict.fromkeys(_row_identity(row) for row in all_rows))
     report_id, filing_key, trade_ids, run_id = _allocate_ids(
         candidate=candidate,
@@ -421,7 +571,8 @@ def generate_manual_test(
         existing_ids=_all_existing_ids(inputs),
         token_factory=token_factory,
     )
-    generated_at = _timestamp_for_date(as_of, now or datetime.now(timezone.utc))
+    now_value = now or datetime.now(timezone.utc)
+    generated_at = _timestamp_for_date(as_of, now_value)
     original_filing = candidate.filing
     original_report_id = str(original_filing["report_id"])
     original_filing_key = str(original_filing["filing_key"])
@@ -435,6 +586,16 @@ def generate_manual_test(
         "original_source": str(original_filing.get("source") or ""),
         "original_report_id": original_report_id,
         "original_filing_key": original_filing_key,
+        "investor_edge_history_required": require_investor_edge_history,
+        "investor_edge_history_count": edge_history_count,
+        "investor_edge_history_source": (
+            "synthetic_fixture"
+            if synthetic_history_needed
+            else "retained"
+            if require_investor_edge_history
+            else "not_required"
+        ),
+        "investor_edge_candidate_original_row": selected_edge_row_identity,
     }
 
     cloned_transactions = [
@@ -445,6 +606,14 @@ def generate_manual_test(
             as_of=as_of,
             observed_at_utc=generated_at,
             base_metadata=base_metadata,
+            row_metadata={
+                "investor_edge_candidate": _row_identity(row) == selected_edge_row_identity,
+                "investor_edge_fixture_role": (
+                    "candidate"
+                    if _row_identity(row) == selected_edge_row_identity
+                    else "companion"
+                ),
+            },
         )
         for row in candidate.transactions
     ]
@@ -456,13 +625,43 @@ def generate_manual_test(
             as_of=as_of,
             observed_at_utc=generated_at,
             base_metadata=base_metadata,
+            row_metadata={
+                "investor_edge_candidate": _row_identity(row) == selected_edge_row_identity,
+                "investor_edge_fixture_role": (
+                    "candidate"
+                    if _row_identity(row) == selected_edge_row_identity
+                    else "companion"
+                ),
+            },
         )
         for row in candidate.purchases
     ]
 
-    unique_rows = {
-        _row_identity(row): row for row in [*candidate.transactions, *candidate.purchases]
-    }
+    synthetic_prior_trade_id = ""
+    if synthetic_history_needed and selected_edge_row_identity in unique_rows:
+        seed = unique_rows[selected_edge_row_identity]
+        current_tx_date = _record_date(seed, "transaction_date") or as_of - timedelta(days=7)
+        prior_tx_date = min(
+            current_tx_date - timedelta(days=30),
+            as_of - timedelta(days=240),
+        )
+        prior_public_date = prior_tx_date + timedelta(days=7)
+        synthetic_prior_trade_id = f"{run_id}-EDGE-HISTORY-001"
+        prior = _clone_trade(
+            seed,
+            new_report_id=f"{run_id}-EDGE-HISTORY-REPORT",
+            new_trade_id=synthetic_prior_trade_id,
+            as_of=prior_public_date,
+            observed_at_utc=_timestamp_for_date(prior_public_date, now_value),
+            base_metadata=base_metadata,
+            row_metadata={
+                "investor_edge_candidate": False,
+                "investor_edge_fixture_role": "prior_history",
+            },
+        )
+        prior["transaction_date"] = prior_tx_date.isoformat()
+        cloned_transactions.append(prior)
+        cloned_purchases.append(copy.deepcopy(prior))
     transaction_types = [str(row.get("transaction_type") or "") for row in unique_rows.values()]
     cloned_filing = copy.deepcopy(original_filing)
     cloned_filing.update(
@@ -498,9 +697,17 @@ def generate_manual_test(
         "original_filing_key": original_filing_key,
         "test_report_id": report_id,
         "test_filing_key": filing_key,
-        "test_trade_ids": list(trade_ids.values()),
+        "test_trade_ids": [
+            *trade_ids.values(),
+            *([synthetic_prior_trade_id] if synthetic_prior_trade_id else []),
+        ],
         "cloned_transaction_rows": len(cloned_transactions),
         "cloned_purchase_rows": len(cloned_purchases),
+        "investor_edge_history_required": require_investor_edge_history,
+        "investor_edge_history_count": edge_history_count,
+        "investor_edge_history_source": base_metadata["investor_edge_history_source"],
+        "investor_edge_candidate_trade_id": trade_ids.get(selected_edge_row_identity, ""),
+        "synthetic_prior_trade_id": synthetic_prior_trade_id,
         "output_dir": str(output_dir.resolve()),
     }
     _write_output_tree(
@@ -513,7 +720,7 @@ def generate_manual_test(
         manifest=manifest,
         source=str(original_filing.get("source") or ""),
         report_id=report_id,
-        trade_ids=list(trade_ids.values()),
+        trade_ids=[*trade_ids.values(), *([synthetic_prior_trade_id] if synthetic_prior_trade_id else [])],
         observed_at_utc=generated_at,
         test_metadata=base_metadata,
     )
@@ -543,6 +750,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Synthetic filing date in YYYY-MM-DD form (default: current UTC date)",
     )
+    parser.add_argument(
+        "--require-investor-edge-history",
+        action="store_true",
+        help=(
+            "Select only a filing whose eligible purchase has prior usable history "
+            "for the production Investor Edge path"
+        ),
+    )
     return parser
 
 
@@ -554,6 +769,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             executive_dir=args.executive_dir,
             output_dir=args.output_dir,
             as_of=args.as_of or datetime.now(timezone.utc).date(),
+            require_investor_edge_history=args.require_investor_edge_history,
         )
     except ManualTestError as exc:
         print(f"Manual test generation failed: {exc}", file=sys.stderr)
