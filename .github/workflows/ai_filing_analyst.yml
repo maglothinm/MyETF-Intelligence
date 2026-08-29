@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      investor_edge_enabled:
+        description: "Enable Investor Edge for this manual run"
+        required: false
+        default: false
+        type: boolean
       max_analyses:
         description: "Maximum purchases to analyze in this run"
         required: false
@@ -42,6 +47,7 @@ env:
   AI_MAX_ANALYSES_PER_RUN: ${{ vars.AI_MAX_ANALYSES_PER_RUN || '20' }}
   AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS: ${{ vars.AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS || '65' }}
   AI_REQUIRE_PUSHOVER: ${{ vars.AI_REQUIRE_PUSHOVER || 'true' }}
+  INVESTOR_EDGE_ENABLED: ${{ vars.INVESTOR_EDGE_ENABLED || 'false' }}
   OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.6-terra' }}
   OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'medium' }}
   SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
@@ -210,6 +216,7 @@ jobs:
           PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
           REANALYZE_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.reanalyze_existing || false }}
           SUPPRESS_ALERTS: ${{ github.event_name == 'workflow_dispatch' && inputs.suppress_alerts || false }}
+          INVESTOR_EDGE_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.investor_edge_enabled || vars.INVESTOR_EDGE_ENABLED || 'false' }}
           MAX_ANALYSES_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_analyses || '' }}
         run: |
           set -euo pipefail

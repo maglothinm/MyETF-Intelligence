@@ -127,6 +127,7 @@ AI_WEB_SEARCH_ENABLED=true
 AI_FETCH_DOCUMENT_TEXT=true
 AI_MAX_ANALYSES_PER_RUN=20
 AI_REQUIRE_PUSHOVER=true
+INVESTOR_EDGE_ENABLED=false
 SEC_USER_AGENT=PolitiTrack research contact <monitored-email-address>
 ```
 

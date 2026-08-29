@@ -1,0 +1,31 @@
+version: 1
+enabled: false
+max_modifier: 12
+minimum_completed_trades: 3
+confidence_prior_trades: 8
+max_history_trades: 40
+leaderboard_max_investors: 40
+backfill_analysis_limit_per_run: 30
+network_request_budget_per_run: 40
+market_cache_hours: 24
+profile_cache_hours: 168
+history_lookback_days: 2200
+alpha_clip_percent: 25.0
+alpha_score_points_per_percent: 2.5
+benchmark_default: SPY
+horizons:
+  - 5
+  - 20
+  - 60
+  - 120
+horizon_weights:
+  "5": 0.15
+  "20": 0.30
+  "60": 0.35
+  "120": 0.20
+edge_weights:
+  followable_alpha: 0.45
+  picker_alpha: 0.20
+  hit_rate: 0.15
+  consistency: 0.10
+  sector_skill: 0.10

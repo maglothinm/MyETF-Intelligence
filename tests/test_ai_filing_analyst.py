@@ -14,6 +14,7 @@ from scripts.ai_filing_analyst import (
     OpenAIQuotaError,
     analysis_id_for_trade,
     analysis_needs_market_refresh,
+    build_analysis_record,
     build_entry_plan,
     deterministic_score,
     eligible_trade,
@@ -536,6 +537,7 @@ def test_ai_batch_stops_after_first_quota_failure(
 
 def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = config_for(tmp_path)
+    monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "true")
     write_jsonl(cfg.legislative_dir / "transactions.jsonl", [sample_trade()])
     write_jsonl(cfg.legislative_dir / "filings.jsonl", [sample_filing()])
     (cfg.legislative_dir / "state.json").write_text("{}", encoding="utf-8")
@@ -589,6 +591,10 @@ def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkey
     assert first.paper_positions_opened == 1
     analyses = [json.loads(line) for line in (cfg.ai_dir / "analyses.jsonl").read_text().splitlines()]
     assert analyses[0]["ticker"] == "EXM"
+    assert analyses[0]["investor_edge_modifier"] == 0
+    assert analyses[0]["investor_edge"]["sample_count"] == 0
+    assert (cfg.ai_dir / "investor-edge-profiles.json").exists()
+    assert (cfg.ai_dir / "investor-edge-leaderboard.json").exists()
     state = json.loads((cfg.ai_dir / "state.json").read_text())
     assert len(state["positions"]) == 1
     assert cfg.analyses_csv_path.exists()
@@ -724,6 +730,50 @@ def test_refresh_analysis_market_preserves_ai_and_recomputes_rules() -> None:
     assert refreshed["analysis_revision"] == 2
     assert refreshed["classification"] == "high_priority"
     assert refreshed["entry_plan"]["entry_status"] == "review_now"
+
+
+def test_native_analysis_record_applies_investor_edge_without_defeating_caps(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    rules = load_rules(root / "config/signal_rules.yml")
+    trade = sample_trade()
+
+    class FakeInvestorEdge:
+        enabled = True
+
+        def profile_for_trade(self, current, transactions):
+            assert current is trade
+            assert transactions == [trade]
+            return {
+                "modifier": 7,
+                "edge_score": 79,
+                "sample_count": 8,
+                "confidence_label": "High",
+            }
+
+    record = build_analysis_record(
+        trade=trade,
+        filing=sample_filing(),
+        ai_result=OpenAIResult(sample_ai_payload(), "resp_edge", 10, 5),
+        market={
+            "current_price": 101.0,
+            "transaction_date_close": 100.0,
+            "atr_14": 2.0,
+            "average_volume_20d": 2_000_000,
+        },
+        sec={},
+        document={"status": "not_requested", "content_hash": ""},
+        all_transactions=[trade],
+        rules=rules,
+        rules_hash="edge-test-rules",
+        config=config_for(tmp_path),
+        investor_edge=FakeInvestorEdge(),
+    )
+    assert record["investor_edge_modifier"] == 7
+    assert record["base_score"] <= record["score"]
+    assert record["score"] <= 100
+    assert record["entry_plan"]["paper_only"] is True
 
 
 def test_paper_position_closes_at_evaluation_horizon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -50,6 +50,7 @@ Create these under **Settings → Secrets and variables → Actions → Variable
 | `AI_FETCH_DOCUMENT_TEXT` | `true` | Reads the official filing document rather than relying only on parsed rows. |
 | `AI_MAX_ANALYSES_PER_RUN` | `20` | Cost and runtime limit. |
 | `AI_REQUIRE_PUSHOVER` | `true` | Treat candidate-alert delivery as required. |
+| `INVESTOR_EDGE_ENABLED` | `false` | Opt in to the bounded historical-performance modifier after a suppressed-alert manual review run. |
 | `SEC_USER_AGENT` | `PolitiTrack research contact your-email@example.com` | SEC fair-access identification. Replace with an actual monitored contact address. |
 | `ALPHAVANTAGE_ENTITLEMENT` | blank unless supplied | Optional Alpha Vantage entitlement. |
 

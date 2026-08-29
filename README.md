@@ -69,6 +69,10 @@ New parsed equity purchases can be enriched with market and SEC evidence, analyz
 
 <!-- MYETF-AI-FILING-ANALYST:END -->
 
+## Investor Edge
+
+The optional, paper-research-only Investor Edge layer measures historical benchmark-relative outcomes for each filer and disclosed owner, applies a bounded modifier without defeating hard caps, and publishes a dedicated heat map. It is disabled by default; see [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md) for methodology and activation guidance.
+
 <!-- MYETF-CHG90-WALLBOARD:START -->
 
 ## CHG90 portrait and super-ultrawide wallboard

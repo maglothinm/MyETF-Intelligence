@@ -67,4 +67,4 @@ The dashboard workflow downloads the newest unexpired Legislative and Executive 
 
 ## AI candidate and paper-portfolio layer
 
-When `AI_ANALYSIS_ENABLED=true`, the dashboard also publishes evidence-constrained candidate rankings and a simulated paper portfolio. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md) for configuration, scoring, market-data requirements, and first activation.
+When `AI_ANALYSIS_ENABLED=true`, the dashboard also publishes evidence-constrained candidate rankings and a simulated paper portfolio. The build always includes an `investor-edge.html` heat-map shell, which populates after the optional feature is enabled and profiles exist. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md) for the analyst and [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md) for the bounded historical-performance modifier.

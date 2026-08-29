@@ -12,7 +12,7 @@ The following names remain intentionally unchanged until a separate, tested repo
 - GitHub Actions workflow filenames, workflow identities, concurrency groups, and the display name `Import migrated MyETF state`.
 - Installer boundary markers such as `MYETF-GOVERNMENT-TRADE-TRACKER` and the matching `.gitignore` markers used for idempotent upgrades.
 - Existing logger names, temporary state filenames, HTTP client identifiers, and migration inventory paths where renaming could disrupt monitoring, WAF behavior, diagnostics, or recovery procedures.
-- Legacy distribution and provenance archive names, including `MyETF-government-trade-tracker-fast-track.zip` and `myetf-investor-edge-implementation.zip`.
+- Legacy distribution and provenance archive names, including `MyETF-government-trade-tracker-fast-track.zip` and the audited source artifact `myetf-investor-edge-implementation.zip`.
 - Historical recovery reports whose titles describe the legacy MyETF repository at the time of recovery.
 
 ## Later migration

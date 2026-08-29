@@ -1,5 +1,5 @@
-9652b4d7961206f3d1e78e1b84b376f4b88b79d46a2c320117babdbb865a88bd  ./README.md
-f34ff12e51a0582d5e0e0db8fc77314d851c25fb1959cfddf447dafd45f3a197  ./VERIFICATION.txt
+fd2dad6e6e53f52c87da05d88d4da7e5be729296ca9927fb58641817d26702b5  ./README.md
+f9efa73923c0373af25e5cdc840214e7e153924d1c71c136d23e3440cf6defda  ./VERIFICATION.txt
 375c47e3e63c6bc32461039acdebab1af86ec6aae628c6faca86e99d7b414de3  ./apply.sh
 109615f7fd3e23526a393747f147de497910477e7e370e8a4433511dff2a81ca  ./repo-files/.env.tracker.example
 a5c58bc6aa8c9108e5927537b45e736e64dfe07d999e98c2fc1bbc99d6b3d660  ./repo-files/.github/workflows/executive_trade_tracker.yml

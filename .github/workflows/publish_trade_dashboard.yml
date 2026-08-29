@@ -100,7 +100,11 @@ jobs:
           test -s trade-dashboard-site/wallboard.html
           test -s trade-dashboard-site/wallboard.css
           test -s trade-dashboard-site/wallboard.js
+          test -s trade-dashboard-site/investor-edge.html
+          test -s trade-dashboard-site/investor-edge.css
+          test -s trade-dashboard-site/investor-edge.js
           test -s trade-dashboard-site/data/summary.json
+          test -s trade-dashboard-site/data/investor-edge.json
           test -s trade-dashboard-site/data/filings.csv
           test -s trade-dashboard-site/data/transactions.csv
           test -s trade-dashboard-site/data/ai-analyses.csv
@@ -121,6 +125,7 @@ jobs:
           if command -v node >/dev/null 2>&1; then
             node --check trade-dashboard-site/app.js
             node --check trade-dashboard-site/wallboard.js
+            node --check trade-dashboard-site/investor-edge.js
           fi
 
       - name: Configure GitHub Pages

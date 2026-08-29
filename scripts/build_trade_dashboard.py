@@ -14,6 +14,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+try:  # Support both package and direct-script execution.
+    from .investor_edge import build_dashboard_addon
+except ImportError:  # pragma: no cover - direct execution path
+    from investor_edge import build_dashboard_addon  # type: ignore
+
 DEFAULT_OUTPUT = Path("trade-dashboard-site")
 
 FILING_FIELDS = (
@@ -1881,6 +1886,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ai = load_ai(args.ai_dir)
     payload = build_payload(legislative, executive, repository_url=args.repository_url, ai=ai)
     build_site(payload, args.output_dir)
+    build_dashboard_addon(args.ai_dir, args.output_dir)
     print(
         f"Dashboard built at {args.output_dir}: "
         f"{len(payload['filings'])} filings, {len(payload['transactions'])} transactions, "

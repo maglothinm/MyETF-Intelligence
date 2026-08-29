@@ -50,6 +50,11 @@ try:  # Support both package and direct-script execution.
         normalize_text,
         parse_bool,
     )
+    from .investor_edge import (
+        EDGE_VERSION,
+        InvestorEdgeRuntime,
+        apply_profile_to_analysis,
+    )
 except ImportError:  # pragma: no cover - direct execution path
     from government_trade_tracker import (  # type: ignore
         PUSHOVER_MESSAGES_URL,
@@ -67,6 +72,11 @@ except ImportError:  # pragma: no cover - direct execution path
         extract_pdf_text,
         normalize_text,
         parse_bool,
+    )
+    from investor_edge import (  # type: ignore
+        EDGE_VERSION,
+        InvestorEdgeRuntime,
+        apply_profile_to_analysis,
     )
 
 LOGGER = logging.getLogger("myetf-ai-analyst")
@@ -1765,6 +1775,15 @@ def notify_candidate(config: AnalystConfig, analysis: Mapping[str, Any]) -> None
         else ""
     )
     summary = str((analysis.get("ai") or {}).get("analysis_summary") or "")
+    edge = analysis.get("investor_edge") or {}
+    if isinstance(edge, Mapping) and edge:
+        summary = (
+            f"Investor Edge {float(edge.get('edge_score') or 50):.0f}/100 "
+            f"({int(edge.get('modifier') or 0):+d} score, "
+            f"{int(edge.get('sample_count') or 0)} prior scored trades; "
+            f"{str(edge.get('confidence_label') or 'Low')} confidence). "
+            + summary
+        )
     message = (
         f"{classification.replace('_', ' ').title()} — {filer} ({owner}) disclosed "
         f"{ticker} {amount}. Entry status: {entry.get('entry_status', 'unknown')}.{band} "
@@ -1792,11 +1811,12 @@ def build_analysis_record(
     rules: Mapping[str, Any],
     rules_hash: str,
     config: AnalystConfig,
+    investor_edge: InvestorEdgeRuntime | None = None,
 ) -> dict[str, Any]:
     scored = deterministic_score(trade, ai_result.payload, market, all_transactions, rules)
     entry_plan = build_entry_plan(trade, market, int(scored["score"]), rules)
     analysis_id = analysis_id_for_trade(trade, model=config.model, rules_hash=rules_hash)
-    return {
+    record = {
         "analysis_id": analysis_id,
         "trade_id": str(trade.get("trade_id") or ""),
         "analyzed_at_utc": iso_utc(),
@@ -1846,6 +1866,16 @@ def build_analysis_record(
         "entry_plan": entry_plan,
         "paper_only": True,
     }
+    if investor_edge is not None and investor_edge.enabled:
+        profile = investor_edge.profile_for_trade(trade, all_transactions)
+        record = apply_profile_to_analysis(record, profile, rules)
+        record["entry_plan"] = build_entry_plan(
+            trade,
+            record.get("market") or {},
+            int(record.get("score") or 0),
+            rules,
+        )
+    return record
 
 
 def analysis_needs_market_refresh(analysis: Mapping[str, Any]) -> bool:
@@ -1864,12 +1894,21 @@ def refresh_analysis_market(
     all_transactions: Sequence[Mapping[str, Any]],
     market: Mapping[str, Any],
     rules: Mapping[str, Any],
+    investor_edge: InvestorEdgeRuntime | None = None,
 ) -> dict[str, Any]:
     ai_payload = analysis.get("ai") or {}
     if not isinstance(ai_payload, Mapping):
         raise AnalystError("Stored AI analysis has no valid structured payload")
     scored = deterministic_score(trade, ai_payload, market, all_transactions, rules)
     updated = dict(analysis)
+    for field in (
+        "base_score",
+        "base_raw_score",
+        "investor_edge",
+        "investor_edge_modifier",
+        "score_method_version",
+    ):
+        updated.pop(field, None)
     updated.update(
         {
             "market": dict(market),
@@ -1887,6 +1926,15 @@ def refresh_analysis_market(
             "analysis_revision": int(analysis.get("analysis_revision") or 1) + 1,
         }
     )
+    if investor_edge is not None and investor_edge.enabled:
+        profile = investor_edge.profile_for_trade(trade, all_transactions)
+        updated = apply_profile_to_analysis(updated, profile, rules)
+        updated["entry_plan"] = build_entry_plan(
+            trade,
+            updated.get("market") or {},
+            int(updated.get("score") or 0),
+            rules,
+        )
     return updated
 
 
@@ -2252,6 +2300,22 @@ def run_analyst(
     result.attempted_count = 0
 
     session = session or build_session(config.repository_url or "PolitiTrack AI filing analyst")
+    investor_edge: InvestorEdgeRuntime | None = None
+    try:
+        investor_edge = InvestorEdgeRuntime.create(
+            ai_dir=config.ai_dir,
+            session=session,
+            alphavantage_api_key=config.alphavantage_api_key,
+            finnhub_api_key=config.finnhub_api_key,
+            alphavantage_entitlement=config.alphavantage_entitlement,
+            request_timeout=config.request_timeout,
+            config_path=Path(
+                os.environ.get("INVESTOR_EDGE_CONFIG", "").strip()
+                or config.rules_path.with_name("investor_edge.yml")
+            ),
+        )
+    except Exception as exc:  # Investor Edge must never block the core analyst.
+        result.warnings.append(f"Investor Edge disabled: {type(exc).__name__}: {exc}")
     ticker_map = load_sec_ticker_map(config, session, result.warnings)
     new_analysis_records: list[dict[str, Any]] = []
     paper_events: list[dict[str, Any]] = []
@@ -2278,7 +2342,12 @@ def run_analyst(
             if json_hash(refreshed_market) == json_hash(prior.get("market") or {}):
                 continue
             refreshed = refresh_analysis_market(
-                prior, trade, all_transactions, refreshed_market, rules
+                prior,
+                trade,
+                all_transactions,
+                refreshed_market,
+                rules,
+                investor_edge,
             )
             result.market_analyses_refreshed += 1
             prior_class = str(prior.get("classification") or "archive")
@@ -2347,6 +2416,7 @@ def run_analyst(
                 rules=rules,
                 rules_hash=rules_hash,
                 config=config,
+                investor_edge=investor_edge,
             )
             new_analysis_records.append(record)
             result.analyses.append(record)
@@ -2413,6 +2483,15 @@ def run_analyst(
         append_jsonl(config.ai_dir / "paper-portfolio.jsonl", portfolio_events)
     result.paper_positions_updated += updated
     result.paper_positions_closed += closed
+
+    if investor_edge is not None and investor_edge.enabled:
+        try:
+            leaderboard = investor_edge.refresh_leaderboard(all_transactions)
+            investor_edge.save(leaderboard)
+        except Exception as exc:  # Preserve the core analyst result and retry Edge later.
+            LOGGER.exception("Investor Edge profile refresh failed")
+            result.warnings.append(f"Investor Edge refresh: {type(exc).__name__}: {exc}")
+            investor_edge.save()
 
     result.finished_utc = iso_utc()
     result.success = not result.errors
