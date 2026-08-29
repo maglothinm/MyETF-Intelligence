@@ -1,6 +1,6 @@
 9652b4d7961206f3d1e78e1b84b376f4b88b79d46a2c320117babdbb865a88bd  ./README.md
-de47bff1ca104558e9357448b06e59a1721a9516befb61fb3ba54c34cfb119cd  ./VERIFICATION.txt
-1ca0f60c07ab6ce9876da7721059755d53a65c51748b9bbd010b7c0be77e01cf  ./apply.sh
+f34ff12e51a0582d5e0e0db8fc77314d851c25fb1959cfddf447dafd45f3a197  ./VERIFICATION.txt
+375c47e3e63c6bc32461039acdebab1af86ec6aae628c6faca86e99d7b414de3  ./apply.sh
 109615f7fd3e23526a393747f147de497910477e7e370e8a4433511dff2a81ca  ./repo-files/.env.tracker.example
 a5c58bc6aa8c9108e5927537b45e736e64dfe07d999e98c2fc1bbc99d6b3d660  ./repo-files/.github/workflows/executive_trade_tracker.yml
 661f75eb727c249779de2397ca0a2960caa5be2f3b51294286db787562bd6345  ./repo-files/.github/workflows/legislative_trade_tracker.yml
@@ -14,4 +14,4 @@ ac5231affc30f905b5755bd9ee7adce12e3114a5f24b90616f95e5d7553bf2e0  ./repo-files/s
 7644b55c0578565dc877d7504c30908a91247b961b7c0f38b6a2821d14db1430  ./repo-files/tests/test_government_trade_tracker.py
 c1bddb11a44b64291f6c6210509e0ec85117e616f907a1ffea43a5678060f583  ./repo-files/tests/test_monitor_disclosures.py
 0f1dc3dbae45f4f2ea8f20afbded19bd7c4a72413c62a957ccfd4ee63f58c1d2  ./repo-files/tests/test_oge_disclosures.py
-dc091cc62d9903343858fae63dee00901995af0ee7a5168eb1a67e13803906ec  ./verify.sh
+95a34995497d80897b36ca61f67a4cc467ea280860b0ce6ce6fd66b8ec10c845  ./verify.sh

@@ -5,16 +5,21 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_FILES="$SCRIPT_DIR/repo-files"
 REPORT="$SCRIPT_DIR/VERIFICATION.txt"
 TEMP_ROOT="$(mktemp -d)"
+BASH_BIN="${BASH:-bash}"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 
-exec > >(tee "$REPORT") 2>&1
+if command -v tee >/dev/null 2>&1; then
+  exec > >(tee "$REPORT") 2>&1
+else
+  exec > "$REPORT" 2>&1
+fi
 
 echo "PolitiTrack government trade tracker verification"
 echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Python: $(python --version 2>&1)"
 echo
 
-bash -n "$SCRIPT_DIR/apply.sh" "$SCRIPT_DIR/verify.sh"
+"$BASH_BIN" -n "$SCRIPT_DIR/apply.sh" "$SCRIPT_DIR/verify.sh"
 echo "[pass] shell syntax"
 
 python -m compileall -q "$REPO_FILES/scripts" "$REPO_FILES/tests"
@@ -87,8 +92,8 @@ printf 'name: obsolete\n' > "$MOCK_REPO/.github/workflows/house_check.yml"
 printf 'name: obsolete\n' > "$MOCK_REPO/.github/workflows/senate_check.yml"
 printf 'name: obsolete\n' > "$MOCK_REPO/.github/workflows/disclosure_monitor.yml"
 
-"$SCRIPT_DIR/apply.sh" "$MOCK_REPO" >/dev/null
-"$SCRIPT_DIR/apply.sh" "$MOCK_REPO" >/dev/null
+"$BASH_BIN" "$SCRIPT_DIR/apply.sh" "$MOCK_REPO" >/dev/null
+"$BASH_BIN" "$SCRIPT_DIR/apply.sh" "$MOCK_REPO" >/dev/null
 
 test -f "$MOCK_REPO/scripts/government_trade_tracker.py"
 test -f "$MOCK_REPO/scripts/oge_disclosures.py"

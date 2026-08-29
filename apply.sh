@@ -43,10 +43,12 @@ rm -f \
 
 # Copy the operational overlay. This is intentionally idempotent.
 cp -a "$SOURCE_DIR/." "$TARGET_DIR/"
-chmod +x \
-  "$TARGET_DIR/scripts/government_trade_tracker.py" \
-  "$TARGET_DIR/scripts/oge_disclosures.py" \
-  "$TARGET_DIR/scripts/monitor_disclosures.py"
+if command -v chmod >/dev/null 2>&1; then
+  chmod +x \
+    "$TARGET_DIR/scripts/government_trade_tracker.py" \
+    "$TARGET_DIR/scripts/oge_disclosures.py" \
+    "$TARGET_DIR/scripts/monitor_disclosures.py"
+fi
 
 python - "$TARGET_DIR/.gitignore" <<'PY'
 from pathlib import Path
