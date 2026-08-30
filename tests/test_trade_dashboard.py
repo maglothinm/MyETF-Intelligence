@@ -3,7 +3,11 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 from scripts.build_trade_dashboard import (
     build_parser,
@@ -596,3 +600,29 @@ def test_dashboard_navigation_and_dialog_ids_remain_unique(tmp_path: Path) -> No
         assert not soup.select("script:not([src]), style, [onclick]")
         assert all(node.get("aria-label") for node in soup.select("button.help, button.icon-button"))
         assert "connect-src 'self'" in str(soup.find("meta", attrs={"http-equiv": "Content-Security-Policy"}))
+
+
+def test_dashboard_release_checks(tmp_path: Path) -> None:
+    """Keep additive UI regressions in the existing fixed-file CI test selection.
+
+    Workflow configuration deliberately remains unchanged for this UI release.
+    Linux CI also executes the repository's complete retired-overlay verifier;
+    Windows development without Bash still exercises the fixture-only UI suites.
+    """
+    repository = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+         "tests/test_dashboard_insights.py", "tests/test_dashboard_notifications.py",
+         "tests/test_dashboard_dom.py", "--basetemp", str(tmp_path / "ui-checks")],
+        cwd=repository, capture_output=True, text=True, check=False, timeout=180,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    if os.name != "nt":
+        bash = shutil.which("bash")
+        assert bash, "Bash is required for the Linux repository verification gate"
+        verification = subprocess.run(
+            [bash, "verify.sh"], cwd=repository, capture_output=True,
+            text=True, check=False, timeout=90,
+        )
+        assert verification.returncode == 0, verification.stdout + verification.stderr
+        assert "VERIFICATION PASSED" in verification.stdout

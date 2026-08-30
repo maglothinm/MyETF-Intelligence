@@ -1,8 +1,8 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **reconciliation deployed and production acceptance passed; repository
-settings cutover remains blocked on authenticated GitHub settings access**
+Status: **UI release prepared in issue #4; merge/Pages evidence pending.
+Reconciliation deployed; state-safety PR #3 and repository cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
@@ -19,7 +19,48 @@ GitHub issue `#1`, **Consolidate repositories and cut over to PolitiTrack**, is 
 active work record. The canonical repository's numeric ID is authoritative if an
 old URL redirects after the rename.
 
-## Durable state checkpoint
+## UI release checkpoint — 2026-08-30
+
+The UI-only branch `codex/dashboard-redesign` starts from live main
+`4a9135a8c12af6eebfce01cf33772ffa13e41951` and excludes held PR #3. There is no
+workflow, collector, analyst-runtime, scoring, schema, alert or simulation-contract
+change. Existing read-only Pages publishing is the only deployment path.
+
+Fresh audit at 16:35 UTC verified latest protected artifacts, exact successful
+attempts/jobs, producer high-water marks, ZIP digests, inventories and continuity:
+
+| Pipeline | Artifact | Producing run / attempt | Producer job | Retained counts |
+|---|---:|---|---:|---|
+| Legislative | `9734211271` | `33318579174` / `1` | `99276401831` | 983 filings; 65 transactions; 19 purchases; 1 review; 27 runs |
+| Executive | `9732455687` | `33312565343` / `1` | `99260139758` | 4,109 filings; 1,495 reviews; 19 runs |
+| AI | `9734221839` | `33318614858` / `1` | `99276494661` | 12 analyses; 28 runs |
+
+Producer commits are `4a9135a`. No eligible canonical producer was pending.
+The two obsolete queued runs remain unchanged cutover blockers. Latest isolated
+`simulation-state` is `9734790733`, run `33320677882` / attempt 1, job
+`99281977011`, with two replay rows and verified predecessor prefix.
+
+Known-good Pages rollback: `33320697336` / attempt 1, artifact `9734796157`,
+exported ZIP SHA-256
+`e8dc54967255af1fca24ed0f16383b3b2fa145cca947a8ec1d133e3ab4c0bca2`.
+Old live Pages matched this artifact. After development, 209 immutable input/copy
+hash-size checks passed with zero differences. Copies are fixtures, not authority.
+
+Published deduplicated counts: 5,079 filings, 60 transactions, 1,496 reviews,
+11 analyses and zero open paper positions. Coverage separates 5,066 cataloged-only,
+6 processed and 7 review-required filings; review inventory separates 1 manual
+exception from 1,495 access-required records. No signal qualifies at this snapshot.
+
+Local active suite: 180 passed; final targeted suite: 9 passed including the
+additive UI suites (61 model, 32 native Node notification and 12 DOM scenarios).
+Axe found zero serious/critical fixture findings with contrast/layout unavailable.
+Linux verify.sh, PR CI and new Pages evidence are pending. Chrome, iPhone Safari,
+real audio, responsive screenshots and physical CHG90 are unverified. The owner
+explicitly requested merge/deploy after disclosure; issue #4 remains open for
+device acceptance. No collectors, AI, simulations or external alerts were
+manually dispatched. See D-2026-08-30-019 and the active handoff.
+
+## Historical post-reconciliation checkpoint
 
 The state was migrated into the canonical repository by successful run
 `33179207530`. The following successful production runs and unexpired artifacts

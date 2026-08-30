@@ -16,7 +16,7 @@ Production data moves through one path:
 3. `Publish government trade dashboard` restores the newest successful artifacts and deploys the generated static site.
 4. GitHub Pages serves the review dashboard and wallboard.
 
-Two actions sit outside that production path. [`Run Simulation`](.github/workflows/manual_test.yml) is a one-run Investor Edge acceptance check that publishes a short-lived dashboard artifact. [`Run $10K portfolio simulator`](.github/workflows/filing_simulation.yml) advances a separate persistent paper simulation with $10,000 starting capital and a $20,000 goal. Neither action updates a production cache, state artifact, paper portfolio, or Pages deployment.
+Two actions sit outside that production path. [`Run Simulation`](.github/workflows/manual_test.yml) is a one-run Investor Edge acceptance check that publishes a short-lived dashboard artifact. [`Run $10K portfolio simulator`](.github/workflows/filing_simulation.yml) appends an isolated historical replay result with $10,000 starting capital and a $20,000 goal to `simulation-state`. Retaining independent replay results is not a persistent portfolio ledger. Neither action updates a production state artifact, paper portfolio, or Pages deployment.
 
 ## Display target
 
@@ -27,7 +27,10 @@ The dedicated wallboard is designed first for the Samsung CHG90 (`LC49HG90DMNXZA
 - Approximate active display area after rotation: 336 mm wide × 1,196 mm tall.
 - Landscape fallback: 3,840 × 1,080 when the arm is rotated back.
 
-The portrait design treats the tall display as a persistent operations column rather than stretching a conventional desktop dashboard. Portrait and native 32:9 landscape layouts fit within one viewport.
+The portrait design treats the tall display as a passive operations column rather
+than stretching a conventional desktop dashboard. CSS targets a single viewport
+at portrait and native 32:9 dimensions. Physical CHG90 acceptance remains
+unverified; an emulated viewport is not proof of hardware/browser behavior.
 
 ## Production URLs
 
@@ -45,13 +48,16 @@ https://maglothinm.github.io/MyETF-Intelligence/wallboard.html
 
 The normal dashboard includes a **Wallboard** link. The wallboard provides:
 
-- system state, source health, clock, data age, and refresh countdown;
-- high-priority and watchlist metrics;
-- AI-ranked candidates with final/base score, review band, filing link, and compact Investor Edge evidence;
-- open paper positions and paper P&L;
+- a deterministic Situation Brief, retained branch health, clock, data age, and refresh countdown;
+- qualifying High Priority/Watchlist totals and the top qualifying signals only;
+- compact signal cards with filing/evidence links, delayed-price timestamps, and Investor Edge confidence/history context;
+- the open paper-position count, with individual valuations available on the full dashboard;
+- the latest **SIMULATED — SINGLE-RUN REPLAY** value and actual change, without an equity curve or persistent-performance claim;
 - newest official filings;
 - latest Legislative, Executive, and AI runs;
 - manual-review exceptions;
+- access/request-required inventory shown separately as informational;
+- browser-local sound armed/muted state, with sound off by default;
 - a five-minute data refresh without a full page reload;
 - full-screen and screen wake-lock requests where supported;
 - responsive portrait and 32:9 landscape arrangements.
@@ -61,6 +67,37 @@ The refresh interval can be changed from 60 to 1,800 seconds:
 ```text
 https://maglothinm.github.io/MyETF-Intelligence/wallboard.html?refresh=180
 ```
+
+The wallboard reads the same compact `data/dashboard-insights.json` as Overview.
+It does not fetch the complete filing/review ledgers or call any external alert
+provider. Missing run evidence is **Unknown**; an old timestamp alone does not
+establish an overdue incident when expected cadence is unavailable. Refresh
+failure keeps existing content visible and marks it potentially stale.
+
+The source assets are `scripts/dashboard_assets/wallboard.html`,
+`wallboard.css`, and `wallboard.js`, with shared display and notification code
+assembled by `scripts/build_trade_dashboard.py`. Edit these generator-owned
+sources, never the deployed output. Root, Wallboard, and Investor Edge URLs are
+preserved. Actions links remain secondary and only open GitHub Actions.
+
+## Sound, touch, and browser-local history
+
+The wallboard and main dashboard share bounded browser-local notification state
+on the same origin. First load establishes a silent baseline; unchanged refresh,
+reload, or visibility changes do not replay prior events. Configure category
+mute, quiet hours, volume, and sound mode in the main Notification Center. Arming
+audio requires a user gesture in the current page; reopening a page does not
+automatically arm sound. The wallboard control reports its current state.
+
+Sound requires an open, active page and browser support. It is never the only
+failure indicator, and ordinary filings remain silent. Local sound and
+acknowledgement do not change Gmail, Pushover, or Healthchecks. The browser never
+pings a Healthchecks URL. Fullscreen and wake lock also depend on browser support
+and permissions; essential monitoring information does not require hover.
+
+**Methodology & Risk** keeps the full disclosure accessible without a dominant
+banner. SIMULATED, PAPER TRADING, delayed/cached-price, and insufficient-history
+labels remain at their point of use. Tooltips support keyboard and tap dismissal.
 
 ## Recommended display settings
 
@@ -73,7 +110,8 @@ https://maglothinm.github.io/MyETF-Intelligence/wallboard.html?refresh=180
 
 ## State continuity
 
-The repository name changed without creating new production state. These compatibility identities remain authoritative:
+The presentation redesign does not rename the repository or create new production
+state. These compatibility identities remain authoritative:
 
 ```text
 legislative-tracker-state
@@ -127,15 +165,24 @@ repository must not ping the same checks.
 
 After a code change or repository-settings change:
 
-1. Confirm the latest Legislative and Executive runs restored their artifacts and succeeded without initialization.
-2. Confirm the AI workflow restored all three production states and succeeded.
-3. Run `Publish government trade dashboard`.
-4. Open both production URLs and confirm current data, source links, Investor Edge, and paper positions.
+1. Verify the latest eligible Legislative and Executive producer attempts and artifacts without initialization.
+2. Verify the eligible AI artifact and retained run evidence. Read existing runs; do not dispatch analysis to populate the UI.
+3. Preserve the previous Pages artifact, then use `Publish government trade dashboard` for deployment.
+4. Open the root, Wallboard, and Investor Edge URLs; confirm the tested build SHA, counts, links, and unchanged protected-state evidence.
 5. Verify the five-minute refresh and both CHG90 orientations.
 6. Confirm only the canonical repository is sending Healthchecks pings and alerts.
 7. Record repository, branch, commit SHA, tests, workflow run URLs, and artifact identifiers in `docs/HANDOFF.md`.
 
-Use `Run Simulation` for isolated Investor Edge acceptance. Use `Run $10K portfolio simulator` to advance the separate $10,000-to-$20,000 paper simulation history. Neither output is proof that production state or Pages deployment changed.
+Use `Run Simulation` only when an isolated Investor Edge acceptance run is
+separately intended. The $10K simulator adds an independent historical replay;
+neither action is required to release the UI or proves a production deployment.
+
+The responsive acceptance matrix includes 1440 × 900, 1280 × 720, 768 × 1024,
+430 × 932, 390 × 844, 1080 × 1920, 1080 × 3840, and 3840 × 1080. Check for page
+overflow, clipping, obscured focus, touch targets, refresh preservation, and sound
+deduplication. Actual Chrome desktop, current iPhone Safari, and physical CHG90
+validation have **not yet been completed** for this redesign; record those
+results explicitly before claiming device acceptance.
 
 ## Repository privacy is not dashboard privacy
 
