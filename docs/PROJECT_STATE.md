@@ -1,8 +1,9 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **contract-compatible revision pushed as draft PR #3; Linux CI passed
-at code commit 4cb6d56. Production acceptance remains pending. No merge or cutover.**
+Status: **contract-compatible revision remains draft PR #3. Current protected
+state and actual read-only restores passed; obsolete queued writers remain a
+GitHub-service blocker. No merge, production acceptance, or cutover.**
 
 ## Current revision and owner-held scope
 
@@ -28,7 +29,10 @@ base to ignored `.test-tmp-pytest` directly under the checkout. Correction commi
 attempt 1, job `99262749719`: 244 tests passed; full verify.sh passed, including
 105 state/workflow checks, 58 Bash syntax checks, recovery tombstone/inventory,
 credential-pattern scan and generated assets. The run uploaded no artifacts.
-This subsequent documentation-only commit records that completed evidence.
+The documentation successor `a7925448524014896d7624eccb1d50d6434a42e1` also
+passed Linux CI `33313630046`, attempt 1, with no artifacts. The current
+checkpoint-only follow-up adds two newly verified entries; its CI is attached to
+PR #3 and must pass independently.
 No merge, production dispatch, mail, deployment, rename, or archive is claimed.
 Unrelated pre-existing `.codex/` remains preserved.
 
@@ -67,10 +71,27 @@ protected artifacts observed on 2026-08-30, all successful attempt 1 on main `4a
 | Executive | `33312565343` | `99260139758` | `9732455687` |
 | AI | `33312663088` | `99260390680` | `9732466504` |
 
-The two newer Executive/AI artifacts have verified run/attempt/job metadata, but
-were not exported or byte-continuity-checked in this publication session. Before
-promotion, export and validate them against the prior checkpoints and refresh the
-exact pre-manifest allowlist; do not fall back to an older allowed artifact.
+On the owner's "Finish" follow-up, all three current artifacts were selected with
+the actual repository-global helper, including exact successful attempts/jobs,
+producer commit ancestry and producer high-water checks. Downloads matched GitHub
+ZIP digests. Complete inventories and original/prior checkpoint ledger prefixes,
+protected IDs and completed Edge outcomes passed. Current counts: Legislative
+983 filings / 65 transactions / 19 purchases / 1 review / 26 runs; Executive
+4,109 filings / 1,495 reviews / 19 runs; AI 12 analyses / 27 runs.
+
+Entries `9732455687` and `9732466504` were added to the exact pre-manifest
+allowlist; every existing entry remains unchanged. No state bytes or production
+artifacts were rewritten. Actual read-only restores succeeded for all three
+protected pipelines. Historical `simulation-state` artifact `9723569827` also
+restored successfully: run `33283104953`, attempt 1, job `99181508496`, one history
+record. These checks used GitHub reads only, not live AI/market data/notifications.
+Local full suite passed again: 244 tests in 16.67s, plus static/generated-asset and
+credential-pattern checks. Ignored reproduction/evidence: `.remediation/live-audit/`
+and `.remediation/verify_live_state.py`.
+
+Before eventual promotion, re-query for newer producers and refresh only newly
+exported, hash-verified successors if necessary. Never fall back to older allowed
+state or initialize a new baseline.
 
 No revised code was deployed. Existing pre-rename Pages and successful main
 publisher run `33312700469` remain the deployment evidence. Live adjusted-price
@@ -85,8 +106,15 @@ comment requires separate approval if still desired.
 
 Obsolete runs `33219808359` and `33221027676` still report
 queued at removed `legislative_trade_tracker.yml`, SHA
-`b9cf0f3e3863de69d92ae01f35f1c154a082f56a`. Prior ordinary/force-cancel attempts
-returned HTTP 409. No production dispatch or cutover until contained.
+`b9cf0f3e3863de69d92ae01f35f1c154a082f56a`. This session reverified each exact
+identity and retried both ordinary and force-cancel endpoints: **all four returned
+HTTP 409**. Both runs still have zero jobs and zero artifacts. GitHub reports their
+workflow ID `344663675` as `deleted`, which does not establish cancellation of
+already queued runs. No production dispatch or cutover until contained; PR #3
+remains draft/unmerged. Next external action: ask GitHub Support to terminally
+cancel these two stuck runs, or provide authoritative confirmation that neither
+can execute or upload protected state. No broad Actions shutdown or run deletion
+was attempted.
 
 ## Earlier operational evidence (historical)
 
