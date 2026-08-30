@@ -13,6 +13,12 @@ permissions:
   actions: write
   contents: read
 
+# Match the retired writer's immutable concurrency group. GitHub cancels any
+# older pending/in-progress member before this exact containment job starts.
+concurrency:
+  group: legislative-purchase-tracker
+  cancel-in-progress: true
+
 jobs:
   cancel-stale-writers:
     name: Cancel superseded Legislative writer runs
