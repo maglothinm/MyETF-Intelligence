@@ -2382,6 +2382,10 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
     """Create the Investor Edge heat-map page and link it from the native dashboard."""
 
     from urllib.parse import urlparse
+    try:
+        from .dashboard_insights import public_payload, safe_url
+    except ImportError:
+        from dashboard_insights import public_payload, safe_url
 
     horizons = ("5", "20", "60", "120")
 
@@ -2425,7 +2429,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         return f"${rendered}"
 
     def safe_http_url(value: Any) -> str:
-        raw = str(value or "").strip()
+        raw = safe_url(value)
         if not raw:
             return ""
         try:
@@ -2597,7 +2601,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         if isinstance(leaderboard_payload, dict)
         else []
     )
-    investors = [dict(item) for item in investors if isinstance(item, Mapping)]
+    investors = public_payload({"investors": [dict(item) for item in investors if isinstance(item, Mapping)]})["investors"]
     generated = (
         str((leaderboard_payload or {}).get("generated_utc") or _iso_utc())
         if isinstance(leaderboard_payload, dict)
@@ -2626,7 +2630,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         sample_number = _safe_float(
             first_value(item, "sample_count", "observation_count")
         )
-        has_observations = bool(sample_number is not None and sample_number > 0)
+        has_observations = bool(sample_number is not None and sample_number > 0 and item.get("status") not in {"insufficient_data", "unavailable", "error", "disabled"} and item.get("minimum_sample_met") is not False)
         confidence = _safe_float(
             first_value(item, "confidence", "identity_confidence")
         )
@@ -2719,7 +2723,9 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             f"<td class='owner-cell'><strong>{text_cell(owner, fallback='Unknown owner')}</strong>{owner_detail}</td>"
             f"<td class='{_edge_class(edge_value)}'><strong>{'—' if edge_value is None else f'{edge_value:.1f}'}</strong>{modifier_html}</td>"
             f"<td>{confidence_cell(item)}</td>"
-            f"<td>{integer_cell(sample_number)}</td>"
+            f"<td>{integer_cell(sample_number)}"
+            + (f"<small class='history-building'>Building history — insufficient completed observations (n = {integer_cell(sample_number)})</small>" if not has_observations or (sample_number is not None and sample_number < 3) else "")
+            + "</td>"
             f"{horizon_cells}"
             f"<td class='{_heat_class(hit_value, neutral=50.0)}'>{'—' if hit_value is None else f'{hit_value:.1f}%'}</td>"
             f"<td>{lag_html}</td>"
@@ -2740,18 +2746,18 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
 <head>
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1'>
-  <meta name='color-scheme' content='dark light'>
-  <meta http-equiv='Content-Security-Policy' content="default-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <meta name='color-scheme' content='dark'>
+  <meta http-equiv='Content-Security-Policy' content="default-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>PolitiTrack Investor Edge</title>
   <link rel='stylesheet' href='investor-edge.css'>
 </head>
 <body>
 <header class='site-header'>
   <div><p class='eyebrow'>Historical filer performance</p><h1>Investor Edge</h1><p class='subtitle'>Benchmark-relative outcomes from disclosed government purchases, emphasizing returns available from the first session after public observation.</p></div>
-  <div class='header-actions'><a class='button secondary' href='index.html'>Main dashboard</a><a class='button secondary' href='wallboard.html'>Wallboard</a></div>
+  <div class='header-actions'><a class='button secondary' href='index.html#investor-edge'>Main dashboard</a><button class='button' data-dialog='risk-dialog'>Methodology &amp; Risk</button><a class='button secondary' href='wallboard.html'>Wallboard</a></div>
 </header>
 <main>
-<section class='notice'><strong>How to read it:</strong><span>Edge 50 is neutral. Green means prior purchases beat their sector benchmark after disclosure; red means they lagged. Low-sample rows are deliberately faded. The PolitiTrack modifier is capped at ±12 points and never overrides an existing hard cap.</span></section>
+<details class='notice edge-reading'><summary>How to read the heat map</summary><p>Edge 50 is neutral. Green means prior purchases beat their sector benchmark after disclosure; red means they lagged. Low-sample rows are deliberately faded. The PolitiTrack modifier is capped at ±12 points and never overrides an existing hard cap. Insufficient history is unavailable, not neutral performance.</p></details>
 <section class='summary-grid'>
   <article class='metric-card'><span>Investors profiled</span><strong>{len(investors)}</strong></article>
   <article class='metric-card'><span>High-confidence profiles</span><strong>{sum(str(i.get('confidence_label') or '').casefold() == 'high' and (_safe_float(i.get('sample_count')) or 0) > 0 for i in investors)}</strong></article>
@@ -2881,8 +2887,18 @@ function filterInvestorGroups() {
     }
   }
 }
-if (input) input.addEventListener("input", filterInvestorGroups);
+let filterTimer;
+if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); filterTimer = setTimeout(filterInvestorGroups, 180);});
 """
+    # Reuse the complete generator-owned risk dialog and accessible tooltip behavior.
+    assets = Path(__file__).with_name("dashboard_assets")
+    shell = (assets / "index.html").read_text(encoding="utf-8")
+    risk_start = shell.index('<dialog id="risk-dialog"')
+    risk = shell[risk_start:shell.index("</dialog>", risk_start) + len("</dialog>")]
+    page = page.replace("</main>", '</main>' + risk + '<div id="tooltip" role="tooltip" hidden></div>')
+    page = page.replace("<th scope='col'>Confidence</th>", "<th scope='col'>Confidence <button class='help' data-tooltip='Confidence reflects completed observations, horizon coverage, identity quality and sample-size shrinkage.' aria-label='Explain confidence'>?</button></th>")
+    js = (assets / "common.js").read_text(encoding="utf-8") + "\n" + js + "\nPT.setupDialogsAndTooltips();\n"
+    css = (assets / "styles.css").read_text(encoding="utf-8") + "\n" + css + "\n" + (assets / "investor-edge-overrides.css").read_text(encoding="utf-8")
     (output_dir / "investor-edge.html").write_text(page, encoding="utf-8")
     (output_dir / "investor-edge.css").write_text(css, encoding="utf-8")
     (output_dir / "investor-edge.js").write_text(js, encoding="utf-8")
@@ -2895,6 +2911,6 @@ if (input) input.addEventListener("input", filterInvestorGroups);
         index = index_path.read_text(encoding="utf-8")
         marker = '<div class="header-actions">'
         link = '<a class="button secondary" href="investor-edge.html">Investor Edge</a>'
-        if link not in index and marker in index:
+        if 'href="#investor-edge"' not in index and link not in index and marker in index:
             index = index.replace(marker, marker + "\n      " + link, 1)
             index_path.write_text(index, encoding="utf-8")

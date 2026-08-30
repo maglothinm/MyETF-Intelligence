@@ -349,7 +349,7 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
         "Filer",
         "Owner / account",
         "Edge",
-        "Confidence",
+        "Confidence ?",
         "Observations",
         "5D followable α",
         "20D followable α",
@@ -372,7 +372,7 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
     assert cells[3].get_text(" ", strip=True) == "71.5 +5 modifier"
     assert "heat-pos-3" in (cells[3].get("class") or [])
     assert cells[4].get_text(" ", strip=True) == "60.0% Medium"
-    assert cells[5].get_text(" ", strip=True) == "2"
+    assert cells[5].get_text(" ", strip=True).startswith("2 Building history")
     assert [cells[index].get_text(" ", strip=True) for index in range(6, 10)] == [
         "+2.25%",
         "-1.50%",
@@ -470,7 +470,7 @@ def test_dashboard_addon_uses_em_dash_for_unavailable_neutral_metrics(
     cells = main.find_all("td", recursive=False)
     assert cells[3].get_text(" ", strip=True) == "—"
     assert cells[4].get_text(" ", strip=True) == "—"
-    assert cells[5].get_text(" ", strip=True) == "0"
+    assert cells[5].get_text(" ", strip=True).startswith("0 Building history")
     assert all(cells[index].get_text(" ", strip=True) == "—" for index in range(6, 10))
     assert cells[10].get_text(" ", strip=True) == "—"
     assert cells[11].get_text(" ", strip=True) == "—"
