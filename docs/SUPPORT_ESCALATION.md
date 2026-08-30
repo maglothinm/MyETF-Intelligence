@@ -18,11 +18,14 @@ pagination was checked; its older incident comments do not resolve these runs.
 
 The owner explicitly authorized contacting GitHub and completing the existing
 revision into production. Deferred features and all state-safety gates remain
-unchanged. A proposed hourly task follow-up was rejected by host approval because
-recurring scheduled authority was not explicit. **No automation was created**;
-the owner has been asked for that separate approval. The Support portal remains
-at sign-in if a private ticket is desired; the public contact above succeeded
-without changing account credentials.
+unchanged. The initial hourly-follow-up request was rejected because recurring
+authority was not explicit. The owner then explicitly approved hourly checks and
+automatic resumption after containment. On **2026-08-30**, task follow-up
+**polititrack-production-unblock** was created successfully and verified
+**ACTIVE**, hourly, attached to this task. It stops after verified completion or
+an owner stop request; it does not bypass state gates or post duplicate reports.
+The Support portal remains at sign-in if a private ticket is desired; the public
+contact above succeeded without changing account credentials.
 
 ## Message
 

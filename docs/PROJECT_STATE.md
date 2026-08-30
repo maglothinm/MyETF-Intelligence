@@ -1,10 +1,12 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **contract-compatible revision remains draft PR #3. Current protected
-state and actual read-only restores passed; obsolete queued writers remain a
+Status: **contract-compatible revision remains draft PR #3. Prior protected
+checkpoints and read-only restores passed; newer scheduled state needs full
+verification before promotion. Obsolete queued writers remain a
 GitHub-service blocker. GitHub Community escalation submitted; production
-rollout now authorized but not performed. No merge, acceptance, or cutover.**
+rollout now authorized but not performed. Hourly task follow-up active. No merge,
+acceptance, or cutover.**
 
 ## Current revision and owner-held scope
 
@@ -35,8 +37,12 @@ passed Linux CI `33313630046`, attempt 1, with no artifacts. The current
 checkpoint-only follow-up `06fae22b3a46049dce5b32f73072e1138c43970d` adds two
 newly verified entries and passed
 [Linux CI 33314178604](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33314178604),
-attempt 1, job `99264428646`, with no artifacts. The current support-record
-follow-up changes documentation only; its own CI must pass before promotion.
+attempt 1, job `99264428646`, with no artifacts. Support-record commit
+`54ccae751a020597b8a4e1167c6528dbc0b590e5` passed
+[Linux CI 33315075463](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33315075463),
+attempt 1, job `99266876236`: all 244 tests and verify.sh passed, no artifacts.
+The current follow-up records the approved schedule only; its CI is attached to
+PR #3 and must pass independently before promotion.
 The owner subsequently authorized contacting GitHub and completing this revision
 into production. This supersedes the earlier lack of promotion authority, not
 the held-feature scope or any safety gate (D-2026-08-30-017).
@@ -69,8 +75,8 @@ completed with zero network/model requests/emails and unchanged source hashes.
 Bash/WSL is unavailable locally. **All 58 Bash checks and full verify.sh passed
 on Linux CI 33313544655**; they are not represented as local Windows passes.
 
-Existing schedules advanced independently during revision. Current unexpired
-protected artifacts observed on 2026-08-30, all successful attempt 1 on main `4a9135a`:
+Existing schedules advanced independently during revision. Last fully verified
+protected checkpoint on 2026-08-30, all successful attempt 1 on main `4a9135a`:
 
 | Pipeline | Run | Producer job | Artifact |
 |---|---:|---:|---:|
@@ -99,6 +105,22 @@ and `.remediation/verify_live_state.py`.
 Before eventual promotion, re-query for newer producers and refresh only newly
 exported, hash-verified successors if necessary. Never fall back to older allowed
 state or initialize a new baseline.
+
+At **2026-08-30 15:39 UTC**, the hourly-follow-up setup session observed newer
+Legislative and AI artifacts from the existing main schedules:
+
+| Pipeline | Newest observed artifact | Run / attempt | Successful producer job |
+|---|---:|---|---:|
+| Legislative | `9734211271` | `33318579174` / 1 | `99276401831` |
+| Executive | `9732455687` (unchanged) | `33312565343` / 1 | `99260139758` |
+| AI | `9734221839` | `33318614858` / 1 | `99276494661` |
+
+All were unexpired with canonical main `4a9135a` and expected workflow identities.
+This was a **metadata check only** for the new artifacts: ZIP contents, inventories,
+ledger continuity and exact allowlist eligibility have **not** been verified.
+The earlier table is the last fully verified checkpoint, not the current restore
+selection. Do not fall back to it; export/verify newer state and refresh exact
+allowlist entries before promotion. The setup session wrote no production state.
 
 No revised code was deployed. Existing pre-rename Pages and successful main
 publisher run `33312700469` remain the deployment evidence. Live adjusted-price
@@ -132,10 +154,18 @@ The request asks GitHub staff to terminally cancel the two runs or confirm that
 neither can execute/upload, while preserving all artifacts and unrelated runs.
 No broad Actions shutdown, run deletion, or new account subscription was tried.
 
-The proposed hourly follow-up was rejected by host approval because explicit
-recurring scheduled authority is required. No schedule was created; that approval
-has been requested from the owner. Browser Support sign-in is optional for a
-private ticket, not a prerequisite for the already submitted public escalation.
+The initial hourly follow-up was rejected because recurring authority was not
+explicit. The owner then answered **"Yes"** to hourly checks and automatic rollout
+resumption once containment is proven. On **2026-08-30**, task follow-up
+**polititrack-production-unblock** was created successfully and its saved
+configuration verified: **ACTIVE**, every hour, attached to this current task.
+It checks the existing report and exact stale runs without duplicate posts or
+repeated unchanged cancel requests. It may resume only the existing approved
+revision after every safety gate passes, and pauses after verified completion or
+an owner stop request. Deferred features remain held. See D-2026-08-30-018.
+The local task requires the computer and app to remain running. Browser Support
+sign-in is optional for a private ticket, not a prerequisite for the submitted
+public escalation.
 
 An independent read-only release review found no new concrete code blocker.
 Containment and a fresh checkpoint review must occur **before merge**, because

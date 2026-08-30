@@ -1,7 +1,7 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-30 UTC**
-Status: **revision verified; GitHub support escalation posted; production held for obsolete-run containment**
+Status: **hourly follow-up active; revision verified; production held for obsolete-run containment**
 Work record: [issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3), unmerged.
 Support: [official Community Actions escalation](https://github.com/community/community/discussions/205874#discussioncomment-18207352).
@@ -13,15 +13,16 @@ granted autonomy to get the current revision into production. Promotion no longe
 needs a new general permission request, but **all containment and state-safety
 gates still apply**. Simulation Gmail, extra durable storage, persistent
 Git-backed paper agent, AI recovery journal and dependent dispatch Worker remain
-held. AGENTS.md is unchanged. See D-2026-08-30-017.
+held. AGENTS.md is unchanged. The subsequent explicit "Yes" authorizes hourly
+checks and automatic continuation after containment; see D-017 and D-018.
 
 Canonical repository **1349678672** remains public
 **maglothinm/MyETF-Intelligence**.
 Remote: `https://github.com/maglothinm/MyETF-Intelligence.git`.
 Branch: **codex/production-remediation**. Default main remains
 **4a9135a8c12af6eebfce01cf33772ffa13e41951**.
-Published branch head before this documentation-only support follow-up:
-**06fae22b3a46049dce5b32f73072e1138c43970d**.
+Published branch head before this documentation-only schedule follow-up:
+**54ccae751a020597b8a4e1167c6528dbc0b590e5**.
 Implementation: **020351a86861020d1a0f579b8ccdd7f218be3994**.
 Fresh-checkout CI setup fix: **4cb6d5677daa60fff507d86502e156b70200a8ff**.
 
@@ -69,16 +70,29 @@ The Support portal is at sign-in if a private ticket is desired. Public contact
 already succeeded; browser login is not blocking that contact. Never request or
 expose the owner's password, tokens, or session cookies.
 
-## Scheduled follow-up not created
+## Hourly follow-up active
 
-An hourly follow-up was proposed to check this escalation and resume the
-authorized rollout after containment. Host approval rejected it because recurring
-scheduled execution needs explicit owner authorization. **No schedule exists.**
-The agent asked the owner: "May I check hourly and resume the approved rollout
-automatically once GitHub confirms the stale runs are contained?"
-Do not retry, create a narrower substitute, or use a background workaround unless
-the owner explicitly approves recurring execution. Continue safe current-turn
-work without treating the rejected schedule as an active monitor.
+The owner explicitly answered **"Yes"** to hourly checks and automatic resumption
+of the approved rollout once the obsolete runs are proven unable to execute.
+This resolves the earlier rejected schedule request; no workaround was used.
+
+Created and saved configuration verified on **2026-08-30**:
+
+- Name: **PolitiTrack production unblock**.
+- Automation ID: **polititrack-production-unblock**.
+- Status/cadence: **ACTIVE**, every hour.
+- Type: current-task follow-up, task **01a05273-f496-73a0-b05f-fdb3d8828569**.
+- It checks the existing escalation/replies and two exact stale runs, does not
+  duplicate reports or retry unchanged cancellation failures, and preserves all
+  existing scope and safety constraints.
+- It resumes the authorized revision only after containment, refreshed state
+  continuity and green CI; it pauses after verified rollout completion or an
+  owner stop request. It does not unlock deferred features or paid purchases.
+
+The local follow-up requires the computer and app to remain running. Update this
+existing automation instead of creating duplicates. The automation is not a
+GitHub production writer or proof of containment. Unchanged external state is
+expected; record only meaningful new evidence, not hourly documentation churn.
 
 ## Completed revision and verification
 
@@ -89,22 +103,32 @@ effective-sample gating, immutable Edge archives/aliases, and both simulations'
 permitted outputs without live credentials. See [STATE_SAFETY.md](STATE_SAFETY.md).
 An independent read-only release review found no new concrete code blocker.
 
-- Latest local full suite: **244 passed in 16.67s**.
+- Latest local full suite: **244 passed in 16.51s** (support-record session).
 - Static checks: 49 Python files, 5 embedded Python blocks, 5 JSON, 11 YAML;
   three generated JavaScript files, recovery manifest and credential scan passed.
 - Windows has no Bash; Linux provides the full 58 shell checks and verify.sh.
 - Latest published-head CI:
-  [33314178604](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33314178604),
-  **success**, attempt **1**, job **99264428646**, head **06fae22**.
+  [33315075463](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33315075463),
+  **success**, attempt **1**, job **99266876236**, head **54ccae7**.
   Full 244-test suite and verify.sh passed; no artifacts were uploaded.
 - Prior corrected CI **33313544655** and documentation CI **33313630046** passed.
   Initial CI **33313439413** failed because pytest's temporary parent was absent
   on a fresh checkout; corrected by **4cb6d56**, not suppressed.
-- This support-documentation follow-up requires its own CI check after push.
+- This schedule-documentation follow-up requires its own CI check after push.
 - Prior actual-input dashboard and deterministic TEST scoring passed without
   model/market/notification calls and with original input hashes unchanged.
 
 ## Latest verified protected-state checkpoint
+
+**Newer metadata observed at 2026-08-30 15:39 UTC:** existing schedules advanced
+Legislative to artifact **9734211271**, run **33318579174**, attempt **1**, job
+**99276401831**, and AI to artifact **9734221839**, run **33318614858**, attempt
+**1**, job **99276494661**. Executive remains **9732455687**. All are unexpired,
+canonical main **4a9135a**, with expected workflow identities and successful jobs.
+The new ZIP contents, inventories, continuity and allowlist eligibility have
+**not been verified**. The table below is the last fully verified checkpoint,
+not the newest selection. Export/verify new state before adding any exact
+allowlist entries or promoting; never fall back silently to the older table.
 
 All artifacts below were unexpired and verified with the actual shared helper:
 global selection, repository/branch/workflow, exact successful attempt/job,

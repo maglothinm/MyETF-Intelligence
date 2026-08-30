@@ -297,3 +297,23 @@ The host rejected creation of a persistent hourly rollout follow-up because the
 owner had not explicitly requested recurring scheduled execution. No automation
 was created and no workaround was used. Explicit recurring approval has been
 requested separately; current-turn work and the successful GitHub contact stand.
+
+## D-2026-08-30-018 — Approve hourly checks and gated automatic continuation
+
+**Decision:** The owner explicitly answered "Yes" to: "May I schedule hourly
+checks and automatically resume the approved rollout once those obsolete runs
+are proven unable to execute?" This supplies the recurring authority absent in
+D-017. The task follow-up **polititrack-production-unblock** was created and its
+saved configuration verified ACTIVE, hourly, attached to the current task.
+
+**Consequence:** Check the existing support escalation and the exact obsolete
+runs without duplicate reports or repetitive unchanged cancellation requests.
+Once containment is proven, continue the existing approved rollout only after
+fresh artifact lineage/continuity checks, older-producer drainage and green CI.
+All contract safeguards and held-feature scope remain unchanged. This is a Codex
+task follow-up, not an additional scheduled production-state writer.
+
+Pause the follow-up after verified completion or an owner stop request. Do not
+create duplicate automations, buy services, or treat scheduling as proof that
+GitHub resolved the stuck queue. The computer and app must remain running for
+local scheduled work. Record meaningful changes rather than hourly doc churn.
