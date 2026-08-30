@@ -1,8 +1,9 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **contract-compatible remediation revised and locally verified on a
-review branch; Linux CI and live production acceptance pending. No cutover.**
+Status: **contract-compatible remediation committed locally and verified;
+public GitHub publication requires explicit owner approval. Linux CI and live
+production acceptance remain pending. No cutover.**
 
 ## Current revision and owner-held scope
 
@@ -15,8 +16,11 @@ ignored `.remediation/held-feature-drafts/`; they are not deployed or committed.
 Canonical repository ID `1349678672` remains public
 `maglothinm/MyETF-Intelligence`; rechecked default `main` is
 `4a9135a8c12af6eebfce01cf33772ffa13e41951`. Revision branch:
-`codex/production-remediation`. This record accompanies the reviewable revision;
-no merge, production dispatch, mail, deployment, rename, or archive is claimed.
+`codex/production-remediation`. Implementation commit: `020351a86861020d1a0f579b8ccdd7f218be3994`.
+The attempted branch push was rejected by the host safety review because publishing
+the full code payload to a public repository was not explicitly authorized in the
+current request. No remote branch/PR was created; the rejection was not bypassed.
+No merge, production dispatch, mail, deployment, rename, or archive is claimed.
 Unrelated pre-existing `.codex/` remains preserved.
 
 The active revision consolidates artifact-only restore/seal validation, preserves

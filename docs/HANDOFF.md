@@ -1,7 +1,7 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-30 UTC**
-Status: **reduced-scope revision locally verified; review/Linux CI pending**
+Status: **revision committed locally; public publication blocked pending approval**
 Work record: [canonical issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 
 ## Task, identity, and branch
@@ -15,8 +15,12 @@ same contract question again or silently reactivate the drafts. AGENTS.md is unc
 - Remote `https://github.com/maglothinm/MyETF-Intelligence.git`.
 - Revision branch **codex/production-remediation**, based on rechecked main
   **4a9135a8c12af6eebfce01cf33772ffa13e41951**.
-- This handoff accompanies the revision commit. Resolve its current SHA with Git;
-  do not describe the baseline SHA as the revision SHA.
+- Implementation commit: **020351a86861020d1a0f579b8ccdd7f218be3994**.
+  A subsequent documentation-only commit records the publication blocker.
+- Branch push was rejected before execution by the host safety review: the full
+  payload would be published to a public GitHub repository without sufficiently
+  explicit current-turn approval. No push, remote branch, PR, or new CI run.
+  Do not bypass the rejection with another tool, token, or upload route.
 - No default-branch merge, production dispatch, mail, deployment, rename or archive.
 - Preserve unrelated `.codex/`. Held feature drafts, including snapshots of their
   prior analyst/workflow wiring, are recoverable under ignored
@@ -67,9 +71,11 @@ sample coverage, and browser/Safari behavior remain unverified.
 
 ## Remaining blockers and next safe action
 
-1. Commit/push only the reviewed active revision, leaving `.codex/` and held
-   drafts untouched. Open a draft PR against canonical main and verify its offline
-   Investor Edge tests workflow (including Linux verify.sh). Do not merge.
+1. Request explicit owner approval to publish implementation commit `020351a`
+   plus this documentation follow-up to public canonical GitHub. Until approved,
+   keep both local. After approval, push only the reviewed revision, open a draft
+   PR, and verify the read-only offline CI (including Linux verify.sh). Do not
+   merge or dispatch production. Leave `.codex/` and held drafts untouched.
 2. Runs [33219808359](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33219808359)
    and [33221027676](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33221027676)
    remain queued at removed `legislative_trade_tracker.yml`, SHA
