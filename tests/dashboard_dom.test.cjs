@@ -1,6 +1,7 @@
 'use strict';
 
-// JSDOM checks DOM behavior, not browser rendering, touch, CSP, or audio policy.
+// JSDOM checks DOM behavior, not browser rendering, physical touch, CSP, or audio policy.
+// Pointer capabilities, clocks and geometry below are explicit deterministic stubs.
 // All resources are fixture files and fetch is an in-memory same-origin adapter.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,6 +15,65 @@ const builtModel = JSON.parse(fs.readFileSync(path.join(build, 'data/dashboard-i
 const KEY = 'polititrack.notifications.v1';
 const copy = value => JSON.parse(JSON.stringify(value));
 const tick = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+function pointer(env, node, type, options = {}) {
+  const event = new env.window.MouseEvent(type, {bubbles: true, cancelable: true, ...options});
+  Object.defineProperty(event, 'pointerType', {value: options.pointerType || 'mouse'});
+  node.dispatchEvent(event);
+  return event;
+}
+
+function tooltipClock(window) {
+  const originalSet = window.setTimeout, originalClear = window.clearTimeout;
+  let now = 0, sequence = 0;
+  const pending = new Map();
+  window.setTimeout = (callback, delay = 0, ...args) => {
+    const id = ++sequence;
+    pending.set(id, {at: now + Number(delay), callback: () => callback(...args)});
+    return id;
+  };
+  window.clearTimeout = id => pending.delete(id);
+  return {
+    advance(milliseconds) {
+      const until = now + milliseconds;
+      for (;;) {
+        const next = [...pending].filter(([, item]) => item.at <= until).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+        if (!next) break;
+        pending.delete(next[0]); now = next[1].at; next[1].callback();
+      }
+      now = until;
+    },
+    restore() { pending.clear(); window.setTimeout = originalSet; window.clearTimeout = originalClear; }
+  };
+}
+
+function animationFrames(window) {
+  const originalRequest = window.requestAnimationFrame, originalCancel = window.cancelAnimationFrame;
+  let sequence = 0;
+  const pending = new Map();
+  window.requestAnimationFrame = callback => { const id = ++sequence; pending.set(id, callback); return id; };
+  window.cancelAnimationFrame = id => pending.delete(id);
+  return {
+    flush() { const callbacks = [...pending.values()]; pending.clear(); callbacks.forEach(callback => callback(0)); },
+    restore() { pending.clear(); window.requestAnimationFrame = originalRequest; window.cancelAnimationFrame = originalCancel; }
+  };
+}
+
+// Observe whether the application blocked activation, then prevent only JSDOM's
+// navigation default. A missing navigation implementation is not a passing result.
+function activationWasBlocked(env, node, pointerType = 'mouse') {
+  let blocked;
+  const observe = event => { blocked = event.defaultPrevented; event.preventDefault(); };
+  env.doc.addEventListener('click', observe, {once: true});
+  const event = pointer(env, node, 'click', {pointerType});
+  env.doc.removeEventListener('click', observe);
+  // A help-preview handler can intentionally stop propagation before observation.
+  return blocked ?? event.defaultPrevented;
+}
+
+function rect(left, top, width, height) {
+  return {left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() { return this; }};
+}
 
 function fixtures() {
   const filings = Array.from({length: 65}, (_, index) => ({filing_key: 'fixture-' + index, report_id: 'fixture-' + index,
@@ -55,6 +115,9 @@ async function dashboard(options = {}) {
   const dom = new JSDOM(fs.readFileSync(path.join(build, 'index.html'), 'utf8'), {url: 'https://dashboard.test/PolitiTrack/',
     runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole});
   const {window} = dom;
+  window.matchMedia = query => ({matches: Boolean(options.coarse && /pointer:\s*coarse|hover:\s*none/.test(query)), media: query,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}});
+  if (options.visualViewport) window.visualViewport = Object.assign(new window.EventTarget(), options.visualViewport);
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   window.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new window.Event('close')); };
   window.addEventListener('error', event => errors.push(event.error?.message || event.message));
@@ -84,7 +147,11 @@ async function dashboard(options = {}) {
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
   }
-  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, close: () => window.close()};
+  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, close: () => {
+    // Disconnect any active tooltip layout observers before destroying the DOM.
+    doc.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+    window.close();
+  }};
 }
 
 test('Overview loads only compact insights; sections fetch their ledgers lazily', async t => {
@@ -249,14 +316,187 @@ test('new historical replay success/failure is visibly simulated without invente
   assert.deepEqual(env.errors, []);
 });
 
-test('tooltips support hover, focus, click, Escape and outside dismissal including dialogs', async t => {
+test('tooltips delay mouse hover, cancel departed targets and preserve child traversal', async t => {
   const env = await dashboard(); t.after(env.close);
   const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
-  help.dispatchEvent(new env.window.Event('pointerover', {bubbles: true})); assert.equal(tip.hidden, false);
-  assert.equal(help.getAttribute('aria-describedby'), 'tooltip');
-  help.dispatchEvent(new env.window.Event('pointerout', {bubbles: true})); assert.equal(tip.hidden, true);
+  const clock = tooltipClock(env.window); t.after(clock.restore);
+  const first = env.doc.createElement('span'), second = env.doc.createElement('span');
+  first.textContent = 'First'; second.textContent = 'Second'; help.replaceChildren(first, second);
+  pointer(env, first, 'pointerover');
+  clock.advance(249); assert.equal(tip.hidden, true, 'Incidental hover remains quiet');
+  pointer(env, first, 'pointerout', {relatedTarget: second});
+  pointer(env, second, 'pointerover', {relatedTarget: first});
+  clock.advance(101); assert.equal(tip.hidden, false, 'Traversal within one control does not restart its delay');
+  pointer(env, second, 'pointerout', {relatedTarget: first});
+  pointer(env, first, 'pointerover', {relatedTarget: second});
+  assert.equal(tip.hidden, false, 'Open help does not flicker across nested content');
+  pointer(env, first, 'pointerout', {relatedTarget: env.doc.body});
+  clock.advance(150);
+  assert.equal(tip.hidden, true);
+  pointer(env, help, 'pointerover'); clock.advance(100);
+  pointer(env, help, 'pointerout', {relatedTarget: env.doc.body}); clock.advance(1000);
+  assert.equal(tip.hidden, true, 'A departed target never opens later');
+  assert.equal(help.hasAttribute('aria-describedby'), false);
+  assert.deepEqual(env.errors, []);
+});
+
+test('a pointer can cross into the bubble to read it without losing the explanation', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  const clock = tooltipClock(env.window); t.after(clock.restore);
+  pointer(env, help, 'pointerover'); clock.advance(350);
+  pointer(env, help, 'pointerout', {relatedTarget: env.doc.body}); clock.advance(30);
+  pointer(env, tip, 'pointerover', {relatedTarget: env.doc.body}); clock.advance(300);
+  assert.equal(tip.hidden, false, 'Briefly crossing the visual gap does not dismiss readable help');
+  pointer(env, tip, 'pointerout', {relatedTarget: env.doc.body}); clock.advance(150);
+  assert.equal(tip.hidden, true);
+});
+
+test('core navigation, Actions and signal concepts resolve authoritative contextual help', async t => {
+  const env = await dashboard({change(data) {
+    data['dashboard-insights'].signals = [{analysis_id: 'help-signal', classification: 'watchlist', ticker: 'HELP',
+      edge_status: 'insufficient_data', edge_observation_count: 1, source_url: 'https://example.test/filing/help', evidence: []}];
+  }}); t.after(env.close);
+  assert.equal(Object.isFrozen(env.window.PT.HELP), true, 'Core definitions share a frozen source');
+  const checks = [
+    ['.nav-links a[href="#investor-edge"], nav a[href="#investor-edge"]', 'investorEdge', /historical investments performed relative to relevant benchmarks/],
+    ['nav a[href="#agent"]', 'agentWorkspace', /simulated \$10,000 historical replay/],
+    ['.header-actions [data-dialog="actions-dialog"]', 'actions', /Opens controls/],
+    ['#run-simulation-link', 'runSimulation', /isolated TEST workflow/],
+    ['#run-10k-agent-link', 'historicalReplay', /does not place real trades/],
+    ['[aria-label="Explain final score"]', 'finalScore', /not a probability of profit or a recommendation/],
+    ['[aria-label="Explain Investor Edge confidence"]', 'edgeConfidence', /completed observations, identity quality and sample-size adjustment/]
+  ];
+  const tip = env.byId('tooltip');
+  for (const [selector, key, copyPattern] of checks) {
+    const target = env.doc.querySelector(selector);
+    assert.ok(target, `Missing contextual-help target: ${selector}`);
+    assert.equal(target.dataset.tooltipKey, key);
+    const dialog = target.closest('dialog');
+    if (dialog) dialog.showModal();
+    target.focus();
+    assert.equal(tip.hidden, false, `Focus opens ${selector}`);
+    assert.match(tip.textContent, copyPattern);
+    assert.equal(target.getAttribute('aria-describedby'), 'tooltip');
+    target.blur();
+    if (dialog) dialog.close();
+  }
+  await env.navigate('#signals', () => env.requests.includes('ai-analyses'));
+  for (const [label, key, copyPattern] of [
+    ['Base score / Modifier', 'baseScoreModifier', /bounded Investor Edge adjustment/],
+    ['Entry-review band', 'entryReviewBand', /not an order, target price, guaranteed fill or recommendation/],
+    ['Chase ceiling', 'chaseCeiling', /not an instruction to buy/],
+    ['Signal expiration', 'signalExpiration', /Missing expiration data remains unavailable/],
+    ['Followable alpha', 'followableAlpha', /post-disclosure observation point/],
+    ['Followable hit rate', 'followableHitRate', /completed post-disclosure observations/],
+    ['Sector edge', 'sectorEdge', /Limited samples remain unavailable/]
+  ]) {
+    const target = env.doc.querySelector(`#signals [aria-label="Explain ${label}"]`);
+    assert.ok(target, `Missing signal help: ${label}`);
+    assert.equal(target.dataset.tooltipKey, key);
+    target.focus(); assert.match(tip.textContent, copyPattern); target.blur();
+  }
+  for (const key of ['transactionOutcomes', 'disclosureOutcomes', 'confidenceShrinkage']) {
+    const help = env.doc.querySelector(`#investor-edge button.help[data-tooltip-key="${key}"]`);
+    assert.ok(help, `Investor Edge concept help: ${key}`);
+    assert.ok(help.getAttribute('aria-label')?.startsWith('Explain '));
+    assert.ok(!help.closest('article').hasAttribute('data-tooltip'), 'Whole explanatory cards are not hover targets');
+  }
+  assert.match(env.byId('ten-k-simulation-panel').textContent, /SIMULATED — SINGLE-RUN HISTORICAL REPLAY/);
+  assert.match(env.byId('ten-k-simulation-panel').textContent, /No persistent portfolio history yet/);
+  assert.match(env.byId('notifications-dialog').textContent, /this page, never external alerts/);
+  assert.deepEqual(env.errors, []);
+});
+
+test('desktop tooltip-enabled links and Actions retain immediate normal activation', async t => {
+  const env = await dashboard(); t.after(env.close);
+  for (const selector of ['nav a[href="#investor-edge"]', 'nav a[href="#agent"]', '#run-simulation-link', '#run-10k-agent-link']) {
+    const link = env.doc.querySelector(selector);
+    pointer(env, link, 'pointerdown'); link.focus();
+    assert.equal(activationWasBlocked(env, link), false, selector + ' must work on its first desktop click');
+  }
+  env.doc.querySelector('.header-actions [data-dialog="actions-dialog"]').click();
+  assert.equal(env.byId('actions-dialog').open, true);
+  assert.deepEqual(env.errors, []);
+});
+
+test('touch workflow help uses separate controls and never launches an action while reading', async t => {
+  const env = await dashboard({coarse: true}); t.after(env.close);
+  env.doc.querySelector('.header-actions [data-dialog="actions-dialog"]').click();
+  const tip = env.byId('tooltip');
+  for (const id of ['run-simulation-link', 'run-10k-agent-link']) {
+    const link = env.byId(id), help = link.parentElement.querySelector('button.help');
+    assert.ok(help, `${id} has a separate accessible explanation control`);
+    assert.equal(help.dataset.tooltipKey, link.dataset.tooltipKey);
+    assert.equal(help.closest('a'), null, 'A help button cannot be nested inside the workflow link');
+    assert.ok(help.getAttribute('aria-label')?.startsWith('Explain '));
+    let linkActivations = 0;
+    link.addEventListener('click', () => linkActivations++);
+    pointer(env, help, 'pointerdown', {pointerType: 'touch'}); help.focus();
+    pointer(env, help, 'click', {pointerType: 'touch'});
+    assert.equal(tip.hidden, false);
+    assert.equal(linkActivations, 0, 'Reading help does not activate the workflow link');
+    pointer(env, help, 'pointerout', {pointerType: 'touch', relatedTarget: env.doc.body});
+    assert.equal(tip.hidden, false, 'Touch explanation remains pinned for reading');
+    pointer(env, link, 'pointerdown', {pointerType: 'touch'});
+    assert.equal(activationWasBlocked(env, link, 'touch'), false, 'The adjacent action still needs just one tap');
+    assert.equal(tip.hidden, true, 'Activating the action does not flash an unreadable tooltip');
+    assert.equal(linkActivations, 1);
+  }
+  assert.deepEqual(env.errors, []);
+});
+
+test('only explanatory touch navigation previews on first tap; second tap and ordinary navigation work', async t => {
+  const env = await dashboard({coarse: true}); t.after(env.close);
+  const tip = env.byId('tooltip');
+  for (const selector of ['nav a[href="#investor-edge"]', 'nav a[href="#agent"]']) {
+    const link = env.doc.querySelector(selector);
+    pointer(env, link, 'pointerdown', {pointerType: 'touch'});
+    assert.equal(activationWasBlocked(env, link, 'touch'), true, 'First explanatory tap stays on the current page');
+    assert.equal(tip.hidden, false);
+    assert.match(tip.textContent, /Tap again to open/);
+    pointer(env, link, 'pointerout', {pointerType: 'touch', relatedTarget: env.doc.body});
+    assert.equal(tip.hidden, false);
+    pointer(env, link, 'pointerdown', {pointerType: 'touch'});
+    assert.equal(activationWasBlocked(env, link, 'touch'), false, 'Second intentional tap executes navigation');
+    assert.equal(tip.hidden, true);
+  }
+  const ordinary = env.doc.querySelector('nav a[href="#signals"]');
+  pointer(env, ordinary, 'pointerdown', {pointerType: 'touch'});
+  assert.equal(activationWasBlocked(env, ordinary, 'touch'), false, 'Ordinary navigation never needs a second tap');
+  assert.equal(env.window.PT.isCoarsePointer({pointerType: 'mouse'}), false, 'Actual mouse input overrides coarse device capability');
+  assert.equal(env.window.PT.isCoarsePointer({pointerType: 'touch'}), true);
+  assert.equal(env.window.PT.isCoarsePointer({}), true, 'Capability fallback is deterministic');
+  assert.deepEqual(env.errors, []);
+});
+
+test('keyboard help is immediate, preserves descriptions, and Escape cancels pending hover', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  const clock = tooltipClock(env.window); t.after(clock.restore);
+  help.setAttribute('aria-describedby', 'coverage-description retained-description');
   help.focus(); assert.equal(tip.hidden, false);
+  assert.deepEqual(help.getAttribute('aria-describedby').split(/\s+/), ['coverage-description', 'retained-description', 'tooltip']);
+  // A separate owner may add a description while a tooltip is visible.
+  help.setAttribute('aria-describedby', help.getAttribute('aria-describedby') + ' later-description');
   env.doc.dispatchEvent(new env.window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true})); assert.equal(tip.hidden, true);
+  assert.equal(help.getAttribute('aria-describedby'), 'coverage-description retained-description later-description');
+  help.blur(); pointer(env, help, 'pointerover'); clock.advance(100);
+  env.doc.dispatchEvent(new env.window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}));
+  clock.advance(1000); assert.equal(tip.hidden, true, 'Escape also cancels a pending tooltip');
+  help.focus(); assert.equal(tip.hidden, false);
+  pointer(env, help, 'pointerout', {relatedTarget: env.doc.body}); clock.advance(200);
+  assert.equal(tip.hidden, false, 'A keyboard-focused trigger retains help when the mouse moves away');
+  help.blur(); assert.equal(tip.hidden, true, 'Moving keyboard focus away closes unpinned help');
+  assert.deepEqual(env.errors, []);
+});
+
+test('explicit help pins immediately and supports toggle, outside and dialog dismissal', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  help.click(); assert.equal(tip.hidden, false);
+  pointer(env, help, 'pointerout', {relatedTarget: env.doc.body}); assert.equal(tip.hidden, false);
+  help.click(); assert.equal(tip.hidden, true, 'A second explicit help activation unpins');
   help.click(); assert.equal(tip.hidden, false);
   env.byId('situation-title').click(); assert.equal(tip.hidden, true);
   env.byId('notification-button').click();
@@ -267,6 +507,113 @@ test('tooltips support hover, focus, click, Escape and outside dismissal includi
   assert.equal(tip.hidden, true);
   assert.equal(tip.parentElement, env.doc.body);
   assert.equal(env.byId('notifications-dialog').open, true, 'Tooltip Escape does not close the containing dialog');
+  modalHelp.click(); assert.equal(tip.hidden, false);
+  env.byId('notifications-dialog').close(); assert.equal(tip.hidden, true);
+  assert.equal(modalHelp.hasAttribute('aria-describedby'), false);
+  assert.deepEqual(env.errors, []);
+});
+
+test('tooltip title, body and optional note render as inert text', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  const hostile = '<img src=x onerror="window.tooltipInjection=1"><script>window.tooltipInjection=2</script>';
+  help.dataset.tooltipTitle = 'Title ' + hostile;
+  help.dataset.tooltip = 'Body ' + hostile;
+  help.dataset.tooltipNote = 'Note ' + hostile;
+  help.focus();
+  for (const part of ['Title ', 'Body ', 'Note ']) assert.ok(tip.textContent.includes(part + hostile));
+  assert.equal(tip.querySelectorAll('img,script,[onerror]').length, 0);
+  assert.equal(env.window.tooltipInjection, undefined);
+  const plain = env.doc.querySelector('[aria-label="Explain run health"]');
+  plain.focus();
+  assert.ok(!tip.textContent.includes(hostile), 'Changing anchors removes prior rich content');
+  assert.deepEqual(env.errors, []);
+});
+
+test('tooltip positions and caret remain in the viewport under deterministic geometry', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  for (const [width, height] of [[1920, 1080], [1440, 900], [1180, 820], [820, 1180], [390, 844]]) {
+    Object.defineProperty(env.window, 'innerWidth', {configurable: true, value: width});
+    Object.defineProperty(env.window, 'innerHeight', {configurable: true, value: height});
+    const bubbleWidth = Math.min(340, width - 24), bubbleHeight = 110;
+    tip.getBoundingClientRect = () => rect(parseFloat(tip.style.left) || 0, parseFloat(tip.style.top) || 0, bubbleWidth, bubbleHeight);
+    for (const [left, top, placement] of [[0, 12, 'below'], [width - 44, height - 56, 'above'], [width / 2, height / 2, 'below']]) {
+      help.getBoundingClientRect = () => rect(left, top, 44, 44);
+      help.focus();
+      assert.equal(tip.hidden, false);
+      assert.equal(tip.dataset.placement, placement, `${width}×${height}: placement`);
+      const x = parseFloat(tip.style.left), y = parseFloat(tip.style.top);
+      assert.ok(x >= 12 && x + bubbleWidth <= width - 12, `${width}×${height}: horizontal bounds`);
+      assert.ok(y >= 12 && y + bubbleHeight <= height - 12, `${width}×${height}: vertical bounds`);
+      const caret = parseFloat(tip.style.getPropertyValue('--tooltip-arrow-x'));
+      assert.ok(caret >= 10 && caret <= bubbleWidth - 10, 'Caret remains on bubble edge');
+      assert.ok(Math.abs(x + caret - (left + 22)) <= 24, 'Caret remains near its trigger under edge clamping');
+      help.blur();
+    }
+  }
+  help.focus(); env.window.dispatchEvent(new env.window.Event('resize')); assert.equal(tip.hidden, true);
+  help.blur(); help.focus(); env.doc.dispatchEvent(new env.window.Event('scroll')); assert.equal(tip.hidden, true);
+  assert.deepEqual(env.errors, []);
+});
+
+test('tooltip geometry responds to layout mutations and dismisses detached anchors', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const frames = animationFrames(env.window); t.after(frames.restore);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  let anchorRect = rect(300, 100, 44, 44);
+  help.getBoundingClientRect = () => anchorRect;
+  tip.getBoundingClientRect = () => rect(parseFloat(tip.style.left) || 0, parseFloat(tip.style.top) || 0, 340, 110);
+  help.focus();
+  const previousTop = parseFloat(tip.style.top);
+  anchorRect = rect(300, 240, 44, 44);
+  help.parentElement.style.paddingTop = '140px';
+  await Promise.resolve(); frames.flush();
+  assert.equal(parseFloat(tip.style.top) - previousTop, 140, 'A layout change repositions the existing bubble');
+  help.remove(); await Promise.resolve(); frames.flush();
+  assert.equal(tip.hidden, true, 'A rerendered-away anchor cannot leave stale floating help');
+  assert.equal(help.hasAttribute('aria-describedby'), false);
+  assert.deepEqual(env.errors, []);
+});
+
+test('visual viewport offsets constrain zoomed tooltip placement and viewport events dismiss it', async t => {
+  const env = await dashboard({visualViewport: {offsetLeft: 60, offsetTop: 40, width: 390, height: 400}}); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  help.getBoundingClientRect = () => rect(404, 368, 44, 44);
+  tip.getBoundingClientRect = () => rect(parseFloat(tip.style.left) || 0, parseFloat(tip.style.top) || 0, 340, 110);
+  help.focus();
+  const x = parseFloat(tip.style.left), y = parseFloat(tip.style.top);
+  assert.ok(x >= 72 && x + 340 <= 438, 'Bubble fits the visible viewport horizontally');
+  assert.ok(y >= 52 && y + 110 <= 428, 'Bubble fits the visible viewport vertically');
+  assert.equal(tip.dataset.placement, 'above');
+  env.window.visualViewport.dispatchEvent(new env.window.Event('resize'));
+  assert.equal(tip.hidden, true);
+  help.blur(); help.focus();
+  env.window.visualViewport.dispatchEvent(new env.window.Event('scroll'));
+  assert.equal(tip.hidden, true);
+  assert.deepEqual(env.errors, []);
+});
+
+test('keyboard users can read overflowing help without moving focus or trapping it', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const tip = env.byId('tooltip'), help = env.doc.querySelector('[aria-label="Explain coverage status"]');
+  help.focus();
+  const content = tip.querySelector('.tooltip-content');
+  Object.defineProperty(content, 'clientHeight', {value: 24});
+  Object.defineProperty(content, 'scrollHeight', {value: 400});
+  const key = name => {
+    const event = new env.window.KeyboardEvent('keydown', {key: name, bubbles: true, cancelable: true});
+    help.dispatchEvent(event); return event;
+  };
+  assert.equal(key('ArrowDown').defaultPrevented, true);
+  assert.equal(content.scrollTop, 40);
+  assert.equal(key('End').defaultPrevented, true);
+  assert.equal(content.scrollTop, 376);
+  content.dispatchEvent(new env.window.Event('scroll', {bubbles: true}));
+  assert.equal(tip.hidden, false, 'Scrolling the explanation retains it');
+  assert.equal(env.doc.activeElement, help, 'Reading never steals trigger focus');
+  assert.equal(key('Tab').defaultPrevented, false, 'Normal tab navigation remains available');
+  key('Escape'); assert.equal(tip.hidden, true);
   assert.deepEqual(env.errors, []);
 });
 
