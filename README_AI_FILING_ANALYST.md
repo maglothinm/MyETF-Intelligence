@@ -75,7 +75,10 @@ For a manual production run:
 
 Each successful scheduled or manual Legislative or Executive tracker run on the default branch automatically triggers the AI workflow. Pull-request collector runs are deliberately excluded from secret-bearing AI execution. Previously completed analysis IDs are skipped unless the model, rules, prompt version, or manual reanalysis setting changes.
 
-The default dashboard URL is `https://maglothinm.github.io/PolitiTrack/`. Set `DASHBOARD_URL` only when the deployment uses a different public or authenticated address.
+The verified pre-rename dashboard URL is
+`https://maglothinm.github.io/MyETF-Intelligence/`; the workflow derives the
+repository path at runtime and will follow the in-place rename. Set
+`DASHBOARD_URL` only for a deliberate custom or authenticated address.
 
 ## Dashboard output
 

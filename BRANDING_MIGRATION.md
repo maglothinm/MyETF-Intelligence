@@ -1,14 +1,22 @@
 # PolitiTrack branding and compatibility record
 
-## Completed identity cutover
+## Product rebrand complete; repository-settings cutover pending
 
-PolitiTrack is the product and repository name. The authoritative repository is `maglothinm/PolitiTrack`; `MyETF` and `MyETF-Intelligence` are historical aliases only.
+PolitiTrack is the product name and approved final repository name. The
+authoritative repository is ID `1349678672`, currently named
+`maglothinm/MyETF-Intelligence` and awaiting an authenticated in-place rename to
+`maglothinm/PolitiTrack`; `MyETF` and `MyETF-Intelligence` remain aliases.
 
-User-visible application text, dashboard links, alert titles, analyst instructions, fallback repository URLs, logger identity, and HTTP client identifiers use PolitiTrack. The public `maglothinm/MyETF` repository is a disabled, archived legacy record and is not an execution target.
+User-visible application text, alert titles, analyst instructions, logger identity,
+and HTTP client identifiers use PolitiTrack. Runtime-generated repository and
+Pages links follow `GITHUB_REPOSITORY`, so they use the current name and will move
+with the rename. Public `maglothinm/MyETF` is code-frozen and is not an execution
+target, but its Pages-disable and archive settings remain pending.
 
 ## Compatibility identifiers intentionally preserved
 
-The repository rename did not reset or rename durable state. These established identities remain unchanged:
+The product rebrand and pending repository rename do not reset or rename durable
+state. These established identities remain unchanged:
 
 - `.trade-tracker/legislative/`, `.trade-tracker/executive/`, and `.trade-tracker/ai/`;
 - `legislative-tracker-state`, `executive-tracker-state`, and `ai-analysis-state`;
@@ -18,7 +26,9 @@ The repository rename did not reset or rename durable state. These established i
 - legacy distribution and provenance filenames, including `MyETF-government-trade-tracker-fast-track.zip` and `myetf-investor-edge-implementation.zip`;
 - historical recovery reports and commit messages that accurately record the repository name at the time.
 
-A preserved compatibility string is not permission to target the archived public repository. Runtime repository fallbacks and generated links must resolve to `maglothinm/PolitiTrack`.
+A preserved compatibility string is not permission to target the legacy public
+repository. Runtime-generated links must follow the canonical repository identity;
+hard-coded fallbacks use the approved `maglothinm/PolitiTrack` target.
 
 ## State-preserving rule
 
@@ -30,7 +40,6 @@ Simulation state is isolated and may use only simulation-named artifacts. It mus
 
 | Name | Meaning after cutover |
 |---|---|
-| `PolitiTrack` | Current product and sole canonical repository. |
-| `MyETF-Intelligence` | Previous name of the same private repository. |
-| `MyETF` | Archived public legacy fork and rollback record. |
-
+| `PolitiTrack` | Current product and approved final name of repository ID `1349678672`. |
+| `MyETF-Intelligence` | Current pre-rename GitHub name of the same canonical repository. |
+| `MyETF` | Code-frozen public legacy fork; settings archive remains pending. |

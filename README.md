@@ -2,7 +2,11 @@
 
 PolitiTrack is the canonical production system for monitoring public U.S. government financial disclosures, preserving the underlying evidence, ranking newly disclosed equity purchases, and evaluating those signals in a paper-only research portfolio.
 
-The authoritative repository is [`maglothinm/PolitiTrack`](https://github.com/maglothinm/PolitiTrack). `MyETF` and `MyETF-Intelligence` are historical aliases for this program; the public `MyETF` fork is legacy-only and must not run production workflows.
+The authoritative identity is GitHub repository ID `1349678672`, currently
+[`maglothinm/MyETF-Intelligence`](https://github.com/maglothinm/MyETF-Intelligence)
+and approved for an in-place rename to `maglothinm/PolitiTrack`. `MyETF`,
+`MyETF-Intelligence`, and `PolitiTrack` are aliases for one program; the public
+`MyETF` fork is legacy-only and must not run production workflows.
 
 ## Production topology
 
@@ -18,16 +22,18 @@ The authoritative repository is [`maglothinm/PolitiTrack`](https://github.com/ma
 The deployed dashboard is:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/
+https://maglothinm.github.io/MyETF-Intelligence/
 ```
 
 The portrait and ultrawide wallboard is:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/wallboard.html
+https://maglothinm.github.io/MyETF-Intelligence/wallboard.html
 ```
 
-GitHub Pages is a separate access boundary from repository privacy. Confirm that the dashboard's visibility is appropriate before treating a private repository as protection for published Pages data.
+Those are the verified pre-rename URLs; GitHub Pages will use the PolitiTrack path
+after the in-place repository rename. GitHub Pages is a separate access boundary
+from repository privacy. Confirm the dashboard's visibility independently.
 
 ## Durable state contract
 

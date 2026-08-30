@@ -71,7 +71,7 @@ The `Publish government trade dashboard` workflow restores the newest Legislativ
 The production URL is:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/
+https://maglothinm.github.io/MyETF-Intelligence/
 ```
 
 GitHub Pages must be enabled once under **Settings → Pages → Build and deployment → Source → GitHub Actions**. The dashboard workflow then runs automatically after either tracker finishes and can also be started manually.

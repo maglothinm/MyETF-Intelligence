@@ -1,8 +1,13 @@
 # PolitiTrack CHG90 wallboard and private-repository operation
 
-## Final topology
+## Approved topology and current cutover state
 
-The canonical production repository is `maglothinm/PolitiTrack`. It is a private, standalone repository. The former private name `MyETF-Intelligence` is a historical alias, and the public `MyETF` fork is an archived legacy/rollback record whose Actions and Pages deployment must remain disabled.
+The canonical production identity is repository ID `1349678672`, currently named
+`maglothinm/MyETF-Intelligence`. GitHub currently reports it public; the approved
+settings cutover is to make the intended privacy correction and rename that same
+repository in place to `maglothinm/PolitiTrack`. Public `MyETF` is a code-frozen
+legacy/rollback record, but its Actions/Pages settings and archive flag still need
+authenticated verification.
 
 Production data moves through one path:
 
@@ -29,13 +34,13 @@ The portrait design treats the tall display as a persistent operations column ra
 Review dashboard:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/
+https://maglothinm.github.io/MyETF-Intelligence/
 ```
 
 Wallboard:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/wallboard.html
+https://maglothinm.github.io/MyETF-Intelligence/wallboard.html
 ```
 
 The normal dashboard includes a **Wallboard** link. The wallboard provides:
@@ -54,7 +59,7 @@ The normal dashboard includes a **Wallboard** link. The wallboard provides:
 The refresh interval can be changed from 60 to 1,800 seconds:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/wallboard.html?refresh=180
+https://maglothinm.github.io/MyETF-Intelligence/wallboard.html?refresh=180
 ```
 
 ## Recommended display settings
@@ -115,7 +120,8 @@ SEC_USER_AGENT=PolitiTrack research contact <monitored-email-address>
 
 The workflows calculate the repository Pages URL automatically. Create `DASHBOARD_URL` only for a deliberate custom or authenticated address. Gmail delivery is optional and requires both `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`; it remains independent of Pushover and collector alerts.
 
-Healthchecks URLs must be used by the canonical workflows only. The archived public repository must not ping the same checks.
+Healthchecks URLs must be used by the canonical workflows only. The legacy public
+repository must not ping the same checks.
 
 ## Deployment verification
 
@@ -133,6 +139,10 @@ Use `Run Simulation` for isolated Investor Edge acceptance. Use `Run $10K portfo
 
 ## Repository privacy is not dashboard privacy
 
-Repository privacy and GitHub Pages visibility are separate controls. A Pages site generated from a private repository may still be publicly accessible, depending on the account and organization configuration. The wallboard exposes research rankings and paper-portfolio results, so validate the effective Pages access policy directly.
+Repository privacy and GitHub Pages visibility are separate controls. The verified
+pre-rename Pages site is currently public. A Pages site generated from a private
+repository may also remain publicly accessible, depending on the account and
+organization configuration. The wallboard exposes research rankings and
+paper-portfolio results, so validate the effective Pages access policy directly.
 
 If public Pages is not acceptable, disable Pages and use private Actions artifacts or an authenticated hosting service. Do not treat a private source repository as dashboard authentication.

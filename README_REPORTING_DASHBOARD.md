@@ -48,7 +48,7 @@ The canonical repository publishes from GitHub Actions:
 Production Pages URL:
 
 ```text
-https://maglothinm.github.io/PolitiTrack/
+https://maglothinm.github.io/MyETF-Intelligence/
 ```
 
 No tracker reinitialization is permitted. The collector workflows expose no initialization or historical-alert bootstrap inputs and hard-code both behaviors off. Existing durable state is restored from production artifacts. A missing artifact fails closed; recovery requires a separately approved procedure.

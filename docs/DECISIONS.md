@@ -201,3 +201,22 @@ old branding, obsolete code, or a duplicate Legislative state writer.
 **Consequence:** Repository changes are made directly to the canonical checked-in
 files. State recovery uses provenance-valid protected artifacts; neither the
 overlay nor its retired payload is a recovery authority.
+
+## D-2026-08-30-014 — Settings evidence is required for identity cutover
+
+**Decision:** Repository ID `1349678672` remains canonical even while GitHub
+reports its live name as `MyETF-Intelligence` and visibility as public. The target
+is still an in-place rename to `PolitiTrack` with the intended privacy setting;
+no replacement repository may be created to bypass unavailable settings access.
+
+**Reason:** Source branding, README text, a redirect assumption, or a successful
+Pages deployment cannot prove repository name, visibility, Actions policy, Pages
+policy, or archive state. The authenticated settings runtime was unavailable
+during the 2026-08-30 cutover, while the numeric repository identity and deployed
+code remained independently verifiable.
+
+**Consequence:** Operational records use the current live name and Pages URL until
+GitHub confirms the rename. Public legacy `MyETF` is code-frozen at `36447a2`, but
+removing workflow files is not a substitute for disabling Actions/Pages and
+setting the archive flag. The cutover remains open until those settings and the
+two stale queued runs are verified.
