@@ -1,7 +1,7 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-30 UTC**
-Status: **published as draft PR #3; fresh-checkout CI setup correction pending verification**
+Status: **draft PR #3 published; corrected code passed Linux CI; no merge/deployment**
 Work record: [canonical issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 
 ## Task, identity, and branch
@@ -20,6 +20,8 @@ same contract question again or silently reactivate the drafts. AGENTS.md is unc
   after the owner's explicit "Yes push" resolved the prior publication blocker.
 - [Draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open
   against unchanged main. This authorizes review publication and offline CI only.
+- Latest code commit: **4cb6d5677daa60fff507d86502e156b70200a8ff**. This
+  documentation-only follow-up records its successful CI and current blockers.
 - No default-branch merge, production dispatch, mail, deployment, rename or archive.
 - Preserve unrelated `.codex/`. Held feature drafts, including snapshots of their
   prior analyst/workflow wiring, are recoverable under ignored
@@ -60,11 +62,19 @@ hashes, old JSONL prefix preservation and ID continuity. Full evidence lives in
 **244 active pytest tests passed in 13.82s**. Static checks passed for 49 Python
 files, five embedded Python blocks, five JSON files, 11 YAML files, three generated
 JavaScript files, recovery manifest and credential-pattern scan. Bash is absent
-and WSL not installed: 58 Bash checks and full verify.sh require Linux CI.
+and WSL not installed; Linux CI supplies those checks.
 First Linux run [33313439413](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33313439413),
 attempt 1, failed with 61 passed and 183 setup errors: the ignored parent of
 pytest's temporary base was absent on a fresh checkout. `pytest.ini` now points
-to ignored `.test-tmp-pytest` directly under the checkout; follow-up CI is required.
+to ignored `.test-tmp-pytest` directly under the checkout in `4cb6d56`.
+
+[Linux CI 33313544655](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33313544655)
+**succeeded**, attempt 1, job `99262749719`, head
+`4cb6d5677daa60fff507d86502e156b70200a8ff`: **244 tests passed in 7.59s**;
+full verify.sh passed with 105 repeated state/workflow checks, all 58 Bash syntax
+checks, retired-installer no-mutation proof, exact recovery manifest, credential
+pattern scan, and generated JS/assets. No CI artifacts were uploaded. This
+supersedes the initial failed run, not production acceptance.
 
 New scheduled main producers observed during publication, all successful attempt 1:
 Executive run `33312565343`, job `99260139758`, artifact `9732455687`;
@@ -82,9 +92,10 @@ sample coverage, and browser/Safari behavior remain unverified.
 
 ## Remaining blockers and next safe action
 
-1. Push the fresh-checkout test configuration correction and verify PR Linux CI
-   (including full verify.sh). Keep PR #3 draft; do not merge or dispatch production.
-   Leave `.codex/` and held drafts untouched. Record final CI evidence in issue #1.
+1. Review draft PR #3 and its green Linux CI. Keep it draft; do not merge or
+   dispatch production without further authorization and resolving the following
+   acceptance gates. Leave `.codex/` and held drafts untouched. This documentation
+   follow-up changes no executable code; check any PR synchronization CI separately.
 2. Runs [33219808359](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33219808359)
    and [33221027676](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33221027676)
    remain queued at removed `legislative_trade_tracker.yml`, SHA
@@ -101,6 +112,10 @@ sample coverage, and browser/Safari behavior remain unverified.
    Notification recovery is deferred, historical replay is not a persistent agent,
    and the dashboard still links to Actions rather than dispatching directly.
 6. Same-ID rename/privacy and legacy ID 1033519491 Actions/Pages shutdown/archive
-   are not completed. Keep issue #1 open and report exact CI/review state there.
+   are not completed. Keep issue #1 open.
+7. Posting the detailed operational/artifact update to public issue #1 was rejected
+   by host publication review as a separate disclosure beyond branch-push approval.
+   No comment was posted and no alternate route was attempted. Separate approval
+   is needed if that comment is desired; PR #3 and this handoff record the status.
 
 Do not equate a tested branch with production acceptance.

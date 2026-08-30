@@ -1,9 +1,8 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **contract-compatible revision published in draft PR #3; Linux CI found
-a fresh-checkout pytest setup error, corrected in the pending follow-up.
-Production acceptance remains pending. No merge or cutover.**
+Status: **contract-compatible revision pushed as draft PR #3; Linux CI passed
+at code commit 4cb6d56. Production acceptance remains pending. No merge or cutover.**
 
 ## Current revision and owner-held scope
 
@@ -23,7 +22,13 @@ was pushed and [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pu
 opened against unchanged main. Linux CI run `33313439413`, attempt 1, failed
 because pytest's configured temporary-directory parent was absent in a fresh
 checkout (61 passed, 183 setup errors). The follow-up moves the disposable test
-base to ignored `.test-tmp-pytest` directly under the checkout; CI must verify it.
+base to ignored `.test-tmp-pytest` directly under the checkout. Correction commit
+`4cb6d5677daa60fff507d86502e156b70200a8ff` passed
+[Linux CI 33313544655](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33313544655),
+attempt 1, job `99262749719`: 244 tests passed; full verify.sh passed, including
+105 state/workflow checks, 58 Bash syntax checks, recovery tombstone/inventory,
+credential-pattern scan and generated assets. The run uploaded no artifacts.
+This subsequent documentation-only commit records that completed evidence.
 No merge, production dispatch, mail, deployment, rename, or archive is claimed.
 Unrelated pre-existing `.codex/` remains preserved.
 
@@ -50,8 +55,8 @@ Python blocks parsed, 5 JSON and 11 YAML files parsed, three generated JavaScrip
 files syntax-checked, recovery manifest and credential-pattern scan passed.
 An actual-input dashboard built successfully, and an isolated TEST scoring run
 completed with zero network/model requests/emails and unchanged source hashes.
-Bash/WSL is unavailable locally: **58 Bash syntax checks and verify.sh execution
-remain a Linux CI gate**, not a local pass.
+Bash/WSL is unavailable locally. **All 58 Bash checks and full verify.sh passed
+on Linux CI 33313544655**; they are not represented as local Windows passes.
 
 Existing schedules advanced independently during revision. Current unexpired
 protected artifacts observed on 2026-08-30, all successful attempt 1 on main `4a9135a`:
@@ -72,7 +77,13 @@ publisher run `33312700469` remain the deployment evidence. Live adjusted-price
 entitlement, sufficient samples, Gmail delivery, and Safari acceptance are not
 proven by offline results. The existing Actions-link dashboard control remains.
 
-Issue #1 stays open. Obsolete runs `33219808359` and `33221027676` still report
+Issue #1 stays open. The attempted detailed issue-comment update was rejected by
+the host publication review as a separate public disclosure outside the explicit
+branch-push approval. It was not posted or retried by another route. The public
+review PR and committed handoff contain the revision status; a detailed issue
+comment requires separate approval if still desired.
+
+Obsolete runs `33219808359` and `33221027676` still report
 queued at removed `legislative_trade_tracker.yml`, SHA
 `b9cf0f3e3863de69d92ae01f35f1c154a082f56a`. Prior ordinary/force-cancel attempts
 returned HTTP 409. No production dispatch or cutover until contained.
