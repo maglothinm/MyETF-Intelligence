@@ -62,6 +62,36 @@ manually dispatched. See D-2026-08-30-019 and the active handoff.
 
 ## Verified deployed release
 
+### Contextual-help candidate — local only, 2026-08-30
+
+Issue [#6](https://github.com/maglothinm/MyETF-Intelligence/issues/6) extends the
+current dashboard from canonical `main` commit `a5d6703`. The source changes reuse
+the single shared tooltip, centralize product definitions, add touch-safe help
+beside workflow links, and preserve all visible research/simulation limitations.
+No business logic, workflow, state, credential or deployment-rule changes are
+included. This candidate has **not been pushed or deployed**.
+
+Local verification: **182 repository tests passed**, including **24 JSDOM
+scenarios** and **32 native Node notification scenarios**; JavaScript syntax,
+Python compilation and diff checks passed. Deterministic geometry covers
+1920×1080, 1440×900, 1180×820, 820×1180 and 390×844, plus visual-viewport offsets.
+Chrome is not connected; no new screenshots, rendered overflow/caret checks,
+physical-device or Safari acceptance are claimed. Full `verify.sh` execution is
+still a Linux release gate: this Windows attempt lacked shell utilities. Its
+unmodified embedded Python assertions passed separately, shell syntax passed,
+and canonical Git blobs match all four manifest hashes; local recovery-file
+differences are Windows line endings only.
+
+Fresh read-only audit (16:56–17:03 UTC) inspected all 114 Actions runs and all
+144 artifacts. The three protected IDs/attempts/jobs below and their reported ZIP
+digests are unchanged, with no newer eligible producer or active eligible writer.
+This rechecks metadata/lineage, not ZIP contents or a production restore. Live
+root, Wallboard, Edge and insights return HTTP 200 at deployed build `12d5896`.
+The two obsolete queued runs and all previously recorded cutover/settings gates
+remain open. See `docs/CONTEXTUAL_HELP.md` and the active handoff for this candidate.
+
+### Deployed redesign evidence
+
 PR [#5](https://github.com/maglothinm/MyETF-Intelligence/pull/5) merged UI source
 `e2f71cff8029871656ba2dbd8c4021e406ea2e9c` as
 `12d58964060885696ef4f5d3724ba5575de33fb2` on canonical `main`. The merge tree

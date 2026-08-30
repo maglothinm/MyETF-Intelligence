@@ -247,3 +247,29 @@ The two stale queued runs, repository settings cutover, PR #3, and unverified
 Gmail delivery remain separate open work. Automated DOM/accessibility fixtures
 are not proof of Chrome, iPhone Safari, real audio, or physical CHG90 behavior;
 issue #4 remains open until the remaining device acceptance is recorded.
+
+## D-2026-08-30-020 — Contextual help extends one shared presentation layer
+
+**Decision:** Issue #6 reuses `PT.setupDialogsAndTooltips()`, `data-tooltip` and
+the single `#tooltip` on root, Wallboard and standalone Investor Edge. A frozen
+`PT.HELP` object owns repeated product definitions; optional title/body/note
+content is rendered with DOM APIs and `textContent`, never interpreted HTML.
+
+**Reason:** First-time users need to distinguish historical evidence, isolated
+TEST acceptance and single-run $10K replay without losing persistent warnings or
+accidentally following workflow links while reading an explanation on touch.
+
+**Consequence:** Workflow links have separate accessible 44px help buttons and
+remain one-tap actions. Explicitly marked explanatory navigation uses first-touch
+preview/second-touch navigation with a visible instruction. Other navigation and
+desktop activation remain immediate. Pointer hover waits 300ms; keyboard focus
+and explicit help are immediate. The existing bubble gains a navy surface, caret,
+viewport-aware placement and native manual-popover enhancement where available.
+It remains a supplemental tooltip, with no focus trap; keyboard scrolling from
+the trigger can read overflow copy in short/zoomed viewports.
+
+All retained scores, confidence calculations, identity handling, classifications,
+prices, simulation isolation, paper positions, alerts, workflows and production
+state remain unchanged. Visible PAPER RESEARCH, TEST/SIMULATED, single-run replay,
+missing-history and browser-local limitations stay on-screen. Local DOM tests
+and geometry stubs do not establish rendered browser or physical-device acceptance.

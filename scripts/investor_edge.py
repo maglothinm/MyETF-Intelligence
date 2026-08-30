@@ -2389,6 +2389,14 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
 
     horizons = ("5", "20", "60", "120")
 
+    def help_control(key: str, label: str) -> str:
+        # Resolve copy from the shared PT.HELP presentation object at runtime.
+        return (
+            "<button type='button' class='help' "
+            f"data-tooltip-key='{html.escape(key, quote=True)}' data-tooltip='' "
+            f"aria-label='Explain {html.escape(label, quote=True)}'>?</button>"
+        )
+
     def text_cell(value: Any, *, fallback: str = "—") -> str:
         text = str(value or "").strip()
         return html.escape(text if text else fallback, quote=True)
@@ -2572,8 +2580,8 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             f"<div><dt>Disclosure lag</dt><dd>{integer_cell(trade.get('disclosure_lag_days'))}{'d' if _safe_float(trade.get('disclosure_lag_days')) is not None else ''}</dd></div>"
             f"<div><dt>Owner / account</dt><dd>{text_cell(owner)}</dd></div>"
             f"<div><dt>Amount / range</dt><dd>{text_cell(trade.get('amount'))}</dd></div>"
-            f"<div><dt>Transaction entry</dt><dd>{price_cell(entry_price(trade, 'picker'))}</dd></div>"
-            f"<div><dt>Disclosure entry</dt><dd>{price_cell(entry_price(trade, 'followable'))}</dd></div>"
+            f"<div><dt>Transaction entry {help_control('transactionOutcomes', 'transaction-date outcomes')}</dt><dd>{price_cell(entry_price(trade, 'picker'))}</dd></div>"
+            f"<div><dt>Disclosure entry {help_control('disclosureOutcomes', 'post-disclosure outcomes')}</dt><dd>{price_cell(entry_price(trade, 'followable'))}</dd></div>"
             f"<div><dt>Benchmark</dt><dd>{text_cell(trade.get('benchmark'))}</dd></div>"
             f"<div><dt>Counts toward Edge</dt><dd>{counts_text}</dd></div>"
             f"<div><dt>Source filing</dt><dd>{source_html}</dd></div>"
@@ -2753,21 +2761,21 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
 </head>
 <body>
 <header class='site-header'>
-  <div><p class='eyebrow'>Historical filer performance</p><h1>Investor Edge</h1><p class='subtitle'>Benchmark-relative outcomes from disclosed government purchases, emphasizing returns available from the first session after public observation.</p></div>
+  <div><p class='eyebrow'>Historical filer performance</p><h1>Investor Edge {help_control('investorEdge', 'Investor Edge')}</h1><p class='subtitle'>Benchmark-relative outcomes from disclosed government purchases, emphasizing returns available from the first session after public observation.</p></div>
   <div class='header-actions'><a class='button secondary' href='index.html#investor-edge'>Main dashboard</a><button class='button' data-dialog='risk-dialog'>Methodology &amp; Risk</button><a class='button secondary' href='wallboard.html'>Wallboard</a></div>
 </header>
 <main>
 <details class='notice edge-reading'><summary>How to read the heat map</summary><p>Edge 50 is neutral. Green means prior purchases beat their sector benchmark after disclosure; red means they lagged. Low-sample rows are deliberately faded. The PolitiTrack modifier is capped at ±12 points and never overrides an existing hard cap. Insufficient history is unavailable, not neutral performance.</p></details>
 <section class='summary-grid'>
   <article class='metric-card'><span>Investors profiled</span><strong>{len(investors)}</strong></article>
-  <article class='metric-card'><span>High-confidence profiles</span><strong>{sum(str(i.get('confidence_label') or '').casefold() == 'high' and (_safe_float(i.get('sample_count')) or 0) > 0 for i in investors)}</strong></article>
+  <article class='metric-card'><span>High-confidence profiles {help_control('edgeConfidence', 'Investor Edge confidence')}</span><strong>{sum(str(i.get('confidence_label') or '').casefold() == 'high' and (_safe_float(i.get('sample_count')) or 0) > 0 for i in investors)}</strong></article>
   <article class='metric-card'><span>Positive edge</span><strong>{sum(value > 55 for value in valid_edges)}</strong></article>
   <article class='metric-card'><span>Generated</span><strong class='date'>{text_cell(generated)}</strong></article>
 </section>
 <section class='panel'>
   <div class='panel-header'><div><h2>Investor performance heat map</h2><p>5/20/60/120-session values are average benchmark-relative returns from the first trading session after public observation. Open a drilldown to inspect transaction- and post-disclosure evidence.</p></div></div>
   <label class='search-label' for='edge-search'>Filter investors and historical trades<input id='edge-search' type='search' placeholder='Identity, filer, owner, ticker, sector…' autocomplete='off'></label>
-  <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Investor Edge leaderboard with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge</th><th scope='col'>Confidence</th><th scope='col'>Observations</th><th scope='col'>5D followable α</th><th scope='col'>20D followable α</th><th scope='col'>60D followable α</th><th scope='col'>120D followable α</th><th scope='col'>Hit rate</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>Investor Edge has no scored historical observations yet. Profiles will populate as cached historical prices become available.</td></tr>"}</tbody></table></div>
+  <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Investor Edge leaderboard with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>Investor Edge has no scored historical observations yet. Profiles will populate as cached historical prices become available.</td></tr>"}</tbody></table></div>
 </section>
 <section class='panel methodology'><h2>Methodology</h2><p>Each filer + disclosed owner is scored separately. Returns are benchmarked to a sector ETF when the industry mapping is sufficiently confident, otherwise SPY. Historical outcomes are measured from the transaction date and from the first session after public observation. The score weights followable alpha 45%, picker alpha 20%, hit rate 15%, consistency 10%, and sector skill 10%, then shrinks small samples toward 50.</p></section>
 </main>
@@ -2896,7 +2904,6 @@ if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); fil
     risk_start = shell.index('<dialog id="risk-dialog"')
     risk = shell[risk_start:shell.index("</dialog>", risk_start) + len("</dialog>")]
     page = page.replace("</main>", '</main>' + risk + '<div id="tooltip" role="tooltip" hidden></div>')
-    page = page.replace("<th scope='col'>Confidence</th>", "<th scope='col'>Confidence <button class='help' data-tooltip='Confidence reflects completed observations, horizon coverage, identity quality and sample-size shrinkage.' aria-label='Explain confidence'>?</button></th>")
     js = (assets / "common.js").read_text(encoding="utf-8") + "\n" + js + "\nPT.setupDialogsAndTooltips();\n"
     css = (assets / "styles.css").read_text(encoding="utf-8") + "\n" + css + "\n" + (assets / "investor-edge-overrides.css").read_text(encoding="utf-8")
     (output_dir / "investor-edge.html").write_text(page, encoding="utf-8")
