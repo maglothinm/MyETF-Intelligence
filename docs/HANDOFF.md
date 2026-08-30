@@ -1,7 +1,7 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-30 UTC**
-Status: **revision committed locally; public publication blocked pending approval**
+Status: **published as draft PR #3; fresh-checkout CI setup correction pending verification**
 Work record: [canonical issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 
 ## Task, identity, and branch
@@ -16,11 +16,10 @@ same contract question again or silently reactivate the drafts. AGENTS.md is unc
 - Revision branch **codex/production-remediation**, based on rechecked main
   **4a9135a8c12af6eebfce01cf33772ffa13e41951**.
 - Implementation commit: **020351a86861020d1a0f579b8ccdd7f218be3994**.
-  A subsequent documentation-only commit records the publication blocker.
-- Branch push was rejected before execution by the host safety review: the full
-  payload would be published to a public GitHub repository without sufficiently
-  explicit current-turn approval. No push, remote branch, PR, or new CI run.
-  Do not bypass the rejection with another tool, token, or upload route.
+  Documentation follow-up `6ffb1639aff2db13890b855acecefb90e6ac87ec` was pushed
+  after the owner's explicit "Yes push" resolved the prior publication blocker.
+- [Draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open
+  against unchanged main. This authorizes review publication and offline CI only.
 - No default-branch merge, production dispatch, mail, deployment, rename or archive.
 - Preserve unrelated `.codex/`. Held feature drafts, including snapshots of their
   prior analyst/workflow wiring, are recoverable under ignored
@@ -53,7 +52,7 @@ See [STATE_SAFETY.md](STATE_SAFETY.md) for the complete design and known limitat
 | Executive | [33297296482](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33297296482) | 1 | 99219056330 | 9727833986 |
 | AI | [33307012616](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33307012616) | 1 | 99245230528 | 9730794047 |
 
-All were rechecked unexpired. Original artifacts 9723708154, 9723732691,
+These are the previously byte-verified checkpoints. Original artifacts 9723708154, 9723732691,
 9723743439 and these successors pass the revised schema validator, exact ZIP/file
 hashes, old JSONL prefix preservation and ID continuity. Full evidence lives in
 `protected-state-migration.json`; none is a permanent restore pin.
@@ -62,6 +61,18 @@ hashes, old JSONL prefix preservation and ID continuity. Full evidence lives in
 files, five embedded Python blocks, five JSON files, 11 YAML files, three generated
 JavaScript files, recovery manifest and credential-pattern scan. Bash is absent
 and WSL not installed: 58 Bash checks and full verify.sh require Linux CI.
+First Linux run [33313439413](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33313439413),
+attempt 1, failed with 61 passed and 183 setup errors: the ignored parent of
+pytest's temporary base was absent on a fresh checkout. `pytest.ini` now points
+to ignored `.test-tmp-pytest` directly under the checkout; follow-up CI is required.
+
+New scheduled main producers observed during publication, all successful attempt 1:
+Executive run `33312565343`, job `99260139758`, artifact `9732455687`;
+AI run `33312663088`, job `99260390680`, artifact `9732466504`.
+Both are unexpired and have checked attempt/job metadata, but their bytes and
+continuity were not validated in this publication session. Legislative remains
+run `33306989441`, attempt 1, artifact `9730784030`. No artifact was written by
+this review revision.
 
 Actual-input preview built at ignored `.remediation/revision-preview/`.
 Isolated TEST scoring from verified copied inputs passed, with zero network/model
@@ -71,11 +82,9 @@ sample coverage, and browser/Safari behavior remain unverified.
 
 ## Remaining blockers and next safe action
 
-1. Request explicit owner approval to publish implementation commit `020351a`
-   plus this documentation follow-up to public canonical GitHub. Until approved,
-   keep both local. After approval, push only the reviewed revision, open a draft
-   PR, and verify the read-only offline CI (including Linux verify.sh). Do not
-   merge or dispatch production. Leave `.codex/` and held drafts untouched.
+1. Push the fresh-checkout test configuration correction and verify PR Linux CI
+   (including full verify.sh). Keep PR #3 draft; do not merge or dispatch production.
+   Leave `.codex/` and held drafts untouched. Record final CI evidence in issue #1.
 2. Runs [33219808359](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33219808359)
    and [33221027676](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33221027676)
    remain queued at removed `legislative_trade_tracker.yml`, SHA
@@ -86,7 +95,7 @@ sample coverage, and browser/Safari behavior remain unverified.
    A newer unmanifested producer requires a newly exported, hash-verified
    allowlist update, not fallback or a blank baseline.
 4. Existing [Pages](https://maglothinm.github.io/MyETF-Intelligence/) and successful
-   publisher [33307049036](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33307049036)
+   publisher [33312700469](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33312700469)
    are prior-deployment evidence only. This revision has not been deployed.
 5. Gmail secrets were absent at the authenticated check; no delivery proof exists.
    Notification recovery is deferred, historical replay is not a persistent agent,

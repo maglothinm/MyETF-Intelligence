@@ -1,9 +1,9 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **contract-compatible remediation committed locally and verified;
-public GitHub publication requires explicit owner approval. Linux CI and live
-production acceptance remain pending. No cutover.**
+Status: **contract-compatible revision published in draft PR #3; Linux CI found
+a fresh-checkout pytest setup error, corrected in the pending follow-up.
+Production acceptance remains pending. No merge or cutover.**
 
 ## Current revision and owner-held scope
 
@@ -17,9 +17,13 @@ Canonical repository ID `1349678672` remains public
 `maglothinm/MyETF-Intelligence`; rechecked default `main` is
 `4a9135a8c12af6eebfce01cf33772ffa13e41951`. Revision branch:
 `codex/production-remediation`. Implementation commit: `020351a86861020d1a0f579b8ccdd7f218be3994`.
-The attempted branch push was rejected by the host safety review because publishing
-the full code payload to a public repository was not explicitly authorized in the
-current request. No remote branch/PR was created; the rejection was not bypassed.
+The owner explicitly approved public publication with "Yes push" after the earlier
+safety-review rejection. Branch head `6ffb1639aff2db13890b855acecefb90e6ac87ec`
+was pushed and [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3)
+opened against unchanged main. Linux CI run `33313439413`, attempt 1, failed
+because pytest's configured temporary-directory parent was absent in a fresh
+checkout (61 passed, 183 setup errors). The follow-up moves the disposable test
+base to ignored `.test-tmp-pytest` directly under the checkout; CI must verify it.
 No merge, production dispatch, mail, deployment, rename, or archive is claimed.
 Unrelated pre-existing `.codex/` remains preserved.
 
@@ -28,7 +32,7 @@ all IDs/ledger prefixes/Edge history, corrects adjusted-price and minimum-sample
 scoring, and keeps both simulations credential-free with their existing permitted
 outputs. See `docs/STATE_SAFETY.md` for design and intentionally unresolved scope.
 
-Verified successor checkpoints, all attempt 1 and unexpired at the recheck:
+Previously hash-verified successor checkpoints, all attempt 1:
 
 | Pipeline | Successful run | Job | Artifact |
 |---|---:|---:|---:|
@@ -49,8 +53,22 @@ completed with zero network/model requests/emails and unchanged source hashes.
 Bash/WSL is unavailable locally: **58 Bash syntax checks and verify.sh execution
 remain a Linux CI gate**, not a local pass.
 
-No revised code was deployed. Existing pre-rename Pages and prior successful
-publisher run `33307049036` remain the deployment evidence. Live adjusted-price
+Existing schedules advanced independently during revision. Current unexpired
+protected artifacts observed on 2026-08-30, all successful attempt 1 on main `4a9135a`:
+
+| Pipeline | Run | Producer job | Artifact |
+|---|---:|---:|---:|
+| Legislative | `33306989441` | `99245167496` | `9730784030` |
+| Executive | `33312565343` | `99260139758` | `9732455687` |
+| AI | `33312663088` | `99260390680` | `9732466504` |
+
+The two newer Executive/AI artifacts have verified run/attempt/job metadata, but
+were not exported or byte-continuity-checked in this publication session. Before
+promotion, export and validate them against the prior checkpoints and refresh the
+exact pre-manifest allowlist; do not fall back to an older allowed artifact.
+
+No revised code was deployed. Existing pre-rename Pages and successful main
+publisher run `33312700469` remain the deployment evidence. Live adjusted-price
 entitlement, sufficient samples, Gmail delivery, and Safari acceptance are not
 proven by offline results. The existing Actions-link dashboard control remains.
 
