@@ -8,6 +8,7 @@ import pytest
 from bs4 import BeautifulSoup
 
 from scripts.investor_edge import (
+    PRICE_BASIS,
     MAX_MODIFIER_LIMIT,
     InvestorEdgeRuntime,
     MarketHistoryProvider,
@@ -32,6 +33,8 @@ def rows(start: date, returns: list[float]) -> list[dict[str, object]]:
 
 
 class FakeProvider:
+    price_basis = PRICE_BASIS
+    provider_name = "deterministic_fixture"
     def __init__(self, stock_rows, benchmark_rows):
         self.stock_rows = stock_rows
         self.benchmark_rows = benchmark_rows
@@ -114,7 +117,8 @@ def test_small_sample_is_shrunk_toward_neutral(tmp_path: Path) -> None:
     profile = runtime.profile_for_trade(candidate, [one, candidate])
     assert profile["raw_edge_score"] > profile["edge_score"]
     assert profile["confidence_label"] == "Low"
-    assert profile["modifier"] <= 3
+    assert profile["modifier"] == 0
+    assert profile["status"] == "insufficient_data"
 
 
 def test_hard_cap_still_wins_after_positive_modifier() -> None:

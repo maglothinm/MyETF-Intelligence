@@ -206,6 +206,10 @@ class Trade:
     raw_row: str
     equity_like: bool
     parse_confidence: str
+    # Optional source-provided identity; never derive a person ID from a filing ID.
+    filer_id: str = ""
+    filer_id_source: str = ""
+    filer_aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -268,16 +272,8 @@ class TrackerState:
         self.seen_filings.setdefault(source, {})[filing_id] = timestamp
 
     def prune(self) -> None:
-        for source, records in self.seen_filings.items():
-            if len(records) > DEFAULT_MAX_SEEN_FILINGS:
-                ordered = sorted(records.items(), key=lambda item: item[1], reverse=True)
-                self.seen_filings[source] = dict(ordered[:DEFAULT_MAX_SEEN_FILINGS])
-        if len(self.seen_trades) > DEFAULT_MAX_SEEN_TRADES:
-            ordered = sorted(self.seen_trades.items(), key=lambda item: item[1], reverse=True)
-            self.seen_trades = dict(ordered[:DEFAULT_MAX_SEEN_TRADES])
-        if len(self.seen_reviews) > DEFAULT_MAX_SEEN_FILINGS:
-            ordered = sorted(self.seen_reviews.items(), key=lambda item: item[1], reverse=True)
-            self.seen_reviews = dict(ordered[:DEFAULT_MAX_SEEN_FILINGS])
+        """Compatibility hook: continuity IDs may not be silently discarded."""
+        return None
 
 
 @dataclass(frozen=True)
@@ -451,6 +447,7 @@ def make_trade(
     confidence: str,
 ) -> Trade:
     if isinstance(report, Report):
+        identity_fields = report.metadata
         report_id = report.report_id
         filer = report.filer
         filed_date = report.filed_date
@@ -459,6 +456,7 @@ def make_trade(
         title = report.metadata.get("title", "")
         agency = report.metadata.get("agency", "")
     else:
+        identity_fields = report
         report_id = str(report.get("listing_id") or report.get("report_id") or "")
         filer = str(report.get("name") or report.get("filer") or "Unknown filer")
         filed_date = str(report.get("date") or report.get("filed_date") or "Unknown")
@@ -479,6 +477,17 @@ def make_trade(
     transaction_date = normalize_date(transaction_date)
     notification_date = normalize_date(notification_date) if notification_date else ""
     amount = normalize_amount(amount)
+    filer_id = ""
+    filer_id_source = ""
+    for identity_field in ("bioguide_id", "filer_id", "reporting_person_id", "person_id", "member_id"):
+        if identity_fields.get(identity_field):
+            filer_id = normalize_text(str(identity_fields[identity_field]))
+            filer_id_source = normalize_text(str(identity_fields.get("filer_id_source") or identity_field))
+            break
+    aliases_value = identity_fields.get("filer_aliases") or ()
+    filer_aliases = tuple(
+        sorted({normalize_text(str(alias)) for alias in aliases_value if normalize_text(str(alias))})
+    ) if isinstance(aliases_value, (list, tuple)) else ()
     trade_id = stable_id(
         "trade",
         (
@@ -517,6 +526,9 @@ def make_trade(
         raw_row=normalize_text(raw_row),
         equity_like=is_equity_like(asset, asset_type, ticker),
         parse_confidence=confidence,
+        filer_id=filer_id,
+        filer_id_source=filer_id_source,
+        filer_aliases=filer_aliases,
     )
 
 

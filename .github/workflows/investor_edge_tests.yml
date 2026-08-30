@@ -3,66 +3,30 @@ name: Investor Edge tests
 on:
   pull_request:
     paths:
-      - "scripts/investor_edge.py"
-      - "scripts/ai_filing_analyst.py"
-      - "scripts/build_trade_dashboard.py"
-      - "scripts/create_manual_test_filing.py"
-      - "scripts/run_investor_edge_simulation.py"
-      - "scripts/government_trade_tracker.py"
-      - "scripts/monitor_disclosures.py"
-      - "config/investor_edge.yml"
-      - "config/signal_rules.yml"
-      - "schemas/ai_filing_analysis.schema.json"
-      - "tests/test_investor_edge.py"
-      - "tests/test_investor_edge_core.py"
-      - "tests/test_investor_edge_surfaces.py"
-      - "tests/test_ai_filing_analyst.py"
-      - "tests/test_trade_dashboard.py"
-      - "tests/test_create_manual_test_filing.py"
-      - "requirements-ai.txt"
-      - "requirements-tracker.txt"
-      - ".env.tracker.example"
-      - "README.md"
-      - "README_AI_FILING_ANALYST.md"
-      - "README_INVESTOR_EDGE.md"
-      - "README_REPORTING_DASHBOARD.md"
-      - "README_WALLBOARD_PRIVATE_REPO.md"
-      - ".github/workflows/ai_filing_analyst.yml"
-      - ".github/workflows/manual_test.yml"
-      - ".github/workflows/publish_trade_dashboard.yml"
-      - ".github/workflows/investor_edge_tests.yml"
+      - "scripts/**"
+      - "tests/**"
+      - "config/**"
+      - "schemas/**"
+      - "docs/protected-state-migration.json"
+      - ".github/workflows/**"
+      - "requirements-*.txt"
+      - "pytest.ini"
+      - "verify.sh"
+      - "MANIFEST.sha256"
   push:
     branches:
       - main
     paths:
-      - "scripts/investor_edge.py"
-      - "scripts/ai_filing_analyst.py"
-      - "scripts/build_trade_dashboard.py"
-      - "scripts/create_manual_test_filing.py"
-      - "scripts/run_investor_edge_simulation.py"
-      - "scripts/government_trade_tracker.py"
-      - "scripts/monitor_disclosures.py"
-      - "config/investor_edge.yml"
-      - "config/signal_rules.yml"
-      - "schemas/ai_filing_analysis.schema.json"
-      - "tests/test_investor_edge.py"
-      - "tests/test_investor_edge_core.py"
-      - "tests/test_investor_edge_surfaces.py"
-      - "tests/test_ai_filing_analyst.py"
-      - "tests/test_trade_dashboard.py"
-      - "tests/test_create_manual_test_filing.py"
-      - "requirements-ai.txt"
-      - "requirements-tracker.txt"
-      - ".env.tracker.example"
-      - "README.md"
-      - "README_AI_FILING_ANALYST.md"
-      - "README_INVESTOR_EDGE.md"
-      - "README_REPORTING_DASHBOARD.md"
-      - "README_WALLBOARD_PRIVATE_REPO.md"
-      - ".github/workflows/ai_filing_analyst.yml"
-      - ".github/workflows/manual_test.yml"
-      - ".github/workflows/publish_trade_dashboard.yml"
-      - ".github/workflows/investor_edge_tests.yml"
+      - "scripts/**"
+      - "tests/**"
+      - "config/**"
+      - "schemas/**"
+      - "docs/protected-state-migration.json"
+      - ".github/workflows/**"
+      - "requirements-*.txt"
+      - "pytest.ini"
+      - "verify.sh"
+      - "MANIFEST.sha256"
   workflow_dispatch:
 
 permissions:
@@ -85,12 +49,8 @@ jobs:
             requirements-tracker.txt
       - name: Install dependencies
         run: python -m pip install --requirement requirements-ai.txt pytest==9.0.2
-      - name: Run Investor Edge and integration tests
-        run: |
-          python -m pytest -q \
-            tests/test_investor_edge.py \
-            tests/test_investor_edge_core.py \
-            tests/test_investor_edge_surfaces.py \
-            tests/test_ai_filing_analyst.py \
-            tests/test_trade_dashboard.py \
-            tests/test_create_manual_test_filing.py
+      - name: Run all active offline tests
+        run: python -m pytest -q
+      - name: Verify recovery tombstone, workflow safety, syntax and generated assets
+        shell: bash
+        run: bash verify.sh

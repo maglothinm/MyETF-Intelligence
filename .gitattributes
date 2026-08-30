@@ -1,0 +1,5 @@
+# Keep executable shell/recovery evidence text identical on Windows and Linux.
+*.sh text eol=lf
+MANIFEST.sha256 text eol=lf
+RECOVERY_REPORT.md text eol=lf
+repo-files/RETIRED.md text eol=lf

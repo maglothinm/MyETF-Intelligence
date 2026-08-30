@@ -1,0 +1,516 @@
+{
+  "artifacts": {
+    "9723708154": {
+      "absent_files": [],
+      "created_at": "2026-08-30T00:33:26Z",
+      "evidence": "GitHub ZIP SHA-256, canonical repository/workflow/run/job/attempt verified; original checkpoint state hashes and record counts match docs/PROJECT_STATE.md.",
+      "expires_at": "2026-11-28T00:32:17Z",
+      "files": {
+        "filings.jsonl": {
+          "rows": 983,
+          "sha256": "e31b011489eea71720210aff5e8ca8041b4eeb69156b702ee68c4fb93fa901b5",
+          "size": 654345
+        },
+        "pending-review.jsonl": {
+          "rows": 1,
+          "sha256": "4300fc42fa8399e7ba064a67e1950ec6c135b70d163a3a244a1685ab1c67d3fd",
+          "size": 551
+        },
+        "purchases.jsonl": {
+          "rows": 19,
+          "sha256": "996df8b52616b287fe12d2c61f93addf52452ef711645154c91eb457660d6952",
+          "size": 16977
+        },
+        "runs.jsonl": {
+          "rows": 24,
+          "sha256": "095c3b4192d85a0acabac0c61fee9c537a6a42c0d9a2c52440ec1cfaf50f9d0f",
+          "size": 21209
+        },
+        "state.json": {
+          "sha256": "045a3f8c5f5a9f096ef12290f7db84228e1a5f127cff56fb20960e851c25cf58",
+          "size": 62711
+        },
+        "transactions.jsonl": {
+          "rows": 65,
+          "sha256": "0cf38c1862a5420307e43a87c073534f03ede898ca6eede9539b87c2acfcbe22",
+          "size": 59387
+        }
+      },
+      "head_sha": "d5ef440b158adc55df51b64344c5ac0ec10287da",
+      "job_id": 99182690100,
+      "job_name": "track",
+      "pipeline": "legislative",
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-30T00:33:32Z",
+      "run_id": 33283553866,
+      "run_started_at": "2026-08-30T00:32:16Z",
+      "workflow_name": "Legislative purchase tracker v2",
+      "workflow_path": ".github/workflows/legislative_trade_tracker_v2.yml",
+      "zip_sha256": "773e6d1744b088d473142548403a464eea7a86df8503507c24e6f7045c9e46db"
+    },
+    "9723732691": {
+      "absent_files": [
+        "transactions.jsonl",
+        "purchases.jsonl"
+      ],
+      "created_at": "2026-08-30T00:35:37Z",
+      "evidence": "GitHub ZIP SHA-256, canonical repository/workflow/run/job/attempt verified; original checkpoint state hashes and record counts match docs/PROJECT_STATE.md.",
+      "expires_at": "2026-11-28T00:33:43Z",
+      "files": {
+        "filings.jsonl": {
+          "rows": 4109,
+          "sha256": "70ef15c6707d61ff3ded470f7e8c0e1215f4de5467825096f0114dbb85e9d5d1",
+          "size": 3067921
+        },
+        "pending-review.jsonl": {
+          "rows": 1495,
+          "sha256": "eccde7494a9b3139004388e72078474bad57943faf4e14791e0f8c623baa4e06",
+          "size": 816117
+        },
+        "runs.jsonl": {
+          "rows": 17,
+          "sha256": "dd1d19d102587b9ef8f1f7181bcae0dee9d71b487ec9b61b74b0641f5f210061",
+          "size": 8983
+        },
+        "state.json": {
+          "sha256": "7a70efafe057f2e9883bcb69d2ea312804d3431b7dabeff89c558a3cd6271d75",
+          "size": 393769
+        }
+      },
+      "head_sha": "d5ef440b158adc55df51b64344c5ac0ec10287da",
+      "job_id": 99182840877,
+      "job_name": "track",
+      "pipeline": "executive",
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-30T00:35:40Z",
+      "run_id": 33283609603,
+      "run_started_at": "2026-08-30T00:33:42Z",
+      "workflow_name": "Executive purchase tracker",
+      "workflow_path": ".github/workflows/executive_trade_tracker.yml",
+      "zip_sha256": "ade12ef09d9f7a24e7873dcee6b69c63a15c4fc3f5035a78de93f1cfa02d2833"
+    },
+    "9723743439": {
+      "absent_files": [
+        "paper-portfolio.jsonl",
+        "investor-edge-observations-archive.json"
+      ],
+      "created_at": "2026-08-30T00:36:32Z",
+      "evidence": "GitHub ZIP SHA-256, canonical repository/workflow/run/job/attempt verified; original checkpoint state hashes and record counts match docs/PROJECT_STATE.md.",
+      "expires_at": "2026-11-28T00:35:49Z",
+      "files": {
+        "analyses.jsonl": {
+          "rows": 12,
+          "sha256": "7db0547dfaca2b24ef9091739d7e58a448a4df31ffc9724f85a1ef2b45b7924f",
+          "size": 163205
+        },
+        "documents/775eb4ee913c8eeb7b284e0d7e1fa6246d687ee3eaf7abbfeb5e3ef50476a0ad.json.gz": {
+          "sha256": "a307dd103037da13f1a2a9923db8cb4fc4d6d5a5967cf0de369a6b7a9248cc94",
+          "size": 991
+        },
+        "documents/9a9b10fc103d4add7621c3a5fa159af275b3ee062c4e760d01e708acb7b9c7b7.json.gz": {
+          "sha256": "d0718a44f20e5ebf7f8f9aa514b1b49e76b7d2313a4de4b2f7a24d88db9c53aa",
+          "size": 902
+        },
+        "documents/e996fa91b264feef0a4e96e15a534dbaf55b5487e1fa359747d00988f7b92ab5.json.gz": {
+          "sha256": "b86685451d9c104e7e5df96c4b90cf07d8064ee9945b375b9445ead3277b48eb",
+          "size": 841
+        },
+        "investor-edge-leaderboard.json": {
+          "sha256": "dcb3e3e43d7532db47ce20f3ea3ff84d20b48a72e759455747be0d2b4f5f80bf",
+          "size": 12155
+        },
+        "investor-edge-market/AMAT-profile.json": {
+          "sha256": "cb53147e7223b5a8627d208a09a397d75fd5eb9cbd90733c257077f371ec0c00",
+          "size": 96
+        },
+        "investor-edge-observations.json": {
+          "sha256": "04e01701e660aa7030999eb43ecdf78be966e1cc2b2beaaeab8759f2a621dc2b",
+          "size": 1411
+        },
+        "investor-edge-profiles.json": {
+          "sha256": "f5a146385fd0fb1a0ae192e0fd6dbab04dc3747d538a2fd86e7ee13d9f2a79ec",
+          "size": 12232
+        },
+        "market-cache/ACN-2026-08-11.json": {
+          "sha256": "a36b788939059891d43511beeb94165b2933ccd540cc22bf081a276c3206d3ee",
+          "size": 405
+        },
+        "market-cache/ACN-daily.json": {
+          "sha256": "9837fc38e813220c832a7d043bb0e8623b9a679928765608c833aa9d8f28092a",
+          "size": 15562
+        },
+        "market-cache/AMAT-2026-07-13.json": {
+          "sha256": "320c2239f20e65cc494ebbb9272ac84279d6ec3bcfd651b4bf51504d17d6e6de",
+          "size": 432
+        },
+        "market-cache/AMAT-daily.json": {
+          "sha256": "d1828bb6cb5aeec76574d144957958b97800ecdcee30f9c15c21947fe20753e4",
+          "size": 15589
+        },
+        "market-cache/GOOGL-2026-08-24.json": {
+          "sha256": "ef16e24803edc2df50a553f11bc2791ce73c882943d3d250a1205a734d984d19",
+          "size": 413
+        },
+        "market-cache/GOOGL-daily.json": {
+          "sha256": "a3a24385c10d9d641de552f140215eb270fa88ea64823100dc66ef7a14866077",
+          "size": 15682
+        },
+        "market-cache/GWW-2026-07-13.json": {
+          "sha256": "238386689fa118d11df84f46880487146142e243999e51594ebdffb8ec0c29eb",
+          "size": 432
+        },
+        "market-cache/GWW-daily.json": {
+          "sha256": "03140f895a5302db79f4fae0e47d390c07eadb368bc809d8e11ff8b989841e71",
+          "size": 15846
+        },
+        "market-cache/MBGL-2026-08-11.json": {
+          "sha256": "b2b8b9d0e35578066c397f757351b97594a3778a008736a0cdf606b34457f5aa",
+          "size": 424
+        },
+        "market-cache/MBGL-daily.json": {
+          "sha256": "d691b05ef0008406dc50de658b520922bb3610a3f51bf2e828ed1ad380b93964",
+          "size": 6402
+        },
+        "market-cache/SOLS-2026-08-11.json": {
+          "sha256": "fea1f80df8d9cab10302fb1a9f9a4f5ad82979d40922b0f4f90e5a52de801988",
+          "size": 410
+        },
+        "market-cache/SOLS-daily.json": {
+          "sha256": "6ecc94029926980cba44c03f761060f61258c14e8999eb82237dbde43cd5a28e",
+          "size": 15167
+        },
+        "market-cache/SPGI-2026-08-11.json": {
+          "sha256": "86b6cf3c60d3ee035654620f459f5403f48c48aff253b9a80caa698ce82927b8",
+          "size": 407
+        },
+        "market-cache/SPGI-daily.json": {
+          "sha256": "9c622566ffce4c07f0ef4301fee9284f0fd5f8e80be8e235d396c63dc79927a0",
+          "size": 15533
+        },
+        "market-cache/STE-2026-07-13.json": {
+          "sha256": "23e5241186ca39e2b927d8024db0b502244cb4c2d3459d018449e1550250d19b",
+          "size": 425
+        },
+        "market-cache/STE-daily.json": {
+          "sha256": "1d4be85dbf87b11cf98e0372a57ed98f4b34a76d679ed8266d5aadf85ad708c8",
+          "size": 15472
+        },
+        "runs.jsonl": {
+          "rows": 23,
+          "sha256": "05dba7e0d2788b36d3a1e8cf335d32df318e30e4e23231d35b5624d60617c912",
+          "size": 21648
+        },
+        "sec-cache/ACN-1467373.json": {
+          "sha256": "f25f4f01e0a90cfcbc27e3916c91190ab7f0edc3f7f6eaaf565e4eb4573d063c",
+          "size": 9125
+        },
+        "sec-cache/AMAT-6951.json": {
+          "sha256": "94ba8ff94dfb07b78f641dc0998b25d37d7335cec6c2d932f40064131fd5b950",
+          "size": 8791
+        },
+        "sec-cache/GOOGL-1652044.json": {
+          "sha256": "a70fc196119855cbc8e9588c0e5575ada8060542cbf3f04e1427c0803393b492",
+          "size": 8721
+        },
+        "sec-cache/GWW-277135.json": {
+          "sha256": "40b7a009d6e5f226004463ef0eea2a5ea83986b62781981d5f770ae01ee669ee",
+          "size": 8986
+        },
+        "sec-cache/MBGL-2090312.json": {
+          "sha256": "7ab7dd3882768705587aa02f4950805dfcc456b542894494bdbd40be85afd563",
+          "size": 7396
+        },
+        "sec-cache/SOLS-2064953.json": {
+          "sha256": "ab0ad2c03d4212d2934443d2539e362b7bfe044fdbb01d0c55c491b5d11ea3c0",
+          "size": 9120
+        },
+        "sec-cache/SPGI-64040.json": {
+          "sha256": "db1ec1e378c6c786b81c3edc984d5e61adb1757172d577dec59dffd93eb05eac",
+          "size": 8907
+        },
+        "sec-cache/STE-1757898.json": {
+          "sha256": "e7b8cac3a1f2b8ea61ea07ca16172a6eb5b3589aec14298b442af88c72958f7d",
+          "size": 9035
+        },
+        "sec-cache/company-tickers.json": {
+          "sha256": "a708628bd5522555fad65afca2f27ea326d6d12068936deedea55d1cdd2002de",
+          "size": 1119291
+        },
+        "state.json": {
+          "sha256": "65cfa452dcb78dd14843155218b65178fb6fea7030cfbee95ac655bd22e2df19",
+          "size": 1132
+        }
+      },
+      "head_sha": "d5ef440b158adc55df51b64344c5ac0ec10287da",
+      "job_id": 99183059871,
+      "job_name": "analyze",
+      "pipeline": "ai",
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-30T00:36:38Z",
+      "run_id": 33283690942,
+      "run_started_at": "2026-08-30T00:35:48Z",
+      "workflow_name": "AI filing analyst and paper portfolio",
+      "workflow_path": ".github/workflows/ai_filing_analyst.yml",
+      "zip_sha256": "f8804319fa52c072a82efa7d4316d554ed6e7ff94eaf432ba336e034c80ada51"
+    },
+    "9727833986": {
+      "absent_files": [
+        "transactions.jsonl",
+        "purchases.jsonl"
+      ],
+      "created_at": "2026-08-30T06:38:53Z",
+      "evidence": "GitHub ZIP SHA-256, canonical repository/workflow/run/job/attempt verified; original checkpoint state hashes and record counts match docs/PROJECT_STATE.md. All predecessor files retained; every JSONL ledger has exact byte prefix; state identity sets retained.",
+      "expires_at": "2026-11-28T06:36:50Z",
+      "files": {
+        "filings.jsonl": {
+          "rows": 4109,
+          "sha256": "70ef15c6707d61ff3ded470f7e8c0e1215f4de5467825096f0114dbb85e9d5d1",
+          "size": 3067921
+        },
+        "pending-review.jsonl": {
+          "rows": 1495,
+          "sha256": "eccde7494a9b3139004388e72078474bad57943faf4e14791e0f8c623baa4e06",
+          "size": 816117
+        },
+        "runs.jsonl": {
+          "rows": 18,
+          "sha256": "9a22882573ff39915c7175334eceed1fd9351660563e80af47f62e3596ca4601",
+          "size": 9516
+        },
+        "state.json": {
+          "sha256": "4329c0d36d992e763b552f44a1838d1f397ffbb245757a6f341740120fdc8d40",
+          "size": 393769
+        }
+      },
+      "head_sha": "4a9135a8c12af6eebfce01cf33772ffa13e41951",
+      "job_id": 99219056330,
+      "job_name": "track",
+      "pipeline": "executive",
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-30T06:38:57Z",
+      "run_id": 33297296482,
+      "run_started_at": "2026-08-30T06:36:50Z",
+      "verified_predecessor_artifact_id": 9723732691,
+      "workflow_name": "Executive purchase tracker",
+      "workflow_path": ".github/workflows/executive_trade_tracker.yml",
+      "zip_sha256": "515ca03d23318dc44d20396a464e8f5dd85dd9e3c33c6a1d418827b94fe39f21"
+    },
+    "9730784030": {
+      "absent_files": [],
+      "created_at": "2026-08-30T10:39:24Z",
+      "evidence": "GitHub ZIP SHA-256, canonical repository/workflow/run/job/attempt verified; original checkpoint state hashes and record counts match docs/PROJECT_STATE.md. All predecessor files retained; every JSONL ledger has exact byte prefix; state identity sets retained.",
+      "expires_at": "2026-11-28T10:38:51Z",
+      "files": {
+        "filings.jsonl": {
+          "rows": 983,
+          "sha256": "e31b011489eea71720210aff5e8ca8041b4eeb69156b702ee68c4fb93fa901b5",
+          "size": 654345
+        },
+        "pending-review.jsonl": {
+          "rows": 1,
+          "sha256": "4300fc42fa8399e7ba064a67e1950ec6c135b70d163a3a244a1685ab1c67d3fd",
+          "size": 551
+        },
+        "purchases.jsonl": {
+          "rows": 19,
+          "sha256": "996df8b52616b287fe12d2c61f93addf52452ef711645154c91eb457660d6952",
+          "size": 16977
+        },
+        "runs.jsonl": {
+          "rows": 26,
+          "sha256": "7a18824c97cec4c06f1eb2ec6e474e7768c6aa6888c8a0d8a55be4eea3b54558",
+          "size": 22489
+        },
+        "state.json": {
+          "sha256": "12a623dfac963c07d3fd3ae927a7444ccd2dc267363972a2d6bd1ef0364b4062",
+          "size": 62711
+        },
+        "transactions.jsonl": {
+          "rows": 65,
+          "sha256": "0cf38c1862a5420307e43a87c073534f03ede898ca6eede9539b87c2acfcbe22",
+          "size": 59387
+        }
+      },
+      "head_sha": "4a9135a8c12af6eebfce01cf33772ffa13e41951",
+      "job_id": 99245167496,
+      "job_name": "track",
+      "pipeline": "legislative",
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-30T10:39:27Z",
+      "run_id": 33306989441,
+      "run_started_at": "2026-08-30T10:38:51Z",
+      "verified_predecessor_artifact_id": 9723708154,
+      "workflow_name": "Legislative purchase tracker v2",
+      "workflow_path": ".github/workflows/legislative_trade_tracker_v2.yml",
+      "zip_sha256": "abcdd2f69c0cedfed8a87289276310fa67695a10c9eb6f802074b551c5da8093"
+    },
+    "9730794047": {
+      "absent_files": [
+        "paper-portfolio.jsonl",
+        "investor-edge-observations-archive.json"
+      ],
+      "created_at": "2026-08-30T10:40:15Z",
+      "evidence": "GitHub ZIP SHA-256, canonical repository/workflow/run/job/attempt verified; original checkpoint state hashes and record counts match docs/PROJECT_STATE.md. All predecessor files retained; every JSONL ledger has exact byte prefix; state identity sets retained.",
+      "expires_at": "2026-11-28T10:39:29Z",
+      "files": {
+        "analyses.jsonl": {
+          "rows": 12,
+          "sha256": "7db0547dfaca2b24ef9091739d7e58a448a4df31ffc9724f85a1ef2b45b7924f",
+          "size": 163205
+        },
+        "documents/775eb4ee913c8eeb7b284e0d7e1fa6246d687ee3eaf7abbfeb5e3ef50476a0ad.json.gz": {
+          "sha256": "a307dd103037da13f1a2a9923db8cb4fc4d6d5a5967cf0de369a6b7a9248cc94",
+          "size": 991
+        },
+        "documents/9a9b10fc103d4add7621c3a5fa159af275b3ee062c4e760d01e708acb7b9c7b7.json.gz": {
+          "sha256": "d0718a44f20e5ebf7f8f9aa514b1b49e76b7d2313a4de4b2f7a24d88db9c53aa",
+          "size": 902
+        },
+        "documents/e996fa91b264feef0a4e96e15a534dbaf55b5487e1fa359747d00988f7b92ab5.json.gz": {
+          "sha256": "b86685451d9c104e7e5df96c4b90cf07d8064ee9945b375b9445ead3277b48eb",
+          "size": 841
+        },
+        "investor-edge-leaderboard.json": {
+          "sha256": "cc1803e86c50ce3389623fbe38d0da8cb9ee429ddde3070ce7436ad2d82b66f2",
+          "size": 12155
+        },
+        "investor-edge-market/AMAT-profile.json": {
+          "sha256": "cb53147e7223b5a8627d208a09a397d75fd5eb9cbd90733c257077f371ec0c00",
+          "size": 96
+        },
+        "investor-edge-observations.json": {
+          "sha256": "49472007cd3479f2f32fd13378eee90b0bd62ca03a2ec8f0f234bffcdd0bcd50",
+          "size": 1411
+        },
+        "investor-edge-profiles.json": {
+          "sha256": "7fa160f8d7cd6263b65b326bacd288ab256d5f61607951ba1cd1a1058488d31b",
+          "size": 12232
+        },
+        "market-cache/ACN-2026-08-11.json": {
+          "sha256": "a36b788939059891d43511beeb94165b2933ccd540cc22bf081a276c3206d3ee",
+          "size": 405
+        },
+        "market-cache/ACN-daily.json": {
+          "sha256": "9837fc38e813220c832a7d043bb0e8623b9a679928765608c833aa9d8f28092a",
+          "size": 15562
+        },
+        "market-cache/AMAT-2026-07-13.json": {
+          "sha256": "320c2239f20e65cc494ebbb9272ac84279d6ec3bcfd651b4bf51504d17d6e6de",
+          "size": 432
+        },
+        "market-cache/AMAT-daily.json": {
+          "sha256": "d1828bb6cb5aeec76574d144957958b97800ecdcee30f9c15c21947fe20753e4",
+          "size": 15589
+        },
+        "market-cache/GOOGL-2026-08-24.json": {
+          "sha256": "ef16e24803edc2df50a553f11bc2791ce73c882943d3d250a1205a734d984d19",
+          "size": 413
+        },
+        "market-cache/GOOGL-daily.json": {
+          "sha256": "a3a24385c10d9d641de552f140215eb270fa88ea64823100dc66ef7a14866077",
+          "size": 15682
+        },
+        "market-cache/GWW-2026-07-13.json": {
+          "sha256": "238386689fa118d11df84f46880487146142e243999e51594ebdffb8ec0c29eb",
+          "size": 432
+        },
+        "market-cache/GWW-daily.json": {
+          "sha256": "03140f895a5302db79f4fae0e47d390c07eadb368bc809d8e11ff8b989841e71",
+          "size": 15846
+        },
+        "market-cache/MBGL-2026-08-11.json": {
+          "sha256": "b2b8b9d0e35578066c397f757351b97594a3778a008736a0cdf606b34457f5aa",
+          "size": 424
+        },
+        "market-cache/MBGL-daily.json": {
+          "sha256": "d691b05ef0008406dc50de658b520922bb3610a3f51bf2e828ed1ad380b93964",
+          "size": 6402
+        },
+        "market-cache/SOLS-2026-08-11.json": {
+          "sha256": "fea1f80df8d9cab10302fb1a9f9a4f5ad82979d40922b0f4f90e5a52de801988",
+          "size": 410
+        },
+        "market-cache/SOLS-daily.json": {
+          "sha256": "6ecc94029926980cba44c03f761060f61258c14e8999eb82237dbde43cd5a28e",
+          "size": 15167
+        },
+        "market-cache/SPGI-2026-08-11.json": {
+          "sha256": "86b6cf3c60d3ee035654620f459f5403f48c48aff253b9a80caa698ce82927b8",
+          "size": 407
+        },
+        "market-cache/SPGI-daily.json": {
+          "sha256": "9c622566ffce4c07f0ef4301fee9284f0fd5f8e80be8e235d396c63dc79927a0",
+          "size": 15533
+        },
+        "market-cache/STE-2026-07-13.json": {
+          "sha256": "23e5241186ca39e2b927d8024db0b502244cb4c2d3459d018449e1550250d19b",
+          "size": 425
+        },
+        "market-cache/STE-daily.json": {
+          "sha256": "1d4be85dbf87b11cf98e0372a57ed98f4b34a76d679ed8266d5aadf85ad708c8",
+          "size": 15472
+        },
+        "runs.jsonl": {
+          "rows": 26,
+          "sha256": "635c128c04b0c23be28b72efe2079ed4959840b5f5d7646d3d9cfe29ae046a79",
+          "size": 23685
+        },
+        "sec-cache/ACN-1467373.json": {
+          "sha256": "f25f4f01e0a90cfcbc27e3916c91190ab7f0edc3f7f6eaaf565e4eb4573d063c",
+          "size": 9125
+        },
+        "sec-cache/AMAT-6951.json": {
+          "sha256": "94ba8ff94dfb07b78f641dc0998b25d37d7335cec6c2d932f40064131fd5b950",
+          "size": 8791
+        },
+        "sec-cache/GOOGL-1652044.json": {
+          "sha256": "a70fc196119855cbc8e9588c0e5575ada8060542cbf3f04e1427c0803393b492",
+          "size": 8721
+        },
+        "sec-cache/GWW-277135.json": {
+          "sha256": "40b7a009d6e5f226004463ef0eea2a5ea83986b62781981d5f770ae01ee669ee",
+          "size": 8986
+        },
+        "sec-cache/MBGL-2090312.json": {
+          "sha256": "7ab7dd3882768705587aa02f4950805dfcc456b542894494bdbd40be85afd563",
+          "size": 7396
+        },
+        "sec-cache/SOLS-2064953.json": {
+          "sha256": "ab0ad2c03d4212d2934443d2539e362b7bfe044fdbb01d0c55c491b5d11ea3c0",
+          "size": 9120
+        },
+        "sec-cache/SPGI-64040.json": {
+          "sha256": "db1ec1e378c6c786b81c3edc984d5e61adb1757172d577dec59dffd93eb05eac",
+          "size": 8907
+        },
+        "sec-cache/STE-1757898.json": {
+          "sha256": "e7b8cac3a1f2b8ea61ea07ca16172a6eb5b3589aec14298b442af88c72958f7d",
+          "size": 9035
+        },
+        "sec-cache/company-tickers.json": {
+          "sha256": "a708628bd5522555fad65afca2f27ea326d6d12068936deedea55d1cdd2002de",
+          "size": 1119291
+        },
+        "state.json": {
+          "sha256": "109dc2eafa4a62bdd03f81baf030f777f2091da4d898ed21a8dc4bb3f01ce388",
+          "size": 1132
+        }
+      },
+      "head_sha": "4a9135a8c12af6eebfce01cf33772ffa13e41951",
+      "job_id": 99245230528,
+      "job_name": "analyze",
+      "pipeline": "ai",
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-30T10:40:20Z",
+      "run_id": 33307012616,
+      "run_started_at": "2026-08-30T10:39:29Z",
+      "verified_predecessor_artifact_id": 9723743439,
+      "workflow_name": "AI filing analyst and paper portfolio",
+      "workflow_path": ".github/workflows/ai_filing_analyst.yml",
+      "zip_sha256": "37c3b781ea2a6c2af51d3cf23f26c0d2c863c4c9b5eea6b1e5ff00d4fdd65583"
+    }
+  },
+  "default_branch": "main",
+  "repository_id": 1349678672,
+  "version": 1
+}

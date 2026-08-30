@@ -695,6 +695,10 @@ def test_run_simulation_reuses_production_path_without_network_or_alerts(
     assert result["analysis"]["classification"] in {"high_priority", "watchlist"}
     assert result["analysis"]["ai"]["evidence_sources"]
     assert result["assertions"]["candidate_alert_eligible"] is True
+    assert result["assertions"]["minimum_sample_gate_passed"] is True
+    assert result["assertions"]["adjusted_price_basis_verified"] is True
+    assert result["analysis"]["investor_edge_observation_count"] >= 3
+    assert all(row["is_synthetic_test"] and row["trade_id"].startswith("TEST-") for row in result["supplemental_history_fixtures"])
     assert result["assertions"]["record_profile_edge_agree"] is True
     assert result["assertions"]["record_profile_sample_agree"] is True
     assert result["assertions"]["record_profile_as_of_agrees"] is True

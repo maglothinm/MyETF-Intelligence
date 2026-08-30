@@ -27,11 +27,14 @@ from typing import Any, Iterable, Mapping, MutableMapping, Sequence
 import requests
 import yaml
 
-EDGE_VERSION = "2026-08-29.5"
+EDGE_VERSION = "2026-08-30.1"
+PRICE_BASIS = "split_dividend_adjusted_total_return"
+PRICE_CACHE_VERSION = 1
 DEFAULT_CONFIG = Path("config/investor_edge.yml")
 PROFILE_FILE = "investor-edge-profiles.json"
 LEADERBOARD_FILE = "investor-edge-leaderboard.json"
 OBSERVATION_FILE = "investor-edge-observations.json"
+OBSERVATION_ARCHIVE_FILE = "investor-edge-observations-archive.json"
 MAX_MODIFIER_LIMIT = 12
 MIN_SECTOR_MAPPING_CONFIDENCE = 0.50
 
@@ -209,12 +212,12 @@ def investor_identity(record: Mapping[str, Any]) -> dict[str, Any]:
     identifier = ""
     identifier_source = ""
     for field_name in (
-        "filer_id", "bioguide_id", "reporting_person_id", "person_id", "member_id"
+        "bioguide_id", "filer_id", "reporting_person_id", "person_id", "member_id"
     ):
         candidate = _identity_part(record.get(field_name))
         if candidate:
             identifier = candidate
-            identifier_source = field_name
+            identifier_source = str(record.get("filer_id_source") or field_name)
             break
     if identifier:
         # Provider field names vary for the same public identifier. The value is
@@ -227,6 +230,10 @@ def investor_identity(record: Mapping[str, Any]) -> dict[str, Any]:
         filer_confidence = 0.75 if filer_key else 0.0
 
     owner = _owner_identity(record.get("owner"))
+    aliases_value = record.get("filer_aliases") or ()
+    aliases = sorted({
+        _identity_part(alias) for alias in aliases_value if _identity_part(alias)
+    }) if isinstance(aliases_value, (list, tuple)) else []
     owner_key = str(owner.get("owner_key") or "other-unknown")
     key = f"{filer_key}|{owner_key}" if filer_key else ""
     confidence = min(filer_confidence, float(owner["owner_confidence"]))
@@ -235,6 +242,7 @@ def investor_identity(record: Mapping[str, Any]) -> dict[str, Any]:
         "filer": filer,
         "filer_key": filer_key,
         "filer_name_key": _identity_part(filer),
+        "filer_alias_keys": aliases,
         "filer_stable_id": identifier,
         "filer_identity_source": identifier_source,
         "filer_identity_confidence": round(filer_confidence, 4),
@@ -259,14 +267,14 @@ def _matching_investor_records(
     target_identity = investor_identity(target)
     target_stable = str(target_identity.get("filer_stable_id") or "")
     target_name = str(target_identity.get("filer_name_key") or "")
+    target_names = {target_name, *target_identity.get("filer_alias_keys", [])} - {""}
     target_owner = str(target_identity.get("owner_key") or "")
     identities = [(item, investor_identity(item)) for item in records]
 
     same_name_owner = [
         (item, identity)
         for item, identity in identities
-        if target_name
-        and str(identity.get("filer_name_key") or "") == target_name
+        if target_names.intersection({str(identity.get("filer_name_key") or ""), *identity.get("filer_alias_keys", [])})
         and str(identity.get("owner_key") or "") == target_owner
     ]
     stable_ids = {
@@ -290,9 +298,8 @@ def _matching_investor_records(
         return matched
     if len(stable_ids) <= 1:
         return [item for item, _ in same_name_owner]
-    return [
-        item for item, identity in same_name_owner if not identity.get("filer_stable_id")
-    ]
+    # A shared name cannot establish which stable person owns name-only history.
+    return []
 
 
 def matching_investor_records(
@@ -307,7 +314,7 @@ def _method_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "version", "minimum_completed_trades", "confidence_prior_trades",
         "sector_confidence_prior_trades", "max_history_trades", "alpha_clip_percent",
         "alpha_score_points_per_percent", "benchmark_default", "horizons",
-        "horizon_weights", "edge_weights", "max_modifier",
+        "horizon_weights", "edge_weights", "max_modifier", "price_basis",
     )
     return {key: config.get(key) for key in keys}
 
@@ -321,7 +328,8 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
     candidate = Path(path or os.environ.get("INVESTOR_EDGE_CONFIG") or DEFAULT_CONFIG)
     if not candidate.exists():
         payload = {
-            "version": 2,
+            "version": 3,
+            "price_basis": PRICE_BASIS,
             "enabled": True,
             "max_modifier": 12,
             "minimum_completed_trades": 3,
@@ -352,6 +360,9 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
         payload = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
         if not isinstance(payload, dict):
             raise ValueError(f"Investor Edge config must be an object: {candidate}")
+    payload.setdefault("price_basis", PRICE_BASIS)
+    if payload["price_basis"] != PRICE_BASIS:
+        raise ValueError("Investor Edge requires split/dividend-adjusted total-return history")
     enabled_override = os.environ.get("INVESTOR_EDGE_ENABLED", "").strip().casefold()
     if enabled_override:
         if enabled_override not in {"1", "0", "true", "false", "yes", "no", "on", "off"}:
@@ -407,6 +418,52 @@ def _coerce_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         cleaned.append({"date": parsed.isoformat(), "close": close})
     cleaned.sort(key=lambda item: item["date"])
     return cleaned
+
+
+def _rows_hash(rows: Sequence[Mapping[str, Any]]) -> str:
+    return hashlib.sha256(json.dumps(list(rows), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+class AdjustedPriceHistory(list):
+    """One internally consistent provider snapshot, never mixed with raw closes."""
+
+    def __init__(self, rows: Sequence[Mapping[str, Any]], metadata: Mapping[str, Any]):
+        super().__init__(_coerce_rows(rows))
+        self.metadata = dict(metadata)
+
+
+def adjusted_price_history(
+    rows: Sequence[Mapping[str, Any]], *, ticker: str, provider: str,
+    fetched_utc: str | None = None,
+) -> AdjustedPriceHistory:
+    cleaned = _coerce_rows(rows)
+    return AdjustedPriceHistory(cleaned, {
+        "schema_version": PRICE_CACHE_VERSION,
+        "price_basis": PRICE_BASIS,
+        "provider": provider,
+        "ticker": ticker,
+        "fetched_utc": fetched_utc or _iso_utc(),
+        "rows_sha256": _rows_hash(cleaned),
+    })
+
+
+def _valid_price_metadata(rows: Sequence[Mapping[str, Any]], metadata: Mapping[str, Any]) -> bool:
+    if not isinstance(metadata, Mapping):
+        return False
+    try:
+        fetched = datetime.fromisoformat(str(metadata.get("fetched_utc") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return bool(
+        metadata.get("schema_version") == PRICE_CACHE_VERSION
+        and metadata.get("price_basis") == PRICE_BASIS
+        and metadata.get("provider")
+        and metadata.get("ticker")
+        and len({row.get("date") for row in rows}) == len(rows)
+        and fetched.tzinfo is not None
+        and fetched <= _utc_now() + timedelta(minutes=5)
+        and metadata.get("rows_sha256") == _rows_hash(rows)
+    )
 
 
 def _rows_cover(
@@ -492,7 +549,7 @@ class MarketHistoryProvider:
         return response
 
     def _edge_cache(self, ticker: str) -> Path:
-        return self.ai_dir / "investor-edge-market" / f"{ticker.upper()}-daily.json"
+        return self.ai_dir / "investor-edge-market" / "adjusted-v1" / f"{ticker.upper()}-daily.json"
 
     def _core_cache(self, ticker: str) -> Path:
         return self.ai_dir / "market-cache" / f"{ticker.upper()}-daily.json"
@@ -516,70 +573,59 @@ class MarketHistoryProvider:
         cache_hours = float(self.config.get("market_cache_hours", 24))
         edge_path = self._edge_cache(ticker)
         edge_payload = _read_json(edge_path)
-        edge_rows = (
-            _coerce_rows(item for item in edge_payload.get("rows", []) if isinstance(item, Mapping))
-            if isinstance(edge_payload, dict)
-            else []
-        )
-        core_path = self._core_cache(ticker)
-        core_payload = _read_json(core_path)
-        core_rows = (
-            _coerce_rows(item for item in core_payload.get("rows", []) if isinstance(item, Mapping))
-            if isinstance(core_payload, dict)
-            else []
-        )
-        cached_rows = _merge_rows(core_rows, edge_rows)
+        cached_rows: Sequence[Mapping[str, Any]] = []
+        if isinstance(edge_payload, dict):
+            raw_rows = edge_payload.get("rows")
+            if (isinstance(raw_rows, list)
+                and all(isinstance(item, Mapping) for item in raw_rows)
+                and edge_payload.get("ticker") == ticker
+                and edge_payload.get("provider") == "alphavantage:TIME_SERIES_DAILY_ADJUSTED"
+                and _valid_price_metadata(raw_rows, edge_payload)
+                and _coerce_rows(raw_rows) == raw_rows):
+                cached_rows = AdjustedPriceHistory(raw_rows, {key: value for key, value in edge_payload.items() if key != "rows"})
+            else:
+                self.errors.append(f"{ticker}: adjusted_cache_invalid_metadata_or_digest")
+        legacy_path = self.ai_dir / "investor-edge-market" / f"{ticker}-daily.json"
+        if not cached_rows and (legacy_path.exists() or self._core_cache(ticker).exists()):
+            self.errors.append(f"{ticker}: raw_or_unversioned_cache_preserved_but_not_eligible")
         historical_request = bool(
             required_through and required_through < _utc_now().date() - timedelta(days=7)
         )
-        edge_is_last_good_stale = bool(
-            isinstance(edge_payload, dict) and edge_payload.get("stale_if_error")
-        )
-        cache_is_fresh = (
-            _cache_fresh(edge_path, cache_hours) and not edge_is_last_good_stale
-        ) or _cache_fresh(core_path, cache_hours)
+        cache_is_fresh = False
+        if cached_rows:
+            fetched = datetime.fromisoformat(str(edge_payload["fetched_utc"]).replace("Z", "+00:00"))
+            cache_is_fresh = _utc_now() - fetched <= timedelta(hours=max(0.0, cache_hours))
         if _rows_cover(cached_rows, minimum_date, required_through) and (
             historical_request or cache_is_fresh
         ):
             self.memory[ticker] = cached_rows
             return cached_rows
 
+        # Adjusted price levels can be revised by corporate actions. Never splice
+        # different snapshots (even from the same provider) or a split-only feed.
         fresh_rows = self._fetch_alphavantage(ticker, outputsize="full")
-        network_rows = list(fresh_rows)
-        merged = _merge_rows(cached_rows, network_rows)
-        if not _rows_cover(merged, minimum_date, required_through):
-            fallback = self._fetch_finnhub(ticker, minimum_date=minimum_date)
-            network_rows = _merge_rows(network_rows, fallback)
-            merged = _merge_rows(merged, fallback)
-        if not network_rows and not _rows_cover(merged, minimum_date, required_through):
-            compact = self._fetch_alphavantage(ticker, outputsize="compact")
-            network_rows = _merge_rows(network_rows, compact)
-            merged = _merge_rows(merged, compact)
-
-        # Stale, non-empty data is strictly preferable to losing a last-good
-        # history during a transient provider outage. Never replace it with empty.
-        rows = merged or cached_rows
+        rows = fresh_rows or cached_rows
         self.memory[ticker] = rows
-        if rows and (network_rows or not edge_rows):
+        if fresh_rows:
             _atomic_json(
                 edge_path,
                 {
-                    "ticker": ticker,
-                    "fetched_utc": _iso_utc(),
+                    **fresh_rows.metadata,
                     "minimum_requested_date": minimum_date.isoformat() if minimum_date else "",
                     "required_through": required_through.isoformat() if required_through else "",
-                    "rows": rows,
-                    "stale_if_error": not bool(network_rows),
-                    "errors": self.errors[-5:],
+                    "rows": list(fresh_rows),
                 },
             )
+        if not rows:
+            reason = "request_budget_exhausted" if not self._can_request() else "adjusted_history_unavailable"
+            self.errors.append(f"{ticker}: {reason}; raw/split-only fallback prohibited")
         return rows
 
     def _fetch_alphavantage(self, ticker: str, *, outputsize: str) -> list[dict[str, Any]]:
         if not self.alphavantage_api_key or not self._can_request():
             return []
         params: dict[str, Any] = {
-            "function": "TIME_SERIES_DAILY",
+            "function": "TIME_SERIES_DAILY_ADJUSTED",
             "symbol": ticker,
             "outputsize": outputsize,
             "apikey": self.alphavantage_api_key,
@@ -593,20 +639,28 @@ class MarketHistoryProvider:
             payload = response.json()
             if not isinstance(payload, dict):
                 return []
-            series = payload.get("Time Series (Daily)") or {}
-            if not isinstance(series, dict):
+            series = payload.get("Time Series (Daily)")
+            if not isinstance(series, dict) or not series:
                 message = payload.get("Information") or payload.get("Note") or payload.get("Error Message")
                 if message:
                     self.errors.append(self._safe_error(f"Alpha Vantage {ticker}", message)[:400])
+                return []
+            source_metadata = payload.get("Meta Data")
+            if (not isinstance(source_metadata, Mapping)
+                    or _ticker_symbol(source_metadata.get("2. Symbol")) != ticker):
+                self.errors.append(f"Alpha Vantage {ticker}: adjusted_response_symbol_unverified")
                 return []
             rows = []
             for row_date, values in series.items():
                 if not isinstance(values, Mapping):
                     continue
-                close = _safe_float(values.get("4. close"))
+                close = _safe_float(values.get("5. adjusted close"))
                 if close and _parse_date(row_date):
                     rows.append({"date": str(row_date), "close": close})
-            return _coerce_rows(rows)
+                else:
+                    self.errors.append(f"Alpha Vantage {ticker}: adjusted_close_missing_or_invalid")
+                    return []
+            return adjusted_price_history(rows, ticker=ticker, provider="alphavantage:TIME_SERIES_DAILY_ADJUSTED")
         except Exception as exc:  # noqa: BLE001
             self.errors.append(
                 self._safe_error(f"Alpha Vantage {ticker}", f"{type(exc).__name__}: {exc}")
@@ -781,6 +835,11 @@ def _outcome_for_horizon(
     *,
     as_of: date | None = None,
 ) -> dict[str, Any] | None:
+    stock_metadata = getattr(stock_rows, "metadata", {})
+    benchmark_metadata = getattr(benchmark_rows, "metadata", {})
+    if not (_valid_price_metadata(stock_rows, stock_metadata)
+            and _valid_price_metadata(benchmark_rows, benchmark_metadata)):
+        return None
     stock_window = _window_return(stock_rows, anchor, horizon, as_of=as_of)
     if not stock_window:
         return None
@@ -790,6 +849,8 @@ def _outcome_for_horizon(
     benchmark_entry = _close_on_or_after(benchmark_rows, entry_date)
     benchmark_exit = _close_on_or_after(benchmark_rows, exit_date)
     if not stock_entry or not stock_exit or not benchmark_entry or not benchmark_exit:
+        return None
+    if benchmark_entry[0] != entry_date or benchmark_exit[0] != exit_date:
         return None
     if as_of is not None and benchmark_exit[0] > as_of:
         return None
@@ -808,6 +869,8 @@ def _outcome_for_horizon(
         "stock_return_percent": round(stock_return, 4),
         "benchmark_return_percent": round(benchmark_return, 4),
         "alpha_percent": round(stock_return - benchmark_return, 4),
+        "price_basis": PRICE_BASIS,
+        "price_provenance": {"stock": dict(stock_metadata), "benchmark": dict(benchmark_metadata)},
     }
 
 
@@ -1058,10 +1121,18 @@ class InvestorEdgeRuntime:
     attempted_observation_keys: set[str] = field(default_factory=set)
     last_observation_key: str = ""
     observations_pruned_this_run: int = 0
+    archived_observations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    observations_archived_this_run: int = 0
 
     def __post_init__(self) -> None:
-        # Old methodology versions and long-lived unavailable attempts must not
-        # make the durable artifact grow without bound.
+        archive_path = self.ai_dir / OBSERVATION_ARCHIVE_FILE
+        if archive_path.exists():
+            archive = _read_json(archive_path)
+            if not isinstance(archive, dict) or not isinstance(archive.get("observations"), dict):
+                raise ValueError("Investor Edge observation archive is malformed; refusing to replace it")
+            self.archived_observations = {**archive["observations"], **self.archived_observations}
+        # Bound active work, not durable history. Evicted observations are saved
+        # separately before replacing the active snapshot.
         self._prune_observations()
 
     @classmethod
@@ -1149,6 +1220,14 @@ class InvestorEdgeRuntime:
             )
         )
 
+    def _archive_observation(self, key: str, observation: Mapping[str, Any]) -> None:
+        """Preserve the original identity and all prior payload versions verbatim."""
+        archive_key = key
+        if key in self.archived_observations and self.archived_observations[key] != observation:
+            revision = hashlib.sha256(json.dumps(observation, sort_keys=True).encode()).hexdigest()
+            archive_key = f"{key}:revision:{revision}"
+        self.archived_observations.setdefault(archive_key, dict(observation))
+
     def _prune_observations(self) -> None:
         limit = self.observation_retention_limit
         if len(self.observations) <= limit:
@@ -1168,12 +1247,20 @@ class InvestorEdgeRuntime:
         retained = sorted(self.observations.items(), key=retention_rank, reverse=True)[
             :limit
         ]
+        retained_keys = {key for key, _ in retained}
+        for key, observation in self.observations.items():
+            if key not in retained_keys:
+                self._archive_observation(key, observation)
         removed = len(self.observations) - len(retained)
         self.observations = {str(key): dict(value) for key, value in retained}
-        self.observations_pruned_this_run += removed
+        self.observations_archived_this_run += removed
 
     def _save_observations(self) -> None:
         self._prune_observations()
+        if self.archived_observations:
+            _atomic_json(self.ai_dir / OBSERVATION_ARCHIVE_FILE, {
+                "version": 1, "observations": self.archived_observations,
+            })
         _atomic_json(
             self.ai_dir / OBSERVATION_FILE,
             {
@@ -1187,6 +1274,8 @@ class InvestorEdgeRuntime:
                     "retention_limit": self.observation_retention_limit,
                     "stored_observation_count": len(self.observations),
                     "pruned_this_run": self.observations_pruned_this_run,
+                    "archived_this_run": self.observations_archived_this_run,
+                    "archived_observation_count": len(self.archived_observations),
                 },
                 "observations": self.observations,
             },
@@ -1219,7 +1308,7 @@ class InvestorEdgeRuntime:
         required_through: date | None,
     ) -> list[dict[str, Any]]:
         try:
-            return self.provider.daily(
+            rows = self.provider.daily(
                 ticker,
                 minimum_date=minimum_date,
                 required_through=required_through,
@@ -1229,7 +1318,20 @@ class InvestorEdgeRuntime:
             # required-through coverage.
             if "required_through" not in str(exc):
                 raise
-            return self.provider.daily(ticker, minimum_date=minimum_date)
+            rows = self.provider.daily(ticker, minimum_date=minimum_date)
+        if not rows:
+            return []
+        metadata = getattr(rows, "metadata", {})
+        if _valid_price_metadata(rows, metadata) and metadata.get("ticker") == ticker:
+            return rows
+        # Explicitly marked deterministic adapters are permitted for offline
+        # acceptance; an arbitrary unlabelled provider must not imply adjustment.
+        if (getattr(self.provider, "price_basis", "") == PRICE_BASIS
+                and getattr(self.provider, "provider_name", "") == "deterministic_fixture"
+                and not getattr(self.provider, "network_requests", 0)):
+            return adjusted_price_history(rows, ticker=ticker, provider="deterministic_fixture")
+        self.provider.errors.append(f"{ticker}: unverified_price_basis_or_provenance")
+        return []
 
     @staticmethod
     def _visible_outcomes(
@@ -1241,8 +1343,14 @@ class InvestorEdgeRuntime:
         for horizon in horizons:
             key_h = str(horizon)
             detail = outcomes.get(key_h)
-            exit_date = _parse_date(detail.get("exit_date")) if isinstance(detail, Mapping) else None
-            visible[key_h] = dict(detail) if isinstance(detail, Mapping) and exit_date and exit_date <= as_of else None
+            dates = [_parse_date(detail.get(name)) for name in (
+                "entry_date", "exit_date", "benchmark_entry_date", "benchmark_exit_date"
+            )] if isinstance(detail, Mapping) else []
+            visible[key_h] = dict(detail) if (
+                isinstance(detail, Mapping)
+                and detail.get("price_basis") == PRICE_BASIS
+                and dates and all(value is not None and value <= as_of for value in dates)
+            ) else None
         return visible
 
     def _observation_for_trade(
@@ -1262,7 +1370,11 @@ class InvestorEdgeRuntime:
             self.config.get("benchmark_default", "SPY")
         )
         observation_key = self._observation_key(item, benchmark=benchmark)
-        cached = dict(self.observations.get(observation_key) or {})
+        cached = dict(self.observations.get(observation_key) or self.archived_observations.get(observation_key) or {})
+        if cached and (cached.get("method_hash") != self.method_hash or cached.get("price_basis") != PRICE_BASIS):
+            # Preserve incompatible data for audit, but never use it to score.
+            self._archive_observation(observation_key, cached)
+            cached = {}
         picker_cached = cached.get("picker_outcomes") or {}
         followable_cached = cached.get("followable_outcomes") or {}
         missing = [
@@ -1316,6 +1428,7 @@ class InvestorEdgeRuntime:
                     "observation_key": observation_key,
                     "version": EDGE_VERSION,
                     "method_hash": self.method_hash,
+                    "price_basis": PRICE_BASIS,
                     "investor_key": key,
                     "trade_id": str(item.get("trade_id") or ""),
                     "ticker": ticker,
@@ -1344,6 +1457,7 @@ class InvestorEdgeRuntime:
                     "observation_key": observation_key,
                     "version": EDGE_VERSION,
                     "method_hash": self.method_hash,
+                    "price_basis": PRICE_BASIS,
                     "investor_key": key,
                     "trade_id": str(item.get("trade_id") or ""),
                     "ticker": ticker,
@@ -1400,6 +1514,18 @@ class InvestorEdgeRuntime:
             status = "partial_cached"
         elif cached and status != "backfilled":
             status = "cached"
+        visible["pending_horizons"] = {
+            anchor: [str(horizon) for horizon in horizons if not isinstance(
+                (visible.get(f"{anchor}_outcomes") or {}).get(str(horizon)), Mapping
+            )]
+            for anchor in ("picker", "followable")
+        }
+        visible["coverage_reason"] = (
+            "adjusted_history_unavailable" if status == "unavailable"
+            else "backfill_budget_or_retry_deferred" if status == "deferred"
+            else "insufficient_adjusted_sessions_or_unmatched_benchmark" if visible_missing
+            else "complete"
+        )
         return visible, status
 
     def profile_for_trade(
@@ -1749,6 +1875,8 @@ class InvestorEdgeRuntime:
                         else observation_status
                     ),
                     "observation_status": observation_status,
+                    "coverage_reason": observation.get("coverage_reason"),
+                    "pending_horizons": observation.get("pending_horizons", {}),
                     "observation_key": str(observation.get("observation_key") or ""),
                     "eligible": True,
                     "counts_toward_edge": followable is not None,
@@ -1998,6 +2126,9 @@ class InvestorEdgeRuntime:
         )
         modifier = int(round((adjusted_edge - 50.0) / 50.0 * max_modifier))
         modifier = max(-max_modifier, min(max_modifier, modifier))
+        minimum_sample_met = n >= minimum and effective_n + 1e-9 >= minimum
+        if not minimum_sample_met:
+            modifier = 0
         disclosure_lags = [
             int(item.get("disclosure_lag_days") or 0)
             for item in eligible_results
@@ -2018,6 +2149,10 @@ class InvestorEdgeRuntime:
             "version": EDGE_VERSION,
             "method_hash": self.method_hash,
             "config_version": self.config.get("version"),
+            "price_basis": PRICE_BASIS,
+            "status": "scored" if minimum_sample_met else "insufficient_data",
+            "minimum_completed_trades": minimum,
+            "minimum_sample_met": minimum_sample_met,
             "generated_utc": _iso_utc(),
             "as_of_date": as_of.isoformat(),
             "investor_key": key,
@@ -2077,6 +2212,9 @@ class InvestorEdgeRuntime:
             "backfill_processed_this_run": self.backfill_processed_this_run,
             "backfill_limit_per_run": self.backfill_limit,
             "backfill_pending_trade_count": pending_trade_count,
+            "backfill_coverage_reasons": dict(Counter(
+                str(item.get("coverage_reason") or "unknown") for item in eligible_results
+            )),
             "profile_status": "partial" if pending_trade_count else "complete",
             "methodology": {
                 "benchmarking": "Sector ETF when Finnhub industry data is available; otherwise SPY",
@@ -2092,6 +2230,8 @@ class InvestorEdgeRuntime:
                 "sector_confidence_prior_trades": sector_prior,
                 "modifier_range": [-max_modifier, max_modifier],
                 "small_sample_shrinkage": True,
+                "minimum_sample_gate": minimum,
+                "price_basis": PRICE_BASIS,
                 "as_of_cutoff": as_of.isoformat(),
                 "method_hash": self.method_hash,
             },
@@ -2164,11 +2304,11 @@ class InvestorEdgeRuntime:
             preserved["data_errors"] = self.provider.errors[-10:]
             self.profiles[key] = preserved
             if previous_key and previous_key != key:
-                self.profiles.pop(previous_key, None)
+                self.profiles[previous_key]["alias_of"] = key
             return preserved
         self.profiles[key] = profile
         if previous_key and previous_key != key:
-            self.profiles.pop(previous_key, None)
+            self.profiles[previous_key]["alias_of"] = key
         return profile
 
     def refresh_leaderboard(
@@ -2181,13 +2321,12 @@ class InvestorEdgeRuntime:
         identified = [(item, investor_identity(item)) for item in eligible]
         stable_by_name_owner: dict[tuple[str, str], set[str]] = {}
         for _, identity in identified:
-            group = (
-                str(identity.get("filer_name_key") or ""),
-                str(identity.get("owner_key") or ""),
-            )
             stable = str(identity.get("filer_stable_id") or "")
-            if group[0] and stable:
-                stable_by_name_owner.setdefault(group, set()).add(stable)
+            names = {str(identity.get("filer_name_key") or ""), *identity.get("filer_alias_keys", [])} - {""}
+            for name in names:
+                group = (name, str(identity.get("owner_key") or ""))
+                if stable:
+                    stable_by_name_owner.setdefault(group, set()).add(stable)
 
         canonical_keys: list[str] = []
         for _, identity in identified:
@@ -2238,6 +2377,9 @@ def neutral_profile(record: Mapping[str, Any], *, reason: str) -> dict[str, Any]
     identity = investor_identity(record)
     return {
         "version": EDGE_VERSION,
+        "status": "insufficient_data",
+        "minimum_sample_met": False,
+        "price_basis": PRICE_BASIS,
         "generated_utc": _iso_utc(),
         "investor_key": str(identity.get("investor_key") or ""),
         "filer": str(record.get("filer") or ""),
@@ -2314,14 +2456,17 @@ def apply_profile_to_analysis(
         -MAX_MODIFIER_LIMIT,
         min(MAX_MODIFIER_LIMIT, int(profile.get("modifier") or 0)),
     )
+    if profile.get("status") in {"insufficient_data", "unavailable", "error", "disabled"} or profile.get("minimum_sample_met") is False:
+        modifier = 0
     adjusted_raw = max(0, min(100, base_raw + modifier))
+    adjusted_base = max(0, min(100, base_score + modifier))
     hard_caps = updated.get("hard_caps") or []
     cap_values = [
         int(item.get("maximum_score"))
         for item in hard_caps
         if isinstance(item, Mapping) and item.get("maximum_score") is not None
     ]
-    adjusted = min([adjusted_raw, *cap_values]) if cap_values else adjusted_raw
+    adjusted = min([adjusted_base, *cap_values]) if cap_values else adjusted_base
     adjusted = max(0, min(100, int(adjusted)))
     components = dict(updated.get("score_components") or {})
     components["investor_edge_modifier"] = modifier

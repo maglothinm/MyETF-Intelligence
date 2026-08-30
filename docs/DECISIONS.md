@@ -220,3 +220,53 @@ GitHub confirms the rename. Public legacy `MyETF` is code-frozen at `36447a2`, b
 removing workflow files is not a substitute for disabling Actions/Pages and
 setting the archive flag. The cutover remains open until those settings and the
 two stale queued runs are verified.
+
+## D-2026-08-30-015 — Pause conflicting remediation proposals before promotion
+
+**Decision:** Preserve the uncommitted `codex/production-remediation` worktree and
+pause implementation pending explicit owner resolution of the newly supplied
+contract versus the earlier approved remediation directive. Do not silently
+amend `AGENTS.md`, merge, dispatch, or deploy the conflicting draft.
+
+**Reason:** The draft adds same-repository fast-forward Git namespaces for an
+isolated persistent paper agent, simulation results/receipts, and an AI delivery
+recovery journal; a dedicated simulation notification job references Gmail
+secrets. The restated contract forbids simulation alert credentials, restricts
+simulation durable outputs, and makes provenance-valid artifacts the sole
+production-state authority. Local tests cannot resolve that authorization or
+design conflict.
+
+**Consequence:** These are local proposals, not adopted operational designs.
+Retain all existing production continuity constraints and protected checkpoints.
+Ask whether to authorize explicit, narrowly documented exceptions or revise the
+draft to remain within the unchanged contract. The persistent paper experiment
+remains separate from historical replay and no $20,000 return is promised.
+
+## D-2026-08-30-016 — Continue the unchanged-contract revision; hold added authorities
+
+**Decision:** The owner's "Hold on those features. Continue the revision"
+supersedes the pause in D-015 without authorizing contract exceptions. Keep
+`AGENTS.md` unchanged. Remove simulation Gmail, extra durable-result state,
+persistent Git-backed paper-agent execution, Git-backed AI recovery integration,
+and the dependent Worker from active code/workflows. Preserve their local drafts
+outside the commit under ignored `.remediation/held-feature-drafts/`.
+
+**Consequence:** Finish artifact-only state integrity and Investor Edge corrections.
+Both simulation workflows retain only their existing permitted outputs and receive
+no real alert/provider credentials. Production alert durability, direct dashboard
+dispatch, and persistent paper-agent operation remain explicitly unresolved.
+
+Shared restore/seal helpers replace duplicated inline restore implementations.
+Exact pre-manifest hash allowlisting bridges verified checkpoints without a
+rebaseline. Completed IDs are never silently pruned; Edge archives are immutable,
+pending horizons can mature, and identity upgrades retain prior profile aliases.
+
+CI now runs the entire active `tests/` suite and mandatory Linux `verify.sh`.
+Historical `backend/tests` imports a retired absent `api` package and is preserved
+but outside active CI collection. Windows checks explicitly report unavailable
+Bash. Shell/recovery text uses canonical LF via `.gitattributes`; protected
+production checkpoint verification remains byte-exact with no normalization.
+
+No new external state authority, paid/provider call, live notification, protected
+writer, production dispatch, default-branch merge, rename, or legacy cutover is
+authorized by this reduced-scope revision.

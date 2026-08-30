@@ -424,6 +424,27 @@ def test_no_candidates_fails_clearly_without_writing_output(tmp_path: Path) -> N
     assert not output.exists()
 
 
+@pytest.mark.parametrize("predecessor", [b'{ "simulation_id" : "legacy-spacing" }\r\n\r\n', b'{ "simulation_id" : "no-final-newline" }'])
+def test_notification_metadata_is_final_before_append_and_preserves_prefix(tmp_path: Path, predecessor: bytes) -> None:
+    legislative, executive, ai = fixture_inputs(tmp_path)
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "simulation-runs.jsonl").write_bytes(predecessor)
+    result = run_simulation(
+        legislative_dir=legislative, executive_dir=executive, ai_dir=ai,
+        output_dir=output, as_of=AS_OF, trade_id="trade-a",
+    )
+    history = (output / "simulation-runs.jsonl").read_bytes()
+    assert history[:len(predecessor)] == predecessor
+    appended = [json.loads(line) for line in history[len(predecessor):].splitlines() if line.strip()]
+    assert appended == [result]
+    assert result["notification"] == {"pushover": "not_requested", "email": "not_requested"}
+    workflow = (Path(__file__).parents[1] / ".github/workflows/filing_simulation.yml").read_text()
+    after_validation = workflow.split("- name: Validate isolated simulation state", 1)[1]
+    assert "history_path.write_text" not in after_validation
+    assert "Record notification isolation in simulation state" not in workflow
+
+
 def test_as_of_requires_timezone() -> None:
     with pytest.raises(SimulationError, match="UTC offset or Z"):
         parse_as_of("2026-08-29T16:00:00")

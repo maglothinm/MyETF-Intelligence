@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from scripts.investor_edge import (
+    PRICE_BASIS,
+    OBSERVATION_ARCHIVE_FILE,
     OBSERVATION_FILE,
     InvestorEdgeRuntime,
     MarketHistoryProvider,
@@ -83,6 +85,8 @@ def purchase(
 
 
 class DeterministicProvider:
+    price_basis = PRICE_BASIS
+    provider_name = "deterministic_fixture"
     def __init__(self, stock_rows: list[dict[str, object]], benchmark_rows: list[dict[str, object]]):
         self.stock_rows = stock_rows
         self.benchmark_rows = benchmark_rows
@@ -387,7 +391,7 @@ def test_applying_modifier_is_idempotent_and_preserves_hard_caps() -> None:
     assert once["final_score"] == 75
 
 
-def test_market_cache_merges_sources_and_uses_stale_data_on_provider_failure(tmp_path: Path) -> None:
+def test_unversioned_raw_caches_are_preserved_but_never_used(tmp_path: Path) -> None:
     ai_dir = tmp_path / "ai"
     edge_path = ai_dir / "investor-edge-market" / "AAA-daily.json"
     core_path = ai_dir / "market-cache" / "AAA-daily.json"
@@ -421,7 +425,7 @@ def test_market_cache_merges_sources_and_uses_stale_data_on_provider_failure(tmp
         required_through=date(2025, 2, 1),
     )
 
-    assert [item["date"] for item in result] == ["2025-01-01", "2025-01-02", "2025-01-03"]
+    assert result == []
     assert json.loads(edge_path.read_text(encoding="utf-8"))["rows"] == edge_rows
     assert provider.errors
 
@@ -575,13 +579,16 @@ def test_observation_retention_is_bounded_and_prefers_current_method_recent_rows
     runtime = InvestorEdgeRuntime(config, tmp_path, provider, {}, observations)
 
     assert set(runtime.observations) == {"current-2", "current-3", "current-4"}
-    assert runtime.observations_pruned_this_run == 3
+    assert runtime.observations_pruned_this_run == 0
+    assert runtime.observations_archived_this_run == 3
     runtime.save()
     payload = json.loads((tmp_path / OBSERVATION_FILE).read_text(encoding="utf-8"))
     assert set(payload["observations"]) == set(runtime.observations)
     assert payload["backfill"]["retention_limit"] == 3
     assert payload["backfill"]["stored_observation_count"] == 3
-    assert payload["backfill"]["pruned_this_run"] == 3
+    assert payload["backfill"]["pruned_this_run"] == 0
+    archive = json.loads((tmp_path / OBSERVATION_ARCHIVE_FILE).read_text(encoding="utf-8"))
+    assert {**archive["observations"], **payload["observations"]} == observations
 
 
 def test_per_horizon_observation_is_filled_later_without_duplicate_trade_state(tmp_path: Path) -> None:
@@ -674,7 +681,8 @@ def test_identity_upgrade_reuses_observation_and_migrates_last_good_profile(
     assert preserved["marker"] == "name-last-good"
     assert preserved["investor_key"] == stable_key
     assert stable_key in runtime.profiles
-    assert name_key not in runtime.profiles
+    assert runtime.profiles[name_key]["marker"] == "name-last-good"
+    assert runtime.profiles[name_key]["alias_of"] == stable_key
 
 
 def test_partial_refresh_does_not_replace_equal_sample_richer_last_good(tmp_path: Path) -> None:

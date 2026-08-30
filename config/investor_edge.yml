@@ -1,4 +1,5 @@
-version: 2
+version: 3
+price_basis: split_dividend_adjusted_total_return
 enabled: true
 max_modifier: 12
 minimum_completed_trades: 3

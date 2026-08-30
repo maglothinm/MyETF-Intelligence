@@ -1,8 +1,61 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **reconciliation deployed and production acceptance passed; repository
-settings cutover remains blocked on authenticated GitHub settings access**
+Status: **contract-compatible remediation revised and locally verified on a
+review branch; Linux CI and live production acceptance pending. No cutover.**
+
+## Current revision and owner-held scope
+
+The owner instructed: "Hold on those features. Continue the revision."
+`AGENTS.md` is unchanged. Simulation Gmail, extra durable storage, the persistent
+Git-backed paper agent, Git-backed AI recovery, and dependent dispatch Worker
+are excluded from active source/workflows. Local drafts are preserved under
+ignored `.remediation/held-feature-drafts/`; they are not deployed or committed.
+
+Canonical repository ID `1349678672` remains public
+`maglothinm/MyETF-Intelligence`; rechecked default `main` is
+`4a9135a8c12af6eebfce01cf33772ffa13e41951`. Revision branch:
+`codex/production-remediation`. This record accompanies the reviewable revision;
+no merge, production dispatch, mail, deployment, rename, or archive is claimed.
+Unrelated pre-existing `.codex/` remains preserved.
+
+The active revision consolidates artifact-only restore/seal validation, preserves
+all IDs/ledger prefixes/Edge history, corrects adjusted-price and minimum-sample
+scoring, and keeps both simulations credential-free with their existing permitted
+outputs. See `docs/STATE_SAFETY.md` for design and intentionally unresolved scope.
+
+Verified successor checkpoints, all attempt 1 and unexpired at the recheck:
+
+| Pipeline | Successful run | Job | Artifact |
+|---|---:|---:|---:|
+| Legislative | `33306989441` | `99245167496` | `9730784030` |
+| Executive | `33297296482` | `99219056330` | `9727833986` |
+| AI | `33307012616` | `99245230528` | `9730794047` |
+
+All six original/successor ZIPs pass the revised validator, exact inventory hashes,
+prior-ledger byte-prefix preservation, and seen-ID retention. Exact evidence is in
+`docs/protected-state-migration.json`. These are comparison checkpoints, not fixed
+restore targets; always query for newer producers and attempts.
+
+Local verification: **244 active tests passed**, 49 Python files and 5 embedded
+Python blocks parsed, 5 JSON and 11 YAML files parsed, three generated JavaScript
+files syntax-checked, recovery manifest and credential-pattern scan passed.
+An actual-input dashboard built successfully, and an isolated TEST scoring run
+completed with zero network/model requests/emails and unchanged source hashes.
+Bash/WSL is unavailable locally: **58 Bash syntax checks and verify.sh execution
+remain a Linux CI gate**, not a local pass.
+
+No revised code was deployed. Existing pre-rename Pages and prior successful
+publisher run `33307049036` remain the deployment evidence. Live adjusted-price
+entitlement, sufficient samples, Gmail delivery, and Safari acceptance are not
+proven by offline results. The existing Actions-link dashboard control remains.
+
+Issue #1 stays open. Obsolete runs `33219808359` and `33221027676` still report
+queued at removed `legislative_trade_tracker.yml`, SHA
+`b9cf0f3e3863de69d92ae01f35f1c154a082f56a`. Prior ordinary/force-cancel attempts
+returned HTTP 409. No production dispatch or cutover until contained.
+
+## Earlier operational evidence (historical)
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
