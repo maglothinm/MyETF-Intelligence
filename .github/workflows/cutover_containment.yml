@@ -69,11 +69,21 @@ jobs:
 
             case "$status" in
               queued|in_progress|pending|waiting|requested)
-                gh api \
+                if ! gh api \
                   --method POST \
                   -H "Accept: application/vnd.github+json" \
                   "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" \
-                  >/dev/null
+                  >/dev/null 2>&1; then
+                  # These migrated runs can report `queued` while GitHub's
+                  # ordinary cancellation endpoint still calls them
+                  # pre-queued. Force-cancel is scoped to the same verified
+                  # immutable run identity and is the supported fallback.
+                  gh api \
+                    --method POST \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/force-cancel" \
+                    >/dev/null
+                fi
                 ;;
               *)
                 echo "Run ${run_id} has unexpected status ${status}; refusing containment." >&2
