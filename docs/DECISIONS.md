@@ -273,3 +273,22 @@ prices, simulation isolation, paper positions, alerts, workflows and production
 state remain unchanged. Visible PAPER RESEARCH, TEST/SIMULATED, single-run replay,
 missing-history and browser-local limitations stay on-screen. Local DOM tests
 and geometry stubs do not establish rendered browser or physical-device acceptance.
+
+## D-2026-08-30-021 — Publish approved contextual help through existing Pages
+
+**Decision:** Following the owner's explicit “I want it published” instruction,
+release issue #6 through PR #7 and the existing canonical read-only Pages
+publisher, after successful PR CI and a fresh artifact-continuity audit. No
+additional confirmation or alternative hosting implementation is required.
+
+**Reason:** The tested presentation change can ship without altering production
+writers. The owner requested publication after the browser/device and Windows
+verifier limits were disclosed; PR/main Linux CI subsequently passed the complete
+verifier. Actual browser/device acceptance remains unverified.
+
+**Consequence:** Merge `1aa87398b53689873de350155d33afdb993fb036` is published by
+successful run `33325629663`; all 21 live files match artifact `9736138918`.
+Scheduled Executive/AI successors were validated before release and remained
+unchanged through publication. Keep issue #6 open for device acceptance. Do not
+conflate publication with the separate cutover, PR #3, obsolete queues,
+repository settings or Gmail delivery gates.

@@ -1,103 +1,109 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-30 UTC**
-Work record: **[issue #6 — Refine contextual help on the current PolitiTrack dashboard](https://github.com/maglothinm/MyETF-Intelligence/issues/6)**
+Work record: **[issue #6 — contextual help](https://github.com/maglothinm/MyETF-Intelligence/issues/6)**
 
-## Current task and exact scope
+## Current task
 
-Contextual-help implementation and local regression verification are complete.
-Chrome responsive acceptance, Linux verification and publication remain pending.
-This is a **local, unpushed candidate on `main`**, based on
-`a5d67034044ca53fc861a51af6218e79f9899870`; the commit carrying this handoff contains
-the implementation and documentation. Canonical repository is
-`maglothinm/MyETF-Intelligence`, ID **1349678672**, default `main`, still public and
-pre-rename. Do not use legacy `maglothinm/MyETF`.
+The owner-requested tooltip publication is complete and live-content/state
+continuity verification passed. Remaining task: browser/device acceptance under
+issue #6. No publication approval is pending. Use the existing deployed UI.
 
-No workflow, collector, score, modifier, confidence calculation, classification,
-benchmark, identity, simulation, paper-position, alert or production-state change
-is included. Held PR #3 remains untouched. Generated production Pages output was
-not edited; no workflow was dispatched and no external alert was sent.
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`, default
+`main`, remains public/pre-rename. Never use legacy `maglothinm/MyETF`. Source
+`2a955f5` was merged by PR #7 as `1aa8739`; the exact full SHA and run evidence
+follow. This handoff belongs to a documentation-only successor on `main`.
 
-## Completed source and evidence
+The implementation reuses `setupDialogsAndTooltips`, `data-tooltip` and one
+shared `#tooltip`, adding consistent help, delayed hover, safe structured copy,
+viewport/caret behavior and touch-safe workflow help. All material warnings
+remain visible. See `docs/CONTEXTUAL_HELP.md` for changed files, exact copy,
+interactions and tests. No business logic, workflow or production-state change
+was included; held PR #3 remains untouched.
 
-- `scripts/dashboard_assets/common.js` retains one shared `#tooltip` and refactors
-  the existing `setupDialogsAndTooltips()`. It adds safe optional title/body/note,
-  frozen shared definitions, 300ms hover, immediate focus/help, correct pointer
-  exit/pinning, preserved ARIA tokens, Escape, caret/viewport positioning,
-  layout-change handling and keyboard scrolling of overflowing copy.
-- Source HTML/JS and `investor_edge.py::build_dashboard_addon()` provide contextual
-  help for Investor Edge, TEST pipeline acceptance, single-run $10K replay,
-  research terminology, selective Overview, local notifications and Monitor Mode.
-  Workflow actions have adjacent 44px help buttons. Selected explanatory links
-  use first-touch preview and second-touch navigation; ordinary navigation and
-  desktop actions remain immediate.
-- All material research/simulation/insufficient-history/local-browser warnings
-  remain visible. Business functions and workflow files are unchanged.
-- Full repository tests: **182 passed**, including **24 JSDOM scenarios** and
-  **32 native Node notification scenarios**. Syntax, Python compilation and diff
-  checks passed. Fixture builders, immutable-input/public-output sanitation and
-  existing dashboard/research regressions passed. Axe found no serious/critical
-  findings in tested fixture views; layout/color checks were excluded.
-- Geometry/pointer checks use explicit stubs: 1920×1080, 1440×900, 1180×820,
-  820×1180 and 390×844, plus visual-viewport offsets, detached anchors, layout
-  changes and overflow reading. **No rendered screenshots or physical-device
-  acceptance were performed.**
-- Windows `verify.sh` could not resolve required `dirname`/`mktemp` utilities.
-  Shell syntax and the script's unmodified embedded Python assertions passed
-  separately. Canonical Git blobs match all four manifest hashes; working
-  recovery files differ only by Windows line endings. Full Linux execution and
-  its `VERIFICATION PASSED` output remain required before release.
-- Detailed changed files, final copy, interaction design, tests and limits are in
-  `docs/CONTEXTUAL_HELP.md`. Local ignored audit evidence is
-  `.remediation/tooltip-audit.md`; it is an evidence record, never state authority.
+## Contextual-help publication — verified 2026-08-30 17:36 UTC
 
-## Fresh operational checkpoint — 16:56–17:03 UTC
+The owner explicitly requested publication after the Chrome/device gap was
+disclosed. PR [#7](https://github.com/maglothinm/MyETF-Intelligence/pull/7) merged
+tested source `2a955f571c2cd4cf26b033984daa39904c11d64c` as
+`1aa87398b53689873de350155d33afdb993fb036` on canonical `main`. Their trees match.
+Documentation-only successors do not change the deployed application source.
 
-All 114 canonical runs and 144 repository-global artifacts were inspected.
-Protected IDs, reported ZIP digests, exact successful attempts/jobs, ancestry and
-producer high-water marks are unchanged from the deployed redesign. No newer
-eligible producer or active eligible writer was found.
+[Live dashboard](https://maglothinm.github.io/MyETF-Intelligence/),
+[Investor Edge](https://maglothinm.github.io/MyETF-Intelligence/investor-edge.html)
+and [Wallboard](https://maglothinm.github.io/MyETF-Intelligence/wallboard.html)
+are published from repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
 
-| Pipeline | Artifact ID | Producing run / attempt | Successful job |
-|---|---:|---|---:|
-| Legislative | `9734211271` | `33318579174` / `1` | `99276401831` |
-| Executive | `9732455687` | `33312565343` / `1` | `99260139758` |
-| AI | `9734221839` | `33318614858` / `1` | `99276494661` |
+| Release evidence | Verified result |
+|---|---|
+| PR CI | [33325538713](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325538713), attempt 1, job `99294887628`; success, 78 selected tests |
+| Main CI | [33325629684](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629684), attempt 1, job `99295130888`; success, 78 selected tests |
+| Linux verifier | Both CI runs passed the existing release gate, which executes full `verify.sh` and requires `VERIFICATION PASSED` |
+| Pages | [33325629663](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629663), attempt 1; success; build `99295130679`, deploy `99295188583` |
+| Pages artifact | `9736138918`; exact successful attempt/build window and ZIP digest verified |
+| Pages ZIP SHA-256 | `f8d5a8e65fa26e34b06e425a6016100fd0e488b312a3aa2fae5731a378acf283` |
+| Live verification | 17:36:13 UTC: 21 root/Wallboard/Edge/assets/JSON URLs returned HTTP 200 and exactly matched the Pages artifact |
+| Published build | `1aa87398b53689873de350155d33afdb993fb036` |
+| Source-content check | 27 additional checks passed across 11 fixed live URLs, including exact source asset/script comparisons, shared copy, help/touch attributes and persistent warnings |
 
-Producer commit is `4a9135a`, an ancestor of the base and this candidate. This is
-fresh **metadata/lineage** verification, not a new artifact download, production
-restore, ZIP-content or ledger-count audit. Historical full continuity evidence
-remains in `docs/PROJECT_STATE.md`.
+The earlier Windows verifier limitation is resolved for this release by Linux CI.
+Local verification remains **182 tests passed**, including **24 JSDOM scenarios**
+and **32 native Node notification scenarios**. JSDOM is an optional dependency
+not provisioned by CI; its local results are not inferred remote CI results.
+Real Chrome/Safari/touch, responsive screenshots, rendered overflow/caret/CSP and
+physical-device acceptance remain unverified under issue #6.
 
-Isolated replay artifact `9734790733`, run `33320677882` / attempt 1, successful
-job `99281977011`, is unchanged. No simulation was run for this work.
+### Protected inputs and continuity
 
-## Existing deployment, unchanged by this candidate
+Scheduled Executive and downstream AI runs completed before publication. Their
+newer artifacts passed exact workflow/job/attempt identity, ancestry, producer
+high-water checks, ZIP digests, schema and full inventory/record continuity
+against original, prior and last-deployed checkpoints. No eligible writer was
+active before merging or at final verification.
 
-- Main CI [33323430401](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430401),
-  attempt 1: success at deployed UI commit `12d5896`.
-- Pages [33323430450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430450),
-  attempt 1: success; build `99289284456`, deploy `99289373251`, artifact
-  `9735544864`. That run uploaded no protected state.
-- Fresh live root, Wallboard, Edge and insights responses were HTTP 200; published
-  `build_sha` remains `12d58964060885696ef4f5d3724ba5575de33fb2`.
-- These runs verify the previous release, **not** the new tooltip candidate.
+| Pipeline | Newest protected artifact | Successful run / attempt | Job | Retained counts |
+|---|---:|---|---:|---|
+| Legislative | `9734211271` | `33318579174` / 1 | `99276401831` | 983 filings; 65 transactions; 19 purchases; 1 review; 27 runs |
+| Executive | `9736054489` | `33325239324` / 1 | `99294089255` | 4,109 filings; 1,495 reviews; 20 runs |
+| AI | `9736064296` | `33325343519` / 1 | `99294369216` | 12 analyses; 29 runs |
 
-## Remaining limits and next safe action
+Actual publisher restore logs, fresh global authority checks and downloaded
+protected ZIPs/full inventories prove these inputs were unchanged through
+publication. Published counts reconcile to 5,079 filings, 60 transactions,
+1,496 reviews and 11 analyses. The Pages run uploaded only `github-pages`.
+No collectors, AI, simulations, external alerts or production-state writers were
+dispatched by this release task, and no workflow rules were changed.
 
-1. Connect Chrome through Settings → Computer use. The Browser skill requires
-   the requested Chrome connection; no other browser was substituted. Inspect
-   desktop/tablet/390px generated fixtures, Actions dialog, touch help, focus,
-   caret, overflow, console/CSP and real iPhone Safari. Keep issue #6 open until
-   acceptance/release evidence is recorded; issue #4 retains its earlier device
-   acceptance requirements.
-2. Run full Linux `verify.sh` in the existing CI path. When publication is
-   requested, reverify live canonical main, artifact high-water marks and this
-   diff; use only the existing read-only Pages publisher and record new CI/Pages
-   runs and live build SHA. Do not dispatch collectors/AI/simulations for UI QA.
-3. Preserve pre-existing untracked `.codex/`; local generated tests/audit files
-   remain ignored. Do not treat them as production authority.
-4. Separate unchanged open work: issue #1, PR #3, obsolete queued runs
+Isolated simulation artifact `9734790733`, run `33320677882` / attempt 1, remains
+unchanged with two replay history rows and preserved predecessor bytes.
+Known-good rollback Pages is `33325376676` / attempt 1, artifact `9736074454`,
+exported ZIP SHA-256
+`910f9e40171a11ea3f0ade63b6dae4386ca4979faaa48d31c7cc4e785739b371`.
+Ignored local evidence: `.remediation/tooltip-publish-preflight`,
+`.remediation/tooltip-published/deployment-verification.json`, and
+`.remediation/tooltip-live-content.json`. These are recovery/verification records,
+not alternate production authority.
+
+Only the two known obsolete queued runs remained at final verification. Issue #1,
+held PR #3, repository rename/privacy, legacy settings retirement and Gmail
+delivery proof remain separate open work. Issue #6 remains open for device
+acceptance, not because publication is pending.
+
+## Next safe action and remaining gates
+
+1. Open the live dashboard. Connect Chrome via Settings → Computer use when
+   ready to perform desktop/tablet/390px rendered and touch acceptance, followed
+   by actual iPhone Safari/device checks. The Browser skill requires the
+   requested Chrome connection; no other browser was substituted for acceptance.
+   Do not claim screenshots, physical-device, real audio or complete CSP/overflow
+   acceptance from HTTP/JSDOM checks. Keep issues #6 and #4 open for these limits.
+2. Before later production work, freshly requery repository and artifact
+   authority. Recorded IDs are checkpoints, not permanent restore targets. Do
+   not dispatch collectors, AI or simulations solely for visual QA.
+3. Preserve pre-existing untracked `.codex/`. Audit exports and generated test
+   outputs remain ignored. The final implementation tree is clean after the
+   documentation-only evidence commit; verify with `git status` before edits.
+4. Separate unchanged gates: issue #1, held PR #3, obsolete queued
    `33219808359` and `33221027676` (zero jobs/artifacts), same-ID rename/privacy,
-   legacy Actions/Pages/archive settings and actual Gmail delivery proof. Do not
-   close those gates, rebaseline state or claim duplicate-writer retirement.
+   legacy Actions/Pages/archive settings and actual Gmail delivery proof. No
+   state rebaseline, settings change or external-alert test was authorized here.
