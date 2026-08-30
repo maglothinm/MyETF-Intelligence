@@ -270,3 +270,30 @@ production checkpoint verification remains byte-exact with no normalization.
 No new external state authority, paid/provider call, live notification, protected
 writer, production dispatch, default-branch merge, rename, or legacy cutover is
 authorized by this reduced-scope revision.
+
+## D-2026-08-30-017 — Authorize GitHub escalation and the existing production rollout
+
+**Decision:** The owner explicitly instructed: "Ask GitHub on my behalf" and
+granted autonomy to get the current revision into production. This supersedes
+D-016's lack of promotion/operations authority, but not its deferred-feature
+scope or the repository contract. The agent may contact GitHub about the exact
+stuck runs and perform the existing revision's merge and production acceptance
+after containment and refreshed state-continuity gates pass.
+
+**Consequence:** Contact was made through the existing official Community Actions
+discussion, authenticated as the owner, with public metadata and sanitized
+request IDs only. The receipt is in `SUPPORT_ESCALATION.md`. It is not a private
+ticket, an assurance of a staff response, or evidence that the queue is safe.
+Do not delete run records or artifacts, rebaseline state, change token policies
+as a substitute for containment, or treat a deleted workflow as cancelled work.
+
+Containment and checkpoint refresh precede merge because the merge itself can
+trigger Pages. Older producers must be drained and automatic collector-to-AI
+successors accounted for before manual acceptance dispatches. Same-ID rename and
+legacy retirement remain subject to their existing acceptance gates. No paid
+service purchase or held-feature implementation is authorized by this decision.
+
+The host rejected creation of a persistent hourly rollout follow-up because the
+owner had not explicitly requested recurring scheduled execution. No automation
+was created and no workaround was used. Explicit recurring approval has been
+requested separately; current-turn work and the successful GitHub contact stand.

@@ -3,7 +3,8 @@
 Last updated: **2026-08-30 UTC**
 Status: **contract-compatible revision remains draft PR #3. Current protected
 state and actual read-only restores passed; obsolete queued writers remain a
-GitHub-service blocker. No merge, production acceptance, or cutover.**
+GitHub-service blocker. GitHub Community escalation submitted; production
+rollout now authorized but not performed. No merge, acceptance, or cutover.**
 
 ## Current revision and owner-held scope
 
@@ -31,8 +32,14 @@ attempt 1, job `99262749719`: 244 tests passed; full verify.sh passed, including
 credential-pattern scan and generated assets. The run uploaded no artifacts.
 The documentation successor `a7925448524014896d7624eccb1d50d6434a42e1` also
 passed Linux CI `33313630046`, attempt 1, with no artifacts. The current
-checkpoint-only follow-up adds two newly verified entries; its CI is attached to
-PR #3 and must pass independently.
+checkpoint-only follow-up `06fae22b3a46049dce5b32f73072e1138c43970d` adds two
+newly verified entries and passed
+[Linux CI 33314178604](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33314178604),
+attempt 1, job `99264428646`, with no artifacts. The current support-record
+follow-up changes documentation only; its own CI must pass before promotion.
+The owner subsequently authorized contacting GitHub and completing this revision
+into production. This supersedes the earlier lack of promotion authority, not
+the held-feature scope or any safety gate (D-2026-08-30-017).
 No merge, production dispatch, mail, deployment, rename, or archive is claimed.
 Unrelated pre-existing `.codex/` remains preserved.
 
@@ -102,7 +109,8 @@ Issue #1 stays open. The attempted detailed issue-comment update was rejected by
 the host publication review as a separate public disclosure outside the explicit
 branch-push approval. It was not posted or retried by another route. The public
 review PR and committed handoff contain the revision status; a detailed issue
-comment requires separate approval if still desired.
+comment was not retried. The owner's subsequent explicit GitHub-contact request
+was fulfilled through the existing official Actions support discussion below.
 
 Obsolete runs `33219808359` and `33221027676` still report
 queued at removed `legislative_trade_tracker.yml`, SHA
@@ -111,10 +119,31 @@ identity and retried both ordinary and force-cancel endpoints: **all four return
 HTTP 409**. Both runs still have zero jobs and zero artifacts. GitHub reports their
 workflow ID `344663675` as `deleted`, which does not establish cancellation of
 already queued runs. No production dispatch or cutover until contained; PR #3
-remains draft/unmerged. Next external action: ask GitHub Support to terminally
-cancel these two stuck runs, or provide authoritative confirmation that neither
-can execute or upload protected state. No broad Actions shutdown or run deletion
-was attempted.
+remains draft/unmerged. Latest retries at **2026-08-30 13:33:44-45 UTC** returned
+the same four HTTP 409 responses: "Cannot cancel a workflow run that has not been
+queued yet." Sanitized request IDs and exact run identities were sent to GitHub.
+
+At **13:37:17 UTC**, authenticated as `maglothinm`, the agent posted the
+[escalation](https://github.com/community/community/discussions/205874#discussioncomment-18207352)
+to the matching existing official Community Actions discussion. This is a public
+support escalation, not a private ticket or verified staff resolution. See
+[SUPPORT_ESCALATION.md](SUPPORT_ESCALATION.md) for receipt and submitted message.
+The request asks GitHub staff to terminally cancel the two runs or confirm that
+neither can execute/upload, while preserving all artifacts and unrelated runs.
+No broad Actions shutdown, run deletion, or new account subscription was tried.
+
+The proposed hourly follow-up was rejected by host approval because explicit
+recurring scheduled authority is required. No schedule was created; that approval
+has been requested from the owner. Browser Support sign-in is optional for a
+private ticket, not a prerequisite for the already submitted public escalation.
+
+An independent read-only release review found no new concrete code blocker.
+Containment and a fresh checkpoint review must occur **before merge**, because
+the merge can immediately trigger Pages. Drain older producer runs, refresh the
+newest exact-attempt artifact inventories/allowlist, then merge a green review
+head. Verify revised collectors and their automatic AI/Pages successors before
+dispatching redundant jobs. Complete exact-attempt continuity, both isolated
+simulations and live deployment acceptance before eligible rename/legacy gates.
 
 ## Earlier operational evidence (historical)
 
