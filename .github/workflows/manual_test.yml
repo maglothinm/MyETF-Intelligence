@@ -8,21 +8,6 @@ on:
         required: false
         default: ""
         type: string
-  # TEMPORARY CUTOVER ACCEPTANCE TRIGGER: remove after the first successful
-  # default-branch Run Simulation acceptance run.
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/manual_test.yml"
-      - "scripts/create_manual_test_filing.py"
-      - "scripts/run_investor_edge_simulation.py"
-      - "scripts/investor_edge.py"
-      - "tests/test_create_manual_test_filing.py"
-      - "tests/test_investor_edge.py"
-      - "tests/test_investor_edge_core.py"
-      - "tests/test_investor_edge_surfaces.py"
-
 permissions:
   actions: read
   contents: read
