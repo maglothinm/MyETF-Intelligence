@@ -5,7 +5,8 @@ Work record: **issue #4 — Deliver the read-only commercial PolitiTrack dashboa
 
 ## Current task
 
-Merge and deploy the approved UI through the existing canonical Pages publisher.
+The approved UI is merged and deployed through the canonical Pages publisher.
+Current task: retain the verified release record and finish device acceptance.
 The owner explicitly requested deployment after disclosure of unavailable
 Chrome/iPhone/CHG90 acceptance. Do not claim complete device acceptance.
 Canonical repository: `maglothinm/MyETF-Intelligence`, ID **1349678672**,
@@ -35,7 +36,7 @@ simulation-contract diff from main.
   DOM fixture checks, including focus restoration.
 - $10K result remains SIMULATED, SINGLE-RUN HISTORICAL REPLAY; independent replay
   history is not persistent portfolio performance.
-- Local active suite: **180 passed**. Final targeted suite: **9 passed**, including
+- Final local active suite: **181 passed**. Final targeted suite: **9 passed**, including
   additive model/notification/DOM suites. Included are **61 model cases**,
   **32 native Node notification scenarios**, and **12 JSDOM scenarios**. Axe found
   zero serious/critical findings in tested fixture views; DOM emulation cannot
@@ -67,21 +68,48 @@ exported ZIP SHA-256
 `e8dc54967255af1fca24ed0f16383b3b2fa145cca947a8ec1d133e3ab4c0bca2`.
 The old live files matched that artifact.
 
-UI PR, merge SHA, CI and new Pages evidence: **pending**. Deployment URL remains
-`https://maglothinm.github.io/MyETF-Intelligence/`.
+## Verified deployed release
+
+PR [#5](https://github.com/maglothinm/MyETF-Intelligence/pull/5) merged UI source
+`e2f71cff8029871656ba2dbd8c4021e406ea2e9c` as
+`12d58964060885696ef4f5d3724ba5575de33fb2` on canonical `main`. The merge tree
+exactly matches the tested PR tree. This evidence update changes documentation
+only and does not change the deployed application source.
+
+| Evidence | Verified result |
+|---|---|
+| PR CI | [33323384450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323384450), attempt 1, job `99289162854`; success |
+| Main CI | [33323430401](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430401), attempt 1, job `99289284185`; success |
+| CI coverage | 77 selected tests in each run; included release gate executes additive UI suites and Linux `verify.sh`, requiring `VERIFICATION PASSED` |
+| Pages | [33323430450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430450), attempt 1, `push`; success |
+| Pages jobs | Build `99289284456`; deploy `99289373251`; both successful |
+| Pages artifact | `9735544864`, exact build-attempt window and ZIP digest verified |
+| Pages ZIP SHA-256 | `0edc98bfc0176f4b2407edfd15218ccb76451426a99380b7a39a6172f107c692` |
+| Live acceptance | 2026-08-30 16:49:28 UTC: 21 fixed root/Wallboard/Investor Edge/assets/JSON URLs returned HTTP 200 and exactly matched the Pages artifact |
+| Deployed build SHA | `dashboard-insights.json.build_sha` equals `12d58964060885696ef4f5d3724ba5575de33fb2` |
+| Continuity | Actual restore logs, newest global authority and high-water checks passed; all three protected ZIPs and full inventories are unchanged from the release checkpoint |
+| Simulation isolation | `9734790733` and its two replay rows unchanged; no new simulation run |
+| Final active-run inventory | No active eligible production writer; only the two previously known obsolete queued runs remain |
+
+Live [dashboard](https://maglothinm.github.io/MyETF-Intelligence/),
+[Wallboard](https://maglothinm.github.io/MyETF-Intelligence/wallboard.html) and
+[Investor Edge](https://maglothinm.github.io/MyETF-Intelligence/investor-edge.html)
+are deployed. This is HTTP/content acceptance, not real-browser visual or device
+acceptance. No production-state artifact was uploaded by the Pages run.
+
 
 ## Remaining limits and next safe action
 
-1. Commit/push the UI branch and open one PR. Wait for successful CI, including
-   Linux `verify.sh`, and honor repository review rules.
-2. Merge the checked SHA under explicit owner authorization; allow the existing
-   main-push publisher to deploy. Do not dispatch production workflows.
-3. Verify exact build/deploy attempt, consumed artifact IDs, unchanged protected
-   snapshots and live root/wallboard/Edge/JSON/asset bytes, including build SHA.
-4. Record the final SHA, runs and live results here and in PROJECT_STATE.
-5. Keep issue #4 open for real Chrome, current iPhone Safari touch/audio,
+1. Keep issue #4 open for real Chrome, current iPhone Safari touch/audio,
    responsive screenshots/console/CSP and rotated CHG90 physical acceptance.
-   No browser was available for these checks. DOM emulation is not device proof.
+   No browser was available for those checks. DOM emulation is not device proof.
+2. Use the existing deployed UI; preserve the recorded rollback Pages artifact.
+   Do not dispatch collectors, AI, simulations or external alerts for visual QA.
+3. Before any later production work, requery canonical state and exact artifact
+   provenance; the recorded IDs are checkpoints, not permanent restore targets.
+4. The local tracked tree is clean after this documentation-only evidence commit.
+   Pre-existing untracked `.codex/` is preserved; ignored audit exports/test
+   fixtures remain local and must never be published as production authority.
 
 Separate open work: obsolete queued runs `33219808359` and `33221027676`
 remain uncontained (zero jobs/artifacts at audit); PR #3 and issue #1 stay held.

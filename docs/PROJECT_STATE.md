@@ -1,8 +1,8 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **UI release prepared in issue #4; merge/Pages evidence pending.
-Reconciliation deployed; state-safety PR #3 and repository cutover remain open.**
+Status: **UI merged and deployed; live content/state-continuity verification passed.
+Device acceptance, state-safety PR #3 and repository cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
@@ -11,12 +11,12 @@ live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
 | Role | Repository | Repository ID | Recorded head | Status |
 |---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Production acceptance `d5ef440` plus this cleanup/docs successor | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
+| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | UI deployment `12d5896` plus documentation-only evidence successor | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
 | Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
 | Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
 
-GitHub issue `#1`, **Consolidate repositories and cut over to PolitiTrack**, is the
-active work record. The canonical repository's numeric ID is authoritative if an
+GitHub issue `#1`, **Consolidate repositories and cut over to PolitiTrack**, remains the
+cutover record; issue #4 tracks the UI release and remaining device acceptance. The canonical repository's numeric ID is authoritative if an
 old URL redirects after the rename.
 
 ## UI release checkpoint — 2026-08-30
@@ -51,14 +51,43 @@ Published deduplicated counts: 5,079 filings, 60 transactions, 1,496 reviews,
 6 processed and 7 review-required filings; review inventory separates 1 manual
 exception from 1,495 access-required records. No signal qualifies at this snapshot.
 
-Local active suite: 180 passed; final targeted suite: 9 passed including the
+Final local active suite: 181 passed; final targeted suite: 9 passed including the
 additive UI suites (61 model, 32 native Node notification and 12 DOM scenarios).
 Axe found zero serious/critical fixture findings with contrast/layout unavailable.
-Linux verify.sh, PR CI and new Pages evidence are pending. Chrome, iPhone Safari,
+Linux verify.sh and PR/main CI passed; Pages evidence follows. Chrome, iPhone Safari,
 real audio, responsive screenshots and physical CHG90 are unverified. The owner
 explicitly requested merge/deploy after disclosure; issue #4 remains open for
 device acceptance. No collectors, AI, simulations or external alerts were
 manually dispatched. See D-2026-08-30-019 and the active handoff.
+
+## Verified deployed release
+
+PR [#5](https://github.com/maglothinm/MyETF-Intelligence/pull/5) merged UI source
+`e2f71cff8029871656ba2dbd8c4021e406ea2e9c` as
+`12d58964060885696ef4f5d3724ba5575de33fb2` on canonical `main`. The merge tree
+exactly matches the tested PR tree. This evidence update changes documentation
+only and does not change the deployed application source.
+
+| Evidence | Verified result |
+|---|---|
+| PR CI | [33323384450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323384450), attempt 1, job `99289162854`; success |
+| Main CI | [33323430401](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430401), attempt 1, job `99289284185`; success |
+| CI coverage | 77 selected tests in each run; included release gate executes additive UI suites and Linux `verify.sh`, requiring `VERIFICATION PASSED` |
+| Pages | [33323430450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430450), attempt 1, `push`; success |
+| Pages jobs | Build `99289284456`; deploy `99289373251`; both successful |
+| Pages artifact | `9735544864`, exact build-attempt window and ZIP digest verified |
+| Pages ZIP SHA-256 | `0edc98bfc0176f4b2407edfd15218ccb76451426a99380b7a39a6172f107c692` |
+| Live acceptance | 2026-08-30 16:49:28 UTC: 21 fixed root/Wallboard/Investor Edge/assets/JSON URLs returned HTTP 200 and exactly matched the Pages artifact |
+| Deployed build SHA | `dashboard-insights.json.build_sha` equals `12d58964060885696ef4f5d3724ba5575de33fb2` |
+| Continuity | Actual restore logs, newest global authority and high-water checks passed; all three protected ZIPs and full inventories are unchanged from the release checkpoint |
+| Simulation isolation | `9734790733` and its two replay rows unchanged; no new simulation run |
+| Final active-run inventory | No active eligible production writer; only the two previously known obsolete queued runs remain |
+
+Live [dashboard](https://maglothinm.github.io/MyETF-Intelligence/),
+[Wallboard](https://maglothinm.github.io/MyETF-Intelligence/wallboard.html) and
+[Investor Edge](https://maglothinm.github.io/MyETF-Intelligence/investor-edge.html)
+are deployed. This is HTTP/content acceptance, not real-browser visual or device
+acceptance. No production-state artifact was uploaded by the Pages run.
 
 ## Historical post-reconciliation checkpoint
 
