@@ -1,7 +1,7 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-30 UTC**
-Status: **hourly follow-up active; revision verified; production held for obsolete-run containment**
+Status: **hourly follow-up active; PR #3 held for obsolete-run containment and new main merge conflicts**
 Work record: [issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3), unmerged.
 Support: [official Community Actions escalation](https://github.com/community/community/discussions/205874#discussioncomment-18207352).
@@ -19,10 +19,11 @@ checks and automatic continuation after containment; see D-017 and D-018.
 Canonical repository **1349678672** remains public
 **maglothinm/MyETF-Intelligence**.
 Remote: `https://github.com/maglothinm/MyETF-Intelligence.git`.
-Branch: **codex/production-remediation**. Default main remains
-**4a9135a8c12af6eebfce01cf33772ffa13e41951**.
-Published branch head before this documentation-only schedule follow-up:
-**54ccae751a020597b8a4e1167c6528dbc0b590e5**.
+Branch: **codex/production-remediation**. Verified default main is now
+**92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae**, the documentation successor of
+deployed UI/contextual-help commit **1aa87398b53689873de350155d33afdb993fb036**.
+Published release head before this documentation-only heartbeat update:
+**884a344bcb6e7fef650a52cdb0fb5f3e177319e4**.
 Implementation: **020351a86861020d1a0f579b8ccdd7f218be3994**.
 Fresh-checkout CI setup fix: **4cb6d5677daa60fff507d86502e156b70200a8ff**.
 
@@ -30,6 +31,25 @@ Preserve unrelated untracked `.codex/` and ignored
 `.remediation/held-feature-drafts/`. Neither is published.
 No merge, production dispatch, protected upload, mail, Pages deployment, rename,
 visibility change, legacy shutdown or archive was performed.
+
+## New release blocker and preserved main work — 17:41 UTC
+
+PR #3 remains draft/open/unmerged and GitHub now reports **mergeable=false**,
+**mergeable_state=dirty**. Main's independent UI and contextual-help releases
+must be retained when reconciling the state-safety revision. Changed-file
+overlaps are `.gitignore`, `README_INVESTOR_EDGE.md`, the three operational docs,
+`scripts/investor_edge.py`, `tests/test_investor_edge.py`, and
+`tests/test_investor_edge_surfaces.py`. Preserve the new view-model, dashboard
+assets, public-payload sanitation, help/tooltip/risk controls and their tests.
+Retain main's D-019/D-020 alongside this branch's D-015–D-018. Old standalone
+branch CI is not integration acceptance.
+
+The active root checkout is being used for main/UI work. Do not switch it or
+overwrite its docs. This heartbeat's release-only documentation worktree is
+`.remediation/production-remediation-monitor`, on the existing
+`codex/production-remediation` branch, same repository ID. Reuse it if appropriate;
+check every worktree's status first and preserve concurrent edits. No new
+implementation repository or state authority was created.
 
 ## GitHub contact completed; external resolution still pending
 
@@ -42,7 +62,7 @@ The sanitized submitted message and receipt are in
 [SUPPORT_ESCALATION.md](SUPPORT_ESCALATION.md). No credentials or production
 ledger contents were shared. Do not create duplicate posts.
 
-An authenticated API read at **13:45 UTC** confirmed the posted comment, zero
+An authenticated API read during this **17:38 UTC heartbeat** confirmed the posted comment, zero
 replies to it, and no newer discussion comments; pagination was complete.
 The older incident discussion does not establish containment for these runs.
 
@@ -101,26 +121,44 @@ attempt/job provenance and producer high-water checks, full inventories,
 ledger-prefix and identity preservation, adjusted-price Investor Edge,
 effective-sample gating, immutable Edge archives/aliases, and both simulations'
 permitted outputs without live credentials. See [STATE_SAFETY.md](STATE_SAFETY.md).
-An independent read-only release review found no new concrete code blocker.
+The earlier independent review found no new concrete code blocker on the old
+base. The newer main merge conflict above still requires reconciliation and
+fresh integration verification.
 
 - Latest local full suite: **244 passed in 16.51s** (support-record session).
 - Static checks: 49 Python files, 5 embedded Python blocks, 5 JSON, 11 YAML;
   three generated JavaScript files, recovery manifest and credential scan passed.
 - Windows has no Bash; Linux provides the full 58 shell checks and verify.sh.
 - Latest published-head CI:
-  [33315075463](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33315075463),
-  **success**, attempt **1**, job **99266876236**, head **54ccae7**.
+  [33320353688](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33320353688),
+  **success**, attempt **1**, job **99281111335**, head **884a344**.
   Full 244-test suite and verify.sh passed; no artifacts were uploaded.
 - Prior corrected CI **33313544655** and documentation CI **33313630046** passed.
   Initial CI **33313439413** failed because pytest's temporary parent was absent
   on a fresh checkout; corrected by **4cb6d56**, not suppressed.
-- This schedule-documentation follow-up requires its own CI check after push.
+- This heartbeat-documentation follow-up requires its own CI check after push;
+  even a pass will not resolve the conflicts or validate integration with main.
 - Prior actual-input dashboard and deterministic TEST scoring passed without
   model/market/notification calls and with original input hashes unchanged.
 
 ## Latest verified protected-state checkpoint
 
-**Newer metadata observed at 2026-08-30 15:39 UTC:** existing schedules advanced
+**Newest metadata at 2026-08-30 17:41 UTC:** Legislative **9734211271**, run
+**33318579174** / attempt **1**, job **99276401831** remains unchanged.
+Executive advanced to **9736054489**, run **33325239324** / attempt **1**, job
+**99294089255**; downstream AI advanced to **9736064296**, run **33325343519** /
+attempt **1**, job **99294369216**. The latter two producer SHAs are main
+**a5d67034044ca53fc861a51af6218e79f9899870**. All are unexpired with expected
+workflow identities, exact successful attempt/job windows, no newer producer
+records and no active eligible writer among 121 runs/151 global artifacts.
+This heartbeat checked metadata only. Main's `92f5c44` publication record contains
+its full continuity evidence; revalidate newest inputs before PR #3 promotion.
+The newer producer SHA is not an ancestor of old PR head `884a344`: reconcile
+main before testing ancestry; never fall back to older state. The migration
+allowlist remains unchanged. Isolated simulation metadata remains artifact
+**9734790733**, run **33320677882** / attempt **1**, job **99281977011**.
+
+**Earlier metadata at 2026-08-30 15:39 UTC:** existing schedules advanced
 Legislative to artifact **9734211271**, run **33318579174**, attempt **1**, job
 **99276401831**, and AI to artifact **9734221839**, run **33318614858**, attempt
 **1**, job **99276494661**. Executive remains **9732455687**. All are unexpired,
@@ -167,8 +205,11 @@ Re-query before promotion; these IDs are not permanent restore pins.
    artifact/attempt/high-water evidence. Export and hash-verify any newly advanced
    pre-manifest checkpoint before adding exact allowlist entries; never rewrite
    existing checkpoints or fall back to older state. Merge itself may trigger Pages.
-3. Verify a green current PR head, then promote the current revision under the
-   owner's authorization. Keep issue #1 open until acceptance completes.
+3. Reconcile PR #3 with the newest main while preserving both state-safety and
+   independently deployed UI/help work. Revalidate integrated state ancestry,
+   complete tests/verify.sh/generated dashboards, and green CI at the exact
+   reconciled head. Only then promote under the owner's authorization. Keep
+   issue #1 open until acceptance completes.
 4. Run/observe revised Legislative and Executive producers as needed, accounting
    for their automatic AI and Pages successors rather than dispatching duplicate
    AI runs. Verify successful exact attempts/jobs, manifest generations,
@@ -182,10 +223,13 @@ Re-query before promotion; these IDs are not permanent restore pins.
 
 Other unchanged limits:
 
-- Existing [Pages](https://maglothinm.github.io/MyETF-Intelligence/) is from
-  successful main publisher
-  [33312700469](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33312700469),
-  not this revision.
+- Existing [Pages](https://maglothinm.github.io/MyETF-Intelligence/) is now the
+  independently published UI/help release `1aa8739`, not PR #3. Main CI
+  [33325629684](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629684)
+  and Pages [33325629663](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629663)
+  succeeded, attempt 1; Pages build `99295130679`, deploy `99295188583`, sole
+  artifact `9736138918`. This heartbeat checked metadata only; main records its
+  separate 17:36 UTC live content acceptance. No fresh device claim is made.
 - Live adjusted-price entitlement, sufficient samples, Gmail delivery and
   browser/Safari acceptance remain unverified. Historical replay is not the held
   persistent paper agent.

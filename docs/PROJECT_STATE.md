@@ -1,12 +1,75 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-30 UTC**
-Status: **contract-compatible revision remains draft PR #3. Prior protected
-checkpoints and read-only restores passed; newer scheduled state needs full
-verification before promotion. Obsolete queued writers remain a
-GitHub-service blocker. GitHub Community escalation submitted; production
-rollout now authorized but not performed. Hourly task follow-up active. No merge,
-acceptance, or cutover.**
+Status: **state-safety PR #3 remains draft/unmerged and now conflicts with the
+newly deployed UI on main. Obsolete queued writers remain a GitHub-service
+blocker; no support response or containment. Newer protected state must be
+revalidated against the reconciled release commit before promotion. Hourly
+follow-up active; no PR #3 production acceptance or repository cutover.**
+
+## Hourly release checkpoint — 2026-08-30 17:41 UTC
+
+Canonical ID **1349678672** remains `maglothinm/MyETF-Intelligence`. Main advanced
+to **92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae**, the documentation successor of
+deployed dashboard/contextual-help commit **1aa87398b53689873de350155d33afdb993fb036**.
+The independent UI releases did not merge state-safety PR #3.
+
+At release head **884a344bcb6e7fef650a52cdb0fb5f3e177319e4**, PR #3 is open/draft
+and GitHub reports **mergeable=false**, **mergeable_state=dirty**. Its
+[CI 33320353688](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33320353688)
+passed attempt 1, job `99281111335`, with no artifacts, but does not validate
+integration with newer main. Reconcile without dropping the deployed view-model,
+dashboard assets, public-output sanitation, contextual help, shared tooltip/risk
+UI, or their tests. Overlaps include `.gitignore`, `README_INVESTOR_EDGE.md`, the
+three operational docs, `scripts/investor_edge.py`, `tests/test_investor_edge.py`,
+and `tests/test_investor_edge_surfaces.py`. Do not resolve these wholesale by
+choosing one side. Retain main decisions D-019/D-020 and this branch's D-015–D-018.
+
+The unchanged support comment remains present with zero replies and no newer
+discussion comments/replies; pagination was complete. Both obsolete run IDs are
+still queued, attempt 1, null conclusion, zero jobs/artifacts, with their exact
+historical SHA/path/workflow identity unchanged. No cancellation retry or new
+support post was made.
+
+All 121 runs and 151 global artifacts were inspected. Latest unexpired metadata:
+
+| Pipeline | Artifact | Successful run / attempt | Producer job |
+|---|---:|---|---:|
+| Legislative | `9734211271` | `33318579174` / 1 | `99276401831` |
+| Executive | `9736054489` | `33325239324` / 1 | `99294089255` |
+| AI | `9736064296` | `33325343519` / 1 | `99294369216` |
+
+Executive advanced through its schedule, and AI through `workflow_run`, on main
+**a5d67034044ca53fc861a51af6218e79f9899870**. Legislative remains at producer
+`4a9135a`. No later producer records or active eligible writers were found.
+Artifact timestamps map to the exact successful attempts/jobs. New reported ZIP
+digests: Executive `86dfc3be0ef9d3e46e8663f6dc057657606177fe682b834c406cf3b7e2fb28f5`;
+AI `b1e17abd43c54174a9c2cf2945a78460b475c7ef527aa41647f8f0c024674042`.
+This heartbeat did not download ZIPs or independently repeat content continuity.
+Main's publication record at `92f5c44` records its full restore/inventory/continuity
+checks; refresh those checks before PR #3 promotion. In particular, the newer
+producer commit is not an ancestor of old release head `884a344`; integrate main
+before testing revised consumer ancestry. Do not select older artifacts to evade
+this requirement. No exact migration allowlist entries were changed.
+
+Isolated replay metadata remains artifact `9734790733`, run `33320677882`,
+attempt 1, job `99281977011`. Its recorded two-row history is not a persistent
+paper portfolio. This heartbeat ran neither simulation.
+
+The UI's [main CI 33325629684](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629684)
+and [Pages 33325629663](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629663)
+succeeded, attempt 1. Pages build `99295130679`, deploy `99295188583`, sole
+artifact `9736138918` (`github-pages`). Main records live content acceptance at
+17:36 UTC; this heartbeat verified run/artifact metadata, not browser/device
+acceptance or a fresh content download. It performed no deployment.
+
+This documentation-only update uses the same repository's release worktree at
+`.remediation/production-remediation-monitor`. The active main checkout and its
+untracked `.codex/` were left untouched. Continue hourly support/status reads.
+After containment, reconcile and retest PR #3 against current main, refresh state
+authority/continuity and exact allowlisting, then perform the authorized gates.
+
+## Earlier revision evidence (historical)
 
 ## Current revision and owner-held scope
 
@@ -17,7 +80,7 @@ are excluded from active source/workflows. Local drafts are preserved under
 ignored `.remediation/held-feature-drafts/`; they are not deployed or committed.
 
 Canonical repository ID `1349678672` remains public
-`maglothinm/MyETF-Intelligence`; rechecked default `main` is
+`maglothinm/MyETF-Intelligence`; the earlier checked default `main` was
 `4a9135a8c12af6eebfce01cf33772ffa13e41951`. Revision branch:
 `codex/production-remediation`. Implementation commit: `020351a86861020d1a0f579b8ccdd7f218be3994`.
 The owner explicitly approved public publication with "Yes push" after the earlier
@@ -122,8 +185,8 @@ The earlier table is the last fully verified checkpoint, not the current restore
 selection. Do not fall back to it; export/verify newer state and refresh exact
 allowlist entries before promotion. The setup session wrote no production state.
 
-No revised code was deployed. Existing pre-rename Pages and successful main
-publisher run `33312700469` remain the deployment evidence. Live adjusted-price
+No PR #3 code was deployed. Main publisher `33312700469` was the earlier Pages
+evidence; the latest independent UI deployment is recorded above. Live adjusted-price
 entitlement, sufficient samples, Gmail delivery, and Safari acceptance are not
 proven by offline results. The existing Actions-link dashboard control remains.
 
