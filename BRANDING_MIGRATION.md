@@ -1,20 +1,36 @@
-# PolitiTrack branding migration
+# PolitiTrack branding and compatibility record
 
-PolitiTrack is the product name. This change updates user-visible application, dashboard, alert, analyst, verification, and documentation text without changing compatibility-sensitive production identities.
+## Completed identity cutover
 
-## Preserved legacy identifiers
+PolitiTrack is the product and repository name. The authoritative repository is `maglothinm/PolitiTrack`; `MyETF` and `MyETF-Intelligence` are historical aliases only.
 
-The following names remain intentionally unchanged until a separate, tested repository and state migration:
+User-visible application text, dashboard links, alert titles, analyst instructions, fallback repository URLs, logger identity, and HTTP client identifiers use PolitiTrack. The public `maglothinm/MyETF` repository is a disabled, archived legacy record and is not an execution target.
 
-- GitHub repositories and URLs: `maglothinm/MyETF-Intelligence` and the rollback source `maglothinm/MyETF`.
-- Durable state and artifact paths, including `.trade-tracker/`, tracker-state artifact names, cache keys, completed IDs, and paper-portfolio ledgers.
-- Existing `MYETF_*` environment variables and secrets, including `MYETF_SOURCE_REPO` and any deployed SMTP secret names.
-- GitHub Actions workflow filenames, workflow identities, concurrency groups, and the display name `Import migrated MyETF state`.
-- Installer boundary markers such as `MYETF-GOVERNMENT-TRADE-TRACKER` and the matching `.gitignore` markers used for idempotent upgrades.
-- Existing logger names, temporary state filenames, HTTP client identifiers, and migration inventory paths where renaming could disrupt monitoring, WAF behavior, diagnostics, or recovery procedures.
-- Legacy distribution and provenance archive names, including `MyETF-government-trade-tracker-fast-track.zip` and the audited source artifact `myetf-investor-edge-implementation.zip`.
-- Historical recovery reports whose titles describe the legacy MyETF repository at the time of recovery.
+## Compatibility identifiers intentionally preserved
 
-## Later migration
+The repository rename did not reset or rename durable state. These established identities remain unchanged:
 
-Rename the authoritative GitHub repository and compatibility-sensitive identifiers only after the rebranded code is green, current production state has been exported, workflows are disabled for cutover, restoration is tested, and rollback remains available. The migration must not create a new silent baseline or share mutable state between production and simulations.
+- `.trade-tracker/legislative/`, `.trade-tracker/executive/`, and `.trade-tracker/ai/`;
+- `legislative-tracker-state`, `executive-tracker-state`, and `ai-analysis-state`;
+- cache keys, state versions, completed analysis IDs, trade IDs, filing IDs, and paper-portfolio ledgers;
+- existing `MYETF_*` environment-variable names that are still consumed by compatibility or recovery tooling;
+- installer boundary comments such as `MYETF-GOVERNMENT-TRADE-TRACKER` where changing them would break idempotent historical overlays;
+- legacy distribution and provenance filenames, including `MyETF-government-trade-tracker-fast-track.zip` and `myetf-investor-edge-implementation.zip`;
+- historical recovery reports and commit messages that accurately record the repository name at the time.
+
+A preserved compatibility string is not permission to target the archived public repository. Runtime repository fallbacks and generated links must resolve to `maglothinm/PolitiTrack`.
+
+## State-preserving rule
+
+Repository and branding changes are metadata changes, not baseline changes. Production runs must restore existing artifacts. `initialize_state` and `bootstrap_alerts` remain `false` during routine operation and cutover verification. Missing state is a recovery incident.
+
+Simulation state is isolated and may use only simulation-named artifacts. It must never replace a production tracker or AI artifact.
+
+## Historical alias map
+
+| Name | Meaning after cutover |
+|---|---|
+| `PolitiTrack` | Current product and sole canonical repository. |
+| `MyETF-Intelligence` | Previous name of the same private repository. |
+| `MyETF` | Archived public legacy fork and rollback record. |
+

@@ -1037,7 +1037,7 @@ def build_config(args: argparse.Namespace) -> Config:
     env = os.environ
     user_agent = env.get(
         "DISCLOSURE_USER_AGENT",
-        "Mozilla/5.0 (compatible; MyETFDisclosureMonitor/2.0; +https://github.com/maglothinm/MyETF)",
+        "Mozilla/5.0 (compatible; PolitiTrackDisclosureMonitor/2.0; +https://github.com/maglothinm/PolitiTrack)",
     ).strip()
     if not user_agent:
         raise ValueError("DISCLOSURE_USER_AGENT must not be empty")

@@ -81,7 +81,7 @@ except ImportError:  # pragma: no cover - direct execution path
         apply_profile_to_analysis,
     )
 
-LOGGER = logging.getLogger("myetf-ai-analyst")
+LOGGER = logging.getLogger("polititrack-ai-analyst")
 
 AI_STATE_VERSION = 1
 PROMPT_VERSION = "2026-08-28.2"
@@ -100,7 +100,7 @@ DEFAULT_SEC_CACHE_HOURS = 6
 DEFAULT_MAX_DOWNLOAD_BYTES_AI = 25 * 1024 * 1024
 DEFAULT_MAX_OCR_PAGES_AI = 75
 DEFAULT_REQUEST_TIMEOUT = (15.0, 60.0)
-DEFAULT_DASHBOARD_URL = "https://maglothinm.github.io/MyETF/"
+DEFAULT_DASHBOARD_URL = "https://maglothinm.github.io/PolitiTrack/"
 MAX_CANDIDATE_ALERT_RETRIES_PER_RUN = 100
 MAX_COMPLETED_CANDIDATE_ALERT_DELIVERIES = 100_000
 
@@ -2887,7 +2887,7 @@ def append_run_history(config: AnalystConfig, result: AnalystRunResult) -> None:
     if os.environ.get("GITHUB_RUN_ID"):
         run_url = (
             f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
-            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/MyETF')}/actions/runs/"
+            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/PolitiTrack')}/actions/runs/"
             f"{os.environ['GITHUB_RUN_ID']}"
         )
     record = {
@@ -3300,7 +3300,7 @@ def build_config(args: argparse.Namespace) -> AnalystConfig:
         dashboard_url=os.environ.get("DASHBOARD_URL", DEFAULT_DASHBOARD_URL).strip(),
         repository_url=(
             f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}/"
-            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/MyETF').strip('/')}"
+            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/PolitiTrack').strip('/')}"
         ),
         max_download_bytes=int(
             os.environ.get("AI_MAX_DOWNLOAD_BYTES", DEFAULT_MAX_DOWNLOAD_BYTES_AI)

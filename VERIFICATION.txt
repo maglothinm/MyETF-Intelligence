@@ -1,19 +1,13 @@
-PolitiTrack government trade tracker verification
-UTC: 2026-08-29T17:31:20Z
-Python: Python 3.12.13
+PolitiTrack retired recovery-overlay verification
 
 [pass] shell syntax
-[pass] Python compilation
-.......................                                                  [100%]
-23 passed in 2.45s
-[pass] 23 parser, source, state, ledger, and OGE-table tests
-[pass] workflow YAML, schedules, current action majors, state restoration, and secret scoping
-[pass] clean mock-repository install, obsolete-file removal, preservation, and idempotency
-2026-08-29 13:31:36,871 INFO Scanning new OGE listing for Synthetic Official
-2026-08-29 13:31:36,879 WARNING Notification suppressed (--no-notify): Government filing needs review: Synthetic Official — Synthetic Official • Oge
-OGE Form 278-T is listed, but access requires an OGE Form 201 request or no direct PDF was published
-2026-08-29 13:31:36,900 INFO Tracking succeeded: visible={'oge': 1} new={'oge': 1} purchases={'oge': 0} pending={'oge': 1}
-2026-08-29 13:31:38,175 INFO Tracking succeeded: visible={'oge': 1} new={'oge': 0} purchases={'oge': 0} pending={'oge': 0}
-[pass] end-to-end Executive request queue, durable state, and no-duplicate second run
+[pass] retired installer fails closed without changing target data
+[pass] retired payload contains no installable files or symlinks
+[pass] artifact-only authority, paginated newest-first provenance/high-water guards, dual simulations, and publisher integration
+./apply.sh: OK
+./RECOVERY_REPORT.md: OK
+./repo-files/RETIRED.md: OK
+./verify.sh: OK
+[pass] deterministic recovery-record manifest
 
 VERIFICATION PASSED

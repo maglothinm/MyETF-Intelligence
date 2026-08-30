@@ -1,88 +1,108 @@
-# PolitiTrack government trade tracker
+# PolitiTrack
 
-PolitiTrack monitors public government financial disclosures, preserves their evidence, and supports review, alerts, and paper-only research. The product currently lives in the legacy-named private repository `maglothinm/MyETF-Intelligence`; the older public `maglothinm/MyETF` repository is retained only as historical context and a rollback source.
+PolitiTrack is the canonical production system for monitoring public U.S. government financial disclosures, preserving the underlying evidence, ranking newly disclosed equity purchases, and evaluating those signals in a paper-only research portfolio.
 
-See [`BRANDING_MIGRATION.md`](BRANDING_MIGRATION.md) for the legacy identifiers intentionally preserved until the repository and durable-state cutover.
+The authoritative repository is [`maglothinm/PolitiTrack`](https://github.com/maglothinm/PolitiTrack). `MyETF` and `MyETF-Intelligence` are historical aliases for this program; the public `MyETF` fork is legacy-only and must not run production workflows.
 
-The overlay:
+## Production topology
 
-- polls official House and Senate Periodic Transaction Report sources;
-- discovers OGE Form 278-T listings for covered Executive-branch officials;
-- records newly disclosed **purchases** in durable JSONL ledgers and CSV snapshots;
-- sends Pushover alerts for equity-like purchases and for filings that require manual review or a Form 201 request;
-- retains state across GitHub Actions runs using both cache and durable artifacts;
-- fails visibly on missing state, source-schema changes, empty sources, parser failures, or required-notification failures;
-- includes 23 offline tests plus an installer and end-to-end smoke verification.
+| Layer | Production responsibility |
+|---|---|
+| `Legislative purchase tracker v2` | Polls House and Senate disclosure sources and updates Legislative state. |
+| `Executive purchase tracker` | Discovers OGE Form 278-T filings and updates Executive state. |
+| `AI filing analyst and paper portfolio` | Enriches parsed purchases, applies deterministic scoring and Investor Edge, delivers configured candidate alerts, and updates the paper portfolio. |
+| `Publish government trade dashboard` | Builds and deploys the static review dashboard and CHG90 wallboard from successful state artifacts. |
+| [`Run Simulation`](.github/workflows/manual_test.yml) | Runs an isolated Investor Edge acceptance check and publishes a one-day dashboard artifact. |
+| [`Run $10K portfolio simulator`](.github/workflows/filing_simulation.yml) | Advances a separate persistent paper simulation with $10,000 starting capital and a $20,000 goal. |
 
-## Package contents
+The deployed dashboard is:
 
-- `repo-files/` — compatibility overlay files copied into a PolitiTrack checkout.
-- `apply.sh` — idempotent installer.
-- `verify.sh` — offline verification and clean-repository smoke test.
-- `VERIFICATION.txt` — generated verification record.
-
-## Install
-
-```bash
-unzip MyETF-government-trade-tracker-fast-track.zip
-cd MyETF-government-trade-tracker-fast-track
-./verify.sh
-./apply.sh /path/to/PolitiTrack
-cd /path/to/PolitiTrack
-git diff --check
-git status --short
+```text
+https://maglothinm.github.io/PolitiTrack/
 ```
 
-The archive name above is retained for compatibility with the original distribution. Then follow `README_GOVERNMENT_TRADES.md` in the repository. GitHub authentication is required only to commit and push the installed files.
+The portrait and ultrawide wallboard is:
 
-## Scope boundary
+```text
+https://maglothinm.github.io/PolitiTrack/wallboard.html
+```
 
-“Fast” means rapid detection **after an official disclosure becomes public**. It does not eliminate the statutory filing delay: covered transactions may be disclosed weeks after the trade.
+GitHub Pages is a separate access boundary from repository privacy. Confirm that the dashboard's visibility is appropriate before treating a private repository as protection for published Pages data.
 
-Executive-branch coverage is necessarily partial. OGE centrally reviews only a subset of public filers; many reports are held by employing agencies, and some OGE listings require a Form 201 request. The overlay records those request-required listings instead of claiming that it downloaded unavailable records.
+## Durable state contract
 
-## Legal-use boundary
+Production continuity is carried by these GitHub Actions artifacts:
 
-House, Senate, and OGE disclosure systems display statutory use restrictions. The workflows will not run until the repository variable `DISCLOSURE_TERMS_ACKNOWLEDGED` is explicitly set to `true`. Review those restrictions and the intended use before activation, especially before any commercial, automated-investment, or redistribution use.
+- `legislative-tracker-state`
+- `executive-tracker-state`
+- `ai-analysis-state`
 
-<!-- MYETF-GOVERNMENT-TRADE-TRACKER:START -->
+Their compatibility-sensitive paths remain under `.trade-tracker/`. Existing artifact names, cache keys, completed IDs, and ledgers are intentionally preserved.
 
-## Government financial-disclosure collectors
+Never create a new baseline during routine operation or repository maintenance. Legislative and Executive workflows hard-code state initialization and historical-alert bootstrapping off; those controls are not exposed to manual runs. A missing required state artifact fails closed. Recovery may proceed only through a separately approved procedure that identifies and verifies the known-good state; do not substitute an empty state. Simulations must never upload, cache, or overwrite any production state artifact.
 
-The fail-closed House, Senate, and OGE collectors, durable state, official-filing links, failure semantics, and disclosure-use restrictions are documented in [`README_GOVERNMENT_TRADES.md`](README_GOVERNMENT_TRADES.md).
+Repository identity, operational state, decisions, and the current handoff are defined in [`AGENTS.md`](AGENTS.md), [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md), [`docs/DECISIONS.md`](docs/DECISIONS.md), and [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
-<!-- MYETF-GOVERNMENT-TRADE-TRACKER:END -->
+## Capabilities
 
-<!-- MYETF-REPORTING-DASHBOARD:START -->
+- Fail-closed House, Senate, and OGE collection from official public sources.
+- Filing inventory, normalized transaction ledger, purchase-only compatibility ledger, review queue, and retained run history.
+- Pushover filing alerts and optional Pushover and Gmail candidate-alert delivery.
+- Evidence-constrained OpenAI analysis with deterministic scoring and hard caps.
+- Investor Edge historical-performance profiles and a bounded score modifier.
+- Paper-only positions with no brokerage credentials or order-submission path.
+- Searchable static dashboard, CSV exports, Investor Edge drilldown, and CHG90 wallboard.
+- One-run Investor Edge acceptance testing and a distinct persistent $10K paper simulator, both isolated from production state.
 
-## Searchable filing-review dashboard
+Detailed operating guides:
 
-The repository publishes a filing inventory, complete parsed transaction ledger, manual-review queue, tracker health, AI analyses, and paper portfolio. GitHub Actions calculates the Pages URL from the current repository; see [`README_REPORTING_DASHBOARD.md`](README_REPORTING_DASHBOARD.md).
+- [`README_GOVERNMENT_TRADES.md`](README_GOVERNMENT_TRADES.md)
+- [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md)
+- [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md)
+- [`README_REPORTING_DASHBOARD.md`](README_REPORTING_DASHBOARD.md)
+- [`README_WALLBOARD_PRIVATE_REPO.md`](README_WALLBOARD_PRIVATE_REPO.md)
+- [`BRANDING_MIGRATION.md`](BRANDING_MIGRATION.md)
 
-<!-- MYETF-REPORTING-DASHBOARD:END -->
+## Required GitHub configuration
 
-<!-- MYETF-AI-FILING-ANALYST:START -->
+Review the official disclosure-site restrictions before setting:
 
-## AI filing analyst and paper portfolio
+```text
+DISCLOSURE_TERMS_ACKNOWLEDGED=true
+```
 
-New parsed equity purchases can be enriched with market and SEC evidence, analyzed through a strict OpenAI JSON schema, deterministically scored, and evaluated in a paper-only portfolio. The implementation has no brokerage or order-submission path. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md).
+Production secrets and variables are documented in the component guides. The principal secrets are `OPENAI_API_KEY`, optional market-data keys, optional Pushover credentials, optional Gmail app credentials, and independent Healthchecks URLs. Do not commit secret values.
 
-<!-- MYETF-AI-FILING-ANALYST:END -->
+`AI_PAPER_TRADING_ONLY=true` is enforced by the workflow. PolitiTrack is for research and review; it does not place trades and is not investment advice.
 
-## Investor Edge
+## Safe manual operation
 
-The paper-research-only Investor Edge layer measures historical benchmark-relative outcomes for each filer and disclosed owner, applies a confidence-shrunk and bounded modifier without defeating hard caps, and publishes a heat map with per-investor drilldown. Normal and manual AI runs enable it by default; see [`README_INVESTOR_EDGE.md`](README_INVESTOR_EDGE.md) for methodology, data limits, and interpretation.
+To run a collector without altering the established baseline:
 
-## Run Simulation
+1. Open the workflow in GitHub Actions.
+2. Select `main`.
+3. Select **Run workflow**.
+4. Confirm in the log that the expected state artifact was restored before collection.
 
-Use **Actions → Run Simulation → Run workflow** to choose an eligible previously processed filing and copy it into a temporary dashboard as though it were filed today. The simulation uses matching retained Investor Edge history when available; if the restored artifacts do not yet contain a repeated eligible filer/owner record, it adds one explicitly marked prior-history fixture inside the isolated run only. Leave `as_of` blank for today's UTC date, or enter a specific `YYYY-MM-DD` test date. When the run finishes, download and unzip the uniquely named `run-simulation-dashboard-<run-id>-<attempt>` artifact. From the unzipped directory, run `python -m http.server 8765`, then open `http://127.0.0.1:8765/`.
+There are two separate simulation actions:
 
-Run Simulation restores and clones the latest durable Legislative, Executive, and AI artifacts into run-specific temporary directories. It exercises the production analysis-record, deterministic scoring, and Investor Edge path with deterministic local inputs, then includes an alert preview and verification result in the dashboard. It does not call OpenAI or market-data services, provide real alert credentials, send notifications, replace production artifacts, save a production cache, or deploy GitHub Pages. The artifact expires after one day.
+- **Actions → Run Simulation → Run workflow** is the isolated Investor Edge acceptance test. It clones production artifacts into temporary directories, uses deterministic local inputs, supplies no real notification credentials, and publishes only a one-day dashboard artifact.
+- **Actions → Run $10K portfolio simulator → Run workflow** runs an isolated historical paper replay with $10,000 starting capital and a $20,000 goal. It retains only `simulation-state`, never receives live notification credentials, and cannot write production tracker, AI, or portfolio state.
 
-<!-- MYETF-CHG90-WALLBOARD:START -->
+## Local verification
 
-## CHG90 portrait and super-ultrawide wallboard
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-tracker.txt -r requirements-ai.txt pytest==9.0.2
+python -m pytest -q
+git diff --check
+```
 
-The dashboard includes `wallboard.html`, optimized for the Samsung CHG90 at 1,080 × 3,840 portrait and 3,840 × 1,080 landscape. The private standalone-repository migration preserves current state artifacts and retains the old fork as a rollback remote. See [`README_WALLBOARD_PRIVATE_REPO.md`](README_WALLBOARD_PRIVATE_REPO.md).
+Chromium and OCR dependencies are required for live OGE collection and image-only filings; see the collector guide for installation details.
 
-<!-- MYETF-CHG90-WALLBOARD:END -->
+## Coverage and use boundaries
+
+“Fast” means detection after an official disclosure becomes public. It does not remove statutory reporting delays. OGE coverage is partial because many Executive-branch reports are held by employing agencies or require Form 201 requests. PolitiTrack records those limitations rather than claiming unavailable coverage.
+
+House, Senate, and OGE systems publish statutory use restrictions. `DISCLOSURE_TERMS_ACKNOWLEDGED=true` records an operator acknowledgement; it is not a legal conclusion that a particular commercial, automated-investment, or redistribution use is permitted.

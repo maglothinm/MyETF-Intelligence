@@ -2202,7 +2202,7 @@ def build_config(args: argparse.Namespace) -> TrackerConfig:
 
     user_agent = env.get(
         "DISCLOSURE_USER_AGENT",
-        "Mozilla/5.0 (compatible; MyETFGovernmentTradeTracker/1.0; +https://github.com/maglothinm/MyETF)",
+        "Mozilla/5.0 (compatible; PolitiTrackGovernmentTradeTracker/1.0; +https://github.com/maglothinm/PolitiTrack)",
     ).strip()
     if not user_agent:
         raise ValueError("DISCLOSURE_USER_AGENT must not be empty")

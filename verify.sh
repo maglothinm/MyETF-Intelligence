@@ -2,176 +2,221 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_FILES="$SCRIPT_DIR/repo-files"
-REPORT="$SCRIPT_DIR/VERIFICATION.txt"
-TEMP_ROOT="$(mktemp -d)"
 BASH_BIN="${BASH:-bash}"
+TEMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 
-if command -v tee >/dev/null 2>&1; then
-  exec > >(tee "$REPORT") 2>&1
-else
-  exec > "$REPORT" 2>&1
-fi
-
-echo "PolitiTrack government trade tracker verification"
-echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-echo "Python: $(python --version 2>&1)"
+echo "PolitiTrack retired recovery-overlay verification"
 echo
 
 "$BASH_BIN" -n "$SCRIPT_DIR/apply.sh" "$SCRIPT_DIR/verify.sh"
 echo "[pass] shell syntax"
 
-python -m compileall -q "$REPO_FILES/scripts" "$REPO_FILES/tests"
-echo "[pass] Python compilation"
+MOCK_TARGET="$TEMP_ROOT/target"
+mkdir -p "$MOCK_TARGET"
+printf 'preserve me\n' > "$MOCK_TARGET/user-data.txt"
+BEFORE_HASH="$(sha256sum "$MOCK_TARGET/user-data.txt")"
+if "$BASH_BIN" "$SCRIPT_DIR/apply.sh" "$MOCK_TARGET" >/dev/null 2>&1; then
+  echo "Retired apply.sh unexpectedly returned success." >&2
+  exit 1
+fi
+AFTER_HASH="$(sha256sum "$MOCK_TARGET/user-data.txt")"
+[[ "$BEFORE_HASH" == "$AFTER_HASH" ]]
+[[ "$(find "$MOCK_TARGET" -mindepth 1 -maxdepth 1 -printf '%f\n')" == "user-data.txt" ]]
+echo "[pass] retired installer fails closed without changing target data"
 
-(
-  cd "$REPO_FILES"
-  python -m pytest -q \
-    tests/test_monitor_disclosures.py \
-    tests/test_government_trade_tracker.py \
-    tests/test_oge_disclosures.py
+mapfile -t BUNDLE_FILES < <(
+  find "$SCRIPT_DIR/repo-files" -type f -printf '%P\n' | LC_ALL=C sort
 )
-echo "[pass] 23 parser, source, state, ledger, and OGE-table tests"
+[[ "${#BUNDLE_FILES[@]}" -eq 1 ]]
+[[ "${BUNDLE_FILES[0]}" == "RETIRED.md" ]]
+[[ -z "$(find "$SCRIPT_DIR/repo-files" -type l -print -quit)" ]]
+echo "[pass] retired payload contains no installable files or symlinks"
 
-python - "$REPO_FILES" <<'PY'
+test ! -e "$SCRIPT_DIR/.github/workflows/legislative_trade_tracker.yml"
+test ! -e "$SCRIPT_DIR/.github/workflows/import_migrated_state.yml"
+
+python - "$SCRIPT_DIR" <<'PY'
 from pathlib import Path
-import re
 import sys
 import yaml
 
 root = Path(sys.argv[1])
-expected_actions = {
-    "actions/checkout@v6",
-    "actions/setup-python@v7",
-    "actions/cache/restore@v5",
-    "actions/cache/save@v5",
-    "actions/upload-artifact@v7",
+workflow_dir = root / ".github" / "workflows"
+expected_names = {
+    "ai_filing_analyst.yml": "AI filing analyst and paper portfolio",
+    "executive_trade_tracker.yml": "Executive purchase tracker",
+    "filing_simulation.yml": "Run $10K portfolio simulator",
+    "investor_edge_tests.yml": "Investor Edge tests",
+    "legislative_trade_tracker_v2.yml": "Legislative purchase tracker v2",
+    "manual_test.yml": "Run Simulation",
+    "publish_trade_dashboard.yml": "Publish government trade dashboard",
 }
-expected = {
-    "legislative_trade_tracker.yml": ("7,22,37,52 * * * *", "America/New_York"),
+available = {path.name for path in workflow_dir.glob("*.yml")}
+missing = set(expected_names) - available
+assert not missing, f"Missing canonical workflows: {sorted(missing)}"
+
+parsed = {}
+for filename, expected_name in expected_names.items():
+    path = workflow_dir / filename
+    workflow = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    assert isinstance(workflow, dict), path
+    assert workflow.get("name") == expected_name, (path, workflow.get("name"))
+    assert isinstance(workflow.get("on"), dict), path
+    assert isinstance(workflow.get("jobs"), dict), path
+    parsed[filename] = workflow
+
+expected_schedules = {
+    "legislative_trade_tracker_v2.yml": ("7,22,37,52 * * * *", "America/New_York"),
     "executive_trade_tracker.yml": ("13 * * * *", "America/New_York"),
 }
-for filename, (expected_cron, expected_timezone) in expected.items():
-    path = root / ".github" / "workflows" / filename
-    text = path.read_text(encoding="utf-8")
-    workflow = yaml.load(text, Loader=yaml.BaseLoader)
-    assert isinstance(workflow, dict), path
-    schedules = workflow["on"]["schedule"]
-    assert len(schedules) == 1, path
-    schedule = schedules[0]
-    assert schedule["cron"] == expected_cron, (path, schedule)
-    assert schedule["timezone"] == expected_timezone, (path, schedule)
-    minute_field = schedule["cron"].split()[0]
-    minutes = [int(value) for value in minute_field.split(",")]
-    assert 0 not in minutes, (path, "schedule must avoid minute zero")
+for filename, (cron, timezone) in expected_schedules.items():
+    schedules = parsed[filename]["on"]["schedule"]
+    assert schedules == [{"cron": cron, "timezone": timezone}], (filename, schedules)
 
-    top_env = workflow.get("env", {})
-    assert "DISCLOSURE_TERMS_ACKNOWLEDGED" in top_env
-    assert all("secrets." not in str(value) for value in top_env.values())
+texts = {
+    filename: (workflow_dir / filename).read_text(encoding="utf-8")
+    for filename in expected_names
+}
+legislative = texts["legislative_trade_tracker_v2.yml"]
+executive = texts["executive_trade_tracker.yml"]
+analyst = texts["ai_filing_analyst.yml"]
+publisher = texts["publish_trade_dashboard.yml"]
+manual = texts["manual_test.yml"]
+simulator = texts["filing_simulation.yml"]
 
-    jobs = workflow.get("jobs", {})
-    serialized_jobs = str(jobs)
-    for action in expected_actions:
-        assert action in serialized_jobs, (path, action)
-    assert "tracker-state" in text
-    assert "PUSHOVER_API_TOKEN" in text and "PUSHOVER_USER_KEY" in text
-    assert "pytest" in text
-    assert re.search(r"hashFiles\('\.trade-tracker/.+?/state\.json'\)", text)
+# Protected state is artifact-only. Dependency caching configured through setup-python
+# is acceptable; direct Actions cache restoration or promotion is not.
+all_workflows = "\n".join(texts.values())
+assert "actions/cache/restore" not in all_workflows
+assert "actions/cache/save" not in all_workflows
 
-print("[pass] workflow YAML, schedules, current action majors, state restoration, and secret scoping")
+for text, artifact in (
+    (legislative, "legislative-tracker-state"),
+    (executive, "executive-tracker-state"),
+):
+    assert "initialize_state:" not in text
+    assert "bootstrap_alerts:" not in text
+    assert 'ALLOW_STATE_INITIALIZATION: "false"' in text
+    assert 'BOOTSTRAP_ALERTS: "false"' in text
+    assert "refusing to initialize protected state" in text
+    assert f"name: {artifact}" in text
+
+assert "No authoritative ${artifact_name} artifact is available; refusing to initialize protected state." in analyst
+assert "name: ai-analysis-state" in analyst
+assert "Legislative purchase tracker v2" in analyst
+assert "Legislative purchase tracker\n" not in analyst
+
+# Every protected-state consumer must bind candidates to one exact producer workflow,
+# repository, default branch, successful attempt/job, compatible producer commit, and
+# the artifact's creation-time window. It must also reject a predecessor when a later
+# successful writer attempt exists without a consumable artifact.
+protected_consumers = {
+    "legislative": legislative,
+    "executive": executive,
+    "analyst": analyst,
+    "manual simulation": manual,
+    "$10K simulator": simulator,
+    "publisher": publisher,
+}
+for label, text in protected_consumers.items():
+    for marker in (
+        ".workflow_run.id",
+        ".run_attempt // 1",
+        ".run_started_at // \"\"",
+        "next_attempt_started_at",
+        ".name // \"\"",
+        ".path // \"\"",
+        ".head_branch // \"\"",
+        ".conclusion // \"\"",
+        ".repository.id // \"\"",
+        ".head_sha // \"\"",
+        "GITHUB_REPOSITORY_ID",
+        "/compare/${run_head_sha}...${consumer_sha}",
+        "high-water violation",
+    ):
+        assert marker in text, (label, marker)
+
+# Most consumers query one artifact page and order it in jq. The persistent simulator
+# deliberately scans every page and then applies one global newest-first order, avoiding
+# the false authority boundary created by a 100-artifact page.
+for label, text in protected_consumers.items():
+    if label != "$10K simulator":
+        assert "sort_by(.created_at)" in text, (label, "newest-first artifact order")
+for marker in (
+    "list_artifacts_newest_first()",
+    '"/repos/${GITHUB_REPOSITORY}/actions/artifacts"',
+    '-f name="$requested_name"',
+    "-f per_page=100",
+    '-f page="$artifact_page"',
+    ".artifacts[] | select(.expired == false) | [.id, .workflow_run.id, .created_at] | @tsv",
+    "artifact_count < 100",
+    "((artifact_page += 1))",
+    "LC_ALL=C sort -t $'\\t' -k3,3r -k1,1nr",
+    'list_artifacts_newest_first "$artifact_name"',
+    "list_artifacts_newest_first simulation-state",
+):
+    assert marker in simulator, ("$10K simulator paginated ordering", marker)
+assert simulator.count("list_artifacts_newest_first()") == 2
+
+for text in (legislative, executive, analyst):
+    assert '"$run_path" != ".github/workflows/${workflow_file}"' in text
+    assert '"$run_conclusion" != "success"' in text
+    assert "successful_state_jobs" in text
+    assert "producer_attempt" in text
+
+for text in (manual, simulator, publisher):
+    assert '"$run_path" == ".github/workflows/${workflow_file}"' in text
+    assert '"$run_conclusion" == "success"' in text
+    assert "successful_" in text and "_jobs" in text
+
+producer_bindings = {
+    "legislative_trade_tracker_v2.yml": "Legislative purchase tracker v2",
+    "executive_trade_tracker.yml": "Executive purchase tracker",
+    "ai_filing_analyst.yml": "AI filing analyst and paper portfolio",
+}
+for consumer in (analyst, manual, simulator, publisher):
+    for workflow_file, workflow_name in producer_bindings.items():
+        assert workflow_file in consumer, (workflow_file, "missing consumer binding")
+        assert workflow_name in consumer, (workflow_name, "missing consumer binding")
+
+for artifact in ("legislative-tracker-state", "executive-tracker-state", "ai-analysis-state"):
+    for consumer in (analyst, manual, simulator, publisher):
+        assert artifact in consumer, (artifact, "missing consumer restore")
+
+assert "github.event.workflow_run.conclusion == 'success'" in publisher
+assert "github.event.workflow_run.head_branch == github.event.repository.default_branch" in publisher
+
+# Both simulations are present and write only simulation-namespaced artifacts. The
+# persistent $10K simulation is an exact publisher trigger/input; the one-run Investor
+# Edge acceptance dashboard remains short-lived and separate.
+assert "name: simulation-dashboard-${{ github.run_id }}-${{ github.run_attempt }}" in manual
+assert "name: simulation-state" in simulator
+assert "pages: write" not in manual
+assert "pages: write" not in simulator
+for artifact in ("legislative-tracker-state", "executive-tracker-state", "ai-analysis-state"):
+    assert f"name: {artifact}" not in manual
+    assert f"name: {artifact}" not in simulator
+
+for marker in (
+    "Run $10K portfolio simulator",
+    "actions/artifacts?name=simulation-state",
+    '"$run_path" == ".github/workflows/filing_simulation.yml"',
+    '[.jobs[] | select(.name == "simulate" and .conclusion == "success")] | length',
+    "simulation result run URL does not match its producer",
+    "--simulation-dir dashboard-input/simulation",
+    "trade-dashboard-site/data/simulation.json",
+):
+    assert marker in publisher, marker
+
+print("[pass] artifact-only authority, paginated newest-first provenance/high-water guards, dual simulations, and publisher integration")
 PY
 
-MOCK_REPO="$TEMP_ROOT/PolitiTrack"
-mkdir -p "$MOCK_REPO/.git" "$MOCK_REPO/scripts" "$MOCK_REPO/.github/workflows"
-printf '# Mock PolitiTrack\n' > "$MOCK_REPO/README.md"
-printf '# Old report\n\nAssessment date: 2026-07-22\n' > "$MOCK_REPO/RECOVERY_REPORT.md"
-printf 'print("obsolete")\n' > "$MOCK_REPO/scripts/check_house_disclosures.py"
-printf 'print("obsolete")\n' > "$MOCK_REPO/scripts/parse_unh_disclosures.py"
-printf 'name: obsolete\n' > "$MOCK_REPO/.github/workflows/house_check.yml"
-printf 'name: obsolete\n' > "$MOCK_REPO/.github/workflows/senate_check.yml"
-printf 'name: obsolete\n' > "$MOCK_REPO/.github/workflows/disclosure_monitor.yml"
-
-"$BASH_BIN" "$SCRIPT_DIR/apply.sh" "$MOCK_REPO" >/dev/null
-"$BASH_BIN" "$SCRIPT_DIR/apply.sh" "$MOCK_REPO" >/dev/null
-
-test -f "$MOCK_REPO/scripts/government_trade_tracker.py"
-test -f "$MOCK_REPO/scripts/oge_disclosures.py"
-test -f "$MOCK_REPO/.github/workflows/legislative_trade_tracker.yml"
-test -f "$MOCK_REPO/.github/workflows/executive_trade_tracker.yml"
-test -f "$MOCK_REPO/RECOVERY_REPORT_2026-07-22.md"
-test ! -e "$MOCK_REPO/scripts/check_house_disclosures.py"
-test ! -e "$MOCK_REPO/scripts/parse_unh_disclosures.py"
-test ! -e "$MOCK_REPO/.github/workflows/house_check.yml"
-test ! -e "$MOCK_REPO/.github/workflows/senate_check.yml"
-test ! -e "$MOCK_REPO/.github/workflows/disclosure_monitor.yml"
-[[ "$(grep -c 'MYETF-GOVERNMENT-TRADE-TRACKER:START' "$MOCK_REPO/README.md")" == "1" ]]
-[[ "$(grep -c '>>> MyETF government trade tracker >>>' "$MOCK_REPO/.gitignore")" == "1" ]]
-python -m compileall -q "$MOCK_REPO/scripts" "$MOCK_REPO/tests"
-echo "[pass] clean mock-repository install, obsolete-file removal, preservation, and idempotency"
-
-INTEGRATION="$TEMP_ROOT/integration"
-mkdir -p "$INTEGRATION"
-cat > "$INTEGRATION/oge-listings.json" <<'JSON'
-{
-  "success": true,
-  "count": 1,
-  "listings": [
-    {
-      "listing_id": "oge:synthetic-request-only",
-      "date": "08/25/2026",
-      "document_type": "278-T Periodic Transaction Report",
-      "name": "Synthetic Official",
-      "title": "Test Official",
-      "agency": "Test Agency",
-      "level": "PAS",
-      "document_url": "",
-      "request_url": "https://example.invalid/form-201",
-      "access_mode": "request",
-      "row_text": "synthetic request-only row"
-    }
-  ]
-}
-JSON
-
-run_integration() {
-  local allow_initialization="$1"
-  (
-    cd "$REPO_FILES"
-    ALLOW_STATE_INITIALIZATION="$allow_initialization" \
-    REQUIRE_PUSHOVER=false \
-    python scripts/government_trade_tracker.py \
-      --branch executive \
-      --oge-listings-file "$INTEGRATION/oge-listings.json" \
-      --state-file "$INTEGRATION/state.json" \
-      --ledger-file "$INTEGRATION/purchases.jsonl" \
-      --pending-file "$INTEGRATION/pending-review.jsonl" \
-      --result-file "$INTEGRATION/result.json" \
-      --latest-csv "$INTEGRATION/latest.csv" \
-      --bootstrap-alerts \
-      --no-notify \
-      --acknowledge-terms >/dev/null
-  )
-}
-run_integration true
-run_integration false
-
-python - "$INTEGRATION" <<'PY'
-from pathlib import Path
-import json
-import sys
-
-root = Path(sys.argv[1])
-result = json.loads((root / "result.json").read_text(encoding="utf-8"))
-state = json.loads((root / "state.json").read_text(encoding="utf-8"))
-pending_lines = [line for line in (root / "pending-review.jsonl").read_text(encoding="utf-8").splitlines() if line]
-assert result["success"] is True
-assert result["new_filing_counts"]["oge"] == 0
-assert len(pending_lines) == 1
-assert "oge:synthetic-request-only" in state["seen_filings"]["oge"]
-assert (root / "latest.csv").read_text(encoding="utf-8").startswith("trade_id,")
-print("[pass] end-to-end Executive request queue, durable state, and no-duplicate second run")
-PY
+(
+  cd "$SCRIPT_DIR"
+  sha256sum --check MANIFEST.sha256
+)
+echo "[pass] deterministic recovery-record manifest"
 
 echo
 echo "VERIFICATION PASSED"

@@ -98,7 +98,7 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _public_date(record: Mapping[str, Any]) -> date | None:
-    """Return the first date MyETF can prove the disclosure was observable."""
+    """Return the first date PolitiTrack can prove the disclosure was observable."""
     return _parse_date(record.get("observed_at_utc")) or _parse_date(
         record.get("filed_date")
     )

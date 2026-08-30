@@ -1,4 +1,4 @@
-# Government disclosure tracker and review dashboard
+# PolitiTrack government disclosure tracker and review dashboard
 
 ## Operational objective
 
@@ -8,7 +8,7 @@ This component detects newly published financial-disclosure filings from officia
 
 ### Legislative branch
 
-The `Legislative purchase tracker` workflow polls:
+The `Legislative purchase tracker v2` workflow polls:
 
 - House annual financial-disclosure indexes, then downloads new Periodic Transaction Report PDFs by document ID;
 - Senate eFD Periodic Transaction Report search results, including electronic transaction tables and paper-report links.
@@ -68,10 +68,10 @@ The `Publish government trade dashboard` workflow restores the newest Legislativ
 - retained run history and errors;
 - downloadable CSV exports for each view.
 
-While the GitHub repository retains its legacy name, the expected URL is:
+The production URL is:
 
 ```text
-https://maglothinm.github.io/MyETF/
+https://maglothinm.github.io/PolitiTrack/
 ```
 
 GitHub Pages must be enabled once under **Settings → Pages → Build and deployment → Source → GitHub Actions**. The dashboard workflow then runs automatically after either tracker finishes and can also be started manually.
@@ -103,7 +103,7 @@ PUSHOVER_API_TOKEN
 PUSHOVER_USER_KEY
 ```
 
-Both workflows set `REQUIRE_PUSHOVER=true`. Missing credentials therefore fail immediately rather than allowing a tracker that cannot alert when a purchase appears.
+Both workflows currently set `REQUIRE_PUSHOVER=false`, so collection can continue when Pushover is not configured. Configure both secrets when filing alerts are wanted. A half-configured pair is invalid, and required-delivery mode must be enabled only after a tested Pushover configuration is in place.
 
 Optional independent dead-man monitoring:
 
@@ -114,33 +114,21 @@ EXECUTIVE_HEALTHCHECKS_PING_URL
 
 Use separate heartbeat endpoints. The legislative workflow normally runs four times per hour; the Executive workflow normally runs hourly.
 
-### 3. Commit and push
+### 3. Preserve and restore production state
 
-```bash
-git diff --check
-git status --short
-git add .
-git commit -m "Add government purchase disclosure tracker"
-git push
-```
+The production baseline is established and must not be recreated. The required artifacts are `legislative-tracker-state` and `executive-tracker-state`.
+
+For every manual collector run:
+
+1. Select the `main` branch.
+2. Select **Run workflow**; no initialization or historical-alert bootstrap controls are exposed.
+3. Confirm in the job log that the expected state artifact was restored before the tracker starts.
+
+The workflows hard-code state initialization and historical-alert bootstrapping off. If restore reports a missing artifact, the run fails closed. Recovery requires a separately approved procedure that identifies the known-good artifact and verifies its hashes and record counts before another production run.
 
 Scheduled workflows execute only from the default branch.
 
-### 4. Initialize the durable baselines
-
-For **each** workflow in the Actions tab:
-
-1. Enable the workflow if GitHub shows it as disabled.
-2. Select **Run workflow**.
-3. Set `initialize_state` to `true`.
-4. Leave `bootstrap_alerts` set to `false`.
-5. Run it once.
-
-That first run silently marks all currently visible filings as the baseline. It prevents a flood of historical alerts. It should still report nonzero source counts and create state/output artifacts.
-
-Do not select `bootstrap_alerts=true` unless a historical scan and potentially many alerts are intentional.
-
-### 5. Acceptance checks
+### 4. Acceptance checks
 
 For the Legislative workflow, confirm:
 
@@ -198,18 +186,26 @@ python -m pytest -q \
   tests/test_trade_dashboard.py
 ```
 
-A local Legislative source check without notifications requires an explicit terms acknowledgement and explicit state initialization:
+A live local Legislative source check must use an exported copy of the established state in an isolated directory. It must keep initialization and alerts disabled:
 
 ```bash
 DISCLOSURE_TERMS_ACKNOWLEDGED=true \
-ALLOW_STATE_INITIALIZATION=true \
+ALLOW_STATE_INITIALIZATION=false \
 REQUIRE_PUSHOVER=false \
 python scripts/government_trade_tracker.py \
   --branch legislative \
   --source all \
+  --state-file /path/to/isolated/legislative/state.json \
+  --ledger-file /path/to/isolated/legislative/purchases.jsonl \
+  --transactions-file /path/to/isolated/legislative/transactions.jsonl \
+  --filings-file /path/to/isolated/legislative/filings.jsonl \
+  --pending-file /path/to/isolated/legislative/pending-review.jsonl \
+  --run-history-file /path/to/isolated/legislative/runs.jsonl \
   --no-notify \
   --verbose
 ```
+
+Do not point a local check at the production state directory or upload its outputs as a production artifact.
 
 For Executive discovery, install Chromium first:
 
@@ -221,7 +217,7 @@ python scripts/oge_disclosures.py --output oge-listings.json --verbose
 
 ## Scheduling and latency
 
-The Legislative workflow polls at minutes 7, 22, 37, and 52 in `America/New_York`. The Executive browser workflow polls at minute 13 each hour. Both avoid the top of the hour, when hosted scheduling is more prone to delay.
+The active `Legislative purchase tracker v2` workflow polls at minutes 7, 22, 37, and 52 in `America/New_York`. The Executive browser workflow polls at minute 13 each hour. Both avoid the top of the hour, when hosted scheduling is more prone to delay.
 
 These schedules control detection latency after publication, not trade-to-disclosure latency. Covered filers can generally report a transaction up to 45 days after it occurs. A five-minute polling schedule cannot reveal a transaction before the responsible office publishes it.
 
@@ -244,8 +240,10 @@ Known paper forms and request-required Executive listings are different: they ar
 
 The reporting upgrade catalogs all filings visible during the first post-upgrade run, including those that were silently baselined during initial activation. It does not retroactively download and parse every baselined document. Those records are displayed as `Cataloged only` with their official links. New filings are fully processed and retained. A separate historical backfill remains appropriate if transaction-level analysis of the baseline period is required.
 
-The historical Flask/PostgreSQL/dbt/React path remains deferred because it contains separate deployment and API defects. The static dashboard deliberately avoids that dependency while providing a usable review interface now.
+The static dashboard is the production reporting surface. Historical Flask/PostgreSQL/dbt/React files are not part of the active deployment and must not be treated as operational truth.
 
 ## AI analysis after collection
 
 The optional AI workflow is isolated from collection. It restores successful tracker artifacts, analyzes newly parsed public-equity purchases, and publishes paper-research candidates without placing orders. See [`README_AI_FILING_ANALYST.md`](README_AI_FILING_ANALYST.md).
+
+The two manual simulation actions have different purposes. [`Run Simulation`](.github/workflows/manual_test.yml) is a one-run, isolated Investor Edge acceptance check with a short-lived dashboard artifact. [`Run $10K portfolio simulator`](.github/workflows/filing_simulation.yml) maintains a separate `simulation-state` history of isolated replays; each replay starts at $10,000 and measures progress toward $20,000. Neither action may alter production tracker or AI state.

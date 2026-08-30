@@ -413,7 +413,7 @@ def scrape_oge_listings(
             user_agent=(
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/128 Safari/537.36 "
-                "MyETFGovernmentTradeTracker/1.0"
+                "PolitiTrackGovernmentTradeTracker/1.0"
             ),
             viewport={"width": 1440, "height": 1200},
         )

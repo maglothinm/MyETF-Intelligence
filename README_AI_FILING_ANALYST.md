@@ -59,21 +59,23 @@ Create these under **Settings → Secrets and variables → Actions → Variable
 
 `AI_PAPER_TRADING_ONLY` is hard-coded to `true` in the workflow. There is no brokerage credential or order endpoint in this implementation.
 
-## First activation
+## Production operation
 
-After committing the files and creating the secret/variables:
+The production AI history already exists in `ai-analysis-state`; routine runs must restore it rather than create an empty state. If that artifact is missing, stop and restore the known-good artifact before running the analyst.
+
+For a manual production run:
 
 1. Open **Actions → AI filing analyst and paper portfolio**.
 2. Select **Run workflow** on `main`.
-3. Leave **Reanalyze the newest already-processed purchases** unchecked for the first run.
+3. Leave **Reanalyze the newest already-processed purchases** unchecked unless a controlled reanalysis is intentional.
 4. Leave **Enable Investor Edge** selected; it is the normal default.
-5. Leave **Suppress alerts** checked only when you want an initial no-alert acceptance test.
+5. Select **Suppress alerts** for a no-delivery acceptance run, or clear it for normal configured delivery.
 6. Set the maximum analyses to `20` or less.
-7. Run the workflow.
+7. Run the workflow and verify that the log restored `ai-analysis-state` before analysis.
 
-The first run creates `.trade-tracker/ai/state.json`, analyzes currently retained parsed purchases up to the run limit, creates `ai-analysis-state`, and triggers a dashboard publication. It does not parse the thousands of catalog-only baseline filings because those records do not yet contain transaction rows.
+Each successful scheduled or manual Legislative or Executive tracker run on the default branch automatically triggers the AI workflow. Pull-request collector runs are deliberately excluded from secret-bearing AI execution. Previously completed analysis IDs are skipped unless the model, rules, prompt version, or manual reanalysis setting changes.
 
-After activation, each successful scheduled or manual Legislative or Executive tracker run on the default branch automatically triggers the AI workflow. Pull-request collector runs are deliberately excluded from secret-bearing AI execution. Previously completed analysis IDs are skipped unless the model, rules, prompt version, or manual reanalysis setting changes.
+The default dashboard URL is `https://maglothinm.github.io/PolitiTrack/`. Set `DASHBOARD_URL` only when the deployment uses a different public or authenticated address.
 
 ## Dashboard output
 

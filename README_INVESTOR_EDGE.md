@@ -13,7 +13,7 @@ Only earlier, eligible equity purchases for that identity may contribute to a ca
 Investor Edge compares the security with a sector ETF when a sufficiently confident industry mapping exists and otherwise uses SPY. It measures benchmark-relative return at 5, 20, 60, and 120 trading-session horizons from two anchors:
 
 - **Picker alpha** starts at the underlying transaction date. It helps describe the official's historical security selection but was not publicly actionable at that time.
-- **Followable alpha** starts at the first trading session after MyETF first observed the public disclosure (falling back to the reported filing date when no observation timestamp exists). It is the more relevant measure for a PolitiTrack user because it uses a conservative, realistically actionable entry.
+- **Followable alpha** starts at the first trading session after PolitiTrack first observed the public disclosure (falling back to the reported filing date when no observation timestamp exists). It is the more relevant measure for a PolitiTrack user because it uses a conservative, realistically actionable entry.
 
 For every completed horizon, the durable observation retains entry and exit dates and prices, stock return, benchmark return, and alpha. Missing horizons remain unavailable; they are not filled with zero or a neutral value. The default horizon weights are 15% at 5 sessions, 30% at 20, 35% at 60, and 20% at 120, normalized across the outcomes that are actually available. Per-horizon alpha is clipped to ±25 percentage points before aggregation so one outlier cannot dominate a profile.
 
@@ -57,7 +57,7 @@ Candidate notifications include classification, amount, entry-review status and 
 
 Use **Actions → Run Simulation → Run workflow** for an isolated end-to-end acceptance check. The workflow restores the latest Legislative, Executive, and AI artifacts, clones them into run-specific temporary directories, chooses a historical filing with an eligible equity purchase, and creates a TEST-prefixed copy dated at the selected `as_of` date. It uses matching retained history when present; otherwise it adds one explicitly marked prior-history fixture only to the isolated tree. It then exercises the production analysis-record, deterministic scoring, and Investor Edge integration path with deterministic local evidence and market data.
 
-The simulation does not call OpenAI or a market-data service and supplies no API or notification credentials. It does not call the real notification function; instead, `data/simulation-result.json` contains the exact alert preview and machine-checkable assertions. The generated dashboard is exposed only through the uniquely named `run-simulation-dashboard-<run-id>-<attempt>` artifact and expires after one day. The cloned AI state remains in runner-temporary storage and is discarded; neither it nor the dashboard is uploaded as production state or deployed to Pages.
+The simulation does not call OpenAI or a market-data service and supplies no API or notification credentials. It does not call the real notification function; instead, `data/simulation-result.json` contains the exact alert preview and machine-checkable assertions. The generated dashboard is exposed only through the uniquely named `simulation-dashboard-<run-id>-<attempt>` artifact and expires after one day. The cloned AI state remains in runner-temporary storage and is discarded; neither it nor the dashboard is uploaded as production state or deployed to Pages.
 
 ## Persistent artifacts
 

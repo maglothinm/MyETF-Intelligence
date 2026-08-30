@@ -335,6 +335,13 @@ def load_ai(directory: Path | None) -> dict[str, Any]:
     }
 
 
+def load_simulation(directory: Path | None) -> dict[str, Any]:
+    """Load the isolated $10K-agent result without merging it into live state."""
+    if directory is None or not directory.exists():
+        return {}
+    return read_json_object(directory / "simulation-result.json")
+
+
 def _optional_number(value: Any) -> float | None:
     try:
         number = float(value)
@@ -569,12 +576,14 @@ def build_payload(
     *,
     repository_url: str,
     ai: dict[str, Any] | None = None,
+    simulation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     filings = legislative["filings"] + executive["filings"]
     transactions = legislative["transactions"] + executive["transactions"]
     reviews = legislative["reviews"] + executive["reviews"]
     runs = legislative["runs"] + executive["runs"]
     ai = ai or {"analyses": [], "portfolio": [], "runs": [], "state": {}}
+    simulation = dict(simulation or {})
     analyses = [
         analysis_export_record(item)
         for item in latest_by(ai.get("analyses", []), "trade_id")
@@ -687,6 +696,7 @@ def build_payload(
         "analyses": analyses,
         "portfolio": portfolio,
         "ai_runs": ai_runs,
+        "simulation": simulation,
     }
 
 
@@ -694,7 +704,7 @@ INDEX_HTML = r'''<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
   <meta name="description" content="PolitiTrack official government financial disclosure filing review dashboard">
@@ -709,6 +719,8 @@ INDEX_HTML = r'''<!doctype html>
       <p class="subtitle">House, Senate, and Executive-branch filing inventory, transactions, review items, and tracker health.</p>
     </div>
     <div class="header-actions">
+      <a id="run-simulation-link" class="button" href="#" target="_blank" rel="noopener" hidden>Run Simulation</a>
+      <a id="run-10k-agent-link" class="button" href="#" target="_blank" rel="noopener" hidden>Run $10K Agent</a>
       <a class="button secondary" href="wallboard.html">Wallboard</a>
       <a id="repository-link" class="button secondary" href="#" target="_blank" rel="noopener">Repository</a>
       <button id="refresh-button" class="button" type="button">Refresh data</button>
@@ -725,6 +737,20 @@ INDEX_HTML = r'''<!doctype html>
     <section id="manual-test-notice" class="notice" aria-label="Run Simulation notice" hidden>
       <strong>Run Simulation preview:</strong>
       <span id="manual-test-note">This temporary dashboard contains synthetic test data.</span>
+    </section>
+
+    <section id="ten-k-simulation-panel" class="ten-k-simulation-panel" aria-labelledby="ten-k-simulation-title">
+      <div class="ten-k-simulation-heading">
+        <div>
+          <p class="eyebrow">Isolated paper agent · production counts excluded</p>
+          <h2 id="ten-k-simulation-title">Latest $10K Agent simulation</h2>
+        </div>
+        <span id="ten-k-simulation-status" class="badge unknown">No result</span>
+      </div>
+      <p class="ten-k-simulation-safety">This historical replay reads retained artifacts but never changes production tracker, AI, or portfolio state.</p>
+      <div id="ten-k-simulation-result" class="ten-k-simulation-result" aria-live="polite">
+        No $10K Agent result has been published yet.
+      </div>
     </section>
 
     <section class="summary-grid" aria-label="Summary">
@@ -880,6 +906,8 @@ WALLBOARD_HTML = r'''<!doctype html>
       <span id="refresh-countdown">Refresh pending</span>
     </div>
     <div class="wall-actions">
+      <a id="wall-run-simulation-link" class="wall-button" href="#" target="_blank" rel="noopener" hidden>Run Simulation</a>
+      <a id="wall-run-10k-agent-link" class="wall-button" href="#" target="_blank" rel="noopener" hidden>Run $10K Agent</a>
       <a class="wall-button secondary" href="index.html">Review dashboard</a>
       <button id="fullscreen-button" class="wall-button" type="button">Full screen</button>
     </div>
@@ -897,6 +925,7 @@ WALLBOARD_HTML = r'''<!doctype html>
         <span id="data-through" class="quiet">—</span>
       </div>
       <div id="source-strip" class="source-strip"></div>
+      <div id="wall-ten-k-simulation" class="ten-k-simulation-strip" hidden aria-live="polite"></div>
       <div class="metric-grid" aria-label="Key metrics">
         <article class="metric-card priority"><span>High priority</span><strong id="metric-high">—</strong></article>
         <article class="metric-card watch"><span>Watchlist</span><strong id="metric-watch">—</strong></article>
@@ -1058,7 +1087,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.4rem;
+  min-height: max(2.4rem, 44px);
   padding: .58rem .85rem;
   border: 1px solid var(--blue);
   border-radius: .6rem;
@@ -1133,6 +1162,19 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .source-chip strong { font-size: .78rem; }
 .source-chip small { display: block; width: 100%; overflow: hidden; color: var(--muted); font-size: .61rem; text-overflow: ellipsis; white-space: nowrap; }
 .source-chip b { color: var(--blue-soft); font-size: .72rem; }
+
+.ten-k-simulation-strip {
+  margin: 0 0 .62rem;
+  padding: .5rem .62rem;
+  border: 1px solid rgba(104, 188, 255, .5);
+  border-radius: .58rem;
+  background: rgba(20, 57, 88, .68);
+  color: var(--blue-soft);
+  font-size: .66rem;
+  line-height: 1.35;
+}
+.ten-k-simulation-strip.success { border-color: rgba(101, 227, 160, .55); color: var(--green); }
+.ten-k-simulation-strip.failure { border-color: rgba(255, 124, 124, .55); color: var(--red); }
 
 .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
 .metric-card {
@@ -1323,7 +1365,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 760px) {
   .wall-header { grid-template-columns: 1fr; grid-template-areas: "identity" "state" "clock" "actions"; }
   .clock-block { justify-items: start; }
-  .wall-actions { justify-content: flex-start; }
+  .wall-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; width: 100%; }
+  .wall-button { width: 100%; }
   .candidate-card { grid-template-columns: 4.2rem minmax(0, 1fr); }
   .candidate-score { width: 4rem; height: 4rem; }
   .candidate-entry { grid-column: 2; justify-items: start; text-align: left; }
@@ -1357,6 +1400,24 @@ const safeUrl = value => {
   } catch {
     return "";
   }
+};
+const workflowUrl = (value, workflowFile="manual_test.yml") => {
+  if (!["manual_test.yml", "filing_simulation.yml"].includes(workflowFile)) return "";
+  const repositoryUrl = safeUrl(value);
+  if (!repositoryUrl) return "";
+  const url = new URL(repositoryUrl);
+  url.search = "";
+  url.hash = "";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/actions/workflows/${workflowFile}`;
+  return url.href;
+};
+const isObject = value => value && typeof value === "object" && !Array.isArray(value);
+const firstSimulationValue = (...values) => values.find(value => value !== undefined && value !== null && String(value) !== "") ?? "";
+const simulationStatusClass = value => {
+  const status = String(value || "").toLowerCase();
+  if (["success", "succeeded", "complete", "completed", "passed"].some(item => status.includes(item))) return "success";
+  if (["failure", "failed", "error", "cancelled"].some(item => status.includes(item))) return "failure";
+  return "unknown";
 };
 const titleCase = value => String(value ?? "").replaceAll("_", " ").replace(/\b\w/g, char => char.toUpperCase());
 const number = value => Number(value || 0).toLocaleString();
@@ -1447,7 +1508,7 @@ async function checkedJson(path) {
 }
 
 async function loadData() {
-  const [summary, filings, transactions, reviews, trackerRuns, analyses, portfolio, aiRuns] = await Promise.all([
+  const [summary, filings, transactions, reviews, trackerRuns, analyses, portfolio, aiRuns, simulation] = await Promise.all([
     checkedJson("data/summary.json"),
     checkedJson("data/filings.json"),
     checkedJson("data/transactions.json"),
@@ -1456,11 +1517,12 @@ async function loadData() {
     checkedJson("data/ai-analyses.json"),
     checkedJson("data/paper-portfolio.json"),
     checkedJson("data/ai-runs.json"),
+    checkedJson("data/simulation.json"),
   ]);
 
   const normalizedAiRuns = aiRuns.map(row => ({ ...row, branch: "ai analyst" }));
   const runs = [...trackerRuns, ...normalizedAiRuns].sort((a, b) => String(b.finished_utc || "").localeCompare(String(a.finished_utc || "")));
-  state.data = { summary, filings, transactions, reviews, analyses, portfolio, runs, aiRuns };
+  state.data = { summary, filings, transactions, reviews, analyses, portfolio, runs, aiRuns, simulation };
   state.lastLoadAt = new Date();
   state.nextRefreshAt = Date.now() + refreshSeconds * 1000;
   el("error-banner").hidden = true;
@@ -1475,6 +1537,14 @@ function sourceStatus(source) {
 
 function renderHeader() {
   const summary = state.data.summary;
+  const simulationLink = el("wall-run-simulation-link");
+  const simulationUrl = workflowUrl(summary.repository_url);
+  simulationLink.href = simulationUrl || "#";
+  simulationLink.hidden = !simulationUrl;
+  const tenKLink = el("wall-run-10k-agent-link");
+  const tenKUrl = workflowUrl(summary.repository_url, "filing_simulation.yml");
+  tenKLink.href = tenKUrl || "#";
+  tenKLink.hidden = !tenKUrl;
   const latestAiRun = state.data.aiRuns[0] || null;
   const statuses = Object.values(summary.sources || {}).map(sourceStatus);
   statuses.push(latestAiRun ? (latestAiRun.success ? "up" : "down") : (summary.ai_last_success_utc ? "up" : "unknown"));
@@ -1543,6 +1613,26 @@ function renderMetrics() {
   const pnlNode = el("metric-pnl");
   pnlNode.textContent = currency(pnl);
   pnlNode.className = pnlClass(pnl);
+}
+
+function renderTenKSimulation() {
+  const strip = el("wall-ten-k-simulation");
+  const simulation = state.data.simulation;
+  if (!isObject(simulation) || !Object.keys(simulation).length) {
+    strip.hidden = true;
+    return;
+  }
+  const filing = isObject(simulation.filing) ? simulation.filing : {};
+  const trade = isObject(simulation.trade) ? simulation.trade : {};
+  const accounting = isObject(simulation.accounting) ? simulation.accounting : {};
+  const status = firstSimulationValue(simulation.status, simulation.success === true ? "success" : simulation.success === false ? "failure" : "available");
+  const label = [trade.ticker, filing.filer].filter(Boolean).join(" · ") || "Result available";
+  const portfolioValue = currency(accounting.portfolio_value_usd);
+  const pnl = currency(accounting.profit_loss_usd);
+  const returnPercent = percent(accounting.return_percent);
+  strip.className = `ten-k-simulation-strip ${simulationStatusClass(status)}`;
+  strip.innerHTML = `<strong>Latest isolated $10K Agent: ${escapeHtml(titleCase(status))}</strong> · ${escapeHtml(label)} · ${escapeHtml(portfolioValue)} portfolio · ${escapeHtml(pnl)} (${escapeHtml(returnPercent)}) · replay ${escapeHtml(relativeAge(simulation.as_of_utc))}`;
+  strip.hidden = false;
 }
 
 function renderCandidates() {
@@ -1638,6 +1728,7 @@ function renderOperations() {
 function renderAll() {
   renderHeader();
   renderSources();
+  renderTenKSimulation();
   renderMetrics();
   renderCandidates();
   renderPortfolio();
@@ -1728,7 +1819,13 @@ STYLES_CSS = r''':root {
 }
 * { box-sizing: border-box; }
 html { background: var(--bg); color: var(--text); }
-body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top right, #173252 0, transparent 34rem), var(--bg); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding-right: env(safe-area-inset-right);
+  padding-left: env(safe-area-inset-left);
+  background: radial-gradient(circle at top right, #173252 0, transparent 34rem), var(--bg);
+}
 a { color: var(--accent-2); }
 .site-header, main, footer { width: min(1500px, calc(100% - 32px)); margin-inline: auto; }
 .site-header { display: flex; justify-content: space-between; gap: 24px; align-items: end; padding: 44px 0 24px; }
@@ -1738,9 +1835,19 @@ h2 { margin-bottom: 6px; font-size: 1.3rem; }
 .subtitle { max-width: 850px; color: var(--muted); font-size: 1.05rem; }
 .eyebrow { margin-bottom: 8px; color: var(--accent); font-size: .76rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.button, .more-button, .tab { border: 1px solid var(--border); border-radius: 10px; background: var(--accent); color: #07111d; font: inherit; font-weight: 750; padding: 10px 14px; cursor: pointer; text-decoration: none; }
+.button, .more-button, .tab { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; background: var(--accent); color: #07111d; font: inherit; font-weight: 750; padding: 10px 14px; cursor: pointer; text-decoration: none; }
 .button.secondary, .more-button, .tab { background: var(--surface); color: var(--text); }
 .notice { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 20px; padding: 14px 16px; border: 1px solid #6b5528; border-radius: 12px; background: rgba(101, 75, 20, .22); color: #f3dfb4; }
+.ten-k-simulation-panel { margin: 0 0 22px; padding: 16px; border: 1px solid rgba(105, 183, 255, .48); border-radius: 14px; background: rgba(15, 39, 63, .82); box-shadow: var(--shadow); }
+.ten-k-simulation-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ten-k-simulation-heading h2 { margin-bottom: 0; }
+.ten-k-simulation-safety { margin: 10px 0 0; color: var(--muted); font-size: .86rem; }
+.ten-k-simulation-result { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; color: var(--muted); }
+.ten-k-simulation-item { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.ten-k-simulation-item span { display: block; margin-bottom: 4px; color: var(--muted); font-size: .7rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.ten-k-simulation-item strong { display: block; overflow-wrap: anywhere; color: var(--text); }
+.ten-k-simulation-message { grid-column: 1 / -1; line-height: 1.45; }
+.ten-k-simulation-links { display: flex; flex-wrap: wrap; gap: 12px; }
 .summary-grid, .source-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .metric-card, .source-card { border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(145deg, rgba(21, 38, 58, .96), rgba(13, 26, 42, .96)); box-shadow: var(--shadow); }
 .metric-card { padding: 19px; }
@@ -1767,7 +1874,7 @@ h2 { margin-bottom: 6px; font-size: 1.3rem; }
 .download-link { white-space: nowrap; }
 .controls { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(150px, 1fr)); gap: 12px; margin: 18px 0 8px; }
 .controls label { display: grid; gap: 6px; color: var(--muted); font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-input, select { width: 100%; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); color: var(--text); padding: 10px 11px; font: inherit; }
+input, select { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); color: var(--text); padding: 10px 11px; font: inherit; }
 .result-count { color: var(--muted); margin: 12px 0; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 11px; }
 table { width: 100%; border-collapse: collapse; min-width: 960px; font-size: .88rem; }
@@ -1777,6 +1884,7 @@ tbody tr:hover { background: rgba(105, 183, 255, .055); }
 .badge { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px; background: var(--surface-2); font-size: .75rem; white-space: nowrap; }
 .badge.processed, .badge.success { color: var(--success); border-color: rgba(112, 214, 161, .5); }
 .badge.review_required, .badge.failure { color: var(--danger); border-color: rgba(255, 140, 140, .5); }
+.badge.unknown, .badge.queued, .badge.running { color: var(--warning); border-color: rgba(242, 200, 121, .5); }
 .badge.cataloged { color: var(--warning); border-color: rgba(242, 200, 121, .5); }
 .badge.detected { color: var(--accent-2); }
 .asset-cell strong, .filer-cell strong { display: block; }
@@ -1810,16 +1918,23 @@ tbody tr:hover { background: rgba(105, 183, 255, .055); }
 .money-neutral { color: var(--muted); font-weight: 750; }
 .entry-cell strong { display: block; }
 .entry-cell small { display: block; margin-top: 4px; color: var(--muted); }
-footer { padding: 30px 0 48px; color: var(--muted); font-size: .85rem; }
+footer { padding: 30px 0 max(48px, env(safe-area-inset-bottom)); color: var(--muted); font-size: .85rem; }
 @media (max-width: 950px) {
   .site-header { align-items: start; flex-direction: column; }
   .summary-grid, .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .controls { grid-template-columns: 1fr; }
+  .ten-k-simulation-result { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
   .site-header, main, footer { width: min(100% - 20px, 1500px); }
-  .site-header { padding-top: 28px; }
-  .summary-grid, .source-grid { grid-template-columns: 1fr; }
+  .site-header { padding-top: max(28px, env(safe-area-inset-top)); }
+  .header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .header-actions .button { width: 100%; }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .source-grid { grid-template-columns: 1fr; }
+  .metric-card { padding: 14px 12px; }
+  .ten-k-simulation-heading { align-items: start; flex-direction: column; gap: 8px; }
+  .ten-k-simulation-result { grid-template-columns: 1fr; }
   .panel { padding: 14px; }
   .panel-header { flex-direction: column; gap: 4px; }
 }
@@ -1847,6 +1962,23 @@ const state = {
 const el = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
 const safeUrl = value => { try { const url = new URL(String(value)); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch { return ""; } };
+const workflowUrl = (value, workflowFile="manual_test.yml") => {
+  if (!["manual_test.yml", "filing_simulation.yml"].includes(workflowFile)) return "";
+  const repositoryUrl = safeUrl(value);
+  if (!repositoryUrl) return "";
+  const url = new URL(repositoryUrl);
+  url.search = "";
+  url.hash = "";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/actions/workflows/${workflowFile}`;
+  return url.href;
+};
+const isObject = value => value && typeof value === "object" && !Array.isArray(value);
+const simulationStatusClass = value => {
+  const status = String(value || "").toLowerCase();
+  if (["success", "succeeded", "complete", "completed", "passed"].some(item => status.includes(item))) return "success";
+  if (["failure", "failed", "error", "cancelled"].some(item => status.includes(item))) return "failure";
+  return "unknown";
+};
 const titleCase = value => String(value ?? "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
 const number = value => Number(value || 0).toLocaleString();
 const currency = value => {
@@ -1928,7 +2060,7 @@ async function checkedJson(path) {
 }
 
 async function loadData() {
-  const [summary, filings, transactions, reviews, trackerRuns, analyses, portfolio, aiRuns] = await Promise.all([
+  const [summary, filings, transactions, reviews, trackerRuns, analyses, portfolio, aiRuns, simulation] = await Promise.all([
     checkedJson("data/summary.json"),
     checkedJson("data/filings.json"),
     checkedJson("data/transactions.json"),
@@ -1937,6 +2069,7 @@ async function loadData() {
     checkedJson("data/ai-analyses.json"),
     checkedJson("data/paper-portfolio.json"),
     checkedJson("data/ai-runs.json"),
+    checkedJson("data/simulation.json"),
   ]);
   const normalizedAiRuns = aiRuns.map(row => ({
     ...row,
@@ -1947,7 +2080,7 @@ async function loadData() {
     ai_completed_count: Number(row.completed_count || 0),
   }));
   const runs = [...trackerRuns, ...normalizedAiRuns].sort((a, b) => String(b.finished_utc || "").localeCompare(String(a.finished_utc || "")));
-  state.data = { summary, filings, transactions, reviews, runs, analyses, portfolio };
+  state.data = { summary, filings, transactions, reviews, runs, analyses, portfolio, simulation };
   renderAll();
 }
 
@@ -1983,11 +2116,70 @@ function renderSummary() {
   el("manual-test-note").textContent = `${number(manualTestFilings)} synthetic filing(s) and ${number(manualTestTransactions)} cloned transaction(s) are included in this isolated Run Simulation. Production state and real alerts are unchanged.`;
   el("updated-at").textContent = `Dashboard generated ${formatDate(summary.generated_utc)}${summary.ai_last_success_utc ? ` • AI last succeeded ${formatDate(summary.ai_last_success_utc)}` : ""}`;
   el("repository-link").href = safeUrl(summary.repository_url) || "#";
+  const simulationLink = el("run-simulation-link");
+  const simulationUrl = workflowUrl(summary.repository_url);
+  simulationLink.href = simulationUrl || "#";
+  simulationLink.hidden = !simulationUrl;
+  const tenKLink = el("run-10k-agent-link");
+  const tenKUrl = workflowUrl(summary.repository_url, "filing_simulation.yml");
+  tenKLink.href = tenKUrl || "#";
+  tenKLink.hidden = !tenKUrl;
   el("source-cards").innerHTML = Object.values(summary.sources || {}).map(source => {
     const statusClass = source.latest_success === true ? "up" : source.latest_success === false ? "down" : "unknown";
     const statusText = source.latest_success === true ? "Last run succeeded" : source.latest_success === false ? "Last run failed" : "No retained run status";
     return `<article class="source-card"><header><strong>${escapeHtml(titleCase(source.source))}</strong><span class="status-dot ${statusClass}" title="${escapeHtml(statusText)}"></span></header><dl><dt>Cataloged filings</dt><dd>${number(source.filing_count)}</dd><dt>Visible in last run</dt><dd>${number(source.visible_count)}</dd><dt>Last run</dt><dd>${formatDate(source.last_run_utc)}</dd><dt>Last success</dt><dd>${formatDate(source.last_success_utc)}</dd></dl>${source.latest_error ? `<p class="muted">${escapeHtml(source.latest_error)}</p>` : ""}</article>`;
   }).join("");
+}
+
+function tenKSimulationItem(label, value) {
+  const displayValue = value === undefined || value === null || value === "" ? "—" : value;
+  return `<div class="ten-k-simulation-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(displayValue)}</strong></div>`;
+}
+
+function renderTenKSimulation() {
+  const statusNode = el("ten-k-simulation-status");
+  const resultNode = el("ten-k-simulation-result");
+  const simulation = state.data.simulation;
+  if (!isObject(simulation) || !Object.keys(simulation).length) {
+    statusNode.className = "badge unknown";
+    statusNode.textContent = "No result";
+    resultNode.className = "ten-k-simulation-result muted";
+    resultNode.textContent = "No $10K Agent result has been published yet. Production counts remain independent.";
+    return;
+  }
+
+  const filing = isObject(simulation.filing) ? simulation.filing : {};
+  const trade = isObject(simulation.trade) ? simulation.trade : {};
+  const analysis = isObject(simulation.analysis) ? simulation.analysis : {};
+  const accounting = isObject(simulation.accounting) ? simulation.accounting : {};
+  const objective = isObject(simulation.objective) ? simulation.objective : {};
+  const selection = isObject(simulation.selection) ? simulation.selection : {};
+  const notification = isObject(simulation.notification) ? simulation.notification : {};
+  const status = firstValue(simulation.status, simulation.success === true ? "success" : simulation.success === false ? "failure" : "available");
+  const statusClass = simulationStatusClass(status);
+  const notificationStatus = firstValue(simulation.notification_status, notification.email, notification.pushover, "not requested");
+  const runUrl = safeUrl(simulation.run_url);
+  const sourceUrl = safeUrl(filing.source_url || trade.source_url);
+  const profitLoss = Number(accounting.profit_loss_usd || 0);
+
+  statusNode.className = `badge ${statusClass}`;
+  statusNode.textContent = titleCase(status);
+  resultNode.className = "ten-k-simulation-result";
+  resultNode.innerHTML = [
+    tenKSimulationItem("Selected filing", [trade.ticker, filing.filer].filter(Boolean).join(" · ")),
+    tenKSimulationItem("Starting capital", currency(objective.starting_capital_usd ?? accounting.starting_cash_usd)),
+    tenKSimulationItem("Portfolio value", currency(accounting.portfolio_value_usd)),
+    `<div class="ten-k-simulation-item"><span>Paper P&amp;L</span><strong class="${pnlClass(profitLoss)}">${escapeHtml(currency(accounting.profit_loss_usd))} · ${escapeHtml(percent(accounting.return_percent))}</strong></div>`,
+    tenKSimulationItem("Goal progress", `${percent(objective.goal_progress_percent)} · ${currency(objective.remaining_to_goal_usd)} remaining`),
+    tenKSimulationItem("Shares", accounting.shares),
+    tenKSimulationItem("Entry → valuation", `${price(accounting.entry_price_usd)} → ${price(accounting.valuation_price_usd)}`),
+    tenKSimulationItem("Replay cutoff", formatDate(simulation.as_of_utc)),
+    tenKSimulationItem("AI record", `${titleCase(analysis.status || "unavailable")} · score ${analysis.score ?? "—"}`),
+    tenKSimulationItem("Selection", titleCase(selection.method || "random")),
+    tenKSimulationItem("Notification", titleCase(notificationStatus)),
+    simulation.message ? `<div class="ten-k-simulation-item ten-k-simulation-message"><span>Result</span><strong>${escapeHtml(simulation.message)}</strong></div>` : "",
+    (runUrl || sourceUrl) ? `<div class="ten-k-simulation-item ten-k-simulation-message ten-k-simulation-links">${runUrl ? `<a href="${escapeHtml(runUrl)}" target="_blank" rel="noopener">Open agent run</a>` : ""}${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">Open selected filing</a>` : ""}<span>${escapeHtml(simulation.simulation_id || "")}</span></div>` : "",
+  ].join("");
 }
 
 function setTable(id, rows, renderer, shownKey) {
@@ -2122,6 +2314,7 @@ function renderRuns() {
 function renderAllTables() { renderAnalyses(); renderPortfolio(); renderFilings(); renderTransactions(); renderReviews(); renderRuns(); }
 function renderAll() {
   renderSummary();
+  renderTenKSimulation();
   populateSelect("ai-classification", state.data.analyses.map(row => row.classification));
   populateSelect("ai-source", state.data.analyses.map(row => row.source));
   populateSelect("portfolio-status", state.data.portfolio.map(row => row.status));
@@ -2163,6 +2356,7 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
         write_json(data_dir / "ai-analyses.json", payload["analyses"])
         write_json(data_dir / "paper-portfolio.json", payload["portfolio"])
         write_json(data_dir / "ai-runs.json", payload["ai_runs"])
+        write_json(data_dir / "simulation.json", payload.get("simulation", {}))
         write_csv(data_dir / "filings.csv", payload["filings"], FILING_FIELDS)
         write_csv(data_dir / "transactions.csv", payload["transactions"], TRANSACTION_FIELDS)
         write_csv(data_dir / "pending-reviews.csv", payload["reviews"], REVIEW_FIELDS)
@@ -2191,12 +2385,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--legislative-dir", type=Path)
     parser.add_argument("--executive-dir", type=Path)
     parser.add_argument("--ai-dir", type=Path)
+    parser.add_argument("--simulation-dir", type=Path)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--repository-url",
         default=(
             f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com').rstrip('/')}/"
-            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/MyETF-Intelligence').strip('/')}"
+            f"{os.environ.get('GITHUB_REPOSITORY', 'maglothinm/PolitiTrack').strip('/')}"
         ),
     )
     return parser
@@ -2207,7 +2402,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     legislative = load_branch(args.legislative_dir, "legislative")
     executive = load_branch(args.executive_dir, "executive")
     ai = load_ai(args.ai_dir)
-    payload = build_payload(legislative, executive, repository_url=args.repository_url, ai=ai)
+    simulation = load_simulation(args.simulation_dir)
+    payload = build_payload(
+        legislative,
+        executive,
+        repository_url=args.repository_url,
+        ai=ai,
+        simulation=simulation,
+    )
     build_site(payload, args.output_dir)
     build_dashboard_addon(args.ai_dir, args.output_dir)
     print(

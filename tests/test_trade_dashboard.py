@@ -4,7 +4,14 @@ import csv
 import json
 from pathlib import Path
 
-from scripts.build_trade_dashboard import build_payload, build_site, load_ai, load_branch
+from scripts.build_trade_dashboard import (
+    build_parser,
+    build_payload,
+    build_site,
+    load_ai,
+    load_branch,
+    load_simulation,
+)
 
 
 def write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -249,6 +256,7 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
         "data/ai-analyses.json",
         "data/paper-portfolio.json",
         "data/ai-runs.json",
+        "data/simulation.json",
         "data/ai-analyses.csv",
         "data/paper-portfolio.csv",
         "data/ai-runs.csv",
@@ -256,18 +264,36 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
         assert (output_dir / relative).exists(), relative
 
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+    styles_css = (output_dir / "styles.css").read_text(encoding="utf-8")
+    app_js = (output_dir / "app.js").read_text(encoding="utf-8")
     wallboard_html = (output_dir / "wallboard.html").read_text(encoding="utf-8")
     wallboard_css = (output_dir / "wallboard.css").read_text(encoding="utf-8")
     wallboard_js = (output_dir / "wallboard.js").read_text(encoding="utf-8")
     assert "PolitiTrack Government Trade Monitor" in index_html
+    assert 'content="width=device-width, initial-scale=1, viewport-fit=cover"' in index_html
+    assert 'id="run-simulation-link"' in index_html
+    assert 'id="run-10k-agent-link"' in index_html
     assert 'href="wallboard.html"' in index_html
     assert "Content-Security-Policy" in index_html
     assert "PolitiTrack Intelligence Wallboard" in wallboard_html
+    assert 'id="wall-run-simulation-link"' in wallboard_html
+    assert 'id="wall-run-10k-agent-link"' in wallboard_html
     assert "Portrait wallboard" in wallboard_html
     assert "orientation: portrait" in wallboard_css
     assert "min-aspect-ratio: 12/5" in wallboard_css
     assert "DEFAULT_REFRESH_SECONDS = 300" in wallboard_js
     assert "requestWakeLock" in wallboard_js
+    assert "workflowUrl(summary.repository_url)" in app_js
+    assert "workflowUrl(summary.repository_url)" in wallboard_js
+    assert 'workflowFile="manual_test.yml"' in app_js
+    assert 'workflowFile="manual_test.yml"' in wallboard_js
+    assert 'workflowUrl(summary.repository_url, "filing_simulation.yml")' in app_js
+    assert 'workflowUrl(summary.repository_url, "filing_simulation.yml")' in wallboard_js
+    assert "Authorization" not in app_js
+    assert "Authorization" not in wallboard_js
+    assert "env(safe-area-inset-bottom)" in styles_css
+    assert "min-height: 44px" in styles_css
+    assert json.loads((output_dir / "data/simulation.json").read_text(encoding="utf-8")) == {}
     with (output_dir / "data/transactions.csv").open(encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
     assert {row["ticker"] for row in csv_rows} == {"EXM", "SEC", "OLD"}
@@ -280,6 +306,111 @@ def test_dashboard_handles_missing_branch_artifacts(tmp_path: Path) -> None:
     assert missing["reviews"] == []
     assert missing["runs"] == []
     assert missing["state"] == {}
+
+
+def test_dashboard_defaults_to_canonical_polititrack_repository(monkeypatch) -> None:
+    monkeypatch.delenv("GITHUB_SERVER_URL", raising=False)
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+    args = build_parser().parse_args([])
+
+    assert args.repository_url == "https://github.com/maglothinm/PolitiTrack"
+
+
+def test_dashboard_keeps_ten_k_agent_result_isolated(tmp_path: Path) -> None:
+    simulation_dir = tmp_path / "simulation"
+    simulation_dir.mkdir()
+    result = {
+        "schema_version": 1,
+        "status": "success",
+        "success": True,
+        "simulation_id": "simulation:42",
+        "mode": "offline_historical_replay",
+        "as_of_utc": "2026-08-29T18:00:00Z",
+        "run_url": "https://github.com/example/PolitiTrack/actions/runs/42",
+        "message": "Selected TEST; priced paper portfolio value $10,250.00 toward the $20,000.00 goal.",
+        "selection": {"method": "random", "candidate_count": 12},
+        "objective": {
+            "starting_capital_usd": 10000.0,
+            "goal_value_usd": 20000.0,
+            "goal_reached": False,
+            "goal_progress_percent": 51.25,
+            "remaining_to_goal_usd": 9750.0,
+        },
+        "filing": {
+            "branch": "legislative",
+            "source": "house",
+            "report_id": "house:42",
+            "filer": "Example Representative",
+            "source_url": "https://example.test/filing-42.pdf",
+        },
+        "trade": {"trade_id": "trade:42", "ticker": "TEST"},
+        "analysis": {"status": "available", "score": 81},
+        "accounting": {
+            "status": "priced",
+            "starting_cash_usd": 10000.0,
+            "shares": 100.0,
+            "entry_price_usd": 100.0,
+            "valuation_price_usd": 102.5,
+            "portfolio_value_usd": 10250.0,
+            "profit_loss_usd": 250.0,
+            "return_percent": 2.5,
+        },
+        "notification": {"pushover": "not_requested", "email": "not_requested"},
+        "notification_status": "Pushover: not_requested; email: not_requested",
+        "safety": {
+            "paper_only": True,
+            "alerts_sent": False,
+            "production_inputs_mutated": False,
+        },
+    }
+    (simulation_dir / "simulation-result.json").write_text(
+        json.dumps(result), encoding="utf-8"
+    )
+
+    simulation = load_simulation(simulation_dir)
+    payload = build_payload(
+        load_branch(None, "legislative"),
+        load_branch(None, "executive"),
+        repository_url="https://github.com/example/PolitiTrack",
+        simulation=simulation,
+    )
+
+    assert payload["simulation"] == result
+    assert payload["summary"]["filing_count"] == 0
+    assert payload["summary"]["transaction_count"] == 0
+    assert payload["summary"]["analysis_count"] == 0
+    assert payload["summary"]["open_paper_position_count"] == 0
+
+    output = tmp_path / "simulation-site"
+    build_site(payload, output)
+    assert json.loads((output / "data/simulation.json").read_text(encoding="utf-8")) == result
+
+    index = (output / "index.html").read_text(encoding="utf-8")
+    app = (output / "app.js").read_text(encoding="utf-8")
+    wallboard = (output / "wallboard.html").read_text(encoding="utf-8")
+    wallboard_js = (output / "wallboard.js").read_text(encoding="utf-8")
+    assert "Latest $10K Agent simulation" in index
+    assert "production counts excluded" in index
+    assert "never changes production tracker, AI, or portfolio state" in index
+    assert "wall-ten-k-simulation" in wallboard
+    assert 'checkedJson("data/simulation.json")' in app
+    assert 'checkedJson("data/simulation.json")' in wallboard_js
+    assert "accounting.portfolio_value_usd" in app
+    assert "accounting.profit_loss_usd" in wallboard_js
+
+
+def test_load_simulation_requires_exact_result_filename(tmp_path: Path) -> None:
+    assert load_simulation(None) == {}
+    assert load_simulation(tmp_path / "missing") == {}
+    directory = tmp_path / "simulation"
+    directory.mkdir()
+    (directory / "simulation.json").write_text('{"status":"queued"}', encoding="utf-8")
+    assert load_simulation(directory) == {}
+    (directory / "simulation-result.json").write_text(
+        '{"status":"success"}', encoding="utf-8"
+    )
+    assert load_simulation(directory) == {"status": "success"}
 
 
 def test_dashboard_includes_ai_candidates_and_paper_portfolio(tmp_path: Path) -> None:
