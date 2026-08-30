@@ -4,7 +4,11 @@
 
 The tracker originally proved that government sources were being checked, but it did not provide a practical place to review what had been filed. This reporting layer converts the durable tracker state into a browser-accessible filing and transaction feed.
 
-## What changes
+## Existing reporting data
+
+The collectors already supply the following reporting layer. The dashboard
+redesign is presentation-only: it does not change collection, parsing, scoring,
+portfolio accounting, alert delivery, or production-state continuity.
 
 - Catalogs every House, Senate, and OGE filing visible to a tracker run, including already-seen baseline records.
 - Preserves purchases, sales, and exchanges in an all-transaction ledger while retaining the purchase-only ledger for compatibility.
@@ -16,23 +20,100 @@ The tracker originally proved that government sources were being checked, but it
 
 ## Dashboard views
 
-The static site contains:
+The static root dashboard has six directly linkable destinations:
 
-- **Filings** — every cataloged record, filer, role or jurisdiction, status, transaction counts, and official link.
-- **Transactions** — purchases, sales, and exchanges with owner, ticker or asset, amount range, dates, and official link.
-- **Review queue** — paper reports, request-only OGE records, and parser exceptions that require human review.
-- **Run history** — retained tracker successes, source counts, new-record counts, and errors.
-- **AI candidates** — final/base score, class, evidence, review band, source links, and the candidate's Investor Edge score, modifier, confidence, observation count, relevant followable alpha, followable hit rate, sector alpha, and disclosure lag.
-- **Investor Edge** — a heat map of normalized filer/owner histories with 5/20/60/120-session outcomes and a per-investor drilldown into identity, sector evidence, eligibility, and prior-trade picker/followable return details.
-- **Paper portfolio** — simulated entries and exits used only for prospective research evaluation.
+| Destination | Contents |
+|---|---|
+| **Overview** (`#overview`) | Deterministic Situation Brief, qualifying signals, device-local changes, manual exceptions, coverage counts, parsed-transaction composition, and retained run health |
+| **Signals** (`#signals`) | High Priority and Watchlist cards, followed by the searchable table of all AI classifications and evidence |
+| **Investor Edge** (`#investor-edge`) | Published profile summary and links to the preserved heat map, methodology, and trade-level drilldowns at `investor-edge.html` |
+| **$10K Agent** (`#agent`) | Latest isolated historical replay and the separate production paper-position table |
+| **Records** (`#records/filings`, `#records/transactions`, `#records/reviews`) | Retained filings, parsed transactions, and review inventory with official disclosure links |
+| **Operations** (`#operations`) | Legislative, Executive, and AI run evidence, coverage totals, and publication details |
 
-The principal views are searchable and exportable to CSV. `data/ai-analyses.csv` contains flattened Investor Edge display fields; full profiles and trade outcomes remain in JSON. Missing historical observations display as an em dash and export blank rather than being represented as zero.
+Signal cards preserve final/base scores, classification, direction, entry-review
+status, and Investor Edge evidence. Transaction, filing, observation, analysis,
+and quote times stay distinct. Only valid numeric prices produce a price-band
+graphic; missing values display **Unavailable**. Weak signals and archives never
+fill an empty actionable board. The board shows at most 48 cards; the complete
+retained analyses remain available in the table and CSV.
+
+Record tables retain CSV downloads and add debounced search, explicit date-basis
+filters, column sorting, sticky headers, and 50-row pagination. Large ledgers
+load only when their destination is opened. `data/ai-analyses.csv` retains
+flattened Investor Edge fields; full profiles and outcomes remain in JSON.
+Missing or insufficient outcomes are unavailable, not zero or neutral returns.
+
+The compact **Actions** drawer contains **Open Run Simulation** and **Open Run
+$10K Agent**. These are GitHub Actions links: the page does not dispatch jobs or
+show invented queued/running progress. **Methodology & Risk** opens the complete
+disclosure in a dialog. Context help supports hover, keyboard focus, tap/click,
+Escape, and outside dismissal; essential simulation and price-delay labels stay
+visible without opening a tooltip.
+
+## Generated sources and local builds
+
+`scripts/build_trade_dashboard.py` remains the build entry point. It reads the
+checked-in HTML/CSS/JavaScript in `scripts/dashboard_assets/` and combines the
+shared utilities and notification engine into the generated scripts. The
+presentation-only `scripts/dashboard_insights.py` produces versioned
+`data/dashboard-insights.json` from existing records. Overview initially fetches
+this compact model rather than the full filing and review ledgers. Existing
+JSON/CSV filenames remain available. Do not edit generated Pages files or the
+inactive `frontend/trades_dashboard` application.
+
+Build from read-only fixture copies, never by running collectors to populate a
+preview:
+
+```text
+python scripts/build_trade_dashboard.py --legislative-dir <copied-legislative> --executive-dir <copied-executive> --ai-dir <copied-ai> --simulation-dir <copied-simulation> --output-dir <temporary-site> --repository-url https://github.com/maglothinm/MyETF-Intelligence
+python -m http.server 8765 --directory <temporary-site>
+```
+
+The simulation input is optional. Input-state hashes must remain unchanged after
+generation. Public output removes credentials, recipient information, heartbeat
+URLs, and internal notification payloads. The frontend has a self-only CSP and
+no CDN, analytics, charting framework, live market request, or heartbeat probe.
+
+## Browser-local changes and sound
+
+The first complete successful render silently establishes the browser baseline.
+Later successful refreshes compare stable record IDs, group routine filing and
+transaction changes, and retain a bounded Notification Center. A failed refresh
+preserves the last rendered data and does not advance that baseline. This is
+per-browser/per-device state, not an account or production ledger.
+
+The center supports acknowledgement, one-hour snooze, category mute, volume,
+quiet hours, and **Off / High Priority Only / All eligible events** sound modes.
+Sound defaults off and requires an explicit user gesture. High Priority Only
+also permits supported failure incidents; ordinary filings and refreshes stay
+silent. Quiet hours suppress audio, not visual history. Reloads and unchanged
+refreshes do not replay events. History is capped at 150 entries; record-membership
+snapshots and deduplication storage are also bounded. If a membership category
+exceeds its bound, its delta is suppressed rather than labeling old records new.
+
+Sound is dependable only while the page is open and active. Browser storage or
+audio restrictions can leave it unavailable. Local settings never alter Gmail,
+Pushover, or Healthchecks, which remain the background channels. Test sound does
+not run a workflow or send a notification. No Web Push or service worker is added.
 
 ## Coverage status
 
 A filing marked **Cataloged only** was visible to the source collector but was already part of the silent baseline before this reporting upgrade. It has an official link, but its transaction rows have not necessarily been parsed. New filings are marked **Processed** or **Review required**.
 
 This upgrade does not silently claim historical transaction coverage. A separate, controlled backfill is required to parse all pre-upgrade documents.
+
+Coverage graphics show absolute counts of separate populations, not a conversion
+funnel. Transaction composition describes the parsed post-upgrade ledger plus
+retained earlier purchases, not complete historical government trading or exact
+dollar exposure. Review inventory distinguishes **Access/request required**,
+**Manual/parser exception**, and **Other/uncategorized**; OGE access requests are
+informational inventory rather than thousands of system failures.
+
+Run health reflects retained branch-level evidence, including errors, last run,
+last success, and data age. Missing evidence is **Unknown**. Zero new records is
+not failure. No stale threshold or source-specific failure attribution is inferred
+when the retained evidence does not support it.
 
 ## GitHub Pages deployment
 
@@ -41,9 +122,13 @@ The canonical repository publishes from GitHub Actions:
 1. Open **Settings** in the PolitiTrack repository.
 2. Open **Pages**.
 3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Open **Actions → Legislative purchase tracker v2 → Run workflow** and start the manual run.
-5. Do the same for **Executive purchase tracker**.
-6. The `Publish government trade dashboard` workflow will run after each tracker. It can also be run manually.
+4. Verify eligible, unexpired protected artifacts and preserve the previous Pages artifact for rollback.
+5. Use the existing `Publish government trade dashboard` workflow for a UI-only release. It also runs after the existing tracker workflows.
+6. Verify the root, `wallboard.html`, and `investor-edge.html`, the tested build SHA, published counts, and unchanged production-state evidence.
+
+Do not dispatch collectors, AI analysis, simulations, or external alerts merely
+to populate or deploy this presentation. Repository checks and the operating
+contract remain release gates.
 
 Production Pages URL:
 
@@ -80,3 +165,19 @@ PolitiTrack exposes two distinct simulation actions:
 - [`Run $10K portfolio simulator`](.github/workflows/filing_simulation.yml) runs an isolated historical replay with $10,000 starting capital and a $20,000 goal. Its replay history persists only in the simulation-named `simulation-state` artifact and remains separate from the production paper portfolio.
 
 Neither action can upload a production tracker or AI state artifact. Use their outputs for simulation review; use production workflow runs and deployed URLs to verify live operation.
+
+The $10K display is labeled **SIMULATED — SINGLE-RUN HISTORICAL REPLAY**. It shows
+starting/current replay value, actual dollar/percentage change, remaining amount
+to the $20,000 objective, and retained entry/valuation times and evidence links.
+Starting capital is not goal progress. Independent replay records are not joined
+into an equity curve: **No persistent portfolio history yet.** An unpriced replay
+does not claim investment performance; a portfolio without open positions says
+**No open paper positions**.
+
+## Acceptance limits
+
+Automated checks and emulated viewport reviews do not establish real-device
+acceptance. Actual Chrome desktop, current iPhone Safari touch behavior, and the
+physical rotated CHG90 display have not yet been validated for this redesign.
+Record live deployment and device results separately in `docs/HANDOFF.md`; do not
+infer them from a successful local build.

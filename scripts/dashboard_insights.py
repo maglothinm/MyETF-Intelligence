@@ -1,0 +1,451 @@
+"""Read-only, public presentation model for the static PolitiTrack dashboard.
+
+This module neither reads nor writes production state. Counts describe separate
+retained populations; it does not change eligibility, classifications or scores.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import os
+import re
+import subprocess
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Mapping
+from urllib.parse import parse_qsl, urlsplit
+
+
+VERSION = 1
+QUALIFYING = {"high_priority": 0, "watchlist": 1}
+BRANCHES = ("legislative", "executive", "ai")
+_PRIVATE_KEY = re.compile(
+    r"(?:secret|password|passwd|credential|recipient|heartbeat|healthcheck|"
+    r"api[_-]?key|access[_-]?token|auth[_-]?token|user[_-]?key|app[_-]?token|"
+    r"authorization|cookie|private[_-]?config|delivery[_-]?(?:payload|state)|"
+    r"gmail[_-]?(?:address|email)|(?:email|mail)[_-]?(?:address|to|from)|"
+    r"token|private[_-]?key|^to$|^cc$|^bcc$|^config$|^configuration$|^environment$|^env$|"
+    r"^delivery$|^delivery_journal$|^alert_delivery$)", re.I
+)
+_URL = re.compile(r"https?://[^\s<>\"']+", re.I)
+_EMAIL = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
+_TOKEN = re.compile(r"\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{12,}|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{12,})\b")
+_LABELED_SECRET = re.compile(
+    r"\b((?:api[_ -]?key|token|secret|password|authorization)\s*[:=]\s*)[^\s,;]+", re.I
+)
+_BEARER = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]+=*", re.I)
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _rows(value: Any) -> list[Mapping[str, Any]]:
+    return [row for row in value if isinstance(row, Mapping)] if isinstance(value, list) else []
+
+
+def _text(value: Any, limit: int = 500) -> str:
+    return _scrub_text(value)[:limit] if isinstance(value, str) else ""
+
+
+def optional_number(value: Any) -> float | None:
+    """Accept finite numeric values, never booleans, blanks, NaN or infinity."""
+    if isinstance(value, bool) or value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _first(*values: Any) -> Any:
+    return next((value for value in values if value is not None and value != ""), None)
+
+
+def _positive(value: Any) -> float | None:
+    number = optional_number(value)
+    return number if number is not None and number > 0 else None
+
+
+def _count(value: Any) -> int | None:
+    number = optional_number(value)
+    return int(number) if number is not None and number >= 0 and number.is_integer() else None
+
+
+def _instant(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        result = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        return result.replace(tzinfo=timezone.utc) if result.tzinfo is None else result.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        return None
+
+
+def optional_timestamp(value: Any) -> str | None:
+    result = _instant(value)
+    return result.isoformat().replace("+00:00", "Z") if result is not None else None
+
+
+def _date(value: Any) -> str | None:
+    result = _instant(value)
+    return result.date().isoformat() if result is not None else None
+
+
+def _unsafe_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        host = (parsed.hostname or "").casefold()
+        return bool(
+            parsed.scheme not in {"http", "https"}
+            or not host
+            or parsed.username or parsed.password
+            or "healthcheck" in host or host == "hc-ping.com" or host.endswith(".hc-ping.com")
+            or any(part in parsed.path.casefold() for part in ("/heartbeat/", "/heartbeat", "/hc-ping/"))
+            or any(_PRIVATE_KEY.search(key) for key, _ in parse_qsl(parsed.query))
+        )
+    except ValueError:
+        return True
+
+
+def safe_url(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or any(ord(char) < 33 or char in "<>\"'" for char in value) or _unsafe_url(value):
+        return None
+    return value
+
+
+def _scrub_text(value: str) -> str:
+    value = _URL.sub(lambda match: "[private URL removed]" if _unsafe_url(match.group()) else match.group(), value)
+    value = _EMAIL.sub("[address removed]", value)
+    value = _TOKEN.sub("[credential removed]", value)
+    value = _LABELED_SECRET.sub(lambda match: match.group(1) + "[removed]", value)
+    return _BEARER.sub("Bearer [removed]", value)
+
+
+def public_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy compatibility data while removing private configuration and secrets.
+
+    Public record text remains text, including HTML-like strings: the renderer
+    must escape it. We do not serialize arbitrary objects, NaN or credentials.
+    Existing benign simulation notification status fields are kept for consumers.
+    """
+    def clean(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            result = {}
+            for key, item in value.items():
+                if not isinstance(key, str) or _PRIVATE_KEY.search(key):
+                    continue
+                if key == "notification" and isinstance(item, Mapping):
+                    # Preserve the existing replay's coarse provider statuses,
+                    # never a provider request/response object or delivery body.
+                    result[key] = {provider: _scrub_text(status) for provider, status in item.items()
+                                   if provider in {"pushover", "email", "gmail"} and isinstance(status, str)}
+                else:
+                    result[key] = clean(item)
+            return result
+        if isinstance(value, (list, tuple)):
+            return [clean(item) for item in value]
+        if isinstance(value, str):
+            return _scrub_text(value)
+        if value is None or isinstance(value, bool) or isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return value if math.isfinite(value) else None
+        return None
+
+    return clean(payload)
+
+
+def _flag(value: Any) -> bool:
+    return value is True or (isinstance(value, str) and value.strip().casefold() == "true")
+
+
+def is_synthetic(row: Mapping[str, Any]) -> bool:
+    if _flag(row.get("is_synthetic_test")) or _flag(row.get("is_temporary")):
+        return True
+    if _mapping(row.get("test_metadata")):
+        return True
+    return any(
+        bool(re.search(r"(?:^|[|:])TEST(?:[-_:]|$)", str(row.get(key) or ""), re.I))
+        for key in ("filing_key", "report_id", "trade_id", "analysis_id")
+    )
+
+
+def _filing_identity(row: Mapping[str, Any]) -> tuple[str, str]:
+    return str(row.get("source") or ""), str(row.get("report_id") or "")
+
+
+def review_category(row: Mapping[str, Any], filing: Mapping[str, Any] | None = None) -> str:
+    """Separate request inventory from parser exceptions using retained fields."""
+    filing = _mapping(filing)
+    access = str(_first(row.get("access_mode"), filing.get("access_mode")) or "").casefold().replace("-", "_")
+    reason = " ".join(str(value or "") for value in (row.get("reason"), row.get("review_reason"), filing.get("review_reason"))).casefold()
+    if access in {"request", "request_only", "access_required", "access_limited", "restricted"}:
+        return "access_required"
+    if re.search(r"(?:access.*(?:request|limit)|request.only|form\s*201|requires? (?:an? )?request)", reason):
+        return "access_required"
+    source = str(_first(row.get("source"), filing.get("source")) or "").casefold()
+    if source == "oge" and "no direct pdf" in reason:
+        return "access_required"
+    if re.search(r"(?:pars(?:e|er|ing)|manual|paper (?:filing|report)|ocr|malformed|unsupported (?:format|document))", reason):
+        return "manual_exception"
+    return "other"
+
+
+def _flat_record(row: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    return {field: _text(row.get(field)) for field in fields}
+
+
+_FILING_PUBLIC = ("filing_key", "source", "branch", "report_id", "filer", "title", "agency", "status", "access_mode")
+_REVIEW_PUBLIC = ("review_id", "source", "branch", "report_id", "filer", "title", "agency", "reason")
+_SIGNAL_PUBLIC = ("analysis_id", "trade_id", "source", "branch", "report_id", "filer", "owner", "ticker", "asset", "amount", "transaction_type", "classification")
+
+
+def _filing(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {**_flat_record(row, _FILING_PUBLIC), "filed_date": _date(row.get("filed_date")),
+            "observed_at_utc": optional_timestamp(row.get("first_seen_utc")),
+            "updated_at_utc": optional_timestamp(row.get("updated_at_utc")), "source_url": safe_url(row.get("source_url"))}
+
+
+def _review(row: Mapping[str, Any], category: str) -> dict[str, Any]:
+    return {**_flat_record(row, _REVIEW_PUBLIC), "category": category,
+            "filed_date": _date(row.get("filed_date")), "observed_at_utc": optional_timestamp(row.get("observed_at_utc")),
+            "source_url": safe_url(row.get("source_url"))}
+
+
+def _signal(row: Mapping[str, Any]) -> dict[str, Any]:
+    entry, market, edge, ai = (_mapping(row.get(key)) for key in ("entry_plan", "market", "investor_edge", "ai"))
+    direction = _text(_first(row.get("signal_direction"), entry.get("signal_direction")))
+    if direction not in {"bullish", "bearish"}:
+        tx_type = str(row.get("transaction_type") or "").casefold()
+        direction = "bullish" if tx_type == "purchase" else ("bearish" if tx_type.startswith(("sale", "disposition")) else "unknown")
+    current = _positive(_first(market.get("current_price"), entry.get("current_price")))
+    low, high = _positive(entry.get("review_band_low")), _positive(entry.get("review_band_high"))
+    maximum_chase = optional_number(entry.get("maximum_chase_percent"))
+    if maximum_chase is not None and maximum_chase < 0:
+        maximum_chase = None
+    tx_close = _positive(_first(entry.get("transaction_date_close"), market.get("transaction_date_close")))
+    ceiling = _positive(entry.get("chase_ceiling"))
+    if ceiling is None and tx_close is not None and maximum_chase is not None and direction == "bullish":
+        ceiling = optional_number(tx_close * (1 + maximum_chase / 100))
+    if low is None or high is None or low >= high:
+        low = high = None
+    band = None
+    if low is not None and high is not None and current is not None:
+        domain = [low, high, current] + ([ceiling] if ceiling is not None else [])
+        minimum, maximum = min(domain), max(domain)
+        if maximum > minimum:
+            band = {"low": low, "high": high, "current": current, "chase_ceiling": ceiling,
+                    "minimum": minimum, "maximum": maximum}
+    observed, filed = _instant(row.get("observed_at_utc")), _instant(row.get("filed_date"))
+    transaction = _instant(row.get("transaction_date"))
+    lag = optional_number(row.get("investor_edge_current_disclosure_lag_days"))
+    if lag is None and transaction and (observed or filed):
+        days = ((observed or filed).date() - transaction.date()).days
+        lag = days if days >= 0 else None
+    evidence = []
+    seen_urls: set[str] = set()
+    for item in _rows(ai.get("evidence_sources")):
+        url = safe_url(item.get("url"))
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            evidence.append({"title": _text(item.get("title"), 140) or "Evidence", "url": url})
+    observations = _count(_first(row.get("investor_edge_observation_count"), edge.get("sample_count"), edge.get("observation_count")))
+    edge_status = _text(_first(row.get("investor_edge_status"), edge.get("status"))) or "unavailable"
+    has_edge_outcomes = bool(observations is not None and observations > 0
+                             and edge_status.casefold() not in {"unavailable", "disabled", "error", "neutral", "missing"}
+                             and not edge_status.casefold().startswith("insufficient"))
+    relevant_alpha = optional_number(row.get("investor_edge_relevant_followable_alpha"))
+    followable_alpha = _first(relevant_alpha, optional_number(row.get("investor_edge_followable_alpha")))
+    alpha_label = _text(row.get("investor_edge_relevant_alpha_label")) if relevant_alpha is not None else ""
+    return {
+        **_flat_record(row, _SIGNAL_PUBLIC), "direction": direction,
+        "source_url": safe_url(row.get("source_url")), "transaction_date": _date(row.get("transaction_date")),
+        "filed_date": _date(row.get("filed_date")), "observed_at_utc": optional_timestamp(row.get("observed_at_utc")),
+        "analyzed_at_utc": optional_timestamp(row.get("analyzed_at_utc")), "disclosure_lag_days": lag,
+        "score": optional_number(row.get("score")), "final_score": optional_number(_first(row.get("final_score"), row.get("score"))),
+        "base_score": optional_number(row.get("base_score")),
+        "edge_modifier": optional_number(_first(row.get("investor_edge_modifier"), edge.get("modifier"))),
+        "edge_score": optional_number(_first(row.get("investor_edge_score"), edge.get("edge_score"))),
+        "edge_confidence": optional_number(_first(row.get("investor_edge_confidence"), edge.get("confidence"))),
+        "edge_confidence_label": _text(_first(row.get("investor_edge_confidence_label"), edge.get("confidence_label"))),
+        "edge_observation_count": observations,
+        "edge_status": edge_status,
+        "edge_relevant_alpha_label": alpha_label if has_edge_outcomes else "",
+        "edge_followable_alpha": followable_alpha if has_edge_outcomes else None,
+        "edge_hit_rate_percent": optional_number(row.get("investor_edge_hit_rate_percent")) if has_edge_outcomes else None,
+        "edge_sector_alpha": optional_number(row.get("investor_edge_sector_alpha")) if has_edge_outcomes else None,
+        "current_price": current, "quote_timestamp_utc": optional_timestamp(market.get("quote_timestamp_utc")),
+        "entry_status": _text(entry.get("entry_status")) or "unavailable", "review_band_low": low, "review_band_high": high,
+        "chase_ceiling": ceiling, "maximum_chase_percent": maximum_chase,
+        "signal_expires_utc": optional_timestamp(entry.get("signal_expires_utc")), "price_band": band,
+        "why": _text(ai.get("analysis_summary"), 360), "evidence": evidence[:8], "paper_only": True,
+    }
+
+
+def _run_status(row: Mapping[str, Any]) -> str:
+    if row.get("success") is False or _errors(row.get("errors")):
+        return "failure"
+    return "success" if row.get("success") is True else "unknown"
+
+
+def _errors(value: Any) -> list[str]:
+    if isinstance(value, list):
+        errors = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                errors.append(_text(item, 300))
+            elif item:
+                errors.append("Retained run reports an error; details unavailable.")
+        return errors
+    if isinstance(value, str):
+        return [_text(value, 300)] if value.strip() else []
+    return ["Retained run reports an error; details unavailable."] if value else []
+
+
+def _sum_counts(value: Any) -> int | None:
+    if not isinstance(value, Mapping) or not value:
+        return None
+    counts = [_count(number) for number in value.values()]
+    return sum(counts) if all(number is not None for number in counts) else None
+
+
+def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
+    key = _text(row.get("run_key"), 200)
+    if not key:
+        key = hashlib.sha256((str(row.get("run_url") or "") + "|" + str(row.get("run_attempt") or "") + "|" + str(row.get("started_utc") or "") + "|" + str(row.get("finished_utc") or "")).encode()).hexdigest()[:24]
+    return {"id": f"{branch}:{key}", "branch": branch, "finished_utc": optional_timestamp(_first(row.get("finished_utc"), row.get("started_utc"))),
+            "success": row.get("success") if isinstance(row.get("success"), bool) else None,
+            "status": _run_status(row), "error_count": len(_errors(row.get("errors"))),
+            "errors": _errors(row.get("errors")), "run_url": safe_url(row.get("run_url")),
+            "new_record_count": _count(row.get("completed_count")) if branch == "ai" else _sum_counts(row.get("new_filing_counts"))}
+
+
+def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_of: datetime | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    branches, all_runs = [], []
+    for branch in BRANCHES:
+        retained = ai_runs if branch == "ai" else [row for row in runs if row.get("branch") == branch]
+        ordered = sorted((_run(row, branch) for row in retained), key=lambda row: row["finished_utc"] or "", reverse=True)
+        all_runs.extend(ordered)
+        last = ordered[0] if ordered else {}
+        success = next((row for row in ordered if row["status"] == "success"), {})
+        last_time = _instant(last.get("finished_utc"))
+        age = max(0, int((as_of - last_time).total_seconds())) if as_of and last_time else None
+        branches.append({"branch": branch, "status": last.get("status", "unknown"),
+                         "last_run_utc": last.get("finished_utc"), "last_success_utc": success.get("finished_utc"),
+                         "age_seconds": age, "expected_cadence_seconds": None,
+                         "errors": last.get("errors", []), "new_record_count": last.get("new_record_count"),
+                         "run_url": last.get("run_url"), "timeline": ordered[:10]})
+    statuses = {row["status"] for row in branches}
+    overall = "failure" if "failure" in statuses else ("success" if statuses == {"success"} else "unknown")
+    return {"status": overall, "branches": branches}, all_runs
+
+
+def _simulation(value: Any) -> dict[str, Any]:
+    row = _mapping(value)
+    objective, accounting, analysis, trade, filing, price = (_mapping(row.get(key)) for key in ("objective", "accounting", "analysis", "trade", "filing", "price_context"))
+    starting = _positive(_first(objective.get("starting_capital_usd"), accounting.get("starting_cash_usd")))
+    current = optional_number(accounting.get("portfolio_value_usd"))
+    goal = _positive(objective.get("goal_value_usd"))
+    priced = accounting.get("status") == "priced"
+    change = round(current - starting, 2) if priced and current is not None and starting is not None else None
+    return {"available": bool(row), "status": _text(row.get("status")) or "unavailable",
+            "label": "SIMULATED — SINGLE-RUN HISTORICAL REPLAY", "simulation_id": _text(row.get("simulation_id")),
+            "as_of_utc": optional_timestamp(row.get("as_of_utc")), "starting_value": starting, "current_value": current,
+            "change_usd": change, "change_percent": round(change / starting * 100, 4) if change is not None and starting is not None else None,
+            "remaining_to_goal": round(max(0, goal - current), 2) if goal is not None and current is not None else None,
+            "goal_value": goal, "ticker": _text(trade.get("ticker")), "score": optional_number(analysis.get("score")),
+            "classification": _text(analysis.get("classification")), "entry_utc": optional_timestamp(price.get("entry_price_timestamp_utc")),
+            "valuation_utc": optional_timestamp(price.get("valuation_price_timestamp_utc")),
+            "run_url": safe_url(row.get("run_url")), "source_url": safe_url(filing.get("source_url")),
+            "priced": priced, "persistent_history": False, "history_note": "No persistent portfolio history yet."}
+
+
+def _build_sha() -> str | None:
+    sha = os.environ.get("GITHUB_SHA", "")
+    if re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+        return sha.lower()
+    try:
+        result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent.parent,
+                                capture_output=True, text=True, timeout=5, check=False)
+        sha = result.stdout.strip()
+        return sha.lower() if result.returncode == 0 and re.fullmatch(r"[0-9a-fA-F]{40}", sha) else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _ids(rows: list[Mapping[str, Any]], key: str) -> list[str]:
+    return sorted({hashlib.sha256(str(row[key]).encode()).hexdigest()[:24] for row in rows if isinstance(row.get(key), str) and row[key]})
+
+
+def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Create a compact additive view model without mutating any source object."""
+    summary = _mapping(payload.get("summary"))
+    filings, transactions, reviews, analyses, runs, ai_runs, portfolio = (
+        _rows(payload.get(key)) for key in ("filings", "transactions", "reviews", "analyses", "runs", "ai_runs", "portfolio")
+    )
+    by_filing = {_filing_identity(row): row for row in filings}
+    test_filings = {_filing_identity(row) for row in filings if is_synthetic(row) and all(_filing_identity(row))}
+    synthetic_transactions = [row for row in transactions if is_synthetic(row) or _filing_identity(row) in test_filings]
+    test_trades = {row.get("trade_id") for row in synthetic_transactions if row.get("trade_id")}
+    is_test = lambda row: is_synthetic(row) or _filing_identity(row) in test_filings or (row.get("trade_id") in test_trades if row.get("trade_id") else False)
+    production = {}
+    synthetic = {}
+    for name, rows in (("filings", filings), ("transactions", transactions), ("reviews", reviews), ("analyses", analyses)):
+        production[name] = [row for row in rows if not is_test(row)]
+        synthetic[name] = len(rows) - len(production[name])
+    filings, transactions, reviews, analyses = (production[key] for key in ("filings", "transactions", "reviews", "analyses"))
+    signals = [_signal(row) for row in analyses if row.get("classification") in QUALIFYING]
+    signals.sort(key=lambda row: (QUALIFYING[row["classification"]], -(row["final_score"] if row["final_score"] is not None else -1), -(_instant(row["analyzed_at_utc"]).timestamp() if row["analyzed_at_utc"] else 0), row["analysis_id"]))
+    status = Counter(str(row.get("status") or "unknown").casefold() for row in filings)
+    categories = [_review(row, review_category(row, by_filing.get(_filing_identity(row)))) for row in reviews]
+    review_counts = Counter(row["category"] for row in categories)
+    categories.sort(key=lambda row: (row["category"] == "manual_exception", row["observed_at_utc"] or "", row["review_id"]), reverse=True)
+    purchases = sum(str(row.get("transaction_type") or "").casefold() in {"purchase", "buy"} for row in transactions)
+    sales = sum(str(row.get("transaction_type") or "").casefold().startswith(("sale", "disposition", "sell")) for row in transactions)
+    generated = optional_timestamp(summary.get("generated_utc"))
+    production_runs = [row for row in runs if not is_synthetic(row)]
+    production_ai_runs = [row for row in ai_runs if not is_synthetic(row)]
+    health, normalized_runs = _health(production_runs, production_ai_runs, _instant(generated))
+    simulation = _simulation(payload.get("simulation"))
+    production_portfolio = [row for row in portfolio if not is_test(row)]
+    timestamps = [row.get(field) for rows, fields in ((filings, ("updated_at_utc", "first_seen_utc")), (transactions + reviews, ("observed_at_utc",)), (analyses, ("analyzed_at_utc",)), (production_runs + production_ai_runs, ("finished_utc",)), (production_portfolio, ("last_updated_utc", "opened_at_utc"))) for row in rows for field in fields]
+    valid_times = [value for raw in timestamps if (value := optional_timestamp(raw))]
+    data_through = max(valid_times, default=None)
+    incidents = []
+    for branch in health["branches"]:
+        if branch["status"] == "failure":
+            incidents.append({"id": "failure:" + branch["timeline"][0]["id"], "branch": branch["branch"], "kind": "failure",
+                              "since": branch["last_run_utc"], "url": branch["run_url"],
+                              "summary": f"{branch['branch'].title()} latest retained run failed or reported errors."})
+    open_positions = sum(row.get("status") == "open" and not is_test(row) for row in portfolio)
+    closed_positions = sum(row.get("status") == "closed" and not is_test(row) for row in portfolio)
+    result = {
+        "version": VERSION, "build_sha": _build_sha(), "generated_utc": generated, "data_through_utc": data_through,
+        "repository_url": safe_url(summary.get("repository_url")),
+        "coverage": {"cataloged_only": status["cataloged"] + status["cataloged_only"], "processed": status["processed"],
+                     "review_required": status["review_required"], "other_filings": sum(count for name, count in status.items() if name not in {"cataloged", "cataloged_only", "processed", "review_required"}),
+                     "filings": len(filings), "transactions": len(transactions), "analyses": len(analyses), "qualifying_signals": len(signals),
+                     "note": "Separate retained populations, not a conversion funnel. Cataloged does not mean transactions parsed; review rows and filing statuses are separate inventories."},
+        "composition": {"population": len(transactions), "purchases": purchases, "sales": sales, "other": len(transactions) - purchases - sales,
+                        "note": "Parsed post-upgrade transaction ledger; not complete historical government-trading volume. Counts do not imply dollar exposure."},
+        "reviews": {"access_required": review_counts["access_required"], "manual_exception": review_counts["manual_exception"], "other": review_counts["other"], "total": len(reviews), "latest": categories[:8]},
+        "signals": signals[:48], "signals_truncated": len(signals) > 48,
+        "health": health, "latest_filings": [_filing(row) for row in sorted(filings, key=lambda row: str(row.get("updated_at_utc") or row.get("first_seen_utc") or ""), reverse=True)[:8]],
+        "simulation": simulation, "synthetic": synthetic,
+        "paper": {"open_positions": open_positions, "closed_positions": closed_positions,
+                  "label": "PAPER TRADING", "empty_note": "No open paper positions" if not open_positions else None},
+        "notifications": {"filing_ids": _ids(filings, "filing_key"), "trade_ids": _ids(transactions, "trade_id"), "analysis_ids": _ids(analyses, "analysis_id"),
+                          "run_ids": sorted({row["id"] for row in normalized_runs}), "simulation_ids": [simulation["simulation_id"]] if simulation["simulation_id"] else [],
+                          "qualifying_signals": [{"analysis_id": row["analysis_id"], "classification": row["classification"], "ticker": row["ticker"], "analyzed_at": row["analyzed_at_utc"], "link": row["source_url"]} for row in signals],
+                          "runs": [{"id": row["id"], "branch": row["branch"], "status": row["status"], "conclusion": row["status"], "at": row["finished_utc"], "url": row["run_url"], "error_count": row["error_count"]} for row in normalized_runs],
+                          "current_incidents": incidents,
+                          "simulation_results": [{"simulation_id": simulation["simulation_id"], "kind": "historical_replay", "timestamp": generated, "cutoff_utc": simulation["as_of_utc"], "url": simulation["run_url"], "status": simulation["status"]}] if simulation["simulation_id"] else []},
+    }
+    return result

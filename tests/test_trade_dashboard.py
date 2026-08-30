@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 from scripts.build_trade_dashboard import (
     build_parser,
@@ -245,6 +250,7 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
         "wallboard.js",
         ".nojekyll",
         "data/summary.json",
+        "data/dashboard-insights.json",
         "data/filings.json",
         "data/transactions.json",
         "data/pending-reviews.json",
@@ -280,7 +286,7 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
     assert 'id="wall-run-10k-agent-link"' in wallboard_html
     assert "Portrait wallboard" in wallboard_html
     assert "orientation: portrait" in wallboard_css
-    assert "min-aspect-ratio: 12/5" in wallboard_css
+    assert "min-aspect-ratio:12/5" in wallboard_css
     assert "DEFAULT_REFRESH_SECONDS = 300" in wallboard_js
     assert "requestWakeLock" in wallboard_js
     assert "workflowUrl(summary.repository_url)" in app_js
@@ -292,7 +298,7 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
     assert "Authorization" not in app_js
     assert "Authorization" not in wallboard_js
     assert "env(safe-area-inset-bottom)" in styles_css
-    assert "min-height: 44px" in styles_css
+    assert "min-height:44px" in styles_css
     assert json.loads((output_dir / "data/simulation.json").read_text(encoding="utf-8")) == {}
     with (output_dir / "data/transactions.csv").open(encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
@@ -391,13 +397,16 @@ def test_dashboard_keeps_ten_k_agent_result_isolated(tmp_path: Path) -> None:
     wallboard = (output / "wallboard.html").read_text(encoding="utf-8")
     wallboard_js = (output / "wallboard.js").read_text(encoding="utf-8")
     assert "Latest $10K Agent simulation" in index
-    assert "production counts excluded" in index
+    assert "production counts excluded" in index.lower()
     assert "never changes production tracker, AI, or portfolio state" in index
     assert "wall-ten-k-simulation" in wallboard
-    assert 'checkedJson("data/simulation.json")' in app
-    assert 'checkedJson("data/simulation.json")' in wallboard_js
-    assert "accounting.portfolio_value_usd" in app
-    assert "accounting.profit_loss_usd" in wallboard_js
+    assert 'checkedJson("data/dashboard-insights.json")' in app
+    assert 'checkedJson("data/dashboard-insights.json")' in wallboard_js
+    insights = json.loads((output / "data/dashboard-insights.json").read_text(encoding="utf-8"))
+    assert insights["simulation"]["current_value"] == 10250
+    assert insights["simulation"]["change_usd"] == 250
+    assert "goal_progress_percent" not in insights["simulation"]
+    assert insights["simulation"]["persistent_history"] is False
 
 
 def test_load_simulation_requires_exact_result_filename(tmp_path: Path) -> None:
@@ -533,6 +542,87 @@ def test_dashboard_includes_ai_candidates_and_paper_portfolio(tmp_path: Path) ->
     app = (output / "app.js").read_text(encoding="utf-8")
     assert "AI-ranked directional signals" in index
     assert "Paper-research portfolio" in index
-    assert "ai-analyses.json" in app
+    assert 'file:"ai-analyses"' in app
     assert (output / "data/ai-analyses.csv").exists()
     assert (output / "data/paper-portfolio.csv").exists()
+
+
+def test_public_build_preserves_input_bytes_and_excludes_private_payloads(tmp_path: Path) -> None:
+    """Exercise the actual file builder, including the separately generated Edge page."""
+    from scripts.build_trade_dashboard import main
+
+    inputs = tmp_path / "copied-inputs"
+    inputs.mkdir()
+    secret = "fixture-private-" + "value"
+    heartbeat = "https://hc-ping.com/" + "fixture-only-never-fetch"
+    hostile = '<img src=x onerror="window.fixtureExecuted=true">'
+    write_jsonl(inputs / "filings.jsonl", [{
+        "filing_key": "house:fixture", "filer": hostile, "status": "cataloged",
+        "source": "house", "source_url": "https://example.test/official",
+        "filed_date": "2026-08-20", "credentials": {"token": secret},
+        "heartbeat_url": heartbeat,
+    }])
+    (inputs / "state.json").write_text('{"seen_ids":["keep-this-id"]}', encoding="utf-8")
+    (inputs / "investor-edge-leaderboard.json").write_text(json.dumps({
+        "investors": [{"filer": hostile, "owner": "Self", "sample_count": 0,
+                       "edge_score": 50, "recipient": "private@example.test",
+                       "delivery_payload": {"secret": secret, "url": heartbeat}}]
+    }), encoding="utf-8")
+    before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs.iterdir()}
+    output = tmp_path / "public-site"
+    assert main(["--legislative-dir", str(inputs), "--ai-dir", str(inputs),
+                 "--output-dir", str(output)]) == 0
+    after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs.iterdir()}
+    assert before == after
+    assets = "\n".join(p.read_text(encoding="utf-8") for p in output.rglob("*") if p.is_file())
+    for value in (secret, heartbeat, "private@example.test"):
+        assert value not in assets
+    edge = (output / "investor-edge.html").read_text(encoding="utf-8")
+    assert hostile not in edge
+    assert "&lt;img" in edge
+    assert "Building history — insufficient completed observations (n = 0)" in edge
+    insights = json.loads((output / "data/dashboard-insights.json").read_text(encoding="utf-8"))
+    assert insights["coverage"]["filings"] == 1
+    assert insights["health"]["status"] == "unknown"
+    assert insights["paper"]["empty_note"] == "No open paper positions"
+
+
+def test_dashboard_navigation_and_dialog_ids_remain_unique(tmp_path: Path) -> None:
+    from bs4 import BeautifulSoup
+    build_site(build_payload(load_branch(None, "legislative"), load_branch(None, "executive"),
+                             repository_url="https://github.com/example/PolitiTrack"), tmp_path / "site")
+    for page in ("index.html", "wallboard.html"):
+        soup = BeautifulSoup((tmp_path / "site" / page).read_text(encoding="utf-8"), "html.parser")
+        ids = [node["id"] for node in soup.select("[id]")]
+        assert len(ids) == len(set(ids))
+        for opener in soup.select("[data-dialog]"):
+            assert soup.find("dialog", id=opener["data-dialog"])
+        assert not soup.select("script:not([src]), style, [onclick]")
+        assert all(node.get("aria-label") for node in soup.select("button.help, button.icon-button"))
+        assert "connect-src 'self'" in str(soup.find("meta", attrs={"http-equiv": "Content-Security-Policy"}))
+
+
+def test_dashboard_release_checks(tmp_path: Path) -> None:
+    """Keep additive UI regressions in the existing fixed-file CI test selection.
+
+    Workflow configuration deliberately remains unchanged for this UI release.
+    Linux CI also executes the repository's complete retired-overlay verifier;
+    Windows development without Bash still exercises the fixture-only UI suites.
+    """
+    repository = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+         "tests/test_dashboard_insights.py", "tests/test_dashboard_notifications.py",
+         "tests/test_dashboard_dom.py", "--basetemp", str(tmp_path / "ui-checks")],
+        cwd=repository, capture_output=True, text=True, check=False, timeout=180,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    if os.name != "nt":
+        bash = shutil.which("bash")
+        assert bash, "Bash is required for the Linux repository verification gate"
+        verification = subprocess.run(
+            [bash, "verify.sh"], cwd=repository, capture_output=True,
+            text=True, check=False, timeout=90,
+        )
+        assert verification.returncode == 0, verification.stdout + verification.stderr
+        assert "VERIFICATION PASSED" in verification.stdout

@@ -610,7 +610,7 @@ def test_dashboard_flattens_edge_fields_and_renders_candidate_surfaces(
     wallboard = (output / "wallboard.js").read_text(encoding="utf-8")
     for label in ("Sector edge", "Observations", "Modifier", "Run Simulation"):
         assert label in app
-    for label in ("candidateEdge", "sector", "final"):
+    for label in ("signalCard", "Sector edge", "final_score"):
         assert label in wallboard
 
 

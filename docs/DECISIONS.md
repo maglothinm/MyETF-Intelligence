@@ -220,3 +220,30 @@ GitHub confirms the rename. Public legacy `MyETF` is code-frozen at `36447a2`, b
 removing workflow files is not a substitute for disabling Actions/Pages and
 setting the archive flag. The cutover remains open until those settings and the
 two stale queued runs are verified.
+
+## D-2026-08-30-019 — Release the dashboard as a read-only presentation layer
+
+**Decision:** Issue #4 delivers the commercial dashboard on a dedicated branch
+from canonical `main`, independently of held state-safety PR #3. The owner
+explicitly requested merge/deployment after the outstanding device acceptance and
+cutover limitations were disclosed. Decisions 015–018 are reserved by that held
+revision and are not incorporated or superseded here.
+
+**Reason:** The dashboard can derive a compact public view from existing records
+without changing collectors, scores, classifications, state schemas, portfolio
+accounting, external alerts, workflow configuration, or simulation contracts.
+The existing Pages publisher restores protected artifacts read-only and uploads
+only `github-pages`; this release does not dispatch production writers.
+
+**Consequence:** Only High Priority/Watchlist records enter the actionable board.
+Catalog coverage, access-required inventory, parser exceptions, and branch health
+remain distinct. Unknown values stay unavailable. The $10K result remains a
+single-run historical replay; append-only replay history is not a persistent
+portfolio. Browser notifications, acknowledgements and sound are local to a
+device, establish a silent first baseline, and never alter external alerts.
+Generated public outputs exclude sensitive delivery fields and heartbeat URLs.
+
+The two stale queued runs, repository settings cutover, PR #3, and unverified
+Gmail delivery remain separate open work. Automated DOM/accessibility fixtures
+are not proof of Chrome, iPhone Safari, real audio, or physical CHG90 behavior;
+issue #4 remains open until the remaining device acceptance is recorded.
