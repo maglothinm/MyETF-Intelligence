@@ -1,0 +1,104 @@
+name: One-time cutover containment
+
+on:
+  # This workflow is removed after the two superseded queued writer runs are
+  # proven cancelled. Keeping the trigger path-limited prevents unrelated use.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cutover_containment.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-stale-writers:
+    name: Cancel superseded Legislative writer runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify identity and cancel exact stale runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_REPOSITORY_ID: "1349678672"
+          EXPECTED_HEAD_SHA: b9cf0f3e3863de69d92ae01f35f1c154a082f56a
+          STALE_RUN_IDS: "33219808359 33221027676"
+        run: |
+          set -euo pipefail
+
+          repository_id="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}" \
+              --jq '.id'
+          )"
+          if [[ "$repository_id" != "$EXPECTED_REPOSITORY_ID" ]]; then
+            echo "Repository identity mismatch: ${repository_id}; refusing containment." >&2
+            exit 1
+          fi
+
+          for run_id in $STALE_RUN_IDS; do
+            payload="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+            )"
+            jq -e \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg expected_head "$EXPECTED_HEAD_SHA" \
+              '(.repository.full_name == $repository)
+               and (.name == "Legislative purchase tracker")
+               and (.path == ".github/workflows/legislative_trade_tracker.yml")
+               and (.event == "workflow_dispatch")
+               and (.head_branch == "main")
+               and (.head_sha == $expected_head)' \
+              <<< "$payload" >/dev/null
+
+            status="$(jq -r '.status' <<< "$payload")"
+            conclusion="$(jq -r '.conclusion // ""' <<< "$payload")"
+            if [[ "$status" == "completed" ]]; then
+              if [[ "$conclusion" != "cancelled" ]]; then
+                echo "Run ${run_id} already completed as ${conclusion}; containment cannot certify it." >&2
+                exit 1
+              fi
+              continue
+            fi
+
+            case "$status" in
+              queued|in_progress|pending|waiting|requested)
+                gh api \
+                  --method POST \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" \
+                  >/dev/null
+                ;;
+              *)
+                echo "Run ${run_id} has unexpected status ${status}; refusing containment." >&2
+                exit 1
+                ;;
+            esac
+
+            for _ in {1..12}; do
+              payload="$(
+                gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+              )"
+              status="$(jq -r '.status' <<< "$payload")"
+              conclusion="$(jq -r '.conclusion // ""' <<< "$payload")"
+              if [[ "$status" == "completed" ]]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [[ "$status" != "completed" || "$conclusion" != "cancelled" ]]; then
+              echo "Run ${run_id} did not reach completed/cancelled state." >&2
+              exit 1
+            fi
+          done
+
+          echo "Exact stale writer runs are cancelled."

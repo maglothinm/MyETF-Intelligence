@@ -14,6 +14,7 @@ import hashlib
 import json
 import secrets
 import shutil
+import stat
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -426,6 +427,22 @@ def _mark_test_ids_seen(
     )
 
 
+def _make_isolated_tree_owner_writable(directory: Path) -> None:
+    """Make only the copied output tree writable by the current runner user."""
+
+    for path in (directory, *directory.rglob("*")):
+        if path.is_symlink():
+            continue
+        try:
+            mode = path.stat().st_mode
+            additions = stat.S_IWUSR | (stat.S_IXUSR if path.is_dir() else 0)
+            path.chmod(mode | additions)
+        except OSError as exc:
+            raise ManualTestError(
+                f"Unable to make isolated staging path writable {path}: {exc}"
+            ) from exc
+
+
 def _write_output_tree(
     *,
     inputs: Mapping[str, Path],
@@ -448,6 +465,7 @@ def _write_output_tree(
     try:
         for branch, source_dir in inputs.items():
             shutil.copytree(source_dir, staging / branch)
+        _make_isolated_tree_owner_writable(staging)
         selected_dir = staging / candidate.branch
         _append_jsonl(selected_dir / FILINGS_FILE, (filing,))
         _append_jsonl(selected_dir / TRANSACTIONS_FILE, transactions)

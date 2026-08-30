@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -263,6 +264,56 @@ def test_generator_copies_full_inputs_and_appends_one_consistent_test_clone(
     assert rendered_summary["manual_test_filing_count"] == 1
     assert rendered_summary["manual_test_transaction_count"] == 2
     assert test_filing["filing_key"] in rendered_filings_csv
+
+
+def test_generator_keeps_read_only_sources_immutable_and_makes_only_output_writable(
+    tmp_path: Path,
+) -> None:
+    legislative = tmp_path / "restored-legislative"
+    executive = tmp_path / "restored-executive"
+    output = tmp_path / "manual-preview-input"
+    make_legislative_artifact(legislative)
+    make_executive_artifact(executive)
+    source_before = {
+        "legislative": tree_snapshot(legislative),
+        "executive": tree_snapshot(executive),
+    }
+
+    source_paths = [
+        path
+        for directory in (legislative, executive)
+        for path in (directory, *directory.rglob("*"))
+        if not path.is_symlink()
+    ]
+    for path in source_paths:
+        path.chmod(path.stat().st_mode & ~0o222)
+
+    try:
+        generate_manual_test(
+            legislative_dir=legislative,
+            executive_dir=executive,
+            output_dir=output,
+            as_of=date(2026, 8, 29),
+            chooser=lambda candidates: candidates[0],
+            token_factory=lambda: "readonly",
+            now=datetime(2026, 8, 29, 14, 15, 16, tzinfo=timezone.utc),
+        )
+
+        assert tree_snapshot(legislative) == source_before["legislative"]
+        assert tree_snapshot(executive) == source_before["executive"]
+        assert all(not (path.stat().st_mode & 0o222) for path in source_paths)
+
+        output_paths = [
+            path for path in (output, *output.rglob("*")) if not path.is_symlink()
+        ]
+        assert output_paths
+        assert all(path.stat().st_mode & stat.S_IWUSR for path in output_paths)
+    finally:
+        for directory in (legislative, executive, output):
+            if directory.exists():
+                for path in (directory, *directory.rglob("*")):
+                    if not path.is_symlink():
+                        path.chmod(path.stat().st_mode | stat.S_IWUSR)
 
 
 def test_generator_supports_one_input_and_purchase_only_historical_records(
