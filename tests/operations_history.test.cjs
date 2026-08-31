@@ -161,7 +161,91 @@ test('a device clock behind the publisher cannot turn already stale production e
   assert.equal(result.health.status, 'stale');
   assert.equal(result.health.branches[0].age_minutes, 70);
   assert.equal(result.health.as_of_utc, before(0));
-  assert.equal(PT.healthAt(input, NaN).health.status, 'unknown', 'An invalid clock never proves current');
+  assert.equal(PT.healthAt(input, NaN).health.status, 'stale', 'An invalid clock cannot erase server-proven stale evidence');
+  assert.equal(PT.healthAt(freshnessModel(), NaN).health.status, 'unknown', 'An invalid clock never proves current');
+});
+
+function displayClock(wall = asOf, elapsed = 0) {
+  return {view: PT.createHealthClock({wallNow: () => wall, monotonicNow: () => elapsed}),
+    advance(minutes, moveWall = true) { elapsed += minutes * 60000;if(moveWall)wall += minutes * 60000; },
+    setWall(value) { wall=value; }, setElapsed(value) { elapsed=value; }};
+}
+
+test('a slow or frozen device clock cannot freeze fresh evidence at the publication time', () => {
+  const model=freshnessModel(),clock=displayClock(asOf-120*60000);
+  const first=clock.view(model);
+  assert.equal(first.health.status,'unknown');
+  assert.equal(first.health.clock_unreliable,true);
+  assert.equal(first.health.branches[0].age_minutes,10);
+  clock.advance(40,false);
+  const aged=clock.view(model);
+  assert.equal(aged.health.status,'stale');
+  assert.equal(aged.health.branches[0].age_minutes,50);
+  assert.equal(aged.health.branches[0].overdue_minutes,35);
+});
+
+test('same-publication refresh and clock catch-up cannot restart age or clear clock uncertainty', () => {
+  const model=freshnessModel(),before=JSON.stringify(model),clock=displayClock(asOf-120*60000);
+  assert.equal(clock.view(model).health.status,'unknown');
+  clock.advance(10,false);
+  const refetched=JSON.parse(before);
+  refetched.generated_utc=new Date(asOf+10*60000).toISOString();
+  assert.equal(clock.view(refetched).health.branches[0].age_minutes,20,'Unchanged server assessment is the same publication');
+  clock.setWall(asOf);
+  assert.equal(clock.view(model).health.status,'unknown','Catching up to the old publisher time is not new evidence');
+  clock.advance(30,false);
+  assert.equal(clock.view(JSON.parse(before)).health.status,'stale');
+  assert.equal(clock.view(model).health.branches[0].age_minutes,50);
+  assert.equal(JSON.stringify(model),before,'The elapsed anchor is browser-only metadata');
+});
+
+test('normal clocks age current evidence and a genuinely newer publication can establish fresh monitoring', () => {
+  const clock=displayClock(),model=freshnessModel();
+  assert.equal(clock.view(model).health.status,'success');
+  clock.advance(40);
+  assert.equal(clock.view(model).health.status,'stale');
+  const next=freshnessModel();
+  next.health.as_of_utc=next.generated_utc=new Date(asOf+40*60000).toISOString();
+  next.health.branches.forEach(row=>{row.last_success_utc=new Date(asOf+30*60000).toISOString();});
+  assert.equal(clock.view(next).health.status,'success');
+  assert.equal(clock.view(next).health.branches[0].age_minutes,10);
+});
+
+for(const intermediateTick of [false,true]) test(`a delayed newer publication cannot regress accrued elapsed time (${intermediateTick?'with':'without'} an intervening clock tick)`, () => {
+  const clock=displayClock(),model=freshnessModel();
+  assert.equal(clock.view(model).health.status,'success');
+  clock.advance(70,false);
+  if(intermediateTick)assert.equal(clock.view(model).health.status,'stale');
+  const delayed=freshnessModel();
+  delayed.generated_utc=delayed.health.as_of_utc=new Date(asOf+10*60000).toISOString();
+  delayed.health.branches.forEach(row=>{row.last_success_utc=new Date(asOf+5*60000).toISOString();});
+  clock.setWall(asOf+10*60000);
+  const assessment=clock.view(delayed);
+  assert.equal(assessment.health.status,'stale');
+  assert.equal(assessment.health.branches[0].age_minutes,65);
+  assert.equal(assessment.health.as_of_utc,new Date(asOf+70*60000).toISOString());
+});
+
+test('failed and already stale evidence outrank unreliable or unavailable device clocks', () => {
+  for(const clock of [displayClock(asOf-120*60000),displayClock(NaN),displayClock(asOf,NaN)]) {
+    const model=freshnessModel({legislative:70});
+    assert.equal(clock.view(model).health.status,'stale');
+    Object.assign(model.health.branches[1],{status:'failure',latest_run_success:false,error_count:1});
+    assert.equal(clock.view(model).health.status,'failure');
+  }
+  assert.equal(displayClock(asOf,NaN).view(freshnessModel()).health.status,'unknown');
+});
+
+test('elapsed-clock rollback does not regress the assessment or restore green', () => {
+  const clock=displayClock(),model=freshnessModel();
+  clock.view(model);clock.advance(10);
+  const known=clock.view(model);
+  clock.setElapsed(0);
+  const uncertain=clock.view(model);
+  assert.equal(uncertain.health.status,'unknown');
+  assert.equal(uncertain.health.as_of_utc,known.health.as_of_utc);
+  clock.advance(40);
+  assert.equal(clock.view(model).health.status,'stale');
 });
 
 test('overall precedence is failure then stale then unknown then success', () => {

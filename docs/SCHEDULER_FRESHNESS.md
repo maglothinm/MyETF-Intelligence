@@ -61,6 +61,15 @@ The central Python policy is `scripts/collector_freshness.py`. AI's conservative
 stale collector inputs. Browser aging consumes this published policy; it does not
 hard-code a second set of thresholds or dispatch jobs.
 
+Each open dashboard/Monitor page also anchors elapsed time to the received
+publication. A device clock behind the publisher, moving backwards, or otherwise
+unavailable cannot establish current health. That uncertainty remains attached
+to the publication; rereading the same publication cannot clear it or restart
+elapsed age. Monotonic elapsed time continues aging the evidence into stale.
+Known failure/stale still outranks unknown. A newer publication can establish a
+new clock anchor without regressing time already observed, but only new valid
+collector evidence can refresh source health.
+
 Health precedence is **failure > stale > unknown > success**. A latest failed
 attempt outranks a previous recent success. Success requires explicit successful
 execution evidence and a valid, sufficiently recent completion timestamp.

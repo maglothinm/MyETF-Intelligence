@@ -638,3 +638,22 @@ configuration, existing obsolete-writer clearance, several real dispatch cycles
 and continuity verification before activation or any later GitHub-cron removal.
 The current task authorizes staged PR/CI/merge/Pages deployment; it does not approve
 rebaselining, revival of retired writers, or bypass of existing recovery gates.
+
+## D-2026-08-31-035 — Age published evidence independently of the device clock
+
+**Decision:** Dashboard and Monitor share one injectable elapsed-time clock per
+open page. Anchor it to the accepted publication and monotonic elapsed time.
+Retain that anchor across repeat fetches of the same publication; never allow
+device-clock catch-up or rollback to make already aged evidence green again.
+Clock uncertainty makes otherwise current evidence unknown, with failure/stale
+still taking precedence. A newer publication can establish a fresh anchor but
+cannot lower the elapsed-time assessment already reached by the page.
+
+**Reason:** Clamping device time to the server timestamp preserved server-proven
+stale status, but a newly published fresh snapshot could stop aging while the
+device clock was behind. A fixed-time audit after PR #20 reproduced this case.
+
+**Consequence:** Health continues aging without publication or wall-clock
+progress. Missing/invalid clock evidence has contextual help and cannot assert
+current monitoring. This changes no cadence policy, source timestamp, state,
+writer, alert, scheduler activation or protected artifact authority.
