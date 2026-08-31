@@ -333,3 +333,21 @@ or missing filing match opens the original review instead of guessing a filing.
 Refresh stages newly opened tables too and rejects mismatched review counts.
 No new resolution action, production write, workflow or simulation behavior is
 introduced. This local implementation is not authorization or proof of publication.
+
+
+## D-2026-08-31-024 — Publish approved review UX through canonical Pages
+
+**Decision:** The owner's explicit “Publish” instruction authorizes releasing
+the tested review UX via a canonical pull request, successful CI and the existing
+read-only Pages workflow. Preserve the separately approved recovery documentation
+already on main and leave the local recovery branch/commit untouched.
+
+**Reason:** The dashboard fixes are tested presentation changes. Publication
+does not require a production writer or modification of protected state, and
+does not resolve the separate obsolete queue or physical-device acceptance gates.
+
+**Consequence:** Revalidate exact protected producer attempts, high-water marks,
+ZIP hashes and inventories before and after publication, and verify the deployed
+artifact/build and live content. Keep issues #4 and #6 open for outstanding device
+acceptance. No collector, AI, simulation or external-alert dispatch is authorized
+by this UI publication decision. Publication remains pending until verified.

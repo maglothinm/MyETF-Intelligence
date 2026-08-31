@@ -5,17 +5,23 @@ Work record: **issue #4 — dashboard UX; issue #6 — shared contextual help**
 
 ## Current task and delivered state
 
-Implement the attached parser-exception, Review Source and Workspace-help UX
-request within the existing static dashboard. The implementation is local on
-`codex/dashboard-review-ux`, based on canonical remote `main`
-`3902968d5d70cd00030248ae4a6bcea18aa2e6ea`. Repository ID **1349678672**, current
-name **maglothinm/MyETF-Intelligence**. The delivery commit contains this handoff.
-**Not pushed, merged or deployed. No new Actions run or external publication.**
+Publish the tested parser-exception, Review Source and Workspace-help UX through
+the existing canonical PR/CI and read-only Pages workflow. The owner explicitly
+requested “Publish” after local implementation and device limitations were
+reported. No further publication approval is needed for this payload.
 
-Local `main` still preserves the prior unpublished recovery-document commit
-`9e5de909d7f939c0088914511cca72852e95508e`. This branch does not include that
-previously blocked payload. Preserve untracked `.codex/`, held PR #3 and unrelated
-work; never implement or dispatch in legacy `maglothinm/MyETF`.
+Canonical repository ID **1349678672**, current name
+**maglothinm/MyETF-Intelligence**, default `main`. Branch
+`codex/dashboard-review-ux` contains tested implementation
+`8f5aa724628b5480c8b6280904d57d96253e596c`, originally based on `3902968`.
+It now integrates upstream documentation commit
+`ac6342ac85e5a395f1b8bab251b8f608c47249e0`. The Senate incident record and
+published recovery evidence are preserved unchanged; no runtime code changed
+during this integration. **PR/CI, merge and deployment are pending.**
+
+Local `main` at `9e5de909d7f939c0088914511cca72852e95508e` is preserved.
+Preserve untracked `.codex/`, held PR #3 and unrelated work. Never implement or
+dispatch in legacy `maglothinm/MyETF`.
 
 ## Implementation
 
@@ -76,10 +82,10 @@ schemas, collectors, scoring, alerts, simulators or hosting configuration change
 - Keyboard focus/touch are verified in deterministic DOM tests. Native Enter/Tab
   browser-control calls did not establish activation, so real keyboard/touch,
   physical iPhone/Safari, audio and physical ultrawide acceptance remain unverified.
-- Windows has no available Bash: local `verify.sh` is not claimed. No new remote
-  CI or Pages verification applies to this unpublished implementation.
+- Windows has no available Bash: local `verify.sh` is not claimed. Remote Linux
+  CI and Pages verification are pending for this approved publication.
 
-## Production baseline evidence — read-only audit at 10:27 UTC
+## Production baseline evidence — read-only audit at 10:53 UTC
 
 | Protected input | Artifact | Successful run / attempt | Producer job |
 |---|---:|---|---:|
@@ -98,17 +104,26 @@ restore authority. No protected artifact or simulation history was written.
 
 Existing Pages **33369728437 / attempt 1**, artifact **9749580990**, succeeded:
 https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369728437.
-All **21** live URLs matched that artifact at build **3902968**. This proves the
+At 10:56 UTC all **21** live URLs matched that artifact at build **3902968**. This proves the
 existing deployment only. Fresh audit receipts, copied-input integrity and preview
-files are in ignored `.remediation/dashboard-review-ux/`.
+files are in ignored `.remediation/dashboard-review-ux/`; fresh publication
+evidence is in `.remediation/dashboard-review-publish/`.
 
 ## Remaining limitations and next safe action
 
-Review this local implementation, then obtain publication authorization before
-pushing/merging/deploying. On publication, use the canonical existing PR/CI and
-read-only Pages path, refresh exact artifact provenance/continuity and verify the
-new deployed build. Do not reuse an old checkpoint as production restore input.
-Do not publish the separately blocked recovery payload as part of this UI change.
+Push the approved branch, open the canonical PR referencing issues #4 and #6,
+require successful CI on its exact head, then merge through existing Pages.
+Verify actual publisher input attempts, protected ZIPs/inventories, simulation
+history, published build SHA and live artifact bytes before declaring deployment.
+Commit the resulting release evidence. Do not dispatch any production writer,
+alert service or simulation, and never use an old checkpoint as restore authority.
+
+Separate recovery context: upstream published the owner-approved issue #8 / PR #9
+evidence; see [the incident record](incidents/senate-efd-2026-08-30.md). The two
+obsolete queues resisted supported cancellation/deletion. The authorized GitHub
+Support draft remains unsent because no eligible Actions route was available.
+Backend clearance or confirmation that neither can execute is still required
+before the separately requested manual Legislative run. Do not relax that gate.
 
 No credentials were tested or changed. Obsolete queued runs `33219808359` and
 `33221027676`, held PR #3, same-ID rename/privacy, legacy settings, physical-device
