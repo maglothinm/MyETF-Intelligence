@@ -427,3 +427,32 @@ Release verification: PR #15 merged as `676701a`; integrated PR/main CI and the
 automatic Pages publication succeeded. The deployed tree matches the tested head
 and both dashboard surfaces were verified live. Production population progress
 still requires subsequent normal writer evidence; local acceptance is not live state.
+
+## D-2026-08-31-027 — Publish approved Operations ordering through canonical Pages
+
+**Decision:** The owner's explicit “Merge and publish” instruction authorizes
+merging tested PR #14 and dispatching the existing read-only Pages workflow on
+canonical `main`, without a production writer or workflow/configuration change.
+
+**Reason:** The narrow presentation fix has local regression coverage and exact
+PR/main CI evidence. The existing publisher's push paths do not include its
+frontend asset, so publication needs an explicit dispatch of that same workflow.
+
+**Consequence:** PR #14 merged as `7a1108f`; main CI `33390543725` and Pages
+`33390642511` succeeded on attempt 1. Artifact `9757309134` matches all 28 live
+public files. Pre/postflight checks verified exact consumed producer attempts,
+global high-water marks and unchanged protected payloads. The current two-entry
+simulator history stayed unchanged; its immediate-predecessor prefix check passed.
+The separately recorded historical rewrite concern remains unresolved before
+future manual simulator work. Publication does not close physical-device acceptance, obsolete queue,
+cutover, repository rename/privacy or external-delivery work. Release evidence is
+recorded in a documentation-only successor after deployment, preserving the
+concurrently used shared checkout and unrelated branches.
+
+The concurrent approved Investor Edge release subsequently published `676701ac`
+through Pages `33391179240` / attempt 1, artifact `9757512563`. It contains the
+unchanged Operations implementation, verified in all generated script bundles and
+in a fresh live browser at desktop/mobile widths. Current protected inputs remain
+unchanged. This documentation successor integrates both releases on top of
+`895bc57`, preserving decision 026 and all production-acceptance gates; neither
+publication establishes live Investor Edge population or market backlog progress.
