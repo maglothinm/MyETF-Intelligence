@@ -2,13 +2,13 @@
 
 Last updated: **2026-08-31 UTC**
 Status: **Review UX published at `9d9e7be`; Operations history ordering fix
-implemented locally under issue #12, not yet published. Protected inputs remain
+CI-verified in draft PR #14 under issue #12, not yet published. Protected inputs remain
 unchanged. Device acceptance, obsolete queues, PR #3 and cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Operations history ordering — local implementation, 2026-08-31
+## Operations history ordering — draft PR #14, 2026-08-31
 
 Issue #12 uses isolated branch `codex/operations-history-order`, based on canonical
 `main` `f2df59740b095417e3883fd81ac0a16c1d16fdad`, the documentation-only
@@ -23,6 +23,14 @@ Local verification: **296 active Python tests passed**, **47 DOM scenarios**,
 **10 native history scenarios** and **32 native notification scenarios** passed.
 Generated TEST previews passed desktop/mobile-width native scrolling and refresh
 checks. Physical keyboard/touch/Safari acceptance remains unverified.
+
+Implementation `39f7edc28eda1ce4a309a2069321ee27d2574f94` is pushed in
+[draft PR #14](https://github.com/maglothinm/MyETF-Intelligence/pull/14).
+Canonical CI [33387285664](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33387285664)
+succeeded with 214 tests and Linux `verify.sh` reporting `VERIFICATION PASSED`.
+This documentation-only successor records that result. The fix is not merged
+or deployed; its release must use the existing read-only publisher because the
+Pages push-path filter does not include the changed frontend asset.
 
 Fresh read-only GitHub audit found the earlier review UX publication complete:
 PR #10 merged to `9d9e7be`; main CI

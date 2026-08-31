@@ -3,6 +3,11 @@
 Updated: **2026-08-31 UTC**
 Work record: **issue #12 — Operations health-check history ordering**
 
+Delivered as draft [PR #14](https://github.com/maglothinm/MyETF-Intelligence/pull/14).
+Tested implementation: `39f7edc28eda1ce4a309a2069321ee27d2574f94`.
+This documentation-only successor records its successful CI; no merge or
+deployment has been performed for the ordering fix.
+
 ## Current task and implementation
 
 Present Operations health-check history newest to oldest from left to right,
@@ -43,6 +48,12 @@ protected artifacts, collectors, alerts, simulations or hosting configuration ch
   JSDOM/axe packages. Its final location rerun passed; no workflow changed.
 - Final full active Python suite: **296 passed**, including generated-dashboard,
   native Node and nested release checks; no skips (387.84 seconds).
+- Canonical PR CI
+  [33387285664](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33387285664)
+  succeeded, job `99472660341`: **214 tests passed** and Linux `verify.sh`
+  reported **VERIFICATION PASSED**. The checkout log confirms merge-test commit
+  `076e83c` integrates exact implementation `39f7edc` with base `f2df597`.
+  Optional DOM/browser acceptance is local evidence, not inferred from CI.
 - JavaScript syntax and diff checks passed. Dashboard generation used empty inputs
   plus explicitly marked TEST fixtures, not production-state clones.
 - Rendered in-app browser checks at 1440x1000 and 390x844 confirmed latest run 09
@@ -95,10 +106,11 @@ ledger audit. Shared-workspace receipts are in
 
 ## Remaining limits and next safe action
 
-The ordering fix is locally verified and not merged or deployed. The exact scoped
-diff is ready for the canonical PR/CI and existing read-only Pages path.
-Confirm current main,
-exact CI head, protected producer high-water marks and deployed build/content
+The ordering fix is committed, pushed and CI-verified in draft PR #14, not merged
+or deployed. Publish through the canonical PR and existing read-only Pages path
+when authorized. The publisher's push paths do not include `common.js`; explicitly
+use the existing Pages workflow or verify a subsequent eligible publication.
+Confirm current main, exact current PR checks, protected producer high-water marks and deployed build/content
 before reporting the fix operational. Never dispatch a production writer to test
 this presentation change and never restore state from a cached checkpoint.
 
