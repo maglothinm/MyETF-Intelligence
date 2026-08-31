@@ -317,6 +317,8 @@ class TrackerConfig:
     allow_empty_sources: bool
     allow_state_initialization: bool
     terms_acknowledged: bool
+    historical_filing_backfill_limit_per_run: int = 20
+    historical_source_documents_manifest: Path | None = None
 
 
 @dataclass
@@ -341,6 +343,7 @@ class TrackerResult:
     pending_reviews: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     success: bool = False
+    historical_backfill: dict[str, Any] = field(default_factory=dict)
 
 
 def iso_utc(value: datetime | None = None) -> str:
@@ -1184,6 +1187,9 @@ def upsert_filing_record(
     payload = asdict(record)
     existing = index.get(record.filing_key)
     if existing:
+        # Preserve additive provenance (including silent historical bootstrap)
+        # and unknown retained metadata when refreshing known catalog fields.
+        payload = {**existing, **payload}
         # A routine catalog pass must never erase a parsed or review-required outcome.
         if record.status in {"cataloged", "detected"} and str(existing.get("status")) in {
             "processed",
@@ -1338,6 +1344,7 @@ def append_run_history(path: Path, result: TrackerResult) -> None:
         "transaction_counts": result.transaction_counts,
         "purchase_counts": result.purchase_counts,
         "pending_review_counts": result.pending_review_counts,
+        "historical_backfill": result.historical_backfill,
         "errors": result.errors,
         "run_url": run_url,
         "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
@@ -1992,6 +1999,10 @@ def run_legislative(
                     filing_index=filing_index,
                 )
             state.last_counts[source] = len(reports)
+        # One bounded maintenance pass, using this same authoritative writer and
+        # (for Senate) the existing validated session. It never sends alerts.
+        if not any(baselines.values()):
+            _run_historical_backfill(config, state, result, session, filing_index, senate_client)
     finally:
         if senate_client is not None:
             senate_client.close()
@@ -2056,6 +2067,19 @@ def run_executive(
             filing_index=filing_index,
         )
     state.last_counts[source] = len(listings)
+    _run_historical_backfill(config, state, result, session, filing_index)
+
+
+def _run_historical_backfill(
+    config: TrackerConfig, state: TrackerState, result: TrackerResult, session: Session,
+    filing_index: dict[str, dict[str, Any]], senate_client: SenateClient | None = None,
+) -> None:
+    try:
+        from .historical_transaction_bootstrap import run_historical_transaction_backfill
+    except ImportError:  # pragma: no cover - direct script execution
+        from historical_transaction_bootstrap import run_historical_transaction_backfill
+    run_historical_transaction_backfill(config=config, state=state, result=result, session=session,
+                                        filing_index=filing_index, senate_client=senate_client)
 
 
 def _markdown_cell(value: Any) -> str:
@@ -2336,6 +2360,16 @@ def build_config(args: argparse.Namespace) -> TrackerConfig:
             args.acknowledge_terms
             or parse_bool(env.get("DISCLOSURE_TERMS_ACKNOWLEDGED"), default=False)
         ),
+        historical_filing_backfill_limit_per_run=max(0, int(
+            args.historical_filing_backfill_limit_per_run
+            if args.historical_filing_backfill_limit_per_run is not None
+            else env.get("HISTORICAL_FILING_BACKFILL_LIMIT_PER_RUN", "20")
+        )),
+        historical_source_documents_manifest=(
+            Path(args.historical_source_documents_manifest or env["HISTORICAL_SOURCE_DOCUMENTS_MANIFEST"])
+            if args.historical_source_documents_manifest or env.get("HISTORICAL_SOURCE_DOCUMENTS_MANIFEST")
+            else None
+        ),
     )
 
 
@@ -2364,6 +2398,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bootstrap-alerts", action="store_true")
     parser.add_argument("--no-notify", action="store_true")
     parser.add_argument("--acknowledge-terms", action="store_true")
+    parser.add_argument("--historical-filing-backfill-limit-per-run", type=int)
+    parser.add_argument("--historical-source-documents-manifest")
     parser.add_argument("--verbose", action="store_true")
     return parser
 

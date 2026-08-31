@@ -1,14 +1,94 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Review UX published at `9d9e7be`; Operations history ordering fix
-CI-verified in draft PR #14 under issue #12, not yet published. Protected inputs remain
-unchanged. Device acceptance, obsolete queues, PR #3 and cutover remain open.**
+Status: **Investor Edge release authorized and pushed in PR #15; integrating the
+concurrent Operations ordering release from PR #14. Final integrated CI, merge
+and Pages verification are pending. Existing production-state and cutover gates
+remain unchanged.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Operations history ordering — draft PR #14, 2026-08-31
+## Investor Edge release — in progress 2026-08-31
+
+The owner requested “Release the commit”. Implementation `b4a9049` is pushed in
+[PR #15](https://github.com/maglothinm/MyETF-Intelligence/pull/15).
+Its initial [CI run](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33390265467)
+passed 263 tests and Linux `verify.sh`. Concurrent PR #14 merged to main at
+`7a1108fb2e32c39f6af943395c1bb9b9a550d26f`; this integration preserves both
+features and their tests. The integrated local suite passed **347 tests**, without
+skips, including optional DOM checks. Integrated CI, merge and deployment remain pending.
+The records below retain the earlier local-acceptance checkpoints; they are not
+claims that the bootstrap has already advanced production data.
+
+## Investor Edge historical bootstrap — pre-release acceptance 2026-08-31
+
+[Issue #11](https://github.com/maglothinm/MyETF-Intelligence/issues/11) implements
+combined normalized history, explicit zero-candidate global maintenance,
+discovery-first building profiles, durable breadth-first market backfill, and a
+separate 20-filing historical transaction reconstruction pass inside the existing
+tracker writers. Full root/standalone inventories now expose actual population
+and pending-work telemetry. Scoring, owner identity, no-lookahead protections,
+40/40/30/40/2,200 limits, protected artifact names and writer ownership are
+unchanged. Workflow edits add only test coverage/path filters.
+
+The demonstrated production cause was missing parsed history, not candidate-only
+input: main already combined both branches and globally refreshed Edge, but the
+artifacts held only **60 unique transactions / 1 eligible purchase / 1 identity**
+alongside **5,066 catalog-only filings**. Baseline-seen filings were never revisited
+by normal unseen-filing processing. Historical rows now append idempotently with
+original IDs/observation timestamps and no new-filing, AI-candidate, external-alert
+or Notification Center events. Global Edge persistence failures stop successful
+state promotion; live candidate delivery waits until final maintenance succeeds.
+
+Actual artifact-copy acceptance: 40 bounded House filing attempts parsed 30
+filings and added 299 unique transactions. Copies now contain **359 unique
+transactions / 122 eligible purchases / 17 identities and profiles**. All 17
+profiles are building; no completed market outcomes were fabricated. Each of two
+Edge passes processed 30 attempts, but **122 observations remain pending** because
+no provider credentials were supplied and cached benchmark/stock coverage was
+insufficient. Deterministic available-price tests separately show 43 pending
+observations falling to 13, then 0, without new filings. The actual acceptance is
+not evidence of decreasing production market backlog.
+
+Remaining catalog-only work: **5,036** (849 House, 90 Senate, 4,097 OGE/request).
+Eight sampled scans need missing local Tesseract; two expose an existing House
+multiline amount parser limitation. OGE Form 201 originals require legitimate
+access; they were not automatically retrieved. Cache-only replay reproduced all
+299 transactions and its repeated sample added none. Original input hashes,
+seen IDs, ledger prefixes and immutable AI decision history remain unchanged.
+
+Local verification: **346 tests passed**, including available DOM checks;
+syntax/compilation, YAML contracts, static generation and actual-copy root and
+standalone browser checks passed. No new remote CI/Linux workflow result is
+claimed. Implementation is in the isolated same-repository worktree
+`.remediation/investor-edge-worktree`, branch `codex/investor-edge-bootstrap`,
+based on canonical main `f2df59740b095417e3883fd81ac0a16c1d16fdad`. Other tasks'
+checkout, unpublished work and the approved Senate/UI release evidence are
+preserved. This local implementation has not advanced main or production state.
+
+Final read-only GitHub audit at **11:48:35 UTC** reconfirmed the unchanged
+protected authorities: Legislative **9749549239 / 33369634244 / attempt 1**,
+Executive **9746602231 / 33360633323 / attempt 1**, AI
+**9749567326 / 33369677492 / attempt 1**. Exact producer jobs, workflow identity,
+ancestry, high-water marks, expiry, ZIP hashes and full continuity passed.
+Simulation **9734790733 / 33320677882 / attempt 1** remains two rows, unchanged.
+Live Pages is still **33385044313 / attempt 1**, artifact **9755242103**, source
+`9d9e7be`; four fixed live surfaces returned HTTP 200 and matched its bytes.
+No collector, AI, simulator, alert or heartbeat was dispatched by this task.
+
+See [the validation report](validation/investor-edge-bootstrap-2026-08-31.md)
+for raw/deduplicated counts, exact run links/jobs/hashes, A–J test coverage,
+source failures and remaining limits. Review/release through canonical CI when
+authorized; then verify sole-writer successors and real pending reduction.
+Do not upload acceptance copies, rebaseline, change held PR #3's allowlist, or
+bypass the existing obsolete-run gate for a separate manual production run.
+
+## Operations history ordering — pre-release record, 2026-08-31
+
+Release update: [PR #14](https://github.com/maglothinm/MyETF-Intelligence/pull/14)
+is now merged at `7a1108fb2e32c39f6af943395c1bb9b9a550d26f`.
+The following paragraphs preserve its earlier implementation checkpoint.
 
 Issue #12 uses isolated branch `codex/operations-history-order`, based on canonical
 `main` `f2df59740b095417e3883fd81ac0a16c1d16fdad`, the documentation-only
