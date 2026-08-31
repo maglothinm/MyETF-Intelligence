@@ -1,6 +1,6 @@
 # PolitiTrack active handoff
 
-Updated: **2026-08-31 13:46 UTC**
+Updated: **2026-08-31 16:22 UTC**
 Status: **hourly follow-up active; PR #3 held for obsolete-run containment and main reconciliation**
 Work record: [issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3), unmerged.
@@ -20,7 +20,7 @@ Live default main: **ecc031dad297f6878e086dbe0b62861cbb4a6441**, documentation
 successor of persistent-shell PR #17 merge **42351e2**, retaining Operations
 PR #14, Investor Edge historical bootstrap PR #15 and Filing Vault PR #16.
 Release branch: **codex/production-remediation**, published head before this
-documentation update **9996f49b5d4a55a8224966ea1409c372b94cb304**.
+documentation update **701b9673e5bce6763192745bb2481a2365d8c981**.
 Implementation: **020351a86861020d1a0f579b8ccdd7f218be3994**;
 CI setup fix: **4cb6d5677daa60fff507d86502e156b70200a8ff**.
 
@@ -108,7 +108,10 @@ unverified gates, not activated by this follow-up or proven by static publicatio
 Additional reconciliation gates:
 
 - `scripts/protected_state.py` currently rejects main's new tracker receipt
-  `historical-backfill.jsonl`. Add narrow schema/inventory and byte-prefix validation
+  `historical-backfill.jsonl`. Current Legislative artifact **9764350004** now
+  contains it, confirmed by the **16:24:07 UTC** ZIP inventory check. This is an
+  active PR #3 compatibility blocker, not evidence of deployed-main corruption.
+  Add narrow schema/inventory and byte-prefix validation
   before promotion. Explicitly handle optional `historical-source-documents.json`
   and validated original-document references; never discard new state or broadly
   allow arbitrary files. No compatibility fix or allowlist update was made here.
@@ -153,28 +156,30 @@ and PR #3 integrated-commit acceptance remain unverified by this heartbeat.
 
 ## Latest protected metadata and deployment
 
-At **13:46:27 UTC**, all **176 runs / 194 global artifacts** were paginated.
+At **16:22:33 UTC**, all **180 runs / 198 global artifacts** were paginated.
 No later successful producer lacks protected state; no permitted producer or
 publisher is active. Only the two obsolete queued runs remain active.
-The existing Executive schedule and automatic AI successor have now succeeded on
-**ecc031d**, followed by Pages. No manual producer was dispatched here. Legislative
-has not yet produced with the new bootstrap code; live population progress and
-full successor ledger continuity are not established by successful run metadata.
+The existing Legislative schedule and automatic AI successor have now succeeded
+on **ecc031d**, followed by Pages. This is the first successful Legislative run on
+bootstrap-era main; no manual producer was dispatched here. Live population
+progress and full successor ledger continuity are not established by run success.
 
 | Pipeline | Artifact | Successful run / attempt | Job | Producer SHA |
 |---|---:|---|---:|---|
-| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` | `3902968` |
+| Legislative | `9764350004` | `33408974583` / 1 | `99543508327` | `ecc031d` |
 | Executive | `9760298853` | `33398375467` / 1 | `99508337018` | `ecc031d` |
-| AI | `9760330164` | `33398583790` / 1 | `99509035178` | `ecc031d` |
+| AI | `9764387095` | `33409079174` / 1 | `99543844689` | `ecc031d` |
 
 All are unexpired and match canonical main, expected workflow/job identities and
-exact successful attempt windows; producers **3902968** and **ecc031d** are ancestors
-of current main. This heartbeat checked metadata and the public build marker, plus
-new Executive/AI ZIP digests and member names/sizes. The in-memory downloads matched
-GitHub at **13:49:11 UTC**; exact digests are in PROJECT_STATE.md. Executive has four
-members, AI 35; the Executive archive contains neither historical receipt/manifest
-filename. Embedded references remain uninspected, so the narrow future inventory
-compatibility gate still applies. **Full member-content/schema/ledger continuity,
+exact successful attempt windows; all producer commits are current main **ecc031d**.
+Fresh metadata, the public build marker and in-memory Legislative/AI ZIP digests
+and member names/sizes were checked. Both downloads matched GitHub at **16:24:07 UTC**;
+digests are in PROJECT_STATE.md. Legislative has seven members including the new
+historical receipt; AI has 45. No embedded-reference or population count was read.
+The earlier **13:49:11 UTC**
+in-memory Executive/AI download evidence remains in PROJECT_STATE.md; its Executive
+archive is still current, but its AI archive is now a predecessor. Do not treat
+historical content checks as current successor acceptance. **Full member-content/schema/ledger continuity,
 retained IDs, predecessor prefixes, restore and release allowlist eligibility were
 not verified.** Integrate current main before validating consuming-commit ancestry.
 Never select older allowed artifacts to bypass these gates.
@@ -186,13 +191,13 @@ verification evidence remains in PROJECT_STATE.md and
 Simulation remains `9734790733`, run `33320677882` / attempt 1, job
 `99281977011`; no simulation was run here.
 
-Latest [Pages 33398661550](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33398661550)
-succeeded, attempt 1, build `99509301253`, deploy `99509481543`, sole artifact
-`9760352094`, unexpired and created within its exact build window. Intermediate
-publisher `33398583688` was cancelled; this successor completed successfully.
+Latest [Pages 33409174140](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33409174140)
+succeeded, attempt 1, build `99544162963`, deploy `99544399679`, sole artifact
+`9764416987`, unexpired and created within its exact build window. Intermediate
+publisher `33409079306` was cancelled; this successor completed successfully.
 Public `/data/dashboard-insights.json` returned HTTP 200 with
 build **ecc031dad297f6878e086dbe0b62861cbb4a6441**, generation
-`2026-08-31T13:45:25Z` and the canonical repository URL.
+`2026-08-31T15:34:37Z` and the canonical repository URL.
 This is live build-marker verification, not full artifact/content equality or
 browser/device acceptance.
 
@@ -225,7 +230,7 @@ browser/device acceptance.
   Main's public record reports 212 selected tests and Linux verify.sh passed.
 - Last release-branch CI [33320353688](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33320353688)
   succeeded, attempt 1, job `99281111335`, old head `884a344`: full 244 tests
-  and verify.sh, zero artifacts. No CI exists for documentation head `9996f49`
+  and verify.sh, zero artifacts. No CI exists for documentation head `701b967`
   or integration with new main.
 - This heartbeat changes only documentation. No new implementation test run,
   full content-continuity audit, simulation or browser/device check is claimed.

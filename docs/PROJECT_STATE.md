@@ -10,7 +10,67 @@ independent Senate fix has completed a successful scheduled Legislative/AI chain
 and Pages publication. Main now publishes its independent full state/content
 acceptance; PR #3 still requires fresh integrated-commit acceptance.**
 
-## New upstream release and producer checkpoint — 2026-08-31 13:46 UTC
+## First bootstrap-era Legislative producer — 2026-08-31 16:22 UTC
+
+Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`;
+main is unchanged **ecc031dad297f6878e086dbe0b62861cbb4a6441**. The existing
+schedule, not this heartbeat, completed the first Legislative run on bootstrap-era
+main, followed by automatic AI and Pages. This is new live execution evidence,
+not by itself full historical-population or protected-content acceptance.
+
+At **16:22:33 UTC**, all **180 runs / 198 global artifacts** were paginated.
+Latest unexpired protected artifacts have expected canonical identities, exact successful
+attempt/job creation windows and producer ancestry to current main:
+
+| Pipeline | Artifact | Successful run / attempt | Job | Producer SHA |
+|---|---:|---|---:|---|
+| Legislative, new | `9764350004` | `33408974583` / 1 | `99543508327` | `ecc031d` |
+| Executive, unchanged | `9760298853` | `33398375467` / 1 | `99508337018` | `ecc031d` |
+| AI, new | `9764387095` | `33409079174` / 1 | `99543844689` | `ecc031d` |
+
+No later producer gap or active permitted writer/publisher was found. Simulation
+remains **9734790733 / 33320677882 / 1**. The new runs do not prove retained-ID,
+member-schema or predecessor-ledger continuity, sufficient samples or population
+progress. No release allowlist was changed; current main must still be integrated
+before PR #3 consumer ancestry and full content acceptance can pass.
+
+At **16:24:07 UTC**, in-memory downloads matched GitHub's ZIP sizes and SHA-256:
+
+| Archive | Bytes | SHA-256 |
+|---|---:|---|
+| Legislative `9764350004` | 64,122 | `666303ed7c1dc88d2404a9048b45a75276f927ef0c595713e981d393bc8cc228` |
+| AI `9764387095` | 307,010 | `4ce53ab46300fd53999c8c23539197a2bb916fed1f6c1101adb34c7c6713cc86` |
+
+Member-name/size inspection found seven Legislative files and 45 AI files.
+**Current Legislative authority now contains `historical-backfill.jsonl`**
+(7,764 bytes). Thus the already-recorded PR #3 tracker-inventory incompatibility
+now applies to current authoritative state, not only a possible future file.
+The narrow receipt schema/prefix integration must preserve this file; do not drop
+it, broadly accept arbitrary files or restore an older artifact. No optional
+`historical-source-documents.json` or separate original-document member appears
+in that archive. Embedded references and population counts were not inspected.
+This check did not extract files, validate member payloads/schema/ledger prefixes
+or update the release allowlist; no corruption or completed bootstrap is inferred.
+
+Latest Pages **33409174140 / 1** succeeded on **ecc031d**, build **99544162963**,
+deploy **99544399679**, sole artifact **9764416987**, created within the successful
+build window and unexpired. Intermediate publisher **33409079306** was cancelled;
+its successor completed successfully. At **16:22:08 UTC**, the public build marker
+returned HTTP 200, SHA **ecc031d**, generated `2026-08-31T15:34:37Z`, canonical
+repository URL. No full new artifact/site equality or device acceptance was checked.
+Main CI remains **33395366037 / 1**, job **99498489333**, successful at **42351e2**;
+there is no exact-head CI for documentation main **ecc031d** or release **701b967**.
+
+Support at **16:22:07 UTC** remains unchanged: zero replies to the existing report,
+no newer discussion comments/replies and complete pagination. Both obsolete runs
+remain exact-identity queued attempt 1, null conclusion, zero jobs/artifacts and
+the only active runs. PR #3 is still open/draft/unmerged/conflicting at
+**701b9673e5bce6763192745bb2481a2365d8c981** before this documentation update.
+No GitHub containment, PR #3 promotion, manual dispatch, support post, cancellation
+retry or runtime/settings mutation was performed here. Keep the existing hourly
+follow-up active; do not infer clearance from successful scheduled production.
+
+## Previous upstream release and producer checkpoint — 2026-08-31 13:46 UTC
 
 Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
 Live main is **ecc031dad297f6878e086dbe0b62861cbb4a6441**, documentation
