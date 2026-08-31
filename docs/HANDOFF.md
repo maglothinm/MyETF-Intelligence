@@ -15,15 +15,20 @@ writer, simulation, external alert or private Vault runtime activation.
 Repository ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
 default **main**. Work uses isolated branch **codex/persistent-shell-layout** at
 `.remediation/persistent-shell/worktree`. Original shell commit
-**73193d91088efecbecf228220c0580f986039832** is being integrated with canonical
-main **642cebc45a489b7b3faf9b2840a716002828fafa**. Preserve all concurrent approved
+**73193d91088efecbecf228220c0580f986039832** was integrated with main `642cebc4`
+and pushed as **b1897d7e888dca6dcab441ef74f434d03ac396e6** in
+[PR #17](https://github.com/maglothinm/MyETF-Intelligence/pull/17). Integration now
+also preserves main's documentation-only successor
+**d6b1e4199cde3bb393d8b11b2a666b6c195598e2**. Preserve all concurrent approved
 Operations, Investor Edge and Filing Vault code/tests/evidence, shared checkout
 user files and unrelated worktrees. Never implement or dispatch in legacy
 `maglothinm/MyETF`.
 
-**Delivery state at this checkpoint:** shell implementation is committed locally;
-current-main integration, its validation and publication remain in progress.
-No new shell PR/CI/Pages or live deployment result is claimed here. The last
+**Delivery state at this checkpoint:** PR #17 is open with the integrated shell;
+the newest main documentation integration, combined tests and canonical CI are
+pending. Prepublication provenance/high-water verification passed at
+**12:57:41 UTC** with unchanged protected inputs. No new shell merge, successful
+CI/Pages or live deployment result is claimed here. The last
 verified published source is Filing Vault release **104fc51**, with full receipts
 retained below and in [the release record](validation/filing-vault-release-2026-08-31.md).
 
@@ -55,8 +60,9 @@ Rendered checks covered all six hash routes, record/exception focus, Source
 filtering, Actions and Notification dialogs, help overlays, deep document scroll,
 independent sidebar movement and widths **320px through 3840px**, with no horizontal
 page overflow. Mobile wrapping and initial no-hash navigation remained visible.
-These results predate integration with current main; rerun the combined tree before
-publication. New remote Linux CI and Pages verification are still pending.
+These results predate integration with current main. The combined full suite is
+running; no result is claimed yet. New remote Linux CI and Pages verification
+remain pending.
 
 **Native-input limit:** browser-control wheel/key events were synthetic
 (`isTrusted=false`). At the sidebar boundary, tool scroll commands moved the
@@ -75,11 +81,12 @@ Raw state copies and local previews are evidence, never production authority.
 
 ## Next safe publication actions and separate gates
 
-Finish current-main integration, review the exact delta and rerun combined tests
-and generated-dashboard checks. Refresh full GitHub artifact-name enumeration,
-exact producer attempts/jobs, expiry, ancestry and high-water marks. Push the
-isolated branch, create the canonical PR, require successful CI on its exact head,
-merge without discarding concurrent changes, and use the existing Pages workflow
+Finish the documentation-only current-main integration, review the exact delta,
+complete combined tests and generated-dashboard checks, and push the updated
+PR #17 head. The 12:57:41 UTC preflight passed full GitHub artifact enumeration,
+exact producer attempts/jobs, expiry, ancestry and high-water marks; refresh these
+as needed before publication. Require successful CI on the exact PR head, merge
+without discarding concurrent changes, and use the existing Pages workflow
 on canonical main. Verify its exact successful attempt, consumed artifact IDs,
 Pages artifact/live content and protected continuity before recording deployment
 as complete. Do not modify workflow triggers or production state as a shortcut.
@@ -92,6 +99,91 @@ clearance before the separately requested manual Legislative run; the support
 draft remains unsent. The historical simulator rewrite concern remains unresolved
 before future manual simulator work. Held PR #3, same-ID rename/privacy, legacy
 retirement, Gmail delivery proof and physical-device acceptance remain separate.
+
+## Separate Investor Edge production activation — prerequisites retained
+
+The following checkpoint is preserved from canonical main's documentation-only
+commit `d6b1e41` for [issue #11](https://github.com/maglothinm/MyETF-Intelligence/issues/11).
+Its **Fully deploy** request and producer gate belong to that separate task; they
+do not change the current shell publication scope. References to that task's
+branch, worktree and documentation commit describe its recorded checkpoint.
+
+The owner requested **Fully deploy** after the Investor Edge release. The code is
+already published, but this follow-up cannot establish full production bootstrap
+while the existing manual Legislative gate remains unresolved.
+
+Canonical repository **1349678672** is currently **maglothinm/MyETF-Intelligence**,
+default **main**. This task uses clean isolated branch
+`codex/investor-edge-bootstrap` in `.remediation/investor-edge-worktree`,
+fast-forwarded to `642cebc45a489b7b3faf9b2840a716002828fafa`.
+The shared checkout and unrelated work are preserved. The documentation commit
+containing this handoff changes no executable source or production state.
+
+### Verified current deployment and continuity
+
+Current published source is `104fc519d883c93153c639e85a2474d3d816a336`, which
+preserves Investor Edge release `676701a` and Operations ordering. Canonical
+[main CI 33392608687](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608687)
+and [Pages 33392608680](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608680)
+are successful on attempt 1. The new read-only audit verified Pages build/deploy,
+archive digest, and four live dashboard/Wallboard/Edge/summary surfaces against
+that publication. Earlier full-release tests and file/browser acceptance remain
+recorded in [PROJECT_STATE](PROJECT_STATE.md) and the
+[Filing Vault release receipt](validation/filing-vault-release-2026-08-31.md);
+no new source test suite was necessary for this documentation-only follow-up.
+
+Fresh exact-attempt provenance, producer high-water, expiration, ZIP/member
+inventory and continuity checks passed for the unchanged Legislative, Executive
+and AI authorities. Isolated simulator history remains unchanged. Both production
+trackers, the AI workflow and the existing Pages publisher report active.
+Tracker/analyst/bootstrap source, configuration and schedules are unchanged from
+the tested Investor Edge release. Their historical pass defaults to 20 filings;
+existing observation and network budgets remain unchanged.
+
+Private audit exports are in the shared workspace's ignored
+`.remediation/investor-edge-bootstrap/full-deployment-audit-20260831/`.
+They are verification evidence, never production restore authority. The helper's
+held-PR migration-allowlist findings belong to PR #3; they do not invalidate the
+independently verified deployed-main artifact provenance.
+
+### Exact blocker and next safe action
+
+Both obsolete runs **33219808359** and **33221027676** still report queued,
+attempt 1, zero jobs and zero artifacts. Their workflow is deleted, but this does
+not prove that their retained historical state-writing code cannot execute.
+Issues #8 and #1 contain no GitHub clearance; the latest recovery comment retains
+the gate and reports the Support submission unresolved. Prior unsuccessful
+cancellation/deletion attempts are documented in the
+[Senate incident record](incidents/senate-efd-2026-08-30.md).
+No cancellation retry, deletion, writer dispatch, rebaseline, simulation, alert,
+credential change or schedule change was performed by this task.
+
+The gate specifically prevents the additional manual Legislative run. It is not
+a newly invented blanket ban on all AI operations. An AI-only run cannot repair
+catalog-only filings: it consumes retained transaction/purchase ledgers, whereas
+historical reconstruction runs inside the tracker. Dispatching AI alone would
+therefore not satisfy the requested population bootstrap.
+
+**Next:** obtain GitHub backend clearance or an authoritative confirmation that
+both obsolete runs cannot execute. The user has been asked for any Support/ticket
+update. Then recheck live main and authoritative state, run the existing bounded
+Legislative producer without initialization, verify its exact successful artifact
+and preserved ledger/seen history, and verify the normal downstream AI/Pages
+successors plus actual profile and pending-observation progress. Keep issue #11
+open until that operational evidence exists. Never upload local acceptance
+copies or bypass the gate to make the dashboard appear populated.
+
+### Separate retained limits
+
+The newer Filing Vault catalog/viewer is published, but its private API/storage
+runtime remains inactive. Its existing host, database, private bucket, credentials,
+legitimate source acknowledgements and timer are separate issue #13 activation
+prerequisites; this task did not create infrastructure or infer source consent.
+See [FILING_VAULT.md](FILING_VAULT.md) for that distinct procedure.
+
+Source-original access, parser/OCR limitations, actual market completion, Gmail
+delivery proof, physical devices, held PR #3, the historical simulator-prefix
+concern, same-ID rename/privacy and legacy retirement remain as documented.
 
 ## Prior Filing Vault release and runtime handoff — retained evidence
 

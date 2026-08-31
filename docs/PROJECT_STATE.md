@@ -2,7 +2,7 @@
 
 Last updated: **2026-08-31 UTC**
 Status: **Persistent dashboard header and Workspace deployment is authorized and
-being integrated with main `642cebc4`; integrated validation, canonical CI and
+being integrated with main `d6b1e41` in PR #17; integrated validation, canonical CI and
 Pages verification remain pending. Filing Vault source/catalog is published at
 `104fc51`; private retrieval remains inactive. Existing state/device/cutover gates
 are preserved.**
@@ -22,8 +22,10 @@ authorize a protected writer, simulation, external alert or runtime activation.
 Canonical repository ID **1349678672**, live name
 **maglothinm/MyETF-Intelligence**, default **main**. The isolated branch
 `codex/persistent-shell-layout` contains shell implementation
-`73193d91088efecbecf228220c0580f986039832` and is integrating canonical main
-`642cebc45a489b7b3faf9b2840a716002828fafa`. Preserve the approved Operations,
+`73193d91088efecbecf228220c0580f986039832`. Integrated head `b1897d7` is pushed in
+[PR #17](https://github.com/maglothinm/MyETF-Intelligence/pull/17); integration now
+also preserves canonical main's documentation-only successor
+`d6b1e4199cde3bb393d8b11b2a666b6c195598e2`. Preserve the approved Operations,
 Investor Edge and Filing Vault implementation and their evidence below, including
 the seven-link Workspace and the separate Filing Vault page. The shared checkout
 and unrelated worktrees are not release targets.
@@ -47,11 +49,29 @@ wrappers; syntax and diff checks passed. Static generation produced **5,079 fili
 60 transactions / 1,496 reviews / 11 analyses** from unchanged read-only fixtures.
 Rendered checks covered six routes and 320px through 3840px without horizontal
 page overflow. These are pre-integration results, not proof of the combined tree
-or a new deployment. Fresh integrated tests, full artifact provenance/high-water
-checks, PR/main CI, Pages artifact and live-byte verification remain pending.
+or a new deployment. The canonical prepublication provenance/high-water audit
+passed at **12:57:41 UTC** with unchanged protected inputs; it does not establish
+a future restore or successful publication. Combined tests are running. PR/main
+CI, Pages artifact and live-byte verification remain pending.
 The preceding published build and complete release receipts are recorded below.
 Native wheel containment, physical keyboard/touch/Safari, audio and physical
 CHG90 acceptance remain unverified; issue #4/#6 gates are not closed by deployment.
+
+## Full deployment follow-up — Investor Edge production gate remains
+
+The owner's **Fully deploy** request was checked against current main and live
+GitHub state after publication. Current code is deployed; the existing trackers,
+AI workflow and Pages publisher are active. Fresh read-only artifact provenance,
+inventory/continuity and live Pages checks passed with unchanged production inputs.
+No additional producer has yet supplied the historical bootstrap acceptance.
+
+The obsolete queued runs remain unresolved, with no GitHub clearance in the
+recovery issues. The existing manual Legislative gate therefore remains in force.
+AI-only processing cannot reconstruct catalog-only transactions and would not
+complete the bootstrap. No writer, simulation, rebaseline, external alert or
+infrastructure configuration was performed in this follow-up. The next safe action
+requires GitHub clearance, fresh provenance checks and the existing bounded
+tracker -> AI -> Pages chain; see the retained Investor Edge prerequisite record in [the handoff](HANDOFF.md).
 
 ## Filing Vault — published interface, private runtime inactive, 2026-08-31
 
@@ -436,7 +456,7 @@ is content/deployment acceptance, not physical-device acceptance.
 
 | Role | Repository | Repository ID | Recorded head | Status |
 |---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified Filing Vault release / Pages `104fc51`, documentation successor `642cebc4`; shell release pending | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
+| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified Filing Vault release / Pages `104fc51`, documentation successor `d6b1e41`; shell PR #17 pending | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
 | Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
 | Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
 
