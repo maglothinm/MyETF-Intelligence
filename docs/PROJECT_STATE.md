@@ -7,6 +7,16 @@ Device acceptance, state-safety PR #3 and repository cutover remain open.**
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
+## Senate resilience implementation
+
+Issue #8 adds strict official-source session validation, bounded retries and
+complete Legislative discovery before processing. The code preserves existing
+production artifacts, stable IDs, baselines and alert deduplication. Local tests
+are not proof of production recovery. Production validation is pending the
+existing writer-queue safety gate; no recovery dispatch is claimed. Detailed
+incident exports remain local pending approval for public disclosure. The
+historical deployment and artifact tables below remain historical checkpoints.
+
 ## Repository identity
 
 | Role | Repository | Repository ID | Recorded head | Status |

@@ -10,20 +10,24 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import logging
 import os
 import re
+import random as random_module
 import sys
 import tempfile
+import time
 import unicodedata
 import zipfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, MutableMapping, Sequence
-from urllib.parse import urljoin
+from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -56,6 +60,7 @@ SENATE_ROOT = "https://efdsearch.senate.gov"
 SENATE_HOME_URL = f"{SENATE_ROOT}/search/home/"
 SENATE_SEARCH_URL = f"{SENATE_ROOT}/search/"
 SENATE_REPORTS_URL = f"{SENATE_ROOT}/search/report/data/"
+SENATE_USER_AGENT = "PolitiTrack/1.0 (+https://github.com/maglothinm/MyETF-Intelligence)"
 PUSHOVER_MESSAGES_URL = "https://api.pushover.net/1/messages.json"
 
 DEFAULT_KEYWORDS = ("UNH", "UnitedHealth", "UnitedHealth Group")
@@ -75,6 +80,41 @@ class MonitorError(RuntimeError):
 
 class SourceChangedError(MonitorError):
     """Raised when a government source no longer has the expected structure."""
+
+
+class SenateError(MonitorError):
+    """Senate failures expose only classified metadata, never response material."""
+
+    classification = "senate_error"
+
+    def __init__(
+        self, stage: str, reason: str, *, status: int | None = None,
+        attempt: int = 1, retryable: bool = False, refresh: bool = False,
+        retry_after: float = 0.0,
+    ) -> None:
+        self.stage = stage
+        self.reason = reason
+        self.status = status
+        self.attempt = attempt
+        self.retryable = retryable
+        self.refresh = refresh
+        self.retry_after = retry_after
+        super().__init__(
+            f"{self.classification}: stage={stage} reason={reason} "
+            f"status={status if status is not None else 'unavailable'} attempt={attempt}"
+        )
+
+
+class SenateAccessDenied(SenateError):
+    """Official Senate access remained unavailable after bounded recovery."""
+
+    classification = "senate_access_denied"
+
+
+class SenateInvalidResponse(SenateError, SourceChangedError):
+    """The official Senate response did not satisfy its required contract."""
+
+    classification = "senate_invalid_response"
 
 
 class NotificationError(MonitorError):
@@ -237,6 +277,7 @@ def response_bytes(
     response: Response,
     context: str,
     max_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
+    *, safe_diagnostics: bool = False,
 ) -> bytes:
     checked_response(response, context)
     content_length = response.headers.get("Content-Length")
@@ -247,7 +288,10 @@ def response_bytes(
                     f"{context} is larger than the configured {max_bytes:,}-byte limit"
                 )
         except ValueError:
-            LOGGER.warning("Invalid Content-Length from %s: %r", response.url, content_length)
+            if safe_diagnostics:
+                LOGGER.warning("Invalid Content-Length from Senate source (value omitted)")
+            else:
+                LOGGER.warning("Invalid Content-Length from %s: %r", response.url, content_length)
     data = response.content
     if len(data) > max_bytes:
         raise MonitorError(
@@ -477,64 +521,439 @@ def fetch_house_reports(
 
 
 def _cookie_csrf(session: Session) -> str | None:
+    # Do not choose an ambiguous cookie or a cookie scoped to another origin.
     for name in ("csrftoken", "csrf"):
-        value = session.cookies.get(name)
-        if value:
-            return value
+        values = {
+            cookie.value for cookie in session.cookies
+            if cookie.name == name
+            and cookie.domain.lstrip(".") == "efdsearch.senate.gov"
+            and cookie.path in ("/", "/search", "/search/")
+            and not cookie.is_expired()
+        }
+        if len(values) == 1:
+            value = values.pop()
+            if re.fullmatch(r"(?:[A-Za-z0-9]{32}|[A-Za-z0-9]{64})", value):
+                return value
     return None
 
 
-def senate_accept_terms(session: Session) -> str:
-    response = checked_response(
-        session.get(SENATE_HOME_URL, timeout=DEFAULT_TIMEOUT),
-        "Senate disclosure landing page",
-    )
-    soup = BeautifulSoup(response.text, "html.parser")
-    input_node = soup.find("input", attrs={"name": "csrfmiddlewaretoken"})
-    if input_node and input_node.get("value"):
-        form_token = str(input_node["value"])
-        accepted = checked_response(
-            session.post(
-                SENATE_HOME_URL,
-                data={
-                    "csrfmiddlewaretoken": form_token,
-                    "prohibition_agreement": "1",
-                },
-                headers={"Referer": SENATE_HOME_URL},
-                timeout=DEFAULT_TIMEOUT,
-            ),
-            "Senate disclosure terms acceptance",
-        )
-        csrf = _cookie_csrf(session)
-        if not csrf:
-            accepted_soup = BeautifulSoup(accepted.text, "html.parser")
-            fallback = accepted_soup.find(
-                "input", attrs={"name": "csrfmiddlewaretoken"}
-            )
-            csrf = str(fallback.get("value")) if fallback and fallback.get("value") else None
-    else:
-        csrf = _cookie_csrf(session)
+def _official_senate_url(url: str) -> str:
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        raise SenateInvalidResponse("report", "untrusted_report_url") from None
+    if (
+        parsed.scheme != "https" or parsed.netloc != "efdsearch.senate.gov"
+        or parsed.username or parsed.password or parsed.fragment
+        or "\\" in url or any(ord(char) < 32 for char in url)
+    ):
+        raise SenateInvalidResponse("report", "untrusted_report_url")
+    return url
 
-    if not csrf:
-        raise SourceChangedError(
-            "Senate disclosure site did not provide a CSRF token after terms acceptance"
+
+def _safe_senate_url(url: str) -> str:
+    """Diagnostic URLs never include credentials, queries or report identifiers."""
+    try:
+        parsed = urlsplit(urljoin(SENATE_ROOT, url))
+    except ValueError:
+        return "[invalid-url]"
+    if parsed.scheme != "https" or parsed.netloc != "efdsearch.senate.gov":
+        return "[external-origin]"
+    path = parsed.path
+    if path not in ("/search/", "/search/home/", "/search/report/data/"):
+        path = "/search/view/[report]" if path.startswith("/search/view/") else "/[redacted-path]"
+    return SENATE_ROOT + path
+
+
+class SenateClient:
+    """Official eFD session, with at most three complete bootstrap attempts.
+
+    No adapter retries are mounted: each retry discards all cookies and tokens,
+    including when the terms POST fails. Transport errors are never interpolated
+    into logs or propagated as exception causes.
+    """
+
+    MAX_ATTEMPTS = 3
+
+    def __init__(
+        self, *, session_factory: Callable[[], Session] | None = None,
+        sleep: Callable[[float], None] | None = None,
+        random: Callable[[], float] | None = None,
+        clock: Callable[[], float] | None = None,
+    ) -> None:
+        self._factory = session_factory or requests.Session
+        self._sleep = sleep or time.sleep
+        self._random = random or random_module.random
+        self._clock = clock or time.monotonic
+        self.session: Session | None = None
+        self.form_token = ""
+        self._ready = False
+        self._attempt = 1
+        self._bootstrap_count = 0
+        self._refreshes = 0
+        self._last_search_response: Response | None = None
+
+    def __enter__(self) -> SenateClient:
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self.session is not None:
+            self.session.close()
+        self.session = None
+        self.form_token = ""
+        self._ready = False
+        self._last_search_response = None
+
+    @staticmethod
+    def _retry_after(response: Response | None) -> float:
+        raw = response.headers.get("Retry-After", "") if response is not None else ""
+        try:
+            if re.fullmatch(r"\d+", raw.strip()):
+                return min(120.0, float(raw))
+            target = parsedate_to_datetime(raw)
+            if target.tzinfo is None:
+                target = target.replace(tzinfo=timezone.utc)
+            return min(120.0, max(0.0, (target - utc_now()).total_seconds()))
+        except (ValueError, TypeError, OverflowError):
+            return 0.0
+
+    @staticmethod
+    def _body_summary(response: Response | None) -> tuple[str, str]:
+        # Fingerprint structure and allowlisted markers, not body text or tokens.
+        # This is intentionally a classified excerpt: even an error page may
+        # echo cookies, hidden inputs or secrets whose spelling we do not know.
+        body = response.text[:65536] if response is not None else ""
+        lowered = body.casefold()
+        markers = [word for word in (
+            "access denied", "forbidden", "csrf", "agreement", "find reports",
+            "cloudflare", "captcha", "login", "request blocked", "error",
+        ) if word in lowered]
+        tags = re.findall(r"</?([a-zA-Z][a-zA-Z0-9]*)", body)
+        safe_shape = json.dumps([markers, tags], separators=(",", ":"))
+        return hashlib.sha256(safe_shape.encode()).hexdigest(), (
+            "page markers: " + (", ".join(markers) if markers else "unclassified")
+        )[:180]
+
+    def _fail(
+        self, stage: str, reason: str, method: str,
+        response: Response | None = None, elapsed: float = 0.0,
+        *, refresh: bool = False, transport: bool = False,
+    ) -> None:
+        status = response.status_code if response is not None else None
+        retryable = transport or status in (403, 408, 425, 429) or (
+            status is not None and 500 <= status <= 599
         )
-    return csrf
+        fingerprint, excerpt = self._body_summary(response)
+        headers = response.headers if response is not None else {}
+        # Explicit allowlist, bounded values, and redact all known cookie/token
+        # values even if a server unexpectedly echoes them in a safe header.
+        known = [self.form_token]
+        if self.session is not None:
+            known.extend(cookie.value for cookie in self.session.cookies)
+
+        def safe_header(name: str, value: str) -> str:
+            for secret in known:
+                if secret:
+                    value = value.replace(secret, "[redacted]")
+            if "[redacted]" in value:
+                return "[redacted]"
+            # Names alone do not make arbitrary header contents safe. Recognize
+            # server products and request-ID formats; omit unknown extensions.
+            patterns = {
+                "Server": r"(?:nginx|Apache|cloudflare|Microsoft-IIS|AkamaiGHost|awselb|envoy)(?:/[0-9.]+)?",
+                "Content-Type": r"(?:text/html|application/(?:json|pdf|xhtml\+xml|octet-stream))(?:;\s*charset=[A-Za-z0-9-]+)?",
+                "X-Request-ID": r"[a-fA-F0-9-]{16,64}",
+                "X-Amzn-RequestId": r"[a-fA-F0-9-]{16,64}",
+                "CF-Ray": r"[a-fA-F0-9]{16,32}-[A-Z]{3}",
+                "X-Azure-Ref": r"[A-Za-z0-9+/=]{16,120}",
+            }
+            return value if re.fullmatch(patterns[name], value, re.I) else "[unrecognized]"
+
+        def run_number(name: str) -> str:
+            value = os.environ.get(name, "")
+            return value if re.fullmatch(r"\d{1,24}", value) else "unavailable"
+
+        diagnostic = {
+            "stage": stage, "attempt": self._attempt, "method": method,
+            "status": status, "elapsed_seconds": round(max(0.0, elapsed), 3),
+            "final_url": _safe_senate_url(response.url) if response is not None else "unavailable",
+            "redirect_location": _safe_senate_url(headers["Location"]) if headers.get("Location") else "",
+            "content_type": safe_header("Content-Type", headers.get("Content-Type", "")),
+            "content_length": len(response.content) if response is not None else 0,
+            "retry_after_seconds": self._retry_after(response),
+            "server_headers": {name: safe_header(name, headers[name]) for name in (
+                "Server", "X-Request-ID", "X-Amzn-RequestId", "CF-Ray", "X-Azure-Ref",
+            ) if headers.get(name)},
+            "body_fingerprint": fingerprint, "body_excerpt": excerpt,
+            "github_run_id": run_number("GITHUB_RUN_ID"),
+            "github_run_attempt": run_number("GITHUB_RUN_ATTEMPT"),
+            "reason": reason,
+        }
+        LOGGER.warning("Senate source failure %s", json.dumps(diagnostic, sort_keys=True))
+        error_type = SenateAccessDenied if retryable or refresh else SenateInvalidResponse
+        raise error_type(
+            stage, reason, status=status, attempt=self._attempt,
+            retryable=retryable, refresh=refresh,
+            retry_after=self._retry_after(response),
+        ) from None
+
+    def _request(self, stage: str, method: str, url: str, **kwargs: Any) -> Response:
+        assert self.session is not None
+        started = self._clock()
+        try:
+            response = getattr(self.session, method.lower())(
+                _official_senate_url(url), allow_redirects=False,
+                timeout=kwargs.pop("timeout", DEFAULT_TIMEOUT), **kwargs,
+            )
+        except requests.RequestException:
+            self._fail(stage, "transport_error", method, elapsed=self._clock() - started, transport=True)
+        elapsed = self._clock() - started
+        # A safe duration is retained for later structural-validation diagnostics.
+        response._senate_elapsed = elapsed
+        if stage not in ("landing", "terms") and self._expired(response):
+            self._fail(stage, "session_expired", method, response, elapsed, refresh=True)
+        if response.status_code not in (200, 301, 302, 303, 307, 308):
+            self._fail(stage, "http_error", method, response, elapsed)
+        try:
+            _official_senate_url(response.url)
+        except (SenateInvalidResponse, ValueError):
+            self._fail(stage, "untrusted_response_url", method, response, elapsed)
+        return response
+
+    @staticmethod
+    def _expired(response: Response) -> bool:
+        destination = urljoin(response.url, response.headers.get("Location", ""))
+        try:
+            parsed = urlsplit(destination)
+            if parsed.scheme == "https" and parsed.netloc == "efdsearch.senate.gov" and parsed.path.rstrip("/") == "/search/home":
+                return True
+        except ValueError:
+            pass  # Invalid targets are rejected by the ordinary URL check.
+        body = response.text[:65536].casefold()
+        return "csrf verification failed" in body or (
+            "csrf" in body and "verification failed" in body and "forbidden" in body
+        )
+
+    def _invalid(self, stage: str, reason: str, method: str, response: Response) -> None:
+        self._fail(stage, reason, method, response, getattr(response, "_senate_elapsed", 0.0))
+
+    def reject_report(self, response: Response) -> None:
+        """Replace downstream parser details with one safe source classification."""
+        self._invalid("report", "invalid_report_content", "GET", response)
+
+    def reject_catalog(self, reason: str) -> None:
+        # Reasons are internal fixed categories, never interpolated source data.
+        assert reason in ("catalog_total_changed", "incomplete_or_duplicate_catalog", "catalog_page_limit")
+        self._fail("search", reason, "POST", self._last_search_response,
+                   getattr(self._last_search_response, "_senate_elapsed", 0.0))
+
+    def _html(self, stage: str, response: Response) -> BeautifulSoup:
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if response.status_code != 200 or content_type not in ("text/html", "application/xhtml+xml") or not response.content.strip():
+            self._invalid(stage, "invalid_html_response", "GET", response)
+        soup = BeautifulSoup(response.text, "html.parser")
+        if soup.find("html") is None:
+            self._invalid(stage, "invalid_html_document", "GET", response)
+        return soup
+
+    def _hidden_token(self, soup: Any, stage: str, response: Response) -> str:
+        nodes = soup.find_all("input", attrs={"name": "csrfmiddlewaretoken", "type": "hidden"})
+        tokens = {str(node.get("value", "")) for node in nodes}
+        if len(tokens) != 1 or not re.fullmatch(r"(?:[A-Za-z0-9]{32}|[A-Za-z0-9]{64})", next(iter(tokens), "")):
+            self._invalid(stage, "missing_or_invalid_form_csrf", "GET", response)
+        return tokens.pop()
+
+    def _bootstrap_once(self) -> None:
+        self.close()
+        if self._bootstrap_count >= self.MAX_ATTEMPTS:
+            raise SenateAccessDenied("bootstrap", "retry_budget_exhausted", attempt=self.MAX_ATTEMPTS)
+        self._bootstrap_count += 1
+        self._attempt = self._bootstrap_count
+        self.session = self._factory()
+        self.session.headers.update({
+            "User-Agent": SENATE_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/pdf,application/json,*/*;q=0.8",
+        })
+        landing = self._request("landing", "GET", SENATE_HOME_URL)
+        soup = self._html("landing", landing)
+        form = soup.find("form", id="agreement_form")
+        if landing.url != SENATE_HOME_URL or form is None or not form.find(
+            "input", attrs={"name": "prohibition_agreement", "type": "checkbox"}
+        ):
+            self._invalid("landing", "missing_agreement_form", "GET", landing)
+        self.form_token = self._hidden_token(form, "landing", landing)
+        if not _cookie_csrf(self.session):
+            self._invalid("landing", "missing_or_invalid_csrf_cookie", "GET", landing)
+        accepted = self._request(
+            "terms", "POST", SENATE_HOME_URL,
+            data={"csrfmiddlewaretoken": self.form_token, "prohibition_agreement": "1"},
+            headers={"Origin": SENATE_ROOT, "Referer": SENATE_HOME_URL},
+        )
+        target = urljoin(SENATE_HOME_URL, accepted.headers.get("Location", ""))
+        if accepted.status_code not in (302, 303) or target != SENATE_SEARCH_URL:
+            self._invalid("terms", "invalid_acceptance_redirect", "POST", accepted)
+        session_cookies = [cookie for cookie in self.session.cookies if (
+            cookie.name == "sessionid" and cookie.domain.lstrip(".") == "efdsearch.senate.gov"
+            and cookie.path in ("/", "/search", "/search/") and not cookie.is_expired()
+            # Django can use a signed-cookie backend rather than a 32-character
+            # database session key. Validate an opaque RFC6265 cookie value;
+            # the subsequent Find Reports response establishes acceptance.
+            and 0 < len(cookie.value) <= 4096
+            and re.fullmatch(r"[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+", cookie.value)
+        )]
+        if len(session_cookies) != 1:
+            self._invalid("terms", "missing_or_invalid_session_cookie", "POST", accepted)
+        search = self._request("search_page", "GET", SENATE_SEARCH_URL)
+        soup = self._html("search_page", search)
+        search_form = soup.find("form", id="searchForm")
+        if (
+            search.url != SENATE_SEARCH_URL
+            or "find reports" not in soup.get_text(" ", strip=True).casefold()
+            or search_form is None
+            or soup.find("form", id="agreement_form")
+            or str(search_form.get("method", "")).lower() != "post"
+            or any(search_form.find(attrs={"name": name}) is None for name in (
+                "first_name", "last_name", "report_type", "filer_type",
+            ))
+        ):
+            self._invalid("search_page", "missing_find_reports_form", "GET", search)
+        self.form_token = self._hidden_token(search_form, "search_page", search)
+        if not _cookie_csrf(self.session):
+            self._invalid("search_page", "missing_or_invalid_csrf_cookie", "GET", search)
+        self._ready = True
+
+    def _perform(self, action: Callable[[], Any]) -> Any:
+        while True:
+            try:
+                if not self._ready:
+                    self._bootstrap_once()
+                return action()
+            except SenateError as exc:
+                self.close()
+                if exc.refresh:
+                    self._refreshes += 1
+                if (
+                    self._bootstrap_count >= self.MAX_ATTEMPTS
+                    or (exc.refresh and self._refreshes > 1)
+                    or not (exc.retryable or exc.refresh)
+                ):
+                    raise
+                delay = min(120.0, max(
+                    exc.retry_after, 2.0 ** (self._bootstrap_count - 1) + max(0.0, min(1.0, self._random())),
+                ))
+                self._sleep(delay)
+
+    def bootstrap(self) -> str:
+        self._perform(lambda: None)
+        return self.form_token
+
+    def search(self, payload: Mapping[str, str]) -> dict[str, Any]:
+        def request() -> dict[str, Any]:
+            assert self.session is not None
+            csrf_cookie = _cookie_csrf(self.session)
+            if not csrf_cookie:
+                self._fail("search", "missing_csrf_cookie", "POST", refresh=True)
+            response = self._request(
+                "search", "POST", SENATE_REPORTS_URL,
+                data={**payload, "csrfmiddlewaretoken": self.form_token},
+                headers={
+                    "Origin": SENATE_ROOT, "Referer": SENATE_SEARCH_URL,
+                    "X-CSRFToken": csrf_cookie, "X-Requested-With": "XMLHttpRequest",
+                },
+            )
+            content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if response.status_code != 200 or content_type != "application/json":
+                self._invalid("search", "invalid_json_content_type", "POST", response)
+            try:
+                body = response.json()
+            except (ValueError, requests.JSONDecodeError):
+                self._invalid("search", "malformed_json", "POST", response)
+            if not isinstance(body, dict) or not isinstance(body.get("data"), list) or not isinstance(body.get("result"), str):
+                self._invalid("search", "invalid_search_schema", "POST", response)
+            for key in ("recordsTotal", "recordsFiltered", "draw"):
+                if type(body.get(key)) is not int or body[key] < 0:
+                    self._invalid("search", "invalid_search_counts", "POST", response)
+            expected_count = min(int(payload["length"]), max(0, body["recordsFiltered"] - int(payload["start"])))
+            if (
+                body["recordsFiltered"] > body["recordsTotal"]
+                or len(body["data"]) != expected_count
+                or body["draw"] != int(payload["draw"])
+            ):
+                self._invalid("search", "inconsistent_search_counts", "POST", response)
+            try:
+                parse_senate_result_rows(body["data"])
+            except (SourceChangedError, SenateError, ValueError):
+                self._invalid("search", "invalid_report_rows", "POST", response)
+            self._last_search_response = response
+            return body
+        return self._perform(request)
+
+    def get(self, url: str, timeout: Any = DEFAULT_TIMEOUT, **kwargs: Any) -> Response:
+        _official_senate_url(url)
+        if kwargs:
+            raise TypeError("Senate report GET only accepts url and timeout")
+
+        def request() -> Response:
+            target = url
+            for _redirect in range(4):
+                response = self._request("report", "GET", target, timeout=timeout)
+                if response.status_code == 200:
+                    if response.content.startswith(b"%PDF"):
+                        return response
+                    soup = self._html("report", response)
+                    text = soup.get_text(" ", strip=True).casefold()
+                    if soup.find("form", id="agreement_form") or any(marker in text for marker in (
+                        "access denied", "request blocked", "captcha", "log in", "login",
+                    )) or not (soup.find("table") or "filing document - print view" in text or soup.find("a", href=re.compile(r"\.pdf(?:$|\?)", re.I))):
+                        self._invalid("report", "invalid_report_document", "GET", response)
+                    return response
+                location = response.headers.get("Location")
+                if not location:
+                    self._invalid("report", "missing_report_redirect", "GET", response)
+                target = urljoin(target, location)
+                try:
+                    _official_senate_url(target)
+                except (SenateInvalidResponse, ValueError):
+                    self._invalid("report", "untrusted_report_redirect", "GET", response)
+            self._invalid("report", "too_many_report_redirects", "GET", response)
+        return self._perform(request)
+
+
+def _senate_client(session: Session | SenateClient) -> SenateClient:
+    if isinstance(session, SenateClient):
+        return session
+    # Compatibility for the older monitor entry point. The isolated client is
+    # retained on its owner so subsequent report/PDF requests reuse it.
+    client = getattr(session, "_polititrack_senate_client", None)
+    if client is None:
+        client = SenateClient()
+        session._polititrack_senate_client = client
+    return client
+
+
+def senate_accept_terms(session: Session | SenateClient) -> str:
+    return _senate_client(session).bootstrap()
 
 
 def extract_report_link(link_html: str) -> str:
     soup = BeautifulSoup(link_html, "html.parser")
     anchor = soup.find("a", href=True)
     if not anchor:
-        raise SourceChangedError(f"Senate result row has no report link: {link_html!r}")
-    return urljoin(SENATE_ROOT, str(anchor["href"]))
+        raise SourceChangedError("Senate result row has no report link")
+    url = _official_senate_url(urljoin(SENATE_ROOT, str(anchor["href"])))
+    if urlsplit(url).query:
+        raise SenateInvalidResponse("search", "unexpected_report_url_query")
+    return url
 
 
 def parse_senate_result_rows(rows: Sequence[Sequence[Any]]) -> list[Report]:
     reports: list[Report] = []
     for raw in rows:
-        if not isinstance(raw, (list, tuple)) or len(raw) < 5:
-            raise SourceChangedError(f"Unexpected Senate result row: {raw!r}")
+        if not isinstance(raw, (list, tuple)) or len(raw) != 5 or any(not isinstance(item, str) for item in raw):
+            raise SourceChangedError("Unexpected Senate result row structure")
         first, last, report_type, link_html, date_received = raw[:5]
         url = extract_report_link(str(link_html))
         path = url.lower()
@@ -579,60 +998,39 @@ def _senate_payload(
 
 
 def fetch_senate_reports(
-    session: Session,
+    session: Session | SenateClient,
     lookback_days: int,
     now: datetime | None = None,
 ) -> list[Report]:
     now = now or utc_now()
     start_date = now - timedelta(days=lookback_days)
-    csrf = senate_accept_terms(session)
+    client = _senate_client(session)
     batch_size = 100
     offset = 0
     rows: list[Sequence[Any]] = []
+    expected_total: int | None = None
 
     for _page in range(100):
-        payload = _senate_payload(csrf, offset, batch_size, start_date, now)
-        response = checked_response(
-            session.post(
-                SENATE_REPORTS_URL,
-                data=payload,
-                headers={
-                    "Referer": SENATE_SEARCH_URL,
-                    "X-CSRFToken": csrf,
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                timeout=DEFAULT_TIMEOUT,
-            ),
-            "Senate report search",
-        )
-        try:
-            body = response.json()
-        except requests.JSONDecodeError as exc:
-            excerpt = normalize_text(response.text)[:300]
-            raise SourceChangedError(
-                f"Senate report search returned non-JSON content: {excerpt!r}"
-            ) from exc
-        if not isinstance(body, dict) or not isinstance(body.get("data"), list):
-            raise SourceChangedError(
-                f"Senate report search JSON is missing a data array: {body!r}"
-            )
+        payload = _senate_payload("", offset, batch_size, start_date, now)
+        body = client.search(payload)
+        total = body["recordsFiltered"]
+        if expected_total is not None and total != expected_total:
+            client.reject_catalog("catalog_total_changed")
+        expected_total = total
         batch = body["data"]
         rows.extend(batch)
         if not batch:
             break
-        total_raw = body.get("recordsFiltered", body.get("recordsTotal"))
-        try:
-            total = int(total_raw) if total_raw is not None else None
-        except (TypeError, ValueError):
-            total = None
         offset += len(batch)
-        if len(batch) < batch_size or (total is not None and offset >= total):
+        if offset >= total:
             break
     else:
-        raise SourceChangedError("Senate report search exceeded 100 result pages")
+        client.reject_catalog("catalog_page_limit")
 
     reports = parse_senate_result_rows(rows)
     deduped = {report.report_id: report for report in reports}
+    if len(deduped) != expected_total:
+        client.reject_catalog("incomplete_or_duplicate_catalog")
     LOGGER.info(
         "Senate search returned %s PTRs over the last %s days",
         len(deduped),
@@ -641,7 +1039,7 @@ def fetch_senate_reports(
     return sorted(deduped.values(), key=lambda report: (report.filed_date, report.report_id))
 
 
-def extract_pdf_text(pdf_bytes: bytes, max_ocr_pages: int) -> str:
+def extract_pdf_text(pdf_bytes: bytes, max_ocr_pages: int, *, safe_diagnostics: bool = False) -> str:
     if not pdf_bytes.startswith(b"%PDF"):
         prefix = pdf_bytes[:80].decode("utf-8", errors="replace")
         raise SourceChangedError(f"Expected a PDF but received: {prefix!r}")
@@ -654,7 +1052,10 @@ def extract_pdf_text(pdf_bytes: bytes, max_ocr_pages: int) -> str:
             for page in pdf.pages:
                 extracted.append(page.extract_text() or "")
     except Exception as exc:
-        LOGGER.warning("PDF text extraction failed; trying OCR: %s", exc)
+        if safe_diagnostics:
+            LOGGER.warning("PDF text extraction failed; trying OCR (parser failure)")
+        else:
+            LOGGER.warning("PDF text extraction failed; trying OCR: %s", exc)
 
     text = "\n".join(extracted).strip()
     if len(normalize_text(text)) >= 20:
@@ -723,19 +1124,8 @@ def fetch_pdf_bytes(session: Session, url: str, config: Config, context: str) ->
     raise SourceChangedError(f"{context} did not return a PDF: {prefix!r}")
 
 
-def _senate_page_response(session: Session, report: Report) -> Response:
-    response = checked_response(
-        session.get(report.url, timeout=DEFAULT_TIMEOUT),
-        f"Senate report {report.url}",
-    )
-    # The site redirects expired sessions back to the terms page.
-    if response.url.rstrip("/") == SENATE_HOME_URL.rstrip("/"):
-        senate_accept_terms(session)
-        response = checked_response(
-            session.get(report.url, timeout=DEFAULT_TIMEOUT),
-            f"Senate report {report.url} after session refresh",
-        )
-    return response
+def _senate_page_response(session: Session | SenateClient, report: Report) -> Response:
+    return _senate_client(session).get(report.url, timeout=DEFAULT_TIMEOUT)
 
 
 def parse_senate_transaction_rows(html: str) -> list[str]:
@@ -784,12 +1174,24 @@ def scan_house_report(session: Session, report: Report, config: Config) -> Alert
     )
 
 
-def scan_senate_report(session: Session, report: Report, config: Config) -> Alert | None:
+def scan_senate_report(session: Session | SenateClient, report: Report, config: Config) -> Alert | None:
     response = _senate_page_response(session, report)
+    try:
+        return _scan_senate_response(session, report, config, response)
+    except SenateError:
+        raise
+    except Exception:
+        _senate_client(session).reject_report(response)
+
+
+def _scan_senate_response(
+    session: Session | SenateClient, report: Report, config: Config, response: Response,
+) -> Alert | None:
     data = response_bytes(
         response,
         f"Senate PTR {report.url}",
         config.max_download_bytes,
+        safe_diagnostics=True,
     )
     content_type = response.headers.get("Content-Type", "").lower()
 
@@ -800,24 +1202,22 @@ def scan_senate_report(session: Session, report: Report, config: Config) -> Aler
         soup = BeautifulSoup(data, "html.parser")
         link = soup.find("a", href=re.compile(r"\.pdf(?:$|\?)", re.IGNORECASE))
         if not link or not link.get("href"):
-            excerpt = normalize_text(soup.get_text(" ", strip=True))[:300]
-            raise SourceChangedError(
-                f"Senate paper PTR page contains no PDF link: {excerpt!r}"
-            )
+            raise SenateInvalidResponse("report", "missing_paper_pdf_link")
         pdf_url = urljoin(response.url, str(link["href"]))
         pdf_response = checked_response(
-            session.get(pdf_url, timeout=DEFAULT_TIMEOUT),
+            _senate_client(session).get(pdf_url, timeout=DEFAULT_TIMEOUT),
             f"Senate paper PTR PDF {pdf_url}",
         )
         data = response_bytes(
             pdf_response,
             f"Senate paper PTR PDF {pdf_url}",
             config.max_download_bytes,
+            safe_diagnostics=True,
         )
         content_type = pdf_response.headers.get("Content-Type", "").lower()
 
     if data.startswith(b"%PDF") or "application/pdf" in content_type:
-        text = extract_pdf_text(data, config.max_ocr_pages)
+        text = extract_pdf_text(data, config.max_ocr_pages, safe_diagnostics=True)
         hits = find_keyword_hits(text, config.keywords)
         if not hits:
             return None
@@ -1028,6 +1428,9 @@ def run_monitor(config: Config, session: Session | None = None) -> RunResult:
         result.errors.append(f"{type(exc).__name__}: {exc}")
         raise
     finally:
+        senate_client = getattr(session, "_polititrack_senate_client", None)
+        if isinstance(senate_client, SenateClient):
+            senate_client.close()
         result.finished_utc = iso_utc()
         write_result(config.result_path, result)
         _write_step_summary(result)

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
-from requests import Response
+from requests import Response, Session
+from requests.cookies import RequestsCookieJar
 
+from scripts import government_trade_tracker as tracker
 from scripts.government_trade_tracker import (
     PaperFilingError,
     TrackerConfig,
@@ -602,3 +605,356 @@ def test_house_preserves_identical_transactions_from_separate_accounts() -> None
     assert [t.ticker for t in trades] == ["MBGL", "MBGL"]
     assert [t.owner for t in trades] == ["Spouse", "Spouse"]
     assert len({t.trade_id for t in trades}) == 2
+
+
+def senate_report() -> Report:
+    url = "https://efdsearch.senate.gov/search/view/ptr/deterministic-fixture/"
+    return Report(
+        report_id=f"senate:{url}", source="senate", filer="TEST Senate Filer",
+        filed_date="08/20/2026", url=url, format="html", metadata={},
+    )
+
+
+def _legislative_fixture(tmp_path: Path) -> tuple[TrackerConfig, dict[str, bytes]]:
+    protected = tmp_path / "protected"
+    output = tmp_path / "output"
+    config = replace(
+        _tracker_config(protected, initialize=False),
+        branch="legislative", no_notify=False,
+        result_path=output / "result.json",
+        latest_csv_path=output / "purchases.csv",
+        latest_transactions_csv_path=output / "transactions.csv",
+        latest_filings_csv_path=output / "filings.csv",
+    )
+    state = TrackerState(
+        seen_filings={"house": {"house:prior": "old"}, "senate": {"senate:prior": "old"}},
+        seen_trades={"retained:trade": "old"}, seen_reviews={"retained:review": "old"},
+        last_attempt_utc="2026-08-20T00:00:00Z", last_success_utc="2026-08-20T00:00:00Z",
+        last_counts={"house": 883, "senate": 91},
+    )
+    save_state(config.state_path, state)
+    for path, record in (
+        (config.ledger_path, {"trade_id": "retained:trade", "source": "house"}),
+        (config.transactions_path, {"trade_id": "retained:trade", "source": "house"}),
+        (config.filings_path, {"filing_key": "retained:filing", "status": "processed"}),
+        (config.pending_path, {"review_id": "retained:review"}),
+        (config.run_history_path, {"run_key": "prior:1", "success": True}),
+    ):
+        path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    return config, _protected_bytes(protected)
+
+
+def _protected_bytes(directory: Path) -> dict[str, bytes]:
+    return {str(path.relative_to(directory)): path.read_bytes() for path in directory.rglob("*") if path.is_file()}
+
+
+def _forbid_discovery_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, Mock]:
+    methods = (
+        "scan_house_report", "scan_senate_report", "send_filing_notification",
+        "send_purchase_notification", "send_pending_notification", "_pushover_post",
+        "_baseline_source", "catalog_visible_filings", "commit_filing_outcome",
+        "save_state", "append_run_history",
+    )
+    spies = {}
+    for method in methods:
+        spies[method] = Mock(side_effect=AssertionError(f"{method} before discovery completed"))
+        monkeypatch.setattr(tracker, method, spies[method])
+    return spies
+
+
+def test_terminal_senate_failure_preserves_all_protected_bytes_and_outputs_degraded_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, before = _legislative_fixture(tmp_path)
+    senate_client = Mock()
+    monkeypatch.setattr(tracker, "SenateClient", lambda: senate_client)
+    monkeypatch.setattr(tracker, "fetch_house_reports", Mock(return_value=[house_report()]))
+    monkeypatch.setattr(
+        tracker, "fetch_senate_reports",
+        Mock(side_effect=MonitorError("sessionid=PRIVATE csrfmiddlewaretoken=MASKED Cookie=COOKIE")),
+    )
+    spies = _forbid_discovery_side_effects(monkeypatch)
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    with pytest.raises(MonitorError):
+        tracker.run_tracker(config, session=Mock())
+    assert _protected_bytes(config.state_path.parent) == before
+    for spy in spies.values():
+        spy.assert_not_called()
+    senate_client.close.assert_called_once_with()
+    result_text = config.result_path.read_text(encoding="utf-8")
+    result = json.loads(result_text)
+    assert result["source_statuses"] == {"house": "ok", "senate": "error"}
+    assert result["overall_status"] == "degraded"
+    assert result["success"] is False
+    assert result["discovery_complete"] is False
+    assert result["source_counts"] == {"house": 1}
+    assert result["new_filing_counts"] == result["baseline_counts"] == {}
+    assert result["errors"] == ["MonitorError: required discovery incomplete"]
+    assert not any(secret in result_text for secret in ("PRIVATE", "MASKED", "COOKIE"))
+    assert "Senate | error | Unavailable" in summary.read_text(encoding="utf-8")
+    assert config.latest_csv_path.exists() and config.latest_transactions_csv_path.exists()
+    assert config.latest_filings_csv_path.exists()
+
+
+@pytest.mark.parametrize("bad_catalog", [None, {}, "<html>Access denied</html>", [], [house_report()]])
+def test_invalid_senate_catalog_is_not_an_empty_success_or_partial_house_run(
+    bad_catalog: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, before = _legislative_fixture(tmp_path)
+    monkeypatch.setattr(tracker, "SenateClient", Mock())
+    monkeypatch.setattr(tracker, "fetch_house_reports", Mock(return_value=[house_report()]))
+    monkeypatch.setattr(tracker, "fetch_senate_reports", Mock(return_value=bad_catalog))
+    spies = _forbid_discovery_side_effects(monkeypatch)
+    with pytest.raises(tracker.SourceChangedError):
+        tracker.run_tracker(config, session=Mock())
+    assert _protected_bytes(config.state_path.parent) == before
+    for spy in spies.values():
+        spy.assert_not_called()
+    result = json.loads(config.result_path.read_text(encoding="utf-8"))
+    assert result["source_statuses"] == {"house": "ok", "senate": "error"}
+    assert "senate" not in result["source_counts"]
+    assert result["success"] is False
+
+
+def test_missing_senate_baseline_prevents_all_house_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, _before = _legislative_fixture(tmp_path)
+    state, _ = load_state(config.state_path)
+    state.seen_filings["senate"] = {}
+    save_state(config.state_path, state)
+    before = _protected_bytes(config.state_path.parent)
+    monkeypatch.setattr(tracker, "SenateClient", Mock())
+    monkeypatch.setattr(tracker, "fetch_house_reports", Mock(return_value=[house_report()]))
+    monkeypatch.setattr(tracker, "fetch_senate_reports", Mock(return_value=[senate_report()]))
+    spies = _forbid_discovery_side_effects(monkeypatch)
+    with pytest.raises(MonitorError, match="no durable baseline"):
+        tracker.run_tracker(config, session=Mock())
+    assert _protected_bytes(config.state_path.parent) == before
+    for spy in spies.values():
+        spy.assert_not_called()
+
+
+def test_discovery_failure_does_not_mutate_in_memory_state_or_initialize_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = replace(_tracker_config(tmp_path, initialize=True), branch="legislative")
+    state = TrackerState()
+    before = asdict(state)
+    result = TrackerResult(branch="legislative", started_utc="2026-08-30T00:00:00Z")
+    filing_index: dict[str, dict] = {}
+    monkeypatch.setattr(tracker, "SenateClient", Mock())
+    monkeypatch.setattr(tracker, "fetch_house_reports", Mock(return_value=[house_report()]))
+    monkeypatch.setattr(tracker, "fetch_senate_reports", Mock(side_effect=MonitorError("blocked")))
+    spies = _forbid_discovery_side_effects(monkeypatch)
+    with pytest.raises(MonitorError):
+        tracker.run_legislative(config, state, result, Mock(), filing_index)
+    assert asdict(state) == before
+    assert filing_index == {}
+    assert not config.state_path.exists()
+    for spy in spies.values():
+        spy.assert_not_called()
+
+
+def test_both_catalogs_precede_processing_and_repeated_filings_do_not_alert_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, _ = _legislative_fixture(tmp_path)
+    house = house_report()
+    senate = senate_report()
+    events = []
+    senate_clients = [Mock(), Mock()]
+    monkeypatch.setattr(tracker, "SenateClient", Mock(side_effect=senate_clients))
+    def house_catalog(*args, **kwargs):
+        events.append("house discovery")
+        return [house]
+    def senate_catalog(*args, **kwargs):
+        events.append("senate discovery")
+        return [senate]
+    monkeypatch.setattr(tracker, "fetch_house_reports", house_catalog)
+    monkeypatch.setattr(tracker, "fetch_senate_reports", senate_catalog)
+    purchase = make_trade(
+        branch="legislative", source="house", report=house, owner="SELF",
+        asset="TEST Example Stock (TEST)", ticker="TEST", asset_type="ST",
+        transaction_type="P", transaction_date="08/20/2026",
+        notification_date="08/20/2026", amount="$1,001 - $15,000",
+        raw_row="deterministic TEST fixture", confidence="high",
+    )
+    def house_scan(*args):
+        assert events[:2] == ["house discovery", "senate discovery"]
+        events.append("house scan")
+        return [purchase], None
+    house_scanner = Mock(side_effect=house_scan)
+    senate_scanner = Mock(return_value=([], None))
+    notifier = Mock(return_value=True)
+    monkeypatch.setattr(tracker, "scan_house_report", house_scanner)
+    monkeypatch.setattr(tracker, "scan_senate_report", senate_scanner)
+    monkeypatch.setattr(tracker, "send_filing_notification", notifier)
+    notification_session = Mock()
+    first = tracker.run_tracker(config, session=notification_session)
+    preserved = {path: path.read_bytes() for path in (config.ledger_path, config.transactions_path, config.pending_path)}
+    second = tracker.run_tracker(config, session=notification_session)
+    assert first.success and second.success
+    assert first.discovery_complete and second.discovery_complete
+    assert first.source_statuses == second.source_statuses == {"house": "ok", "senate": "ok"}
+    assert first.overall_status == second.overall_status == "ok"
+    assert first.alerted_filing_counts == {"house": 1, "senate": 0}
+    assert second.new_filing_counts == second.alerted_filing_counts == {"house": 0, "senate": 0}
+    house_scanner.assert_called_once_with(notification_session, house, config)
+    senate_scanner.assert_called_once_with(senate_clients[0], senate, config)
+    notifier.assert_called_once_with(notification_session, config, "House PTR", [purchase])
+    assert {path: path.read_bytes() for path in preserved} == preserved
+    for client in senate_clients:
+        client.close.assert_called_once_with()
+    final_state, _ = load_state(config.state_path)
+    assert final_state.is_filing_seen("house", house.report_id)
+    assert final_state.is_filing_seen("senate", senate.report_id)
+    assert "retained:trade" in final_state.seen_trades
+    assert purchase.trade_id in final_state.seen_trades
+    assert final_state.seen_reviews == {"retained:review": "old"}
+
+
+def test_senate_linked_pdf_uses_the_same_authenticated_client(tmp_path: Path) -> None:
+    viewer = Response()
+    viewer.status_code = 200
+    viewer.url = "https://efdsearch.senate.gov/search/view/paper/test/"
+    viewer.headers["Content-Type"] = "text/html"
+    viewer._content = b'<html><a href="/search/view/paper/test/download.pdf">PDF</a></html>'
+    pdf = Response()
+    pdf.status_code = 200
+    pdf.url = "https://efdsearch.senate.gov/search/view/paper/test/download.pdf"
+    pdf.headers["Content-Type"] = "application/pdf"
+    pdf._content = b"%PDF-TEST mocked bytes"
+    retained_client = Mock()
+    retained_client.get.return_value = pdf
+    contents, url = _senate_pdf_from_viewer(
+        retained_client, viewer, viewer.content, _tracker_config(tmp_path, initialize=False),
+    )
+    assert contents == pdf.content and url == pdf.url
+    retained_client.get.assert_called_once_with(pdf.url, timeout=tracker.DEFAULT_TIMEOUT)
+
+
+def test_three_landing_403s_exit_nonzero_without_state_changes_or_notifications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    config, before = _legislative_fixture(tmp_path)
+    sessions = []
+    for _ in range(3):
+        response = Response()
+        response.status_code = 403
+        response.url = "https://efdsearch.senate.gov/search/home/"
+        response.headers.update({"Content-Type": "text/html", "Set-Cookie": "sessionid=PRIVATE_SESSION"})
+        response._content = (
+            b'<html><h1>Access denied</h1><input type="hidden" name="csrfmiddlewaretoken" '
+            b'value="PRIVATE_CSRF"><div>Cookie: PRIVATE_COOKIE</div></html>'
+        )
+        session = Mock(spec=Session)
+        session.headers = {}
+        session.cookies = RequestsCookieJar()
+        session.cookies.set("sessionid", "PRIVATE_SESSION")
+        session.get.return_value = response
+        sessions.append(session)
+    factory = Mock(side_effect=sessions)
+    sleep = Mock()
+    real_client = tracker.SenateClient(session_factory=factory, sleep=sleep, random=lambda: 0)
+    monkeypatch.setattr(tracker, "SenateClient", lambda: real_client)
+    monkeypatch.setattr(tracker, "fetch_house_reports", Mock(return_value=[house_report()]))
+    monkeypatch.setattr(tracker, "build_config", lambda _args: config)
+    monkeypatch.setattr(tracker, "build_session", Mock(return_value=Mock(spec=Session)))
+    spies = _forbid_discovery_side_effects(monkeypatch)
+    assert tracker.main(["--branch", "legislative"]) == 1
+    assert factory.call_count == 3
+    assert sleep.call_count == 2
+    for session in sessions:
+        session.get.assert_called_once()
+        session.post.assert_not_called()
+        session.close.assert_called_once()
+    for spy in spies.values():
+        spy.assert_not_called()
+    assert _protected_bytes(config.state_path.parent) == before
+    result_text = config.result_path.read_text(encoding="utf-8")
+    result = json.loads(result_text)
+    assert result["success"] is False and result["overall_status"] == "degraded"
+    assert result["source_statuses"] == {"house": "ok", "senate": "blocked"}
+    assert result["source_counts"] == {"house": 1}
+    assert result["errors"] == ["SenateAccessDenied: required discovery incomplete"]
+    for secret in ("PRIVATE_SESSION", "PRIVATE_CSRF", "PRIVATE_COOKIE"):
+        assert secret not in result_text
+        assert secret not in caplog.text
+
+
+@pytest.mark.parametrize("scenario", ["table", "viewer", "pdf_content_type", "parser_error"])
+def test_senate_report_failures_never_export_or_log_response_tokens(
+    scenario: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config, _ = _legislative_fixture(tmp_path)
+    report = senate_report()
+    response = Response()
+    response.status_code = 200
+    response.url = report.url
+    response.headers["Content-Type"] = "text/html"
+    # A table can satisfy the client's broad document check while containing no
+    # transactions. Never print the surrounding response when parsing fails.
+    response._content = (
+        b'<html><h1>Filing</h1><table><tr><td>PRIVATE_COOKIE</td></tr></table>'
+        b'<input type="hidden" name="csrfmiddlewaretoken" value="PRIVATE_CSRF">'
+        b'<div>sessionid=PRIVATE_SESSION</div></html>'
+    )
+    if scenario == "viewer":
+        report = replace(report, format="pdf")
+    elif scenario == "pdf_content_type":
+        response.headers["Content-Type"] = "application/pdf"
+    elif scenario == "parser_error":
+        response._content = b"%PDF-1.7\nPRIVATE_COOKIE PRIVATE_SESSION PRIVATE_CSRF"
+        response.headers["Content-Type"] = "application/pdf"
+        monkeypatch.setattr(
+            tracker, "extract_pdf_text",
+            Mock(side_effect=ValueError("PRIVATE_COOKIE PRIVATE_SESSION PRIVATE_CSRF")),
+        )
+    client = tracker.SenateClient()
+    client.session = Mock(spec=Session)
+    client.session.cookies = RequestsCookieJar()
+    client.session.cookies.set("sessionid", "PRIVATE_SESSION")
+    client.form_token = "PRIVATE_CSRF"
+    monkeypatch.setattr(client, "get", Mock(return_value=response))
+    monkeypatch.setattr(tracker, "SenateClient", lambda: client)
+    monkeypatch.setattr(tracker, "fetch_house_reports", Mock(return_value=[house_report()]))
+    monkeypatch.setattr(tracker, "fetch_senate_reports", Mock(return_value=[report]))
+    monkeypatch.setattr(tracker, "scan_house_report", Mock(return_value=([], None)))
+    monkeypatch.setattr(tracker, "build_config", lambda _args: config)
+    monkeypatch.setattr(tracker, "build_session", Mock(return_value=Mock(spec=Session)))
+    notifier = Mock(side_effect=AssertionError("notification from invalid report"))
+    monkeypatch.setattr(tracker, "send_filing_notification", notifier)
+    caplog.set_level("INFO")
+    assert tracker.main(["--branch", "legislative"]) == 1
+    result_text = config.result_path.read_text(encoding="utf-8")
+    result = json.loads(result_text)
+    assert result["discovery_complete"] is True
+    assert result["success"] is False and result["overall_status"] == "degraded"
+    assert result["errors"] == [
+        "SenateInvalidResponse: senate_invalid_response: stage=report "
+        "reason=invalid_report_content status=200 attempt=1"
+    ]
+    assert "Senate source failure" in caplog.text
+    for secret in ("PRIVATE_SESSION", "PRIVATE_CSRF", "PRIVATE_COOKIE"):
+        assert secret not in result_text
+        assert secret not in caplog.text
+    notifier.assert_not_called()
+
+
+def test_senate_parser_and_pdf_viewer_raise_classified_errors_without_excerpts(tmp_path: Path) -> None:
+    token = "PRIVATE_TOKEN_MUST_NEVER_APPEAR"
+    html = f"<html><table><tr><td>{token}</td></tr></table></html>"
+    with pytest.raises(tracker.SenateInvalidResponse) as parser_error:
+        parse_senate_html_transactions(html, senate_report())
+    assert token not in str(parser_error.value)
+    response = Response()
+    response.status_code = 200
+    response.url = senate_report().url
+    response.headers["Content-Type"] = "text/html"
+    response._content = html.encode()
+    with pytest.raises(tracker.SenateInvalidResponse) as viewer_error:
+        _senate_pdf_from_viewer(Mock(), response, response.content, _tracker_config(tmp_path, initialize=False))
+    assert token not in str(viewer_error.value)
