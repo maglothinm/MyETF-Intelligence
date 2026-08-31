@@ -10,7 +10,69 @@ independent Senate fix has completed a successful scheduled Legislative/AI chain
 and Pages publication. Main now publishes its independent full state/content
 acceptance; PR #3 still requires fresh integrated-commit acceptance.**
 
-## First bootstrap-era Legislative producer — 2026-08-31 16:22 UTC
+## Upstream icon release checkpoint — 2026-08-31 17:23 UTC
+
+Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
+Main is now **6384c76aa102290aa15e246f81ae2f8e23146de6**, documentation successor
+of icon PR #18 merge **6bd76843e604941efef757aab434699feb1944f1**. The exact
+**ecc031d..6384c76** delta contains three commits and 62 files. Preserve D-032,
+the owner-supplied source assets/provenance manifest, relative web icon/manifest
+paths and retained React copies. The new `scripts/dashboard_branding.py` helper
+is called by both `build_trade_dashboard.py` and standalone `investor_edge.py`;
+keep both entrypoints when reconciling PR #3's overlapping generator/Edge work.
+Do not regenerate/recompress the supplied images or discard the retained Windows
+ICO. This delta changes no workflow, collector, scoring, protected-state schema,
+simulation, dependency or test source. Existing responsive geometry is retained.
+
+At **17:23:36 UTC**, all **183 runs / 198 global artifacts** were paginated.
+The three new runs are successful CI/Pages, not protected-state producers.
+Latest protected metadata remains:
+
+| Pipeline | Artifact | Successful run / attempt | Job | Producer SHA |
+|---|---:|---|---:|---|
+| Legislative | `9764350004` | `33408974583` / 1 | `99543508327` | `ecc031d` |
+| Executive | `9760298853` | `33398375467` / 1 | `99508337018` | `ecc031d` |
+| AI | `9764387095` | `33409079174` / 1 | `99543844689` | `ecc031d` |
+
+All remain unexpired with expected canonical identities and exact successful
+attempt/job creation windows; **ecc031d** is an ancestor of new main **6384c76**.
+No later producer gap or active permitted writer/publisher exists. Simulation
+remains **9734790733 / 33320677882 / 1**, job **99281977011**. This heartbeat
+checked metadata only; the earlier ZIP digests/inventories below were not rerun.
+Current Legislative receipt compatibility, full content/predecessor continuity,
+consuming-commit ancestry and release allowlist eligibility remain open gates.
+
+Main CI **33417300859 / 1**, job **99570923703**, succeeded on **6bd76843** with
+zero artifacts. PR CI **33416929114 / 1** at **aa8201a** also succeeded. Latest
+Pages **33417300834 / 1** succeeded on **6bd76843**, build **99570924086**, deploy
+**99571098216**, sole artifact **9767514649**, created **17:02:04 UTC**, unexpired
+until September 1 **17:02:03 UTC**. At **17:23:56 UTC**, the public build marker
+returned HTTP 200, full SHA **6bd76843e604941efef757aab434699feb1944f1**, generated
+`2026-08-31T17:02:00Z` and the canonical repository URL. This is live marker
+verification, not fresh whole-site/device acceptance. No exact-head CI exists
+for docs-only main **6384c76** or pre-update release head **e3804bf**.
+
+Main's public `docs/validation/icon-assets-2026-08-31.md` independently records
+524 local Python tests, one React test/build, 441 CI tests, six filing-link DOM
+cases and Linux verification; it reports 250 served files plus root matching the
+Pages artifact and protected/simulation ZIP/member hashes unchanged across its
+preflight/postflight. Those are upstream recorded checks, not tests/downloads or
+full content validation repeated by this heartbeat. Preserve that receipt and
+its device/installer limits. Its immediate-input checks do not establish PR #3
+integration acceptance or clear the retained simulator-history warning.
+
+Support at **17:23:56 UTC** remains unchanged: zero replies to the existing report,
+no newer discussion comments/replies and complete pagination. Both obsolete runs
+remain exact-identity queued attempt 1, null conclusion, zero jobs/artifacts and
+the only active runs. PR #3 remains open/draft/unmerged/conflicting at
+**e3804bf3d87d964e1f870b9fee683ef2bc38ed6b** before this documentation update.
+Only two release-status documents change here; no implementation, protected
+upload, merge, dispatch, support post, cancellation retry, deletion or settings
+mutation was performed. Shared checkout and held-feature drafts are untouched.
+Continue the existing hourly follow-up; successful icon publication does not
+contain the obsolete writers or authorize bypassing any release gate.
+
+## Previous bootstrap-era Legislative checkpoint — 2026-08-31 16:22 UTC
 
 Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`;
 main is unchanged **ecc031dad297f6878e086dbe0b62861cbb4a6441**. The existing
