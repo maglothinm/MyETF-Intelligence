@@ -36,6 +36,29 @@ def signal(identifier="a:1", **values):
             "filed_date": "2026-08-25", "observed_at_utc": "2026-08-26T10:00:00Z", "analyzed_at_utc": "2026-08-27T09:00:00Z", **values}
 
 
+def test_historical_bootstrap_remains_visible_without_new_record_or_candidate_events():
+    source = payload(
+        filings=[{"filing_key": "f:old", "source": "house", "report_id": "old", "historical_bootstrap": True},
+                 {"filing_key": "f:new", "source": "house", "report_id": "new"}],
+        transactions=[{"trade_id": "t:old", "source": "house", "report_id": "old"},
+                      {"trade_id": "t:tagged", "historical_bootstrap": True},
+                      {"trade_id": "t:new", "source": "house", "report_id": "new"}],
+        analyses=[signal("a:old", trade_id="t:old"), signal("a:tagged", trade_id="t:tagged"),
+                  signal("a:direct", historical_bootstrap="true"), signal("a:new", trade_id="t:new")],
+    )
+    before = copy.deepcopy(source)
+    model = build_insights(source)
+    assert source == before
+    assert model["coverage"]["filings"] == 2
+    assert model["coverage"]["transactions"] == 3
+    assert model["coverage"]["analyses"] == 4
+    assert len(model["signals"]) == 4  # Immutable analyses remain inspectable.
+    assert len(model["notifications"]["filing_ids"]) == 1
+    assert len(model["notifications"]["trade_ids"]) == 1
+    assert len(model["notifications"]["analysis_ids"]) == 1
+    assert [row["analysis_id"] for row in model["notifications"]["qualifying_signals"]] == ["a:new"]
+
+
 def test_coverage_composition_and_review_categories_are_distinct_exact_populations(monkeypatch):
     monkeypatch.setenv("GITHUB_SHA", "a" * 40)
     source = payload(

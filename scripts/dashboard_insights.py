@@ -478,6 +478,29 @@ def _ids(rows: list[Mapping[str, Any]], key: str) -> list[str]:
     return sorted({hashlib.sha256(str(row[key]).encode()).hexdigest()[:24] for row in rows if isinstance(row.get(key), str) and row[key]})
 
 
+def _historical_bootstrap_predicate(payload: Mapping[str, Any]) -> Callable[[Mapping[str, Any]], bool]:
+    """Keep reconstructed old records visible, but out of new-event inventory."""
+    filings = _rows(payload.get("filings"))
+    old_filings = {_filing_identity(row) for row in filings
+                   if _flag(row.get("historical_bootstrap")) and all(_filing_identity(row))}
+    old_keys = {row["filing_key"] for row in filings
+                if _flag(row.get("historical_bootstrap")) and isinstance(row.get("filing_key"), str) and row["filing_key"]}
+
+    def linked(row: Mapping[str, Any]) -> bool:
+        key = row.get("filing_key")
+        return (_flag(row.get("historical_bootstrap")) or _filing_identity(row) in old_filings
+                or isinstance(key, str) and key in old_keys)
+
+    old_trades = {row["trade_id"] for row in _rows(payload.get("transactions"))
+                  if linked(row) and isinstance(row.get("trade_id"), str) and row["trade_id"]}
+
+    def matches(row: Mapping[str, Any]) -> bool:
+        trade_id = row.get("trade_id")
+        return linked(row) or isinstance(trade_id, str) and trade_id in old_trades
+
+    return matches
+
+
 def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Create a compact additive view model without mutating any source object."""
     summary = _mapping(payload.get("summary"))
@@ -492,6 +515,11 @@ def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
         production[name] = [row for row in rows if not is_test(row)]
         synthetic[name] = len(rows) - len(production[name])
     filings, transactions, reviews, analyses = (production[key] for key in ("filings", "transactions", "reviews", "analyses"))
+    is_bootstrap = _historical_bootstrap_predicate(payload)
+    event_filings, event_transactions, event_analyses = (
+        [row for row in rows if not is_bootstrap(row)] for rows in (filings, transactions, analyses)
+    )
+    bootstrap_analysis_ids = {str(row.get("analysis_id") or "") for row in analyses if is_bootstrap(row)}
     signals = [_signal(row) for row in analyses if row.get("classification") in QUALIFYING]
     signals.sort(key=lambda row: (QUALIFYING[row["classification"]], -(row["final_score"] if row["final_score"] is not None else -1), -(_instant(row["analyzed_at_utc"]).timestamp() if row["analyzed_at_utc"] else 0), row["analysis_id"]))
     status = Counter(str(row.get("status") or "unknown").casefold() for row in filings)
@@ -533,9 +561,9 @@ def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
         "simulation": simulation, "synthetic": synthetic,
         "paper": {"open_positions": open_positions, "closed_positions": closed_positions,
                   "label": "PAPER TRADING", "empty_note": "No open paper positions" if not open_positions else None},
-        "notifications": {"filing_ids": _ids(filings, "filing_key"), "trade_ids": _ids(transactions, "trade_id"), "analysis_ids": _ids(analyses, "analysis_id"),
+        "notifications": {"filing_ids": _ids(event_filings, "filing_key"), "trade_ids": _ids(event_transactions, "trade_id"), "analysis_ids": _ids(event_analyses, "analysis_id"),
                           "run_ids": sorted({row["id"] for row in normalized_runs}), "simulation_ids": [simulation["simulation_id"]] if simulation["simulation_id"] else [],
-                          "qualifying_signals": [{"analysis_id": row["analysis_id"], "classification": row["classification"], "ticker": row["ticker"], "analyzed_at": row["analyzed_at_utc"], "link": row["source_url"]} for row in signals],
+                          "qualifying_signals": [{"analysis_id": row["analysis_id"], "classification": row["classification"], "ticker": row["ticker"], "analyzed_at": row["analyzed_at_utc"], "link": row["source_url"]} for row in signals if row["analysis_id"] not in bootstrap_analysis_ids],
                           "runs": [{"id": row["id"], "branch": row["branch"], "status": row["status"], "conclusion": row["status"], "at": row["finished_utc"], "url": row["run_url"], "error_count": row["error_count"]} for row in normalized_runs],
                           "current_incidents": incidents,
                           "simulation_results": [{"simulation_id": simulation["simulation_id"], "kind": "historical_replay", "timestamp": generated, "cutoff_utc": simulation["as_of_utc"], "url": simulation["run_url"], "status": simulation["status"]}] if simulation["simulation_id"] else []},

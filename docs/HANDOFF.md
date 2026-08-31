@@ -1,105 +1,150 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-31 UTC**
-Work record: **issue #4 — dashboard UX; issue #6 — shared contextual help**
+Work record: [issue #11 — Investor Edge historical bootstrap](https://github.com/maglothinm/MyETF-Intelligence/issues/11).
 
-## Current task — published and verified
+## Current task — implemented and locally verified, not deployed
 
-The owner's “Publish” request is complete. PR
-[#10](https://github.com/maglothinm/MyETF-Intelligence/pull/10) merged tested head
-`ca0152044bec58032acc3c7604398e844b2ba12f` as
-`9d9e7bef326a0e24a5f846ea1310dec24a647019` on canonical `main`.
-Repository ID **1349678672**, current name **maglothinm/MyETF-Intelligence**.
-The tested and merged trees match. Existing Pages published the merge successfully;
-this final documentation-only successor records its evidence.
+The user's attached bootstrap request is implemented in canonical repository
+**1349678672**, current name **maglothinm/MyETF-Intelligence**, default **main**.
+Work branch **codex/investor-edge-bootstrap** is in the isolated same-repository
+worktree `.remediation/investor-edge-worktree`, based on main
+`f2df59740b095417e3883fd81ac0a16c1d16fdad`. The commit containing this handoff
+includes the implementation and evidence. It is local: no push, PR merge,
+production dispatch or deployment is claimed.
 
-[Live dashboard](https://maglothinm.github.io/MyETF-Intelligence/) ·
-[Manual Parser Exceptions](https://maglothinm.github.io/MyETF-Intelligence/#records/reviews?category=manual_exception).
+Other tasks switched the shared checkout during the audit, so this task moved its
+work into the isolated worktree. Preserve the root checkout, its current branch,
+untracked `.codex/`, held PR #3, and the approved Senate/UI release evidence.
+Never implement or dispatch from legacy `maglothinm/MyETF`.
 
-Delivered: consistent Overview/review classification and full exception drill-down,
-exact retained-filing selection with honest unmatched-review details, source/branch
-filter metadata and OGE formatting, shared Signals/Records/Operations help, and
-refresh consistency. No workflow, collector, analyst scoring, state schema, alert,
-simulator or hosting configuration changed. No review/retry writer was added.
+## Completed work and actual result
 
-Changed implementation files: `scripts/dashboard_insights.py`,
-`scripts/build_trade_dashboard.py`,
-`scripts/dashboard_assets/{app.js,common.js,index.html,styles.css}` and
-`tests/{test_dashboard_insights.py,test_trade_dashboard.py,dashboard_dom.test.cjs}`.
-Documentation: `docs/{PROJECT_STATE.md,DECISIONS.md,HANDOFF.md}`.
+Root cause: main already combined both restored branch histories and refreshed
+Edge without candidates. The authoritative artifacts contained only 60 unique
+transactions, one eligible purchase and one eligible identity, while 5,066
+catalog-only filings lacked transactions. Normal baseline/unseen-only discovery
+never reconstructed old cataloged filings. Legacy missing-ID rows and sequential
+market scheduling were additional weaknesses.
 
-## Verification and continuity
+Implemented canonical normalized history with stable/fallback deduplication,
+retained dates/provenance and separate AI candidate selection; discovery-first
+profiles; durable breadth-first observation scheduling; zero-candidate maintenance
+and cache-only work at exhausted request budgets. Existing trackers now silently
+reconstruct at most 20 catalog-only filings per run using official scanners,
+existing access rules and an optional identity/hash-validated original-document
+cache. No baseline reset, historical filing alert, AI candidate upgrade or new
+Notification Center event occurs solely from reconstruction.
 
-- Full local integration rerun: **295 tests passed**. **34 DOM scenarios** and
-  **32 native notification scenarios** passed. Syntax, Python compilation, static
-  dashboard generation, unchanged source-input hashes and diff checks passed.
-- PR CI [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936)
-  / attempt 1 / job `99465044563`: success. Main CI
-  [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349)
-  / attempt 1 / job `99465680760`: success. Both exact logs show **213 selected
-  tests passed** and Linux `verify.sh`: **VERIFICATION PASSED**.
-- Pages [33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313)
-  / attempt 1 succeeded; build `99465681041`, deploy `99465807219`.
-  Artifact **9755242103**, ZIP SHA-256
-  `ca3b63daecb7c4e6ce5e92e162cbb363e753c07d8983fddcc1306ca7ac7e4014`.
-- At **11:04:50 UTC**, all **21** fixed live URLs returned HTTP 200 and matched
-  the uploaded artifact. Published build SHA equals merge `9d9e7be`. Counts:
-  **5,079 filings / 60 transactions / 1,496 reviews / 11 analyses**.
-- Live in-app browser: card → **1** parser exception → exact RICHARD BLUMENTHAL
-  filing → back; focus/visibility, source choices, help attributes and no document
-  overflow passed at 1280×720. Local rendered checks also passed at 1440×1000 and
-  390×844, including all five mouse-hover bubbles.
+Global Edge maintenance must persist successfully before AI state can be promoted.
+Initial failure stops candidate/market work. Existing pending and new candidate
+deliveries wait for final successful maintenance and no earlier run errors, then
+use the existing bounded channel-deduplicated queue. Candidate-specific Edge
+fallback, formulas, alpha horizons, owner separation, modifier/hard caps,
+time-censoring and the 40/40/30/40/2,200 limits are unchanged.
 
-| Protected input | Artifact | Successful run / attempt | Job |
+Root and standalone dashboards show the full bounded profile inventory plus
+population, completeness, processed/pending and branch counts independently of
+qualifying signal cards. Unknown legacy telemetry is not falsely labeled current.
+
+In real artifact copies, two 20-filing House passes parsed 30 filings and added
+299 unique transactions. Result: **359 transactions / 122 eligible purchases /
+17 identities and profiles**, all **17 building / 0 complete**. No model analyses,
+external alerts or new filing identities were created. Each of two Edge passes
+processed 30 attempts; **122 observations remain pending** because local
+acceptance supplied no provider credentials and cached price coverage was
+insufficient. Deterministic price fixtures separately show pending 43 → 13 → 0
+across two same-day passes with no new filings. Do not confuse that test with
+live market completion.
+
+Cache-only replay reproduced the 299 additions with zero requests; repeating the
+same sample appended zero transactions and left output ledgers byte-identical.
+All 47 original verified input files, original seen IDs/timestamps/prefixes, and
+immutable AI state/analysis/run history remained unchanged. A final-code repeat
+in new copies reproduced the 17-profile/122-pending result.
+
+## Verification
+
+**346 local tests passed**, no skips, with existing Node/JSDOM/axe dependencies
+configured. Focused Edge suite: 67 passed; analyst suite: 30 passed. Included
+36 DOM and 32 native notification scenarios. Python compilation, JS syntax,
+YAML contracts, static generation and diff checks passed. Four workflow edits
+add only test coverage/path filters; no schedule, credential, restore, artifact
+upload, concurrency or writer change.
+
+Actual-copy dashboard: **5,079 unique filings / 359 transactions / 1,496 review
+items / 11 analyses / 0 paper positions**. In-app browser root and standalone
+views both showed 17 profiles and accurate history counts, unavailable
+performance, no console warnings/errors, and no horizontal document overflow at
+the ordinary 1280×720 viewport. Physical devices, Safari, touch/audio and full
+Linux `verify.sh` are not claimed for this task; no new remote CI ran.
+
+[Detailed validation report](validation/investor-edge-bootstrap-2026-08-31.md)
+contains A–J coverage, all source counts/failures, changed-file groups, run links,
+hashes and limitations. Ignored evidence is in
+`.remediation/investor-edge-bootstrap/`, especially `before-population.json`,
+`actual-bootstrap-passes.json`, `actual-edge-passes.json`,
+`bootstrap-document-diagnostics.json`, `final-code-acceptance/`,
+`final-audit/` and `dashboard-preview/`. Copies are never production authority.
+
+## Unchanged production authority
+
+Final read-only audit completed **2026-08-31 11:48:35 UTC**. Exact canonical
+workflow/display-name/job/attempt windows, ancestry, global producer high-water
+marks, expiration, ZIP digests, complete inventories and continuity passed.
+
+| Protected state | Artifact | Successful run / attempt | Producer job |
 |---|---:|---|---:|
-| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` |
-| Executive | `9746602231` | `33360633323` / 1 | `99391153447` |
-| AI | `9749567326` | `33369677492` / 1 | `99417669143` |
+| Legislative | 9749549239 | [33369634244](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369634244) / 1 | 99417536057 |
+| Executive | 9746602231 | [33360633323](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33360633323) / 1 | 99391153447 |
+| AI | 9749567326 | [33369677492](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369677492) / 1 | 99417669143 |
 
-Fresh GitHub authority, exact workflow/job/attempt windows, ancestry, high-water
-marks, expiration, downloaded ZIP digests/full inventories and continuity passed
-before and after deployment. Actual publisher logs prove it consumed the exact
-three inputs above; they are unchanged. Only `github-pages` was uploaded.
-`simulation-state` **9734790733**, run **33320677882 / 1**, job **99281977011**,
-is unchanged with two replay rows and preserved predecessor bytes.
+All three producer commits are `3902968d5d70cd00030248ae4a6bcea18aa2e6ea`.
+Their original production populations remain unchanged (60 transactions, one
+eligible identity/profile). Isolated simulator artifact **9734790733**, run
+**33320677882 / 1**, job **99281977011**, remains two retained rows, unchanged.
+Neither simulation changed or ran; no protected state or live alert credentials
+were added to simulation workflows.
 
-Pre-release rollback artifact **9749580990**, Pages **33369728437 / 1**, exported
-ZIP hash `330d1e4e343d827d917eb3902ba289eed59f00554147a82c38469b86a05df427`.
-Use a reviewed source revert with current valid input artifacts if rollback is
-needed; never restore old production state. Ignored audit exports are in
-`.remediation/dashboard-review-publish/`, especially `release-evidence.json`,
-`deployment-verification.json` and both exact CI receipts. Detailed run links and
-remaining history are in `docs/PROJECT_STATE.md`.
+Live [dashboard](https://maglothinm.github.io/MyETF-Intelligence/) remains the
+prior approved review-UX release: successful Pages **33385044313 / 1**, build
+**99465681041**, deploy **99465807219**, artifact **9755242103**, source
+`9d9e7bef326a0e24a5f846ea1310dec24a647019`. Four fixed live Pages URLs returned
+HTTP 200 and matched the artifact. This is not deployment of the bootstrap fix.
+The previous publication and Senate incident evidence remain in PROJECT_STATE
+and `docs/incidents/senate-efd-2026-08-30.md`.
 
-## Preserved work and remaining limits
+## Remaining limits and next safe action
 
-Upstream approved Senate recovery evidence at `ac6342a` and
-`docs/incidents/senate-efd-2026-08-30.md` are preserved unchanged. Local `main`
-at `9e5de909` and untracked `.codex/` remain untouched. Another task switched
-the shared checkout during final verification; this evidence was prepared in
-isolated branch/worktree `codex/dashboard-review-release-evidence`, avoiding its
-files and branch. Never implement, deploy or dispatch in legacy `maglothinm/MyETF`.
+- **122 pending market observations** in the acceptance copy; no real
+  provider-backed pending reduction or completed market return is proven.
+- **5,036 catalog-only filings** remain: 849 House (839 outside the sample,
+  eight local missing-Tesseract failures, two existing multiline-amount scanner
+  failures), 90 Senate unattempted in this House-only acceptance, and 4,097 OGE
+  Form 201 access-request listings. Exact report IDs are in the validation report.
+  Linux already installs OCR but these exact documents remain unverified there.
+- Externally configured source manifests/documents are not automatically retained
+  in a state artifact. Only files within its existing uploaded state directory
+  persist through that path; never treat document caches as state authority.
+- Obsolete runs **33219808359** and **33221027676** still show queued / attempt 1 /
+  zero jobs and artifacts. Preserve the existing gate on any separate manual
+  production dispatch. The separate authorized Support draft remains unsent;
+  no backend clearance is claimed.
+- Held PR #3's additional pre-manifest allowlist does not include these newer
+  artifacts. That held migration gate is unchanged; this work neither adopts nor
+  modifies its allowlist or production restore policy.
+- Same-ID rename/privacy, legacy settings retirement, Gmail delivery proof and
+  physical-device acceptance remain separate open work. No credentials/settings
+  were changed, and no production, alert or heartbeat endpoint was exercised.
+- Separate read-only review note: the unchanged `filing_simulation.yml`
+  notification-isolation step reserializes the full JSONL history after its
+  predecessor-prefix check. Noncanonical predecessor formatting could change.
+  This existing simulator path was not executed or modified; audit it before
+  future simulator work rather than inferring byte-preservation from this task.
 
-Keyboard focus/touch behavior passed DOM fixtures; native keyboard activation,
-physical iPhone/Safari/touch, real audio and physical ultrawide acceptance remain
-unverified. Axe fixture checks exclude layout and contrast. Keep issues #4 and #6
-open for this acceptance, not because publication is pending.
-
-Only obsolete queued runs **33219808359** and **33221027676** remained active at
-the final audit. Their supported cancellation/deletion failed in the separate
-recovery task. The owner-approved GitHub Support draft is still unsent because no
-eligible Actions support route was available. Backend clearance or confirmation
-that neither can execute remains required before the separate requested manual
-Legislative run. See the preserved incident record; do not relax this gate.
-
-No collector, AI, simulator, live alert or fake heartbeat was dispatched by this
-UI release. No credentials/settings were changed or independently tested.
-Held PR #3, same-ID rename/privacy, legacy settings and Gmail delivery proof remain
-separate open work.
-
-## Next safe action
-
-Perform the remaining physical-device/keyboard/touch acceptance on the live
-dashboard. Publication needs no further approval or dispatch. Keep the obsolete
-writer cleanup and cutover work separate; requery current GitHub provenance
-before any later production operation.
+Next: review/release the local commit through canonical CI when authorized, then
+verify the actual sole-writer artifact successors and profile/pending counts over
+normal runs with configured market data. Freshly recheck provenance before those
+operations. Do not upload acceptance copies, rebaseline, clear safety gates,
+dispatch an alternate writer or claim the live one-profile symptom is already
+resolved by a local commit.

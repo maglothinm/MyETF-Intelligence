@@ -356,3 +356,45 @@ Pages run `33385044313` / attempt 1 succeeded. Post-deployment audit verified al
 protected inventories and simulator history. Physical-device acceptance remains
 open. The final documentation-only evidence was prepared in an isolated worktree
 because another task switched the shared checkout.
+
+## D-2026-08-31-025 — Bootstrap retained history without creating new events
+
+**Decision:** Issue #11 uses the combined normalized Legislative/Executive
+transaction universe independently of AI candidate selection. Discover and
+persist all configured historical profiles before bounded breadth-first market
+work; retain a deterministic investor cursor and cache-only continuation when
+network capacity is exhausted. Keep scoring, time censoring and all existing
+40/40/30/40/2,200 defaults unchanged.
+
+**Reason:** Provenance-verified production artifacts held only one eligible
+purchase/identity, while 5,066 cataloged filings had no normalized transactions.
+Main already refreshed globally from both branches; ordinary baseline/unseen-only
+tracking never reconstructed the cataloged history. Sequential market processing
+and missing population telemetry made the sparse result harder to diagnose.
+
+**Consequence:** Existing tracker writers get a separate 20-filing bounded
+historical pass using official scanners and original-document caches validated
+by source identity, contained path and SHA-256. Access-request listings remain
+blocked without legitimately available originals. Preserve parser IDs, original
+observation timestamps, baselines and all prior ledger/seen state. Append silent
+`historical_bootstrap` records and receipts; exclude them from new filing alerts,
+model candidate/reanalysis selection, candidate upgrades/delivery and new local
+Notification Center events. Partial parsing and missing prices remain explicitly
+pending or blocked; no fabricated returns or completed-history claim is allowed.
+
+Candidate-specific Edge failure remains fail-open, but global population
+initialization/refresh/persistence is required for a successful AI state writer.
+Initial maintenance failure stops candidate/market work. Pending and newly queued
+candidate alerts use the existing bounded channel-deduplicated path only after
+final maintenance succeeds and no earlier errors remain. This prevents the new
+fatal maintenance gate from knowingly sending alerts in an unpublishable run;
+it does not claim an atomic transaction across GitHub artifacts and external
+delivery services.
+
+The root and standalone dashboards publish full bounded profiles and actual
+population/backfill metadata independently of qualifying signals. Unknown legacy
+counts stay unknown. Workflow changes are coverage-only; no extra schedule,
+writer, protected artifact or hosting path is introduced. Local acceptance
+produced 17 building profiles and 122 pending observations from real artifact
+copies. Deployment and live pending reduction remain unverified; the existing
+manual-production, held-PR and cutover gates are not relaxed.

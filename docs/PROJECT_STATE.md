@@ -1,13 +1,77 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Dashboard review UX published and verified on canonical Pages.
-Protected inputs and simulator history unchanged. Senate recovery evidence
-preserved. Physical-device acceptance, obsolete queues, PR #3 and cutover remain
-open.**
+Status: **Investor Edge historical bootstrap implemented and locally verified on
+codex/investor-edge-bootstrap; not pushed, merged or deployed. Existing dashboard
+review UX remains published. Protected inputs and simulator history unchanged.
+Live market completion, physical-device acceptance, obsolete queues, PR #3 and
+cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Investor Edge historical bootstrap — local acceptance 2026-08-31
+
+[Issue #11](https://github.com/maglothinm/MyETF-Intelligence/issues/11) implements
+combined normalized history, explicit zero-candidate global maintenance,
+discovery-first building profiles, durable breadth-first market backfill, and a
+separate 20-filing historical transaction reconstruction pass inside the existing
+tracker writers. Full root/standalone inventories now expose actual population
+and pending-work telemetry. Scoring, owner identity, no-lookahead protections,
+40/40/30/40/2,200 limits, protected artifact names and writer ownership are
+unchanged. Workflow edits add only test coverage/path filters.
+
+The demonstrated production cause was missing parsed history, not candidate-only
+input: main already combined both branches and globally refreshed Edge, but the
+artifacts held only **60 unique transactions / 1 eligible purchase / 1 identity**
+alongside **5,066 catalog-only filings**. Baseline-seen filings were never revisited
+by normal unseen-filing processing. Historical rows now append idempotently with
+original IDs/observation timestamps and no new-filing, AI-candidate, external-alert
+or Notification Center events. Global Edge persistence failures stop successful
+state promotion; live candidate delivery waits until final maintenance succeeds.
+
+Actual artifact-copy acceptance: 40 bounded House filing attempts parsed 30
+filings and added 299 unique transactions. Copies now contain **359 unique
+transactions / 122 eligible purchases / 17 identities and profiles**. All 17
+profiles are building; no completed market outcomes were fabricated. Each of two
+Edge passes processed 30 attempts, but **122 observations remain pending** because
+no provider credentials were supplied and cached benchmark/stock coverage was
+insufficient. Deterministic available-price tests separately show 43 pending
+observations falling to 13, then 0, without new filings. The actual acceptance is
+not evidence of decreasing production market backlog.
+
+Remaining catalog-only work: **5,036** (849 House, 90 Senate, 4,097 OGE/request).
+Eight sampled scans need missing local Tesseract; two expose an existing House
+multiline amount parser limitation. OGE Form 201 originals require legitimate
+access; they were not automatically retrieved. Cache-only replay reproduced all
+299 transactions and its repeated sample added none. Original input hashes,
+seen IDs, ledger prefixes and immutable AI decision history remain unchanged.
+
+Local verification: **346 tests passed**, including available DOM checks;
+syntax/compilation, YAML contracts, static generation and actual-copy root and
+standalone browser checks passed. No new remote CI/Linux workflow result is
+claimed. Implementation is in the isolated same-repository worktree
+`.remediation/investor-edge-worktree`, branch `codex/investor-edge-bootstrap`,
+based on canonical main `f2df59740b095417e3883fd81ac0a16c1d16fdad`. Other tasks'
+checkout, unpublished work and the approved Senate/UI release evidence are
+preserved. This local implementation has not advanced main or production state.
+
+Final read-only GitHub audit at **11:48:35 UTC** reconfirmed the unchanged
+protected authorities: Legislative **9749549239 / 33369634244 / attempt 1**,
+Executive **9746602231 / 33360633323 / attempt 1**, AI
+**9749567326 / 33369677492 / attempt 1**. Exact producer jobs, workflow identity,
+ancestry, high-water marks, expiry, ZIP hashes and full continuity passed.
+Simulation **9734790733 / 33320677882 / attempt 1** remains two rows, unchanged.
+Live Pages is still **33385044313 / attempt 1**, artifact **9755242103**, source
+`9d9e7be`; four fixed live surfaces returned HTTP 200 and matched its bytes.
+No collector, AI, simulator, alert or heartbeat was dispatched by this task.
+
+See [the validation report](validation/investor-edge-bootstrap-2026-08-31.md)
+for raw/deduplicated counts, exact run links/jobs/hashes, A–J test coverage,
+source failures and remaining limits. Review/release through canonical CI when
+authorized; then verify sole-writer successors and real pending reduction.
+Do not upload acceptance copies, rebaseline, change held PR #3's allowlist, or
+bypass the existing obsolete-run gate for a separate manual production run.
 
 ## Dashboard review UX — published and verified 2026-08-31 11:04 UTC
 

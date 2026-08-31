@@ -175,6 +175,55 @@ test('Overview loads only compact insights; sections fetch their ledgers lazily'
   assert.deepEqual(env.errors, []);
 });
 
+test('Investor Edge renders the full building population and producer history counts without signals', async t => {
+  const env = await dashboard({change(data) {
+    data['investor-edge'] = {
+      investors: Array.from({length: 12}, (_, index) => ({filer: `TEST Filer ${index}`, owner: index % 2 ? 'Spouse' : 'Self',
+        sample_count: 0, edge_score: 50, confidence_label: 'Low', status: 'insufficient_data', minimum_sample_met: false, backfill_pending_trade_count: 2})),
+      published_profile_count: 12, completed_profile_count: 0, building_profile_count: 12,
+      historical_transaction_count: 60, eligible_purchase_count: 24, unique_investor_identity_count: 12,
+      backfill_processed_this_run: 5, backfill_pending_observation_count: 19, backfill_limit_per_run: 30,
+      network_requests_this_run: 7, branch_transaction_counts: {legislative: 40, executive: 20}
+    };
+  }}); t.after(env.close);
+  assert.deepEqual(env.requests, ['dashboard-insights']);
+  await env.navigate('#investor-edge', () => env.byId('edge-profile-body').children.length === 12);
+  assert.equal(env.byId('attention-signals').textContent, '0');
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill in progress');
+  assert.equal(env.byId('edge-history-label').textContent, '12 published investor profiles');
+  assert.match(env.byId('edge-profile-body').textContent, /TEST Filer 11/);
+  assert.match(env.byId('edge-profile-body').textContent, /Building history — insufficient completed observations \(n = 0\)/);
+  assert.ok([...env.byId('edge-profile-body').rows].every(row => row.cells[4].textContent === 'Unavailable'));
+  assert.deepEqual([...env.byId('edge-bootstrap-counts').querySelectorAll('dd')].map(node => node.textContent), ['12', '0', '12', '60', '5', '19']);
+  assert.match(env.byId('edge-bootstrap-coverage').textContent, /Legislative trades: 40 · Executive trades: 20/);
+  assert.match(env.byId('edge-bootstrap-budget').textContent, /Observation budget per run: 30 · Market requests this run: 7/);
+  env.data['investor-edge'].backfill_pending_observation_count = 0;
+  await env.refresh();
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill current');
+  assert.equal(env.byId('edge-profile-body').children.length, 12);
+  assert.equal(env.byId('notification-count').textContent, '0');
+  assert.deepEqual(env.errors, []);
+});
+
+test('Investor Edge legacy, invalid and failed telemetry never imply zero pending or completed history', async t => {
+  const env = await dashboard({change(data) {
+    data['investor-edge'] = {investors: [{filer: '<img onerror="bad()">', owner: 'Joint', sample_count: 0}]};
+  }}); t.after(env.close);
+  await env.navigate('#investor-edge', () => env.byId('edge-profile-body').textContent.includes('Joint'));
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
+  assert.deepEqual([...env.byId('edge-bootstrap-counts').querySelectorAll('dd')].map(node => node.textContent), ['1', 'Unavailable', 'Unavailable', 'Unavailable', 'Unavailable', 'Unavailable']);
+  assert.equal(env.byId('edge-profile-body').querySelector('img'), null);
+  env.data['investor-edge'].backfill_pending_observation_count = false;
+  await env.refresh();
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
+  env.failures.add('investor-edge');
+  await env.refresh();
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
+  assert.equal(env.byId('edge-history-label').textContent, 'Investor Edge data unavailable');
+  assert.ok([...env.byId('edge-bootstrap-counts').querySelectorAll('dd')].every(node => node.textContent === 'Unavailable'));
+  assert.deepEqual(env.errors, []);
+});
+
 test('record pagination, debounced search, explicit date basis and sortable columns work', async t => {
   const env = await dashboard(); t.after(env.close);
   await env.navigate('#records', () => env.byId('filings-body').children.length === 50);
