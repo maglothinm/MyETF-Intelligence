@@ -27,6 +27,11 @@ from typing import Any, Iterable, Mapping, MutableMapping, Sequence
 import requests
 import yaml
 
+try:  # Support both package and direct-script execution.
+    from .dashboard_branding import copy_branding_assets
+except ImportError:  # pragma: no cover - direct execution path
+    from dashboard_branding import copy_branding_assets  # type: ignore
+
 EDGE_VERSION = "2026-08-29.5"
 DEFAULT_CONFIG = Path("config/investor_edge.yml")
 PROFILE_FILE = "investor-edge-profiles.json"
@@ -3048,6 +3053,11 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
   <meta name='color-scheme' content='dark'>
   <meta http-equiv='Content-Security-Policy' content="default-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>PolitiTrack Investor Edge</title>
+  <link rel='icon' href='icons/favicon.ico' sizes='16x16 32x32 48x48'>
+  <link rel='icon' type='image/png' sizes='32x32' href='icons/favicon-32x32.png'>
+  <link rel='icon' type='image/png' sizes='16x16' href='icons/favicon-16x16.png'>
+  <link rel='apple-touch-icon' sizes='180x180' href='icons/apple-touch-icon.png'>
+  <link rel='manifest' href='site.webmanifest'>
   <link rel='stylesheet' href='investor-edge.css'>
 </head>
 <body>
@@ -3206,6 +3216,7 @@ if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); fil
     (output_dir / "investor-edge.html").write_text(page, encoding="utf-8")
     (output_dir / "investor-edge.css").write_text(css, encoding="utf-8")
     (output_dir / "investor-edge.js").write_text(js, encoding="utf-8")
+    copy_branding_assets(output_dir)
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     _atomic_json(data_dir / "investor-edge.json", {"generated_utc": generated, "investors": investors, **history})
