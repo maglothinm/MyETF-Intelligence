@@ -12,7 +12,8 @@
   const reviewLabels={manual_exception:"Manual Parser Exceptions",access_required:"Access / request required",other:"Other / uncategorized"};
   const filterLabel=field=>field==="category"?"Review status":title(field);
   const allLabel=field=>field==="source"?"All Sources":field==="category"?"All review statuses":`All ${title(field).toLowerCase()}`;
-  const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",nextRefreshAt:Date.now()+300000,renderedAt:null,healthMinute:null,changes:{},refreshError:false};
+  const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",nextRefreshAt:Date.now()+300000,renderedAt:null,healthViewKey:null,changes:{},refreshError:false};
+  const healthClock=PT.createHealthClock();
   const openDialog=PT.setupDialogsAndTooltips();
   const notifications=new PolitiTrackNotifications({onChange:()=>renderNotifications()});
   const definitions={
@@ -179,7 +180,7 @@
     const summary=PT.monitoringSummary(m),status=m.health.status;
     el("overall-state").className=`status ${state.refreshError&&status==="success"?"unknown":status}`;
     el("overall-state").textContent=`${state.refreshError?"! Refresh unavailable · ":""}${summary.label}`;
-    el("overall-state").dataset.tooltipKey=status==="stale"?"monitoringStale":status==="success"?"monitoringCurrent":"systemEvidence";
+    el("overall-state").dataset.tooltipKey=status==="stale"?"monitoringStale":status==="success"?"monitoringCurrent":status==="unknown"&&m.health.clock_unreliable?"monitoringClock":"systemEvidence";
     el("overall-state").dataset.tooltipNote=summary.detail;
     el("updated-at").textContent=`Source data through ${date(m.data_through_utc)}`;
     el("attention-health").textContent=({success:"Current",failure:"Failure",stale:"Overdue",unknown:"Unknown"})[status]||"Unknown";
@@ -189,14 +190,14 @@
     const bad=m.health.branches.filter(b=>b.status!=="success");
     el("exceptions-list").innerHTML=bad.map(b=>`<div class="activity-row"><span class="${b.status}" aria-hidden="true">${b.status==="stale"?"◷":b.status==="unknown"?"◌":"!"}</span><div><strong>${esc(PT.branchLabel(b.branch))}: ${statusText(b.status)}</strong><p>${esc(b.errors.join("; ")||PT.healthDetail(b))}</p>${link(b.run_url,"Run evidence")}</div></div>`).join("")+m.reviews.latest.filter(r=>r.category==="manual_exception").slice(0,2).map(r=>`<div class="activity-row"><span class="caution" aria-hidden="true">!</span><div><strong>Manual Parser Exception · ${esc(r.filer||"Unknown filer")}</strong><p>${esc(r.reason)}</p><a href="#records/reviews?category=manual_exception">Inspect parser exceptions →</a></div></div>`).join("")+`<div class="activity-row"><span aria-hidden="true">ⓘ</span><div><strong>${number(m.reviews.access_required)} access/request-required records</strong><p>Disclosure access inventory, not a red system failure. ${number(m.reviews.other)} other/uncategorized review items.</p></div></div>`;
     el("build-details").textContent=`Dashboard generated ${date(m.generated_utc)} · build ${m.build_sha||"unavailable"} · Source data through ${date(m.data_through_utc)}. Publication does not establish collector success.`;
-    state.healthMinute=Math.floor(Date.now()/60000);
+    state.healthViewKey=PT.healthViewKey(m);
   }
-  function refreshHealth() {
+  function refreshHealth(force=true) {
     if(!state.model)return;
-    const m=PT.healthAt(state.model);renderHealth(m,state.changes,true);
+    const m=healthClock(state.model);if(!force&&state.healthViewKey===PT.healthViewKey(m))return;renderHealth(m,state.changes,true);
     if(!m.signals.length){el("overview-signals").innerHTML=emptySignals(m);el("all-signals").innerHTML=emptySignals(m);}
   }
-  function renderModel(m,change){m=PT.healthAt(m);const summary={repository_url:m.repository_url};const signalCount=m.coverage.qualifying_signals;
+  function renderModel(m,change){m=healthClock(m);const summary={repository_url:m.repository_url};const signalCount=m.coverage.qualifying_signals;
     el("attention-signals").textContent=number(signalCount);el("nav-signal-count").textContent=number(signalCount);
     const delta=Object.values(change.changes||{}).filter(v=>typeof v==="number").reduce((a,b)=>a+b,0);el("attention-changes").textContent=change.firstVisit?"0":number(delta);el("attention-changes-note").textContent=change.firstVisit?"Baseline established quietly":"Changes on this browser";
     el("baseline-note").textContent=change.firstVisit?"Current records are your starting baseline. Future changes are tracked on this browser and device only.":"Compared with the previous successful review on this browser and device. Not synchronized account state.";
@@ -237,8 +238,8 @@
     catch(e){state.model=previous;state.data=oldData;if(previous){renderModel(previous,{changes:{},firstVisit:false});for(const key of Object.keys(oldData)){populateFilters(key);renderTable(key);}}throw e;}
     state.model=model;state.changes=change.changes||{};state.renderedAt=Date.now();state.nextRefreshAt=Date.now()+300000;state.refreshError=false;el("error-banner").hidden=true;refreshHealth();
     await change.commit();renderNotifications();if(state.section==="investor-edge")await loadEdge();if(change.events.length){document.querySelectorAll(".attention-card").forEach(n=>n.classList.add("changed"));setTimeout(()=>document.querySelectorAll(".attention-card").forEach(n=>n.classList.remove("changed")),1200);}
-  }catch(e){el("error-banner").textContent=`Refresh unavailable — ${e.message}. ${state.model?"Last successfully rendered data remains visible; this view may be stale.":"No successful data load yet. Status is Unknown."}`;state.refreshError=true;el("error-banner").hidden=false;if(state.model)renderHealth(PT.healthAt(state.model),state.changes);else{el("overall-state").textContent="! Refresh unavailable";el("overall-state").className="status unknown";}state.nextRefreshAt=Date.now()+300000;}finally{state.loading=false;el("refresh-button").disabled=false;}}
-  function clock(){el("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});const s=Math.max(0,Math.ceil((state.nextRefreshAt-Date.now())/1000));el("refresh-countdown").textContent=`Next refresh ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;if(state.healthMinute!==Math.floor(Date.now()/60000))refreshHealth();}
+  }catch(e){el("error-banner").textContent=`Refresh unavailable — ${e.message}. ${state.model?"Last successfully rendered data remains visible; this view may be stale.":"No successful data load yet. Status is Unknown."}`;state.refreshError=true;el("error-banner").hidden=false;if(state.model)renderHealth(healthClock(state.model),state.changes);else{el("overall-state").textContent="! Refresh unavailable";el("overall-state").className="status unknown";}state.nextRefreshAt=Date.now()+300000;}finally{state.loading=false;el("refresh-button").disabled=false;}}
+  function clock(){el("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});const s=Math.max(0,Math.ceil((state.nextRefreshAt-Date.now())/1000));el("refresh-countdown").textContent=`Next refresh ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;refreshHealth(false);}
   initTables();window.addEventListener("hashchange",()=>navigate());el("refresh-button").onclick=loadData;
   document.addEventListener("click",e=>{
     if(e.defaultPrevented)return;

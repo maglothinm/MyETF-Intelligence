@@ -1,96 +1,63 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-31 UTC**
-Work record: [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19).
+Work: [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19).
 
-## Current task — scheduler reliability and freshness
+## Current task — finalize scheduler freshness rollout
 
-Implement the owner's staged scheduler/freshness rollout. Canonical repository
-ID **1349678672**, current name **maglothinm/MyETF-Intelligence**, default **main**.
-Use isolated branch `codex/scheduler-freshness` in `.worktrees/scheduler-freshness`.
-The original checkout, local main and unrelated worktrees are preserved.
-Initial base `ecc031d`; approved icon merge `6bd7684` and release receipt
-`6384c76` are integrated. Never implement or dispatch in legacy `maglothinm/MyETF`.
+Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
+default **main**. PR #20 merged tested `c9dd3a5` as
+`b9380f231d09eb8610a96c6d4c83399ace67b008`, with identical trees. Work is isolated
+in `.worktrees/scheduler-freshness`, now branch `codex/freshness-clock-audit`.
+Original checkout `9d9e7be`, local main and unrelated work remain preserved.
+Never implement or dispatch from legacy `maglothinm/MyETF`.
 
-**Current delivery state:** implementation, independent review and local regression
-are complete. PR CI, merge and deployment remain pending. No external scheduler
-has been activated.
+## Completed work and proof
 
-## Completed implementation and evidence
+Central freshness policy, truthful source timestamps, header/Operations/Monitor
+aging, read-only exact Actions observations, Executive half-hour cron, safe
+canonical external dispatch contract and uncertain-retry guard are deployed.
+The external Worker is inert. GitHub cron remains enabled.
 
-Root cause and full timestamp semantics are in [SCHEDULER_FRESHNESS.md](SCHEDULER_FRESHNESS.md).
-The old header used historical success without freshness; Operations had no
-cadence policy, open pages did not age health, and failed attempts could be absent
-from successful protected artifacts. The live page reproduced green with
-Legislative 1h33m and Executive 3h22m old at 17:06 UTC.
+Local **633 tests, no skips**, plus **11 Worker cases** passed. PR CI
+**33420373213 / 1** and main CI **33420549112 / 1** each passed 550 Python,
+6 filing DOM, 11 Worker and Linux verification. The old schedule expectation in
+verify.sh and its checksum were corrected; safety assertions remain intact.
 
-The changes centralize Legislative 15/30, Executive 30/60 and collector-triggered
-AI 15/75 minute cadence/freshness policy; failure > stale > unknown > success.
-Source time excludes generation/AI/portfolio refresh; Operations exposes timing,
-overdue and trigger evidence. The page ages without new publication. New exact
-Actions-attempt observations supplement health without becoming state authority.
-Executive cron is changed to `13,43`; manual dispatch remains. The external dispatch
-client/Cloudflare example is disabled by default and keeps GitHub fallback cron.
+Pages **33420549071 / 1** succeeded, source `b9380f2`, artifact **9768730400**.
+All **250 live files** match. Exact logs and full authority audit confirm:
+Legislative **9764350004 -> 33408974583 / 1**;
+Executive **9760298853 -> 33398375467 / 1**;
+AI **9764387095 -> 33409079174 / 1**. Provenance/high-water/expiry/hashes and
+continuity passed at 17:39 UTC; protected inputs and simulator 9734790733's two
+rows are unchanged. Header correctly shows overdue with source **15:32:55 UTC**,
+despite generation at **17:38:02 UTC**. Desktop/portrait Operations and Monitor
+checks pass with no browser warnings/errors. Full jobs/hashes/counts and limits
+are in [the release receipt](validation/scheduler-freshness-2026-08-31.md).
+Ignored proof is under this worktree's `.remediation/preflight`, `postflight`,
+`scheduler-live-integration` and `scheduler-release-check`.
 
-Existing noncancelling concurrency/validated restore/deduplication are preserved.
-An additional retry guard blocks an unretained attempt that might have sent an
-alert; it never resets state or guesses delivery. Read the exact implementation
-and external activation documentation before operating it.
+## Active follow-up and next safe action
 
-Final full local regression: **633 passed, no skips, in 131.00 seconds**.
-Worker tests: **11 passed**. This includes generated dashboard/Vault/PDF DOM
-checks; the dashboard's 63 DOM cases and 35 native JS cases also passed separately.
-Initial missing dependencies were resolved using the repository's existing
-declared dependency installation, without changing permissions or weakening tests.
-Rendered 320px/390px previews show amber polling overdue, source time 11:32 from
-collector evidence, readable Operations facts and no horizontal page overflow.
-Preview uses isolated validated artifact copies only.
+A final fixed-clock audit confirmed fresh evidence could stop aging when device
+time trails the server. The shared monotonic age anchor and regressions now pass
+65 DOM and 42 native JS tests. It retains elapsed time across repeat/newer late
+publications, latches clock uncertainty, and preserves failure/stale precedence.
+Require follow-up PR CI, merge and verify
+its exact Pages artifact/live state. First deployment is not final acceptance.
 
-Independent review fixed slow-device-clock false green, impossible chronology,
-missing/malformed Actions snapshots, pending reruns hiding failure, late jobs
-whose workflow queued earlier, optional heartbeat errors, and history focus.
-Read-only live integration at 17:26 UTC made 53 API reads: all three observation
-branches are available, exact jobs/attempts match validated producers, and all
-three retry guards allow the clean current authority. The model correctly reports
-all three stale while source currency remains 15:32:55 UTC.
+## Infrastructure blockers
 
-Read-only baseline audit completed17:03 UTC:
-
-| Protected input | Artifact | Exact run / attempt | Producer job |
-|---|---:|---|---:|
-| Legislative |9764350004|33408974583 /1|99543508327|
-| Executive |9760298853|33398375467 /1|99508337018|
-| AI |9764387095|33409079174 /1|99543844689|
-
-Exact provenance/high-water/expiry/ancestry, ZIP/member hashes and continuity
-passed. Legislative contains1,001 filing rows,183 transactions,73 purchases,
-1 review,32 runs and20 historical receipts; Executive4,109 filings,1,495 reviews,
-24 runs; AI12 analyses/38 runs. New approved bootstrap receipts were separately
-validated against their published schema. Simulator9734790733 remains two
-unchanged retained rows; its older historical concern remains unresolved.
-
-Concurrent prior release Pages33417300834 /1, artifact9767514649, build6bd7684
-matched all250 served files. This is not freshness-release deployment. Ignored
-proof/exports are `.remediation/baseline/` in this worktree; no production state
-was restored or advanced by this task.
-
-## Next safe action and blockers
-
-Commit the integrated implementation/docs, open canonical PR, require CI for the
-tested commit, merge and
-verify actual Pages inputs/attempts/artifact/live header/Operations. Requery live
-producer state before any operation. Do not claim real15/30-minute cadence until
-several subsequent actual runs establish it. A repeated 17:27 UTC preflight
-confirmed the same protected artifacts and live icon deployment with continuity
-passing; no newer collector run had arrived.
-
-Cloudflare account/Worker/token configuration is not connected or activated.
-The dispatcher is code only. Keep GitHub cron enabled. Obsolete queued writers
-33219808359 and33221027676 still require backend clearance under the existing
-manual-production gate before external scheduling/diagnostic writer activation.
-No production writer, simulation, rebaseline, alert test, credential or repository
-setting was dispatched/changed. Existing Vault runtime, held PR#3, cutover,
-physical-device and external-delivery limits stay separate below.
+External scheduler activation remains blocked by GitHub backend clearance for
+obsolete queued writers **33219808359** and **33221027676**. No diagnostic writer
+or external scheduler may bypass that gate. Cloudflare account/Worker/scoped
+secret configuration and multiple real 15/30-minute cycles are still required.
+At 17:39 no new collector had arrived; latest measured gaps were 468.5/493.8m.
+Actual post-release source advancement and external delivery remain unverified.
+Keep GitHub cron until a separately recorded redundancy decision. No producer,
+simulation, alert test, rebaseline, credential or repository setting was manually
+dispatched/changed. Vault, held PR #3, physical-device, simulator-history and
+cutover gates remain separate below.
 
 ## Separate Investor Edge production activation — prerequisites retained
 

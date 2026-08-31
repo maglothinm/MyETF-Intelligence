@@ -92,7 +92,7 @@ function fixtures() {
     reviews: {access_required: 0, manual_exception: 0, other: 0, total: 0, latest: []},
     simulation: {available: false, status: 'unavailable'}, paper: {open_positions: 0}, latest_filings: filings.slice(0, 5),
     synthetic: {filings: 0, transactions: 0, analyses: 0},
-    health: {status: 'success', required_branches: ['legislative', 'executive', 'ai'], policy: {
+    health: {status: 'success', as_of_utc: '2026-08-30T12:00:00Z', required_branches: ['legislative', 'executive', 'ai'], policy: {
       legislative: {expected_interval_minutes: 15, stale_after_minutes: 30},
       executive: {expected_interval_minutes: 30, stale_after_minutes: 60},
       ai: {expected_interval_minutes: 15, stale_after_minutes: 75, cadence_label: 'After collector success (about every 15m)'}},
@@ -124,12 +124,14 @@ async function dashboard(options = {}) {
   // The production clock ages evidence independently of fetch. Tests control both
   // Date and timer callbacks; no health assertion depends on execution wall time.
   let now = Date.parse(options.asOf || '2026-08-30T12:00:00Z');
+  let elapsedNow = 0;
   const RealDate = window.Date, intervals = [];
   window.Date = class extends RealDate {
     constructor(...args) { super(...(args.length ? args : [now])); }
     static now() { return now; }
   };
   window.setInterval = (callback, delay) => { intervals.push({callback, delay}); return intervals.length; };
+  window.performance.now = () => elapsedNow;
   window.matchMedia = query => ({matches: Boolean(options.coarse && /pointer:\s*coarse|hover:\s*none/.test(query)), media: query,
     addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}});
   if (options.visualViewport) window.visualViewport = Object.assign(new window.EventTarget(), options.visualViewport);
@@ -159,12 +161,14 @@ async function dashboard(options = {}) {
     await tick(15);
   }
   async function refresh() {
+    if(wallboard){await intervals.find(timer => timer.delay > 1000).callback();await tick(5);return;}
     byId('refresh-button').click();
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
   }
   return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh,
-    advanceTime(milliseconds) { now += milliseconds; intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
+    advanceTime(milliseconds, {wall = true} = {}) { if(wall)now += milliseconds;elapsedNow += milliseconds;intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
+    setWallTime(value) { now=Date.parse(value);intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     close: () => {
     // Disconnect any active tooltip layout observers before destroying the DOM.
     doc.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
@@ -305,6 +309,40 @@ test('Monitor Mode uses the same freshness policy and ages to stale without a ne
   assert.match(env.byId('source-strip').textContent, /expected every 15m/);
   assert.equal(env.requests.length, 1);
   assert.deepEqual(env.errors, []);
+});
+
+for(const page of ['dashboard','wallboard']) test(`${page} ages uncertain-clock evidence across identical refreshes without restoring false green`, async t => {
+  const env=await dashboard({page,asOf:'2026-08-30T10:00:00Z',hash:page==='dashboard'?'#operations':''});t.after(env.close);
+  assert.equal(env.byId('overall-state').textContent,'◌ Monitoring status incomplete');
+  assert.equal(env.byId('overall-state').classList.contains('success'),false);
+  assert.equal(env.byId('overall-state').dataset.tooltipKey,'monitoringClock');
+  env.byId('overall-state').focus();
+  assert.match(env.byId('tooltip').textContent,/device’s clock cannot confirm current monitoring/);
+  env.doc.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  const sourceId=page==='dashboard'?'updated-at':'data-through',sourceTime=env.byId(sourceId).textContent;
+  env.advanceTime(10*60000,{wall:false});await env.refresh();
+  assert.equal(env.byId('overall-state').classList.contains('unknown'),true);
+  env.advanceTime(30*60000,{wall:false});
+  assert.match(env.byId('overall-state').textContent,/Legislative polling overdue/);
+  assert.equal(env.byId('overall-state').classList.contains('stale'),true);
+  if(page==='dashboard'){
+    const card=env.byId('operations-health').querySelector('[data-branch="legislative"]');
+    const label=[...card.querySelectorAll('dt')].find(node=>node.textContent==='Successful run age');
+    assert.equal(label.nextElementSibling.textContent,'50m','A repeated publication does not restart the elapsed clock');
+  }
+  env.setWallTime('2026-08-30T12:00:00Z');await env.refresh();
+  assert.equal(env.byId('overall-state').classList.contains('stale'),true,'Catching up to an old publication never restores green');
+  assert.equal(env.byId(sourceId).textContent,sourceTime);
+  const model=env.data['dashboard-insights'];
+  model.generated_utc=model.health.as_of_utc='2026-08-30T12:10:00Z';
+  model.health.branches.forEach(branch=>{branch.last_success_utc='2026-08-30T12:05:00Z';});
+  env.setWallTime('2026-08-30T12:10:00Z');await env.refresh();
+  assert.equal(env.byId('overall-state').classList.contains('stale'),true,'A newer publication can arrive late; already observed elapsed time must survive');
+  model.generated_utc=model.health.as_of_utc='2026-08-30T12:50:00Z';
+  model.health.branches.forEach(branch=>{branch.last_success_utc='2026-08-30T12:40:00Z';});
+  env.setWallTime('2026-08-30T12:50:00Z');await env.refresh();
+  assert.equal(env.byId('overall-state').textContent,'✓ Monitoring current','A genuinely newer publication can supply fresh evidence with a corrected clock');
+  assert.deepEqual(env.errors,[]);
 });
 
 test('Investor Edge renders the full building population and producer history counts without signals', async t => {

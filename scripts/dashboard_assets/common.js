@@ -37,6 +37,7 @@ window.PT = (() => {
     systemEvidence: "Status uses retained production run evidence and freshness targets. Failure takes precedence over stale, then unknown, then current. It is not an independent live probe of every upstream service.",
     monitoringCurrent: "All required PolitiTrack collectors and the AI analyst have completed successfully within their freshness windows.",
     monitoringStale: "The most recent retained collector run may have succeeded, but it is older than PolitiTrack’s freshness window. This can indicate a delayed or missed scheduled execution.",
+    monitoringClock: "This device’s clock cannot confirm current monitoring. Elapsed time continues to age the published evidence when available; known failures and overdue evidence still take precedence. A page refresh is not a new collector execution.",
     sourceDataThrough: "Newest timestamp represented by retained production source evidence. It is not simply the time this dashboard page was generated.",
     runHealth: "A successful run is current only within its freshness window. Stale or polling overdue can indicate a delayed or missed execution. Missing evidence is Unknown; zero new records is not failure.",
     notificationCenter: "Browser-local PolitiTrack activity history. Acknowledgement, snooze and mute affect this browser only; Gmail, Pushover and Healthchecks are unchanged.",
@@ -84,11 +85,12 @@ window.PT = (() => {
   // Python owns cadence policy and admission of production evidence. The browser
   // only advances the age of that evidence, even if publication has stopped.
   // Never infer a collector execution from a page load or manufacture a run row.
-  function healthAt(model,asOf=Date.now()) {
+  function healthAt(model,asOf=Date.now(),{clockUnreliable=false}={}) {
     const health=model.health||{},clientNow=typeof asOf==="number"?asOf:Date.parse(asOf),publishedAt=Date.parse(health.as_of_utc);
     // A device clock behind the publisher must never make server-proven stale
     // evidence recent again. An invalid client clock cannot establish freshness.
-    const now=Number.isFinite(clientNow)?Math.max(clientNow,Number.isFinite(publishedAt)?publishedAt:clientNow):NaN;
+    const now=Number.isFinite(clientNow)?Math.max(clientNow,Number.isFinite(publishedAt)?publishedAt:clientNow):Number.isFinite(publishedAt)?publishedAt:NaN;
+    const uncertainClock=clockUnreliable||!Number.isFinite(clientNow)||(Number.isFinite(publishedAt)&&clientNow<publishedAt);
     const branches=(health.branches||[]).map(original=>{
       const policy=health.policy?.[original.branch]||{},b={...original};
       const interval=numeric(b.expected_interval_minutes??policy.expected_interval_minutes),threshold=numeric(b.stale_after_minutes??policy.stale_after_minutes);
@@ -101,19 +103,45 @@ window.PT = (() => {
       b.next_expected_utc=hasPolicy&&valid?new Date(successful+interval*60000).toISOString():null;
       b.overdue_minutes=hasPolicy&&valid?Math.max(0,elapsed-interval):null;
       b.estimated_missed_intervals=hasPolicy&&valid?Math.max(0,Math.floor(elapsed/interval)-1):null;
-      b.status=failed?"failure":fresh===false?"stale":fresh===true&&latest===true&&!b.evidence_incomplete?"success":"unknown";
+      b.clock_unreliable=uncertainClock;
+      b.status=failed?"failure":fresh===false?"stale":fresh===true&&latest===true&&!b.evidence_incomplete&&!uncertainClock?"success":"unknown";
       b.cadence_label=b.cadence_label||policy.cadence_label;
       b.trigger_relationship=b.trigger_relationship||policy.trigger_relationship;
       return b;
     });
     const required=health.required_branches||branches.map(b=>b.branch),statuses=required.map(name=>branches.find(b=>b.branch===name)?.status||"unknown");
     const status=["failure","stale","unknown"].find(value=>statuses.includes(value))||(statuses.length?"success":"unknown");
-    return {...model,health:{...health,branches,status,as_of_utc:Number.isFinite(now)?new Date(now).toISOString():null}};
+    return {...model,health:{...health,branches,status,clock_unreliable:uncertainClock,as_of_utc:Number.isFinite(now)?new Date(now).toISOString():null}};
   }
+  // One clock per open page. A repeated publication cannot restart elapsed age
+  // or clear clock uncertainty. The wall clock can advance the assessment, but
+  // cannot undo time already observed by the independent elapsed clock.
+  function createHealthClock({wallNow=()=>Date.now(),monotonicNow=()=>window.performance?.now?.()??NaN}={}) {
+    let anchor=null;
+    return model=>{
+      const wall=wallNow(),monotonic=monotonicNow(),published=Date.parse(model.health?.as_of_utc);
+      const validWall=Number.isFinite(wall),validElapsed=Number.isFinite(monotonic),validPublication=Number.isFinite(published);
+      // Account for elapsed time before replacing an anchor: the next publication
+      // can arrive late, including as the first callback after page suspension.
+      const accrued=anchor?Math.max(anchor.last,anchor.base+(validElapsed&&Number.isFinite(anchor.monotonic)?Math.max(0,monotonic-anchor.monotonic):0)):-Infinity;
+      if(!anchor||(validPublication&&(!Number.isFinite(anchor.published)||published>anchor.published))) {
+        const base=Math.max(accrued,validWall?wall:-Infinity,validPublication?published:-Infinity);
+        anchor={published,base,monotonic,lastMonotonic:monotonic,lastWall:wall,last:base,
+          unreliable:!validWall||!validElapsed||!validPublication||wall<published};
+      } else {
+        if(!validWall||!validElapsed||!validPublication||wall<published||(validWall&&wall<anchor.lastWall)||(validElapsed&&monotonic<anchor.lastMonotonic))anchor.unreliable=true;
+      }
+      const elapsed=validElapsed&&Number.isFinite(anchor.monotonic)?Math.max(0,monotonic-anchor.monotonic):0;
+      const assessed=Math.max(anchor.last,anchor.base+elapsed,validWall?wall:-Infinity,validPublication?published:-Infinity);
+      anchor.last=assessed;if(validWall)anchor.lastWall=wall;if(validElapsed)anchor.lastMonotonic=monotonic;
+      return healthAt(model,Number.isFinite(assessed)?assessed:NaN,{clockUnreliable:anchor.unreliable});
+    };
+  }
+  const healthViewKey = model => `${model.health.status}|${model.health.clock_unreliable}|${Math.floor(Date.parse(model.health.as_of_utc)/60000)}`;
   const cadenceText = branch => branch.cadence_label||(numeric(branch.expected_interval_minutes)>0?`Every ${durationMinutes(branch.expected_interval_minutes)}`:"Unavailable");
   function healthDetail(branch) {
     if(branch.status==="failure")return "Latest production attempt reported an error. A previous success does not clear it.";
-    if(branch.status==="unknown")return "No sufficient production execution evidence is available.";
+    if(branch.status==="unknown")return branch.clock_unreliable?HELP.monitoringClock:"No sufficient production execution evidence is available.";
     return `Last successful check ${durationMinutes(branch.age_minutes)} ago · expected ${cadenceText(branch).replace(/^[A-Z]/,c=>c.toLowerCase())}`;
   }
   function monitoringSummary(model) {
@@ -335,5 +363,5 @@ window.PT = (() => {
     const query=new URLSearchParams(id?{filing:id}:{url,...(row.source?{source:row.source}:{}),...(row.report_id?{report:row.report_id}:{})});
     return `<span class="filing-actions"><a href="filing-vault.html?${esc(query.toString())}">View Filing</a>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Official Source ↗</a>`:""}</span>`;
   }
-  return {el,esc,HELP,helpAttrs,helpButton,numeric,number,money,percent,title,date,age,durationMinutes,branchLabel,triggerLabel,healthAt,cadenceText,healthDetail,monitoringSummary,safeUrl,link,filingActions,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief,validateModel,isCoarsePointer,setupDialogsAndTooltips};
+  return {el,esc,HELP,helpAttrs,helpButton,numeric,number,money,percent,title,date,age,durationMinutes,branchLabel,triggerLabel,healthAt,createHealthClock,healthViewKey,cadenceText,healthDetail,monitoringSummary,safeUrl,link,filingActions,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief,validateModel,isCoarsePointer,setupDialogsAndTooltips};
 })();
