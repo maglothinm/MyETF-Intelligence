@@ -550,3 +550,16 @@ not a completed deployment. No production writer, simulation, external alert,
 private Vault runtime activation, repository setting or rebaseline is authorized.
 Device acceptance, obsolete queues, historical simulator concerns, held PR #3,
 cutover and external-delivery proof remain separate open work.
+
+Release verification: PR #17 merged as `42351e2` with a tree identical to tested
+`6967a17`. Combined local 524 tests and exact PR/main CI passed. Existing Pages
+`33395506967` / attempt 1 succeeded, artifact `9759155643`. The 13:12:37 UTC audit
+verified all 238 served content files plus root, exact consumed protected attempts,
+fresh producer high-water marks and unchanged protected/simulator inventories.
+All six live dashboard routes and 320px–3840px rendered layouts passed shell/anchor,
+independent scrolling and overlay checks with no console warnings/errors. The seven-link
+Workspace, separate Vault page, prior releases and honest inactive Vault runtime
+are preserved. No production writer, simulation or external alert was dispatched.
+Issues #4/#6 device acceptance and all existing production/runtime/cutover gates
+remain open. Full evidence is in
+[the release receipt](validation/persistent-shell-release-2026-08-31.md).
