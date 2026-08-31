@@ -1,19 +1,23 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Filing Vault implemented on isolated codex/filing-vault; local
-validation passed (463 tests). Runtime/API/storage/timer not deployed. Previously approved
-review UX is published; protected state and separate cutover gates are unchanged.**
+Status: **Filing Vault publication authorized; integrating current main and
+verifying CI/Pages. Private runtime activation remains separately unconfigured.
+Protected inputs, prior UX and Operations ordering are preserved.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Filing Vault — local implementation, 2026-08-31
+## Filing Vault — publication authorized, 2026-08-31
 
 Work record: [issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13).
 Canonical GitHub ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
 default `main`. The isolated branch started at **9d9e7bef326a0e24a5f846ea1310dec24a647019**
-and now includes its verified documentation-only successor **f2df59740b095417e3883fd81ac0a16c1d16fdad**.
+and incorporates **f2df59740b095417e3883fd81ac0a16c1d16fdad** plus the newer
+Operations-history merge **7a1108fb2e32c39f6af943395c1bb9b9a550d26f**.
+The owner explicitly requested **Publish** after implementation commit
+`71b55ec3e35128f438c860ce01f4fb64b22100cc` and runtime limits were reported.
+Canonical PR/CI/Pages publication is authorized; it is not complete yet.
 It adds the source-aware Filing Vault API, private runtime storage, acknowledgements,
 30-day hashed document retention, version history, lifecycle tooling and dashboard
 links/viewer. No protected artifact, ingestion ledger, producer workflow, schedule,
@@ -60,6 +64,51 @@ this session's fresh remote HTTP probes failed, so current live bytes were not
 independently reverified. No writer or simulation was dispatched. Obsolete queued
 runs `33219808359` and `33221027676` remain. Rename/privacy, legacy retirement,
 held PR #3 and external credential/device acceptance remain separate work.
+
+## Operations history ordering — retained pre-merge checkpoint, 2026-08-31
+
+Publication-session update: live GitHub proves PR #14 merged at `7a1108f`.
+The earlier draft-stage evidence below is historical; the new Vault release
+preserves its source and tests. Deployment is checked independently.
+
+Issue #12 uses isolated branch `codex/operations-history-order`, based on canonical
+`main` `f2df59740b095417e3883fd81ac0a16c1d16fdad`, the documentation-only
+successor of deployed `9d9e7be`. The shared health-card renderer
+now sorts a copied timeline by parsed execution finish time (valid start fallback),
+newest first, with deterministic ID/URL ties. Operations and its Overview preview
+share DOM, link and timestamp order. Native horizontal scrolling remains unchanged;
+refresh rebuilds the strip at its leftmost/latest item. No backend, stored state,
+workflow, scheduling, alert, simulation or hosting configuration changed.
+
+Local verification: **296 active Python tests passed**, **47 DOM scenarios**,
+**10 native history scenarios** and **32 native notification scenarios** passed.
+Generated TEST previews passed desktop/mobile-width native scrolling and refresh
+checks. Physical keyboard/touch/Safari acceptance remains unverified.
+
+Implementation `39f7edc28eda1ce4a309a2069321ee27d2574f94` is pushed in
+[draft PR #14](https://github.com/maglothinm/MyETF-Intelligence/pull/14).
+Canonical CI [33387285664](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33387285664)
+succeeded with 214 tests and Linux `verify.sh` reporting `VERIFICATION PASSED`.
+This documentation-only successor records that result. The fix is not merged
+or deployed; its release must use the existing read-only publisher because the
+Pages push-path filter does not include the changed frontend asset.
+
+Fresh read-only GitHub audit found the earlier review UX publication complete:
+PR #10 merged to `9d9e7be`; main CI
+[33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349)
+and Pages
+[33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313)
+both succeeded on attempt 1. All 28 live public content files matched Pages
+artifact `9755242103`, with build `9d9e7be`. These results verify the previous release; they do not publish issue #12.
+
+Protected artifact metadata remains unchanged: Legislative `9749549239`
+(`33369634244`/1), Executive `9746602231` (`33360633323`/1), AI `9749567326`
+(`33369677492`/1). Exact workflow/job/attempt windows, expiry, ancestry and producer
+high-water checks passed across all 158 audited runs. No protected payload was
+restored or written; this is metadata/provenance continuity, not a new full ledger
+audit. Evidence is in ignored `.remediation/operations-history-audit/` in the shared
+workspace; local implementation/TEST preview are in its isolated worktree.
+See the active handoff for final local test results and publication status.
 
 ## Dashboard review UX — published and verified 2026-08-31 11:04 UTC
 

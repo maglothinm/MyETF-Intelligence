@@ -3,7 +3,7 @@
 Updated: **2026-08-31 UTC**
 Work record: [issue #13 — 30-Day Filing Vault](https://github.com/maglothinm/MyETF-Intelligence/issues/13)
 
-## Current task and exact delivery state
+## Current task — publish the approved Filing Vault
 
 Implement private 30-day filing storage, source-aware retrieval and an integrated
 evidence viewer. Work is isolated in **codex/filing-vault**, worktree
@@ -14,10 +14,13 @@ successor `f2df59740b095417e3883fd81ac0a16c1d16fdad` and its release evidence.
 The original shared checkout, its other branches and untracked `.codex/` are
 preserved. Never implement or dispatch in legacy `maglothinm/MyETF`.
 
-**Local implementation and verification are complete on the isolated branch.
-No Vault runtime, schema migration, bucket, timer or Pages release is deployed.**
-There is no new Vault Actions run. The earlier owner's Publish request concerned
-PR #10; it is not treated as a Vault publication instruction.
+**The owner now explicitly requests Publish for this Vault implementation.**
+Release commit `71b55ec3e35128f438c860ce01f4fb64b22100cc` is being integrated
+with canonical main `7a1108fb2e32c39f6af943395c1bb9b9a550d26f` (Operations
+history PR #14). Push, canonical PR/CI, merge and existing Pages deployment are
+authorized without another confirmation. No Vault release has completed yet.
+Private runtime/storage/migration/timer activation remains separately unconfigured;
+if absent, the released interface must retain honest catalog-only availability.
 
 ## Implementation
 
@@ -98,13 +101,18 @@ IDs, producing attempts, hashes and expiration.
 
 ## Remaining configuration and next safe action
 
-Review the committed isolated implementation. Before publication, provision the existing application's PostgreSQL database, private Supabase bucket,
+Finish integration tests, publish the approved canonical PR, require exact-source CI,
+then merge and independently verify Pages and protected continuity. In parallel,
+check whether the existing application runtime is configured; do not block safe
+code/catalog publication merely because private retrieval is not activated.
+To activate retrieval, provision the existing PostgreSQL database, private Supabase bucket,
 server-only storage/signing credentials and HTTPS API host. Run the explicit additive
 migration; configure exact origins/agency hosts and truthfully accepted government
 source notices. Supply catalog metadata from verified canonical publisher output,
 install the runtime daily timer, then set the public `FILING_VAULT_API_ORIGIN`
 repository variable and release through canonical CI/Pages. Static publication
-alone cannot activate cached viewing. No credentials or settings were changed.
+alone cannot activate cached viewing. No credentials or settings were changed. Source acknowledgements are not
+implied by publication authorization.
 
 Verify private storage/database isolation, HTTPS/CORS, aggregate proxy/egress rate
 limits, exact source access, timer execution and physical mobile acceptance before

@@ -357,8 +357,25 @@ protected inventories and simulator history. Physical-device acceptance remains
 open. The final documentation-only evidence was prepared in an isolated worktree
 because another task switched the shared checkout.
 
+## D-2026-08-31-025 — Present Operations run history newest first
 
-## D-2026-08-31-025 — Keep raw Filing Vault evidence in private runtime storage
+**Decision:** Issue #12 orders a copied health timeline by the actual retained
+execution timestamp, descending, with stable descending run ID and URL ties.
+Use a valid finish timestamp, falling back to a valid start timestamp when needed;
+undated records follow dated records. The shared Overview preview uses the same
+ordering as Operations.
+
+**Reason:** The renderer reversed the model's already newest-first history.
+Explicit datetime ordering also handles ascending or mixed API results without
+reversing CSS, focus order, labels or record links.
+
+**Consequence:** Native horizontal scrolling moves toward older runs on the right.
+Each refresh starts at the latest item. Source arrays, stored chronology,
+health status, schedules and state writers remain unchanged. No extra chronology
+copy, slider controls or selection state is introduced. Native Node regression
+checks complement optional DOM tests in the existing watched dashboard CI test file.
+
+## D-2026-08-31-026 — Keep raw Filing Vault evidence in private runtime storage
 
 **Decision:** Issue #13 adds the Vault to the existing Flask/SQLAlchemy/Supabase
 architecture and links it from the existing generated dashboard. Private runtime
@@ -379,3 +396,20 @@ relationships. Local PDF.js rendering preserves original bytes and avoids blank
 native embeds; its code assets and licenses are pinned locally. API/storage
 configuration, verified catalog delivery, runtime timer installation and publication
 must be verified separately before the feature can be described as operational.
+
+## D-2026-08-31-027 — Publish the approved Filing Vault through canonical Pages
+
+**Decision:** The owner's explicit Publish instruction authorizes pushing the
+Vault branch, canonical PR/CI, merge and the existing read-only Pages publisher.
+Preserve current main's Operations-history fix and all previous release evidence.
+
+**Reason:** The implemented source-aware runtime and integrated interface can be
+released without changing protected state. Deployment status must still distinguish
+published code/catalog UI from configured, operational cached-document retrieval.
+
+**Consequence:** Require successful CI on the exact integrated source, validated
+protected producer attempts/high-water marks, and verified Pages artifact/live
+content. With no runtime configuration, publish the honest catalog-only state;
+never invent API/storage credentials, source acknowledgements or cached availability.
+No production writer, simulation or real alert dispatch is authorized. Keep issue
+#13 open until private runtime and source/device acceptance are verified.
