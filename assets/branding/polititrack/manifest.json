@@ -1,0 +1,116 @@
+{
+  "source_archive": "PolitiTrack_Icon_Assets.zip",
+  "source_archive_sha256": "0fbc21472cce75ee3d1f47040683dfe8e4a1b1044cd892f12e75c599b40cf65a",
+  "files": [
+    {
+      "name": "android-chrome-192x192.png",
+      "bytes": 53144,
+      "sha256": "6e12da9bda3d07c2c94d6709cb42f4c93d236e3bd4c1ec4bbd29357cbd038fb5"
+    },
+    {
+      "name": "android-chrome-512x512.png",
+      "bytes": 312235,
+      "sha256": "e5b53467a372e09cdcd18243b62fe09f4896464eb7fcf75651ef2a2b37d501d1"
+    },
+    {
+      "name": "apple-touch-icon.png",
+      "bytes": 47658,
+      "sha256": "4cd43441f356cd3d8d6bd223f0ebf75ea94ee4f832547023e2baeb01ae064980"
+    },
+    {
+      "name": "favicon-16x16.png",
+      "bytes": 827,
+      "sha256": "df69b9bca8ee591d6b2d5899fa36b3eb7e169c2a6dbb553f872c9e39f8708b7b"
+    },
+    {
+      "name": "favicon-32x32.png",
+      "bytes": 2642,
+      "sha256": "942fad4ec76bebec061b7219a24274dcacafef6399665aa3de661a5e85e3892a"
+    },
+    {
+      "name": "favicon.ico",
+      "bytes": 8800,
+      "sha256": "2924cde4109e26d0f1596efdfbb91a1e175e98b57e62bfa66e9969cedbdb979b"
+    },
+    {
+      "name": "polititrack-header-128.png",
+      "bytes": 27152,
+      "sha256": "55e3bf85e5e2d29bbdb7ffeec6c338a9ac645abfb34a21aeb6c6dad97242ab30"
+    },
+    {
+      "name": "polititrack-header-40.png",
+      "bytes": 3871,
+      "sha256": "4768b4515b6be1a9e1c59ca82c7b8ae4293f48271b061188dff7e2e7c4c80ee2"
+    },
+    {
+      "name": "polititrack-header-48.png",
+      "bytes": 5296,
+      "sha256": "e79b2684f82f5813c429fe7a6f2be60ae56f252a362280cbb380f863b881ad6f"
+    },
+    {
+      "name": "polititrack-header-64.png",
+      "bytes": 8519,
+      "sha256": "caca3a70e14f7aa17c002979ff76b21877b4a049df6a1fa707d0d1899e81563c"
+    },
+    {
+      "name": "polititrack-header-96.png",
+      "bytes": 16926,
+      "sha256": "295b4de80d957b0f296efe70eb69efe0926789891bc81334f38f4a94b9973537"
+    },
+    {
+      "name": "polititrack-icon-128x128.png",
+      "bytes": 27152,
+      "sha256": "55e3bf85e5e2d29bbdb7ffeec6c338a9ac645abfb34a21aeb6c6dad97242ab30"
+    },
+    {
+      "name": "polititrack-icon-16x16.png",
+      "bytes": 827,
+      "sha256": "df69b9bca8ee591d6b2d5899fa36b3eb7e169c2a6dbb553f872c9e39f8708b7b"
+    },
+    {
+      "name": "polititrack-icon-180x180.png",
+      "bytes": 47658,
+      "sha256": "4cd43441f356cd3d8d6bd223f0ebf75ea94ee4f832547023e2baeb01ae064980"
+    },
+    {
+      "name": "polititrack-icon-192x192.png",
+      "bytes": 53144,
+      "sha256": "6e12da9bda3d07c2c94d6709cb42f4c93d236e3bd4c1ec4bbd29357cbd038fb5"
+    },
+    {
+      "name": "polititrack-icon-256x256.png",
+      "bytes": 86951,
+      "sha256": "9cd9426c56af5b87d1ba35b2545178b5528d41c9cc683f43ba4cfff6aff8fe3d"
+    },
+    {
+      "name": "polititrack-icon-32x32.png",
+      "bytes": 2642,
+      "sha256": "942fad4ec76bebec061b7219a24274dcacafef6399665aa3de661a5e85e3892a"
+    },
+    {
+      "name": "polititrack-icon-48x48.png",
+      "bytes": 5296,
+      "sha256": "e79b2684f82f5813c429fe7a6f2be60ae56f252a362280cbb380f863b881ad6f"
+    },
+    {
+      "name": "polititrack-icon-512x512.png",
+      "bytes": 312235,
+      "sha256": "e5b53467a372e09cdcd18243b62fe09f4896464eb7fcf75651ef2a2b37d501d1"
+    },
+    {
+      "name": "polititrack-icon-64x64.png",
+      "bytes": 8519,
+      "sha256": "caca3a70e14f7aa17c002979ff76b21877b4a049df6a1fa707d0d1899e81563c"
+    },
+    {
+      "name": "polititrack-icon-original-1254.png",
+      "bytes": 1733220,
+      "sha256": "13eec44b839f0c4a55ccb9d04ecf7569cec5808c8ddc5e1f2887e6e5098270b2"
+    },
+    {
+      "name": "PolitiTrack.ico",
+      "bytes": 137050,
+      "sha256": "7165f3fb7a5f51a959fc48be41cb38b6844baf9d705648e5b9689695759840b1"
+    }
+  ]
+}

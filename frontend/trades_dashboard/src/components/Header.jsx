@@ -1,11 +1,17 @@
 import React from 'react';
-import logo from '../images/flag_circle.jpeg';
 
 const Header = () => {
     return (
         <div className="header">
             <div className="header-left">
-                <img src={logo} alt="Logo" className="logo" />
+                <img
+                    src={`${process.env.PUBLIC_URL}/polititrack-header-64.png`}
+                    srcSet={`${process.env.PUBLIC_URL}/polititrack-header-128.png 2x`}
+                    alt=""
+                    width="50"
+                    height="50"
+                    className="logo"
+                />
                 <h1>PolitiTrack</h1>
             </div>
             <div className="header-right">
