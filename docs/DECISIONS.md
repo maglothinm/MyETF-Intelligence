@@ -357,7 +357,25 @@ protected inventories and simulator history. Physical-device acceptance remains
 open. The final documentation-only evidence was prepared in an isolated worktree
 because another task switched the shared checkout.
 
-## D-2026-08-31-025 — Bootstrap retained history without creating new events
+## D-2026-08-31-025 — Present Operations run history newest first
+
+**Decision:** Issue #12 orders a copied health timeline by the actual retained
+execution timestamp, descending, with stable descending run ID and URL ties.
+Use a valid finish timestamp, falling back to a valid start timestamp when needed;
+undated records follow dated records. The shared Overview preview uses the same
+ordering as Operations.
+
+**Reason:** The renderer reversed the model's already newest-first history.
+Explicit datetime ordering also handles ascending or mixed API results without
+reversing CSS, focus order, labels or record links.
+
+**Consequence:** Native horizontal scrolling moves toward older runs on the right.
+Each refresh starts at the latest item. Source arrays, stored chronology,
+health status, schedules and state writers remain unchanged. No extra chronology
+copy, slider controls or selection state is introduced. Native Node regression
+checks complement optional DOM tests in the existing watched dashboard CI test file.
+
+## D-2026-08-31-026 — Bootstrap retained history without creating new events
 
 **Decision:** Issue #11 uses the combined normalized Legislative/Executive
 transaction universe independently of AI candidate selection. Discover and
@@ -398,3 +416,9 @@ writer, protected artifact or hosting path is introduced. Local acceptance
 produced 17 building profiles and 122 pending observations from real artifact
 copies. Deployment and live pending reduction remain unverified; the existing
 manual-production, held-PR and cutover gates are not relaxed.
+
+
+Release authorization: the owner requested “Release the commit”. Integrate the
+already-approved Operations ordering change from canonical main, retain both
+regression suites, and publish through the existing PR/CI/Pages path. This does
+not authorize a new manual production or simulation run or relax existing gates.

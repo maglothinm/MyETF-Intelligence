@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 
+import pytest
+
 from scripts.build_trade_dashboard import (
     build_parser,
     build_payload,
@@ -656,6 +658,19 @@ def test_dashboard_navigation_and_dialog_ids_remain_unique(tmp_path: Path) -> No
         assert not soup.select("script:not([src]), style, [onclick]")
         assert all(node.get("aria-label") for node in soup.select("button.help, button.icon-button"))
         assert "connect-src 'self'" in str(soup.find("meta", attrs={"http-equiv": "Content-Security-Policy"}))
+
+
+def test_operations_history_ordering() -> None:
+    """Run chronology regressions in the existing CI selection without JSDOM."""
+    node = os.environ.get("POLITITRACK_TEST_NODE") or shutil.which("node")
+    if not node:
+        pytest.skip("Node is unavailable; run operations_history.test.cjs in Linux CI")
+    repository = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [node, "--test", "tests/operations_history.test.cjs"],
+        cwd=repository, capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_dashboard_release_checks(tmp_path: Path) -> None:
