@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from scripts.investor_edge import (
+    LEADERBOARD_FILE,
     OBSERVATION_FILE,
+    PROFILE_FILE,
     InvestorEdgeRuntime,
     MarketHistoryProvider,
     _rows_cover,
@@ -15,6 +17,7 @@ from scripts.investor_edge import (
     history_trade_eligibility,
     investor_identity,
     investor_key,
+    load_config,
 )
 
 
@@ -896,3 +899,346 @@ def test_market_coverage_allows_long_weekend_but_not_missing_trading_week() -> N
         long_weekend_rows, date(2025, 1, 3), date(2025, 1, 7)
     ) is True
     assert _rows_cover(stale_rows, date(2025, 1, 6), date(2025, 1, 10)) is False
+
+
+def population_history(*, prolific_count: int = 1) -> list[dict[str, object]]:
+    start = date(2024, 1, 1)
+    records = [
+        purchase(start + timedelta(days=index), trade_id=f"a-{index}", filer="Alpha", branch="legislative")
+        for index in range(prolific_count)
+    ]
+    records.extend([
+        purchase(start, trade_id="b", filer="Beta", branch="legislative"),
+        purchase(start, trade_id="c", filer="Beta", owner="Spouse", branch="legislative"),
+        purchase(start, trade_id="d", filer="Delta", branch="executive"),
+    ])
+    return records
+
+
+def population_provider() -> DeterministicProvider:
+    return DeterministicProvider(
+        price_rows(date(2024, 1, 1), [0.002] * 800),
+        price_rows(date(2024, 1, 1), [0.0005] * 800),
+    )
+
+
+def test_population_discovery_is_durable_before_any_market_work(tmp_path: Path) -> None:
+    provider = population_provider()
+    original_sector = provider.sector
+    calls = []
+
+    def inspect_discovery(ticker: str) -> dict[str, object]:
+        profiles = json.loads((tmp_path / PROFILE_FILE).read_text(encoding="utf-8"))["profiles"]
+        published = json.loads((tmp_path / LEADERBOARD_FILE).read_text(encoding="utf-8"))
+        assert len(profiles) == 4
+        assert published["published_profile_count"] == 4
+        assert published["building_profile_count"] == 4
+        assert all(profile["sample_count"] == 0 for profile in profiles.values())
+        calls.append(ticker)
+        return original_sector(ticker)
+
+    provider.sector = inspect_discovery
+    runtime = InvestorEdgeRuntime(core_config(backfill_analysis_limit_per_run=1), tmp_path, provider, {})
+    leaderboard = runtime.refresh_leaderboard(population_history(), as_of=date(2025, 6, 1))
+
+    assert len(leaderboard) == 4
+    assert len(calls) == 1  # Deferred profiles do not spend sector requests.
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 3
+    assert runtime.population_metadata["backfill_processed_this_run"] == 1
+
+
+def test_zero_budget_publishes_all_building_profiles_and_actual_population_counts(tmp_path: Path) -> None:
+    provider = population_provider()
+
+    def forbidden_market(*args: object, **kwargs: object) -> object:
+        raise AssertionError("discovery must not call a market provider")
+
+    provider.sector = forbidden_market
+    provider.daily = forbidden_market
+    history = population_history()
+    history.append(purchase(date(2024, 1, 1), trade_id="excluded", ticker="SPY", branch="executive", parse_confidence="low"))
+    runtime = InvestorEdgeRuntime(core_config(backfill_analysis_limit_per_run=0), tmp_path, provider, {})
+
+    leaderboard = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    payload = json.loads((tmp_path / LEADERBOARD_FILE).read_text(encoding="utf-8"))
+
+    assert len(leaderboard) == 4
+    assert all(profile["sample_count"] == 0 and profile["edge_score"] == 50 for profile in leaderboard)
+    assert all(profile["followable_alpha"] is None for profile in leaderboard)
+    assert all(profile["backfill_pending_trade_count"] == 1 for profile in leaderboard)
+    assert payload["historical_transaction_count"] == 5
+    assert payload["eligible_purchase_count"] == 4
+    assert payload["unique_investor_identity_count"] == 4
+    assert payload["published_profile_count"] == 4
+    assert payload["completed_profile_count"] == 0
+    assert payload["building_profile_count"] == 4
+    assert payload["backfill_pending_observation_count"] == 4
+    assert payload["network_requests_this_run"] == 0
+    assert payload["branch_transaction_counts"] == {"legislative": 3, "executive": 2}
+    assert payload["excluded_reason_counts"]["fund_or_etf"] == 1
+    assert payload["excluded_reason_counts"]["low_parse_confidence"] == 1
+
+
+def test_fair_population_backfill_does_not_let_prolific_investor_consume_run(tmp_path: Path) -> None:
+    runtime = InvestorEdgeRuntime(core_config(backfill_analysis_limit_per_run=4), tmp_path, population_provider(), {})
+    history = population_history(prolific_count=20)
+
+    first = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+
+    assert len(first) == 4
+    assert runtime.backfill_processed_this_run == 4
+    assert {profile["investor_key"]: profile["sample_count"] for profile in first} == {
+        "alpha|self": 1, "beta|self": 1, "beta|spouse": 1, "delta|self": 1,
+    }
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 19
+
+
+def test_zero_candidate_same_day_resume_decreases_pending_without_profile_cache_delay(tmp_path: Path) -> None:
+    config = core_config(backfill_analysis_limit_per_run=2, profile_cache_hours=168)
+    history = population_history(prolific_count=4)
+    first = InvestorEdgeRuntime(config, tmp_path, population_provider(), {})
+    first.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    before = first.population_metadata["backfill_pending_observation_count"]
+    stored = json.loads((tmp_path / OBSERVATION_FILE).read_text(encoding="utf-8"))
+    resumed = InvestorEdgeRuntime(
+        config, tmp_path, population_provider(), first.profiles, stored["observations"],
+        last_backfill_investor_key=stored["backfill"]["last_investor_key"],
+    )
+
+    second = resumed.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+
+    assert len(second) == 4
+    assert resumed.backfill_processed_this_run == 2
+    assert resumed.population_metadata["backfill_pending_observation_count"] == before - 2
+    assert set(first.observations) < set(resumed.observations)
+    assert {observation["investor_key"] for observation in resumed.observations.values()} == {
+        "alpha|self", "beta|self", "beta|spouse", "delta|self",
+    }
+
+
+def test_fair_cursor_restores_and_rotates_past_partial_profiles_next_day(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import scripts.investor_edge as edge_module
+
+    config = core_config(backfill_analysis_limit_per_run=2)
+    history = population_history()
+    first = InvestorEdgeRuntime(config, tmp_path, population_provider(), {})
+    first.refresh_leaderboard(history, as_of=date(2024, 1, 10))
+    assert first.last_backfill_investor_key == "beta|self"
+    assert all(profile["profile_status"] == "partial" for profile in first.profiles.values())
+    monkeypatch.setattr(edge_module, "load_config", lambda path=None: config)
+    monkeypatch.setattr(edge_module, "MarketHistoryProvider", lambda **kwargs: population_provider())
+    resumed = InvestorEdgeRuntime.create(
+        ai_dir=tmp_path, session=object(), alphavantage_api_key="", finnhub_api_key="",
+        alphavantage_entitlement="", request_timeout=(1, 1),
+    )
+
+    resumed.refresh_leaderboard(history, as_of=date(2024, 1, 11))
+
+    assert resumed.backfill_processed_this_run == 2
+    newly_attempted = {
+        observation["investor_key"] for observation in resumed.observations.values()
+        if observation["last_attempted_as_of"] == "2024-01-11"
+    }
+    assert newly_attempted == {"beta|spouse", "delta|self"}
+
+
+def test_cache_only_publication_does_not_spend_budget_and_new_filings_enrich_profile(tmp_path: Path) -> None:
+    config = core_config(backfill_analysis_limit_per_run=30)
+    history = population_history()
+    runtime = InvestorEdgeRuntime(config, tmp_path, population_provider(), {})
+    runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 0
+    before_calls = list(runtime.provider.daily_calls)
+    history.append(purchase(date(2024, 2, 1), trade_id="new-history", filer="Alpha", branch="legislative"))
+
+    pending = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1), allow_backfill=False)
+    assert runtime.provider.daily_calls == before_calls
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 1
+    assert len(pending) == 4
+    advanced = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    alpha = next(profile for profile in advanced if profile["investor_key"] == "alpha|self")
+    assert alpha["sample_count"] == 2
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 0
+    assert runtime.population_metadata["historical_transaction_count"] == 5
+
+
+def test_population_limits_and_order_are_deterministic(tmp_path: Path) -> None:
+    config = core_config(backfill_analysis_limit_per_run=2, leaderboard_max_investors=3)
+    history = population_history(prolific_count=3)
+    forward = InvestorEdgeRuntime(config, tmp_path / "forward", population_provider(), {})
+    reverse = InvestorEdgeRuntime(config, tmp_path / "reverse", population_provider(), {})
+
+    first = forward.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    second = reverse.refresh_leaderboard(list(reversed(history)), as_of=date(2025, 6, 1))
+
+    assert len(first) == len(second) == 3
+    assert forward.population_metadata["unique_investor_identity_count"] == 4
+    assert forward.population_metadata["published_profile_count"] == 3
+    assert set(forward.observations) == set(reverse.observations)
+    assert [profile["investor_key"] for profile in first] == [profile["investor_key"] for profile in second]
+
+
+def test_population_stops_market_work_at_request_budget_but_keeps_inventory(tmp_path: Path) -> None:
+    class OfflineFailure:
+        calls = 0
+
+        def get(self, *args: object, **kwargs: object) -> object:
+            self.calls += 1
+            raise RuntimeError("deterministic offline provider failure")
+
+    session = OfflineFailure()
+    config = core_config(backfill_analysis_limit_per_run=30, network_request_budget_per_run=2)
+    provider = MarketHistoryProvider(
+        ai_dir=tmp_path, session=session, alphavantage_api_key="test-only", finnhub_api_key="test-only", config=config,
+    )
+    runtime = InvestorEdgeRuntime(config, tmp_path, provider, {})
+
+    leaderboard = runtime.refresh_leaderboard(population_history(), as_of=date(2025, 6, 1))
+
+    assert len(leaderboard) == 4
+    assert session.calls == provider.network_requests == 2
+    assert runtime.backfill_processed_this_run == 1
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 4
+    assert len(runtime.observations) == 1  # Unattempted identities are not labeled provider failures.
+
+
+def test_candidates_after_maintenance_are_cache_only_and_still_time_censored(tmp_path: Path) -> None:
+    provider = population_provider()
+    runtime = InvestorEdgeRuntime(core_config(), tmp_path, provider, {})
+    history = population_history()
+    runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    global_profile = dict(runtime.profiles["alpha|self"])
+    candidate = purchase(
+        date(2024, 1, 8), trade_id="candidate", filer="Alpha", filed_date="2024-01-10",
+    )
+
+    def forbidden_market(*args: object, **kwargs: object) -> object:
+        raise AssertionError("candidate must not start a second historical market queue")
+
+    provider.daily = forbidden_market
+    provider.sector = forbidden_market
+    profile = runtime.profile_for_trade(candidate, [*history, candidate])
+
+    assert profile["as_of_date"] == "2024-01-10"
+    assert profile["followable_alpha_by_horizon"]["5"] is not None
+    assert profile["followable_alpha_by_horizon"]["20"] is None
+    assert profile["followable_alpha_by_horizon"]["60"] is None
+    assert profile["followable_alpha_by_horizon"]["120"] is None
+    assert runtime.profiles["alpha|self"] == global_profile
+
+
+def test_configured_thirty_observation_budget_preserves_forty_trade_long_history(tmp_path: Path) -> None:
+    config = load_config()
+    assert config["backfill_analysis_limit_per_run"] == 30
+    assert config["network_request_budget_per_run"] == 40
+    assert config["max_history_trades"] == 40
+    assert config["leaderboard_max_investors"] == 40
+    assert config["history_lookback_days"] == 2200
+    history = population_history(prolific_count=45)
+    runtime = InvestorEdgeRuntime(config, tmp_path, population_provider(), {})
+
+    runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+
+    assert runtime.backfill_processed_this_run == 30
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 13
+    assert runtime.population_metadata["historical_transaction_count"] == 48
+    resumed = InvestorEdgeRuntime(config, tmp_path, population_provider(), runtime.profiles, runtime.observations)
+    resumed.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    assert resumed.backfill_processed_this_run == 13
+    assert resumed.population_metadata["backfill_pending_observation_count"] == 0
+    assert resumed.profiles["alpha|self"]["sample_count"] == 40
+    assert resumed.population_metadata["completed_profile_count"] == 1
+    assert resumed.population_metadata["building_profile_count"] == 3
+    assert all(observation["trade_id"] not in {"a-0", "a-1", "a-2", "a-3", "a-4"} for observation in resumed.observations.values())
+
+
+def cached_population_provider(
+    directory: Path, config: dict[str, object], *, cached_sector: bool = True,
+) -> MarketHistoryProvider:
+    class NoNetwork:
+        def get(self, *args: object, **kwargs: object) -> object:
+            pytest.fail("An exhausted request budget must use only local market data")
+
+    daily_dir = directory / "market-cache"
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    fixtures = population_provider()
+    for ticker, rows in (("AAA", fixtures.stock_rows), ("XLK", fixtures.benchmark_rows)):
+        (daily_dir / f"{ticker}-daily.json").write_text(json.dumps({"rows": rows}), encoding="utf-8")
+    if cached_sector:
+        sector_dir = directory / "investor-edge-market"
+        sector_dir.mkdir(parents=True, exist_ok=True)
+        (sector_dir / "AAA-profile.json").write_text(json.dumps({"industry": "Technology"}), encoding="utf-8")
+    return MarketHistoryProvider(
+        ai_dir=directory, session=NoNetwork(), alphavantage_api_key="test-only",
+        finnhub_api_key="test-only", config=config,
+    )
+
+
+@pytest.mark.parametrize(("request_budget", "already_spent"), [(0, 0), (2, 2)])
+def test_exhausted_network_budget_still_derives_cached_market_observations(
+    tmp_path: Path, request_budget: int, already_spent: int,
+) -> None:
+    config = core_config(network_request_budget_per_run=request_budget)
+    provider = cached_population_provider(tmp_path, config)
+    provider.network_requests = already_spent
+    runtime = InvestorEdgeRuntime(config, tmp_path, provider, {})
+    trade = purchase(date(2024, 1, 15), trade_id="cached", branch="legislative")
+
+    leaderboard = runtime.refresh_leaderboard([trade], as_of=date(2025, 6, 1))
+
+    assert provider.network_requests == already_spent
+    assert runtime.backfill_processed_this_run == 1
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 0
+    assert leaderboard[0]["sample_count"] == 1
+    assert leaderboard[0]["followable_alpha"] is not None
+    assert len(runtime.observations) == 1
+    assert next(iter(runtime.observations.values()))["benchmark"] == "XLK"
+    assert provider.errors == []
+
+
+def test_cache_misses_do_not_block_later_cached_identity_or_create_failed_attempts(tmp_path: Path) -> None:
+    config = core_config(network_request_budget_per_run=0, backfill_analysis_limit_per_run=1)
+    provider = cached_population_provider(tmp_path, config)
+    runtime = InvestorEdgeRuntime(config, tmp_path, provider, {})
+    history = [
+        purchase(date(2024, 1, 15), trade_id="miss-1", filer="Alpha", ticker="MISS"),
+        purchase(date(2024, 1, 16), trade_id="miss-2", filer="Alpha", ticker="MISS"),
+        purchase(date(2024, 1, 15), trade_id="cached", filer="Beta"),
+    ]
+
+    leaderboard = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+
+    assert provider.network_requests == 0
+    assert runtime.backfill_processed_this_run == 1
+    assert runtime.last_backfill_investor_key == "beta|self"
+    assert len(runtime.attempted_observation_keys) == 1
+    assert runtime.population_metadata["backfill_pending_observation_count"] == 2
+    assert {item["trade_id"] for item in runtime.observations.values()} == {"cached"}
+    alpha = next(profile for profile in leaderboard if profile["investor_key"] == "alpha|self")
+    assert alpha["sample_count"] == 0
+    assert all(item["observation_status"] == "deferred" for item in alpha["trade_results"])
+    assert all(not item.get("retry_after_as_of") for item in runtime.observations.values())
+
+
+def test_cache_only_extension_preserves_partial_observation_sector_and_identity(tmp_path: Path) -> None:
+    config = core_config(network_request_budget_per_run=0)
+    prior_runtime = InvestorEdgeRuntime(config, tmp_path, population_provider(), {})
+    trade = purchase(date(2024, 1, 1), trade_id="partial")
+    prior_runtime.profile_for_investor(investor_key(trade), [trade], as_of=date(2024, 1, 10))
+    prior_keys = set(prior_runtime.observations)
+    prior_observation = next(iter(prior_runtime.observations.values()))
+    prior_short_outcome = prior_observation["followable_outcomes"]["5"]
+    assert "120" not in prior_observation["followable_outcomes"]
+    provider = cached_population_provider(tmp_path, config, cached_sector=False)
+    resumed = InvestorEdgeRuntime(config, tmp_path, provider, prior_runtime.profiles, prior_runtime.observations)
+
+    leaderboard = resumed.refresh_leaderboard([trade], as_of=date(2025, 6, 1))
+
+    assert provider.network_requests == 0
+    assert resumed.backfill_processed_this_run == 1
+    assert set(resumed.observations) == prior_keys
+    observation = next(iter(resumed.observations.values()))
+    assert observation["benchmark"] == "XLK"
+    assert observation["followable_outcomes"]["5"] == prior_short_outcome
+    assert observation["followable_outcomes"]["120"] is not None
+    assert leaderboard[0]["backfill_pending_trade_count"] == 0

@@ -239,6 +239,9 @@ class AnalystRunResult:
     success: bool = False
     enabled: bool = True
     eligible_transaction_count: int = 0
+    historical_transaction_count: int = 0
+    historical_bootstrap_transaction_count: int = 0
+    investor_edge_maintenance_status: str = "not_run"
     skipped_existing_count: int = 0
     attempted_count: int = 0
     completed_count: int = 0
@@ -393,15 +396,96 @@ def load_schema(path: Path) -> dict[str, Any]:
     return schema
 
 
-def load_tracker_data(directory: Path | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def historical_trade_id(record: Mapping[str, Any]) -> str:
+    """Keep normal IDs; give pre-ID ledger rows a reproducible full SHA-256 ID.
+
+    Owner is deliberately part of the identity. A spouse's purchase must never
+    collapse into the filer's own purchase, even within one filing and date.
+    Amount distinguishes multiple otherwise-identical rows where it is retained.
+    No observation timestamp or input pathname participates in the identity.
+    """
+    retained_id = str(record.get("trade_id") or "").strip()
+    if retained_id:
+        return retained_id
+    fields = (
+        "source", "report_id", "filer", "owner", "asset", "ticker",
+        "transaction_type", "transaction_date", "amount",
+    )
+    identity = {key: normalize_text(str(record.get(key) or "")) for key in fields}
+    identity["report_id"] = normalize_text(str(
+        record.get("report_id") or record.get("filing_key") or record.get("source_url") or ""
+    ))
+    identity["source"] = identity["source"].casefold()
+    identity["ticker"] = identity["ticker"].upper()
+    return "historical-trade:" + json_hash(identity)
+
+
+def _merge_historical_trade(
+    previous: Mapping[str, Any], current: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Merge duplicate ledger updates without losing provenance/first observation."""
+    previous_primary = any(
+        isinstance(origin, Mapping) and origin.get("ledger") == "transactions.jsonl"
+        for origin in previous.get("history_provenance") or []
+    )
+    current_primary = any(
+        isinstance(origin, Mapping) and origin.get("ledger") == "transactions.jsonl"
+        for origin in current.get("history_provenance") or []
+    )
+    merged = (
+        {**current, **previous} if previous_primary and not current_primary
+        else {**previous, **current}
+    )
+    provenance: list[dict[str, Any]] = []
+    for record in (previous, current):
+        for origin in record.get("history_provenance") or []:
+            if isinstance(origin, Mapping) and dict(origin) not in provenance:
+                provenance.append(dict(origin))
+    merged["history_provenance"] = provenance
+    observed = [
+        (parsed, str(record["observed_at_utc"]))
+        for record in (previous, current)
+        if (parsed := parse_iso_datetime(str(record.get("observed_at_utc") or "")))
+        is not None
+    ]
+    if observed:
+        merged["observed_at_utc"] = min(observed, key=lambda item: item[0])[1]
+    # A fallback purchase copy cannot turn historical reconstruction into a new
+    # AI candidate. Normal later disclosures have their own stable trade IDs.
+    if previous.get("historical_bootstrap") is True or current.get("historical_bootstrap") is True:
+        merged["historical_bootstrap"] = True
+    return merged
+
+
+def load_tracker_data(
+    directory: Path | None, *, branch: str = ""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if directory is None or not directory.exists():
         return [], []
-    transactions = latest_by(read_jsonl(directory / "transactions.jsonl"), "trade_id")
-    # Preserve retained purchases created before the all-transaction ledger existed.
-    for purchase in read_jsonl(directory / "purchases.jsonl"):
-        trade_id = str(purchase.get("trade_id") or "")
-        if trade_id and trade_id not in transactions:
-            transactions[trade_id] = dict(purchase)
+    transactions: dict[str, dict[str, Any]] = {}
+    for ledger in ("transactions.jsonl", "purchases.jsonl"):
+        for retained in read_jsonl(directory / ledger):
+            record = dict(retained)
+            if not record.get("branch") and branch:
+                record["branch"] = branch
+            trade_id = historical_trade_id(record)
+            if not record.get("trade_id"):
+                record["trade_id"] = trade_id
+                record["trade_id_origin"] = "historical_fallback_v1"
+            record["history_provenance"] = [
+                dict(origin) for origin in record.get("history_provenance") or []
+                if isinstance(origin, Mapping)
+            ]
+            origin = {"branch": str(record.get("branch") or branch),
+                      "source": str(record.get("source") or ""), "ledger": ledger}
+            if origin not in record["history_provenance"]:
+                record["history_provenance"].append(origin)
+            if trade_id not in transactions:
+                transactions[trade_id] = record
+            else:
+                # The normalized all-transactions row is primary. The old
+                # purchases projection only supplies otherwise absent history.
+                transactions[trade_id] = _merge_historical_trade(transactions[trade_id], record)
     filings = latest_by(read_jsonl(directory / "filings.jsonl"), "filing_key")
     return list(transactions.values()), list(filings.values())
 
@@ -409,11 +493,40 @@ def load_tracker_data(directory: Path | None) -> tuple[list[dict[str, Any]], lis
 def merge_tracker_data(config: AnalystConfig) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     transactions: dict[str, dict[str, Any]] = {}
     filings: dict[str, dict[str, Any]] = {}
-    for directory in (config.legislative_dir, config.executive_dir):
-        branch_transactions, branch_filings = load_tracker_data(directory)
-        transactions.update(latest_by(branch_transactions, "trade_id"))
+    for branch, directory in (
+        ("legislative", config.legislative_dir), ("executive", config.executive_dir)
+    ):
+        branch_transactions, branch_filings = load_tracker_data(directory, branch=branch)
+        for record in branch_transactions:
+            trade_id = historical_trade_id(record)
+            transactions[trade_id] = _merge_historical_trade(transactions.get(trade_id, {}), record)
         filings.update(latest_by(branch_filings, "filing_key"))
     return list(transactions.values()), filings
+
+
+def load_complete_retained_transaction_history(
+    config: AnalystConfig,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Canonical Edge input, independent of model selection/AI batch limits."""
+    return merge_tracker_data(config)
+
+
+def select_new_analysis_candidates(
+    eligible: Sequence[Mapping[str, Any]], config: AnalystConfig,
+    state: AIState, rules_hash: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Historical reconstruction is history-only, never a newly filed signal."""
+    pending: list[dict[str, Any]] = []
+    skipped_existing = 0
+    for trade in eligible:
+        if trade.get("historical_bootstrap") is True:
+            continue
+        analysis_id = analysis_id_for_trade(trade, model=config.model, rules_hash=rules_hash)
+        if not config.reanalyze_existing and analysis_id in state.completed_analysis_ids:
+            skipped_existing += 1
+            continue
+        pending.append(dict(trade))
+    return pending[: max(0, config.max_analyses)], skipped_existing
 
 
 def filing_for_trade(
@@ -2251,7 +2364,7 @@ def _queue_candidate_alert(
 ) -> str | None:
     """Add one immutable alert snapshot to state before any channel is attempted."""
 
-    if config.suppress_alerts:
+    if config.suppress_alerts or analysis.get("historical_bootstrap") is True:
         return None
     requested_channels = _requested_candidate_channels(config)
     if not requested_channels:
@@ -2413,7 +2526,7 @@ def notify_candidate(
     Required Pushover is attempted before Gmail and retains its blocking semantics.
     """
 
-    if config.suppress_alerts:
+    if config.suppress_alerts or analysis.get("historical_bootstrap") is True:
         return False
     delivery_state = state or AIState()
     delivery_id = _queue_candidate_alert(config, analysis, delivery_state)
@@ -2521,6 +2634,7 @@ def build_analysis_record(
         "transaction_date": str(trade.get("transaction_date") or ""),
         "filed_date": str(trade.get("filed_date") or filing.get("filed_date") or ""),
         "observed_at_utc": str(trade.get("observed_at_utc") or ""),
+        "historical_bootstrap": trade.get("historical_bootstrap") is True,
         "amount": str(trade.get("amount") or ""),
         "source_url": str(trade.get("source_url") or filing.get("source_url") or ""),
         "parse_confidence": str(trade.get("parse_confidence") or ""),
@@ -2897,6 +3011,9 @@ def append_run_history(config: AnalystConfig, result: AnalystRunResult) -> None:
         "success": result.success,
         "enabled": result.enabled,
         "eligible_transaction_count": result.eligible_transaction_count,
+        "historical_transaction_count": result.historical_transaction_count,
+        "historical_bootstrap_transaction_count": result.historical_bootstrap_transaction_count,
+        "investor_edge_maintenance_status": result.investor_edge_maintenance_status,
         "skipped_existing_count": result.skipped_existing_count,
         "attempted_count": result.attempted_count,
         "completed_count": result.completed_count,
@@ -2932,6 +3049,9 @@ def write_step_summary(result: AnalystRunResult) -> None:
         "",
         f"- Status: **{'success' if result.success else 'failed'}**",
         f"- Eligible parsed directional transactions: **{result.eligible_transaction_count}**",
+        f"- Retained historical transactions: **{result.historical_transaction_count}**",
+        f"- Historical-only reconstructed transactions: **{result.historical_bootstrap_transaction_count}**",
+        f"- Investor Edge maintenance: **{result.investor_edge_maintenance_status}**",
         f"- New analyses completed: **{result.completed_count}**",
         f"- High priority: **{result.high_priority_count}**",
         f"- Watchlist: **{result.watchlist_count}**",
@@ -2968,6 +3088,59 @@ def write_step_summary(result: AnalystRunResult) -> None:
         handle.write("\n".join(lines) + "\n")
 
 
+def maintain_investor_edge(
+    runtime: InvestorEdgeRuntime | None,
+    historical_transactions: Sequence[Mapping[str, Any]],
+    warnings: list[str],
+    *,
+    allow_backfill: bool = True,
+) -> bool | None:
+    """Global, model-independent maintenance, including runs with no AI work.
+
+    The first pass owns the fair market-work budget. The final cache-only pass
+    publishes current inventory without granting a second per-run budget.
+    """
+    if runtime is None:
+        return False
+    if not runtime.enabled:
+        return None
+    try:
+        if allow_backfill:
+            leaderboard = runtime.refresh_leaderboard(historical_transactions)
+        else:
+            leaderboard = runtime.refresh_leaderboard(historical_transactions, allow_backfill=False)
+        runtime.save(leaderboard)
+        return True
+    except Exception as exc:  # Retain diagnostics without promoting incomplete state.
+        LOGGER.exception("Investor Edge profile refresh failed")
+        warnings.append(f"Investor Edge refresh: {_redact_edge_error(runtime, exc)}")
+        try:
+            runtime.save()
+        except Exception as save_exc:  # noqa: BLE001 - retain both failure reasons
+            LOGGER.exception("Investor Edge fallback persistence failed")
+            warnings.append(f"Investor Edge persistence: {_redact_edge_error(runtime, save_exc)}")
+        return False
+
+
+def _finish_analyst_run(
+    config: AnalystConfig,
+    result: AnalystRunResult,
+    state: AIState,
+    state_path: Path,
+) -> AnalystRunResult:
+    result.finished_utc = iso_utc()
+    result.success = not result.errors
+    if result.success:
+        state.last_success_utc = result.finished_utc
+    save_state(state_path, state)
+    all_analyses = read_jsonl(config.ai_dir / "analyses.jsonl")
+    write_latest_outputs(config, all_analyses, state)
+    write_json(config.result_path, asdict(result))
+    append_run_history(config, result)
+    write_step_summary(result)
+    return result
+
+
 def run_analyst(
     config: AnalystConfig,
     *,
@@ -3000,17 +3173,15 @@ def run_analyst(
         write_step_summary(result)
         return result
 
-    retried_alerts, alert_retry_errors = _retry_pending_candidate_alerts(
-        config, state, state_path
-    )
-    result.alerted_count += retried_alerts
-    result.errors.extend(alert_retry_errors)
-
     rules = load_rules(config.rules_path)
     schema = load_schema(config.schema_path)
     rules_hash = json_hash(rules)
-    all_transactions, filings = merge_tracker_data(config)
-    eligible = [trade for trade in all_transactions if eligible_trade(trade, rules)]
+    historical_transactions, filings = load_complete_retained_transaction_history(config)
+    result.historical_transaction_count = len(historical_transactions)
+    result.historical_bootstrap_transaction_count = sum(
+        trade.get("historical_bootstrap") is True for trade in historical_transactions
+    )
+    eligible = [trade for trade in historical_transactions if eligible_trade(trade, rules)]
     eligible.sort(
         key=lambda row: (
             str(row.get("observed_at_utc") or ""),
@@ -3027,14 +3198,9 @@ def run_analyst(
         if analysis_id:
             state.completed_analysis_ids.setdefault(analysis_id, result.started_utc)
 
-    pending: list[dict[str, Any]] = []
-    for trade in eligible:
-        analysis_id = analysis_id_for_trade(trade, model=config.model, rules_hash=rules_hash)
-        if not config.reanalyze_existing and analysis_id in state.completed_analysis_ids:
-            result.skipped_existing_count += 1
-            continue
-        pending.append(trade)
-    pending = pending[: config.max_analyses]
+    new_analysis_candidates, result.skipped_existing_count = select_new_analysis_candidates(
+        eligible, config, state, rules_hash
+    )
     result.attempted_count = 0
 
     session = session or build_session(config.repository_url or "PolitiTrack AI filing analyst")
@@ -3052,20 +3218,34 @@ def run_analyst(
                 or config.rules_path.with_name("investor_edge.yml")
             ),
         )
-    except Exception as exc:  # Investor Edge must never block the core analyst.
+    except Exception as exc:  # Enabled global maintenance must be durable to succeed.
         result.warnings.append(f"Investor Edge disabled: {type(exc).__name__}: {exc}")
-    ticker_map = load_sec_ticker_map(config, session, result.warnings)
+    # Discover every historical identity and fairly advance its market history
+    # before an individual current candidate can consume the shared Edge budget.
+    maintenance_ok = maintain_investor_edge(investor_edge, historical_transactions, result.warnings)
+    if maintenance_ok is False:
+        result.investor_edge_maintenance_status = "failed"
+        result.errors.append("Investor Edge global maintenance/persistence failed; protected state must not be promoted")
+        # Do not perform candidate work or send pending alerts in a run already
+        # known to be ineligible to publish authoritative delivery state.
+        return _finish_analyst_run(config, result, state, state_path)
+    ticker_map = (
+        load_sec_ticker_map(config, session, result.warnings) if new_analysis_candidates else {}
+    )
     new_analysis_records: list[dict[str, Any]] = []
     paper_events: list[dict[str, Any]] = []
 
-    trades_by_id = {str(item.get("trade_id") or ""): item for item in all_transactions}
+    trades_by_id = {str(item.get("trade_id") or ""): item for item in historical_transactions}
     latest_existing = latest_by(existing_analyses, "trade_id")
     refresh_limit = int((rules.get("analysis") or {}).get("max_market_refreshes_per_run", 50))
-    pending_ids = {str(item.get("trade_id") or "") for item in pending}
+    pending_ids = {str(item.get("trade_id") or "") for item in new_analysis_candidates}
     refresh_candidates = [
         row
         for trade_id, row in latest_existing.items()
-        if trade_id not in pending_ids and analysis_needs_market_refresh(row)
+        if trade_id not in pending_ids
+        and row.get("historical_bootstrap") is not True
+        and (trades_by_id.get(trade_id) or {}).get("historical_bootstrap") is not True
+        and analysis_needs_market_refresh(row)
     ]
     refresh_candidates.sort(
         key=lambda row: str(row.get("analyzed_at_utc") or ""), reverse=True
@@ -3082,7 +3262,7 @@ def run_analyst(
             refreshed = refresh_analysis_market(
                 prior,
                 trade,
-                all_transactions,
+                historical_transactions,
                 refreshed_market,
                 rules,
                 investor_edge,
@@ -3112,20 +3292,13 @@ def run_analyst(
                 result.paper_positions_opened += 1
             append_jsonl(config.ai_dir / "analyses.jsonl", [refreshed])
             save_state(state_path, state)
-            if upgraded and notify_candidate(
-                config,
-                refreshed,
-                state=state,
-                state_path=state_path,
-            ):
-                result.alerted_count += 1
         except Exception as exc:  # noqa: BLE001 - refresh retries on later runs
             result.warnings.append(
                 f"Market refresh {str(prior.get('ticker') or 'unknown')} / {trade_id}: "
                 f"{type(exc).__name__}: {exc}"
             )
 
-    for trade in pending:
+    for trade in new_analysis_candidates:
         result.attempted_count += 1
         try:
             filing = filing_for_trade(trade, filings)
@@ -3140,7 +3313,7 @@ def run_analyst(
             )
             document = document_text(trade, filing, config, session, result.warnings)
             context = build_analysis_context(
-                trade, filing, all_transactions, document, market, sec, rules
+                trade, filing, historical_transactions, document, market, sec, rules
             )
             ai_result = openai_analyze(
                 context,
@@ -3155,7 +3328,7 @@ def run_analyst(
                 market=market,
                 sec=sec,
                 document=document,
-                all_transactions=all_transactions,
+                all_transactions=historical_transactions,
                 rules=rules,
                 rules_hash=rules_hash,
                 config=config,
@@ -3192,13 +3365,6 @@ def run_analyst(
             if opened:
                 append_jsonl(config.ai_dir / "paper-portfolio.jsonl", [opened])
             save_state(state_path, state)
-            if should_alert and notify_candidate(
-                config,
-                record,
-                state=state,
-                state_path=state_path,
-            ):
-                result.alerted_count += 1
         except OpenAIQuotaError as exc:
             message = (
                 f"{str(trade.get('ticker') or 'unknown')} / "
@@ -3233,32 +3399,29 @@ def run_analyst(
     result.paper_positions_updated += updated
     result.paper_positions_closed += closed
 
-    if investor_edge is not None and investor_edge.enabled:
-        try:
-            leaderboard = investor_edge.refresh_leaderboard(all_transactions)
-            investor_edge.save(leaderboard)
-        except Exception as exc:  # Preserve the core analyst result and retry Edge later.
-            LOGGER.exception("Investor Edge profile refresh failed")
-            result.warnings.append(f"Investor Edge refresh: {type(exc).__name__}: {exc}")
-            try:
-                investor_edge.save()
-            except Exception as save_exc:  # noqa: BLE001 - fail open through persistence too
-                LOGGER.exception("Investor Edge fallback persistence failed")
-                result.warnings.append(
-                    f"Investor Edge persistence: {type(save_exc).__name__}: {save_exc}"
-                )
+    final_maintenance_ok = maintain_investor_edge(
+        investor_edge, historical_transactions, result.warnings, allow_backfill=False
+    )
+    result.investor_edge_maintenance_status = (
+        "failed" if maintenance_ok is False or final_maintenance_ok is False
+        else "disabled" if maintenance_ok is None else "complete"
+    )
+    if result.investor_edge_maintenance_status == "failed":
+        # Candidate-level scoring still fails open. Failure to publish durable
+        # global inventory is different: do not promote an incomplete AI state
+        # artifact as a successful run or silently label stale history current.
+        result.errors.append("Investor Edge global maintenance/persistence failed; protected state must not be promoted")
 
-    result.finished_utc = iso_utc()
-    result.success = not result.errors
-    if result.success:
-        state.last_success_utc = result.finished_utc
-    save_state(state_path, state)
-    all_analyses = read_jsonl(config.ai_dir / "analyses.jsonl")
-    write_latest_outputs(config, all_analyses, state)
-    write_json(config.result_path, asdict(result))
-    append_run_history(config, result)
-    write_step_summary(result)
-    return result
+    # Existing retries and newly queued candidates share the same bounded,
+    # channel-deduplicated delivery path, only after global publication succeeds.
+    # Historical bootstrap rows never enter this queue.
+    if not result.errors:
+        delivered_alerts, alert_errors = _retry_pending_candidate_alerts(
+            config, state, state_path
+        )
+        result.alerted_count += delivered_alerts
+        result.errors.extend(alert_errors)
+    return _finish_analyst_run(config, result, state, state_path)
 
 
 def build_config(args: argparse.Namespace) -> AnalystConfig:

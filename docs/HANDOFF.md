@@ -16,8 +16,9 @@ preserved. Never implement or dispatch in legacy `maglothinm/MyETF`.
 
 **The owner now explicitly requests Publish for this Vault implementation.**
 Release commit `71b55ec3e35128f438c860ce01f4fb64b22100cc` is being integrated
-with canonical main `7a1108fb2e32c39f6af943395c1bb9b9a550d26f` (Operations
-history PR #14). Push, canonical PR/CI, merge and existing Pages deployment are
+with canonical main `676701ac1521458aefd72e2329d4e87c8781e41f` (Investor
+Edge PR #15), preserving its parent Operations history PR #14 at `7a1108f`.
+[PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16) is open for this release. Push, canonical PR/CI, merge and existing Pages deployment are
 authorized without another confirmation. No Vault release has completed yet.
 Private runtime/storage/migration/timer activation remains separately unconfigured;
 if absent, the released interface must retain honest catalog-only availability.
@@ -55,14 +56,15 @@ workflow or production state was changed or dispatched.
 
 ## Local verification
 
-**463 tests passed** in the final full run, with no skips. This includes **168
+The original full run passed **463 tests** with no skips. Integration with
+Operations passed **464 tests**, also without skips. The combined suite after
+Investor Edge integration is pending. This includes **168
 Vault cases** (62 backend, 72 provider, 34 UI), which run 22 generated Vault DOM
 scenarios and 7 PDF-helper scenarios. Existing dashboard/notification/simulation
 regressions and nested release checks pass. Python/JS syntax, all workflow YAML,
 generated output, private-data/input-byte checks and 201 vendor hashes/sizes pass.
 Government sources are mocked. PostgreSQL security SQL and transactional rollback
-are tested with fixtures, not a live server. No local Bash run or new remote CI is
-claimed. Vendor Git attributes preserve original bytes on Windows checkouts.
+are tested with fixtures, not a live server. No local Bash run or new Vault remote CI is claimed yet. Vendor Git attributes preserve original bytes on Windows checkouts.
 
 The in-app browser used a disposable in-memory TEST API and synthetic PDFs:
 actual PDF.js rendering passed at 1440x1000 and 390x844 with no horizontal overflow.
@@ -73,6 +75,12 @@ Screenshots in this worktree's ignored `.remediation/browser-evidence/`:
 `vault-pdf-desktop.png`, `vault-pdf-mobile.png`, `vault-request-mobile.png`.
 No real government, storage, source-access grant or alert service was used.
 Physical iPhone/Safari and real PostgreSQL/Supabase runtime acceptance are unverified.
+
+Latest pre-Vault audit: **166 Actions runs** checked, protected ZIP/member
+hashes, inventories and simulation history unchanged. Pages **33391179240 /
+attempt 1** at `676701ac`, artifact **9757512563**, succeeded with build job
+**99484924587** and deploy job **99485120700**. Exact build logs consumed the
+same three protected inputs below and simulator artifact **9734790733**.
 
 ## Existing production evidence — not Vault deployment
 
@@ -101,7 +109,7 @@ IDs, producing attempts, hashes and expiration.
 
 ## Remaining configuration and next safe action
 
-Finish integration tests, publish the approved canonical PR, require exact-source CI,
+Finish integration tests, push the integrated source to PR #16, require exact-source CI,
 then merge and independently verify Pages and protected continuity. In parallel,
 check whether the existing application runtime is configured; do not block safe
 code/catalog publication merely because private retrieval is not activated.
