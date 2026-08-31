@@ -356,3 +356,26 @@ Pages run `33385044313` / attempt 1 succeeded. Post-deployment audit verified al
 protected inventories and simulator history. Physical-device acceptance remains
 open. The final documentation-only evidence was prepared in an isolated worktree
 because another task switched the shared checkout.
+
+
+## D-2026-08-31-025 — Keep raw Filing Vault evidence in private runtime storage
+
+**Decision:** Issue #13 adds the Vault to the existing Flask/SQLAlchemy/Supabase
+architecture and links it from the existing generated dashboard. Private runtime
+objects and additive vault tables are separate from all protected tracker artifacts.
+GitHub/Pages contain code and safe metadata only, never cached government documents.
+
+**Reason:** Static Pages cannot safely implement persistent server retrieval,
+acknowledgement enforcement, hash validation, expiration and source access gates.
+An optional runtime preserves the existing deployment and ingestion contracts.
+
+**Consequence:** Absolute retention is 30 days from actual retrieval; metadata checks
+do not renew it. Exact IDs and immutable version/source snapshots survive expiration.
+Government requirements remain distinct from the versioned PolitiTrack notice.
+Synthetic records are rejected by server admission, and no simulation gets Vault
+credentials. Known request-only disclosures remain request-only. Source endpoint
+checks never pretend to discover separate amendments without authoritative catalog
+relationships. Local PDF.js rendering preserves original bytes and avoids blank
+native embeds; its code assets and licenses are pinned locally. API/storage
+configuration, verified catalog delivery, runtime timer installation and publication
+must be verified separately before the feature can be described as operational.

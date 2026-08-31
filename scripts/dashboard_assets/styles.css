@@ -19,3 +19,5 @@ body{padding-bottom:env(safe-area-inset-bottom)}.facts dt{position:relative}.fac
 .review-summary .badge.caution,.record-panel .badge.caution{color:var(--amber);border-color:#705b36}.record-details{scroll-margin-block:16px}
 @media(max-width:600px){#panel-reviews .controls label:last-child{grid-column:1/-1}}
 .timeline{gap:2px;margin:2px 0}.timeline a{min-width:44px;min-height:44px;max-width:none;display:grid;place-items:center;background:transparent!important;flex:1;text-decoration:none}.timeline a span{display:grid;place-items:center;border:1px solid currentColor;width:22px;height:22px;border-radius:4px;font-size:12px}.timeline a.success{color:var(--teal)}.timeline a.failure{color:var(--coral)}.timeline a.unknown{color:var(--muted)}.timeline{overflow-x:auto;scrollbar-width:thin}.attention-card:target{outline:1px solid var(--blue)}
+
+.filing-actions{display:inline-flex;gap:12px;flex-wrap:wrap;align-items:center}.filing-actions a{min-height:44px;display:inline-flex;align-items:center}

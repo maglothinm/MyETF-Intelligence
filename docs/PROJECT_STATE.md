@@ -1,13 +1,65 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Dashboard review UX published and verified on canonical Pages.
-Protected inputs and simulator history unchanged. Senate recovery evidence
-preserved. Physical-device acceptance, obsolete queues, PR #3 and cutover remain
-open.**
+Status: **Filing Vault implemented on isolated codex/filing-vault; local
+validation passed (463 tests). Runtime/API/storage/timer not deployed. Previously approved
+review UX is published; protected state and separate cutover gates are unchanged.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Filing Vault — local implementation, 2026-08-31
+
+Work record: [issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13).
+Canonical GitHub ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
+default `main`. The isolated branch started at **9d9e7bef326a0e24a5f846ea1310dec24a647019**
+and now includes its verified documentation-only successor **f2df59740b095417e3883fd81ac0a16c1d16fdad**.
+It adds the source-aware Filing Vault API, private runtime storage, acknowledgements,
+30-day hashed document retention, version history, lifecycle tooling and dashboard
+links/viewer. No protected artifact, ingestion ledger, producer workflow, schedule,
+external alert, simulation history or repository setting is changed. Existing
+read-only CI now covers the Vault; Pages receives only its public API-origin
+configuration and generated-output checks.
+
+The deployment architecture remains static Pages plus the optional existing Flask /
+PostgreSQL / Supabase runtime. Vault storage/API hosting, private bucket, schema
+migration, verified catalog supply and the daily runtime timer are **not configured
+or deployed by this session**. Pages publication alone cannot activate this feature.
+See [FILING_VAULT.md](FILING_VAULT.md) for configuration and source limitations.
+Separate amendment records require exact source relationships from catalog ingestion;
+endpoint revalidation is not a claim of exhaustive amendment discovery.
+
+Local validation: **463 tests passed**, including **168 Vault cases**, the existing
+regressions and optional DOM suites. The Vault cases run **22 generated-page DOM**
+and **7 PDF-helper scenarios**. Python/JS syntax, all workflow YAML, dashboard
+generation, input-byte preservation and 201 vendor hashes/sizes passed. Real local
+PDF rendering, unchanged-refresh timestamps, notice reuse and explicit request-only
+behavior passed at desktop/mobile viewport sizes. Physical iPhone/Safari and live
+PostgreSQL/Supabase enforcement remain unverified. The PostgreSQL migration now
+secures only the six Vault tables atomically with RLS and revoked browser grants.
+
+A fresh read-only GitHub audit corrected the earlier publication-pending handoff:
+PR #10 merged as `9d9e7be`; PR CI **33384840936**, main CI **33385044349** and
+Pages **33385044313**, all attempt 1, succeeded. Pages artifact **9755242103**
+restored the exact protected inputs below. All 158 run records were inspected;
+producer high-water marks, exact successful jobs/attempt windows, ancestor commits,
+unexpired artifact metadata, and existing archive SHA-256/size comparisons passed.
+Retained JSON/JSONL entries parse with unchanged recorded counts. The final
+12:01 UTC recheck found 160 runs; the only additions were two unrelated CI runs.
+The newest protected producer attempts and artifact IDs/digests remain unchanged.
+
+| Protected artifact | ID | Producing run / attempt | Job |
+|---|---:|---|---:|
+| legislative-tracker-state | 9749549239 | 33369634244 / 1 | 99417536057 |
+| executive-tracker-state | 9746602231 | 33360633323 / 1 | 99391153447 |
+| ai-analysis-state | 9749567326 | 33369677492 / 1 | 99417669143 |
+
+This is evidence for the **existing release**, not CI/deployment of Filing Vault.
+Existing local release receipt records 21 live files matching Pages at 11:04:50 UTC;
+this session's fresh remote HTTP probes failed, so current live bytes were not
+independently reverified. No writer or simulation was dispatched. Obsolete queued
+runs `33219808359` and `33221027676` remain. Rename/privacy, legacy retirement,
+held PR #3 and external credential/device acceptance remain separate work.
 
 ## Dashboard review UX — published and verified 2026-08-31 11:04 UTC
 

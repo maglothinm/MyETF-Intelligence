@@ -630,9 +630,9 @@ def test_public_build_preserves_input_bytes_and_excludes_private_payloads(tmp_pa
                  "--output-dir", str(output)]) == 0
     after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs.iterdir()}
     assert before == after
-    assets = "\n".join(p.read_text(encoding="utf-8") for p in output.rglob("*") if p.is_file())
+    assets = b"\n".join(p.read_bytes() for p in output.rglob("*") if p.is_file())
     for value in (secret, heartbeat, "private@example.test"):
-        assert value not in assets
+        assert value.encode("utf-8") not in assets
     edge = (output / "investor-edge.html").read_text(encoding="utf-8")
     assert hostile not in edge
     assert "&lt;img" in edge

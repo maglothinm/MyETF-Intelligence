@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Filing Vault · PolitiTrack</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="filing-vault.css">
+  <link rel="stylesheet" href="filing-pdf.css">
+</head>
+<body class="vault-page">
+  <a class="skip-link" href="#vault-main">Skip to filings</a>
+  <header class="app-header"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">P<span></span></span><span>PolitiTrack<small>DISCLOSURE INTELLIGENCE</small></span></a><a href="index.html#records">← Source Records</a></header>
+  <main id="vault-main" tabindex="-1">
+    <div class="page-heading"><div><p class="eyebrow">THE ORIGINAL EVIDENCE</p><h1>Filing Vault</h1><p>Government source documents. Thirty days of cached access. Provenance retained.</p></div><span class="pill">Official Filings</span></div>
+    <p class="notice" id="vault-runtime" role="status">Connecting to filing storage…</p>
+    <section id="vault-viewer" class="surface" aria-labelledby="filing-title" hidden>
+      <div class="section-heading"><div><p id="filing-source" class="eyebrow"></p><h2 id="filing-title" tabindex="-1">Filing</h2><p id="filing-type"></p></div><button id="filing-close">Close</button></div>
+      <dl id="filing-metadata" class="facts"></dl>
+      <div class="vault-actions"><a id="filing-official" target="_blank" rel="noopener noreferrer">Official Source ↗</a><a id="filing-download" hidden>Download ↓</a><button id="filing-refresh">Refresh Source</button><button id="filing-retry" hidden>Retry</button></div>
+      <p id="filing-message" class="notice" role="status" aria-live="polite"></p>
+      <div id="filing-document" aria-label="Official filing document"></div>
+      <details id="filing-versions"><summary>Version history &amp; integrity</summary><div id="filing-history"></div></details>
+    </section>
+    <section class="surface" aria-labelledby="vault-list-title">
+      <div class="section-heading"><h2 id="vault-list-title">Document inventory</h2><button id="vault-reload">Refresh inventory</button></div>
+      <div class="controls vault-filters">
+        <label>Search<input id="vault-search" type="search" placeholder="Filer name or filing / report ID"></label>
+        <label>Source<select id="vault-source"><option value="">All sources</option value="oge">OGE</option><option value="executive_agency">Executive</option><option value="house">House</option><option value="senate">Senate</option></select></label>
+        <label>Filing type<select id="vault-type"><option value="">All types</option><option value="ptr">PTR</option><option value="annual">Annual</option></select></label>
+        <label>Status<select id="vault-status"><option value="">All statuses</option><option value="Amended">Amended</option><option value="Superseded">Superseded</option><option value="Archived">Archived</option></select></label>
+        <label>Sort<select id="vault-sort"><option value="filing_date">Newest filing</option><option value="retrieved_at">Newest retrieval</option><option value="expires_at">Cache expiration</option><option value="source">Source</option></select></label>
+      </div>
+      <p id="vault-count" class="result-count" role="status"></p><div id="vault-list" class="vault-list"></div>
+      <div class="pagination"><button id="vault-previous">← Previous</button><span id="vault-page"></span><button id="vault-next">Next →</button></div>
+    </section>
+    <p class="chart-note">Retention is measured from document retrieval, not from metadata checks. The PolitiTrack notice does not replace a government acknowledgement, OGE Form 201, or agency disclosure request. No filing content is modified.</p>
+  </main>
+  <dialog id="filing-acknowledgement" aria-labelledby="filing-ack-title"><h2 id="filing-ack-title">Federal Financial Disclosure Notice</h2><p id="filing-ack-text">Federal financial disclosure reports are subject to statutory restrictions governing their acquisition and use. By continuing, you acknowledge those restrictions.</p><p>This notice does not replace any acknowledgement or request required by the government source.</p><div class="vault-actions"><button id="filing-ack-accept" class="primary">Acknowledge &amp; Continue</button><button id="filing-ack-cancel">Cancel</button></div><p id="filing-ack-error" role="status"></p></dialog>
+  <div id="tooltip" role="tooltip" hidden></div>
+  <script src="filing-pdf.js" defer></script>
+  <script src="filing-vault.js" defer></script>
+</body>
+</html>

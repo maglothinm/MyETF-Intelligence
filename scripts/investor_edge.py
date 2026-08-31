@@ -2548,6 +2548,13 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             if href
             else "—"
         )
+        if href:
+            from urllib.parse import urlencode
+            vault_query = urlencode({"url": href})
+            source_html = (
+                f"<span class='filing-actions'><a href='filing-vault.html?{html.escape(vault_query, quote=True)}'>View Filing</a> "
+                f"<a href='{html.escape(href, quote=True)}' target='_blank' rel='noopener noreferrer'>Official Source</a></span>"
+            )
         counts = counts_toward_edge(trade)
         counts_text = "Yes" if counts is True else "No" if counts is False else "—"
         exclusions = trade.get("excluded_reasons") or []

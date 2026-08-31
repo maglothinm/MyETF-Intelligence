@@ -429,10 +429,16 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
     assert "Benchmark XLK" in first_card_text
     assert "Counts toward Edge Yes" in first_card_text
     assert "Exclusions None recorded" in first_card_text
-    safe_link = cards[0].find("a", string="Official filing")
+    safe_link = cards[0].find("a", string="Official Source")
     assert safe_link is not None
     assert safe_link["href"] == "https://example.test/filing?id=1&view=public"
     assert safe_link["rel"] == ["noopener", "noreferrer"]
+    from urllib.parse import parse_qs, urlsplit
+    vault_link = cards[0].find("a", string="View Filing")
+    assert vault_link is not None
+    target = urlsplit(vault_link["href"])
+    assert target.path == "filing-vault.html"
+    assert parse_qs(target.query) == {"url": [safe_link["href"]]}
 
     outcome_rows = cards[0].select("table.outcome-table tbody tr")
     assert len(outcome_rows) == 8
