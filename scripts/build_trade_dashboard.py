@@ -15,10 +15,12 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 try:  # Support both package and direct-script execution.
+    from .dashboard_branding import copy_branding_assets
     from .investor_edge import build_dashboard_addon
     from .dashboard_insights import build_insights, public_payload, review_rows
     from .filing_resources import filing_catalog, attach_filing_ids, api_origin
 except ImportError:  # pragma: no cover - direct execution path
+    from dashboard_branding import copy_branding_assets  # type: ignore
     from investor_edge import build_dashboard_addon  # type: ignore
     from dashboard_insights import build_insights, public_payload, review_rows  # type: ignore
     from filing_resources import filing_catalog, attach_filing_ids, api_origin  # type: ignore
@@ -776,6 +778,7 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
         shutil.copyfile(ASSET_DIR / "filing-pdf.js", temp_dir / "filing-pdf.js")
         shutil.copyfile(ASSET_DIR / "filing-pdf.css", temp_dir / "filing-pdf.css")
         shutil.copytree(ASSET_DIR / "vendor" / "pdfjs", temp_dir / "vendor" / "pdfjs")
+        copy_branding_assets(temp_dir)
         (temp_dir / ".nojekyll").write_text("", encoding="utf-8")
         if output_dir.exists():
             shutil.rmtree(output_dir)

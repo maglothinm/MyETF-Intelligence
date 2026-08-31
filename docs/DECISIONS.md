@@ -563,3 +563,23 @@ are preserved. No production writer, simulation or external alert was dispatched
 Issues #4/#6 device acceptance and all existing production/runtime/cutover gates
 remain open. Full evidence is in
 [the release receipt](validation/persistent-shell-release-2026-08-31.md).
+
+## D-2026-08-31-032 — Preserve approved icon sources and publish web copies
+
+**Decision:** Keep the 22 unchanged files from the owner-supplied
+`PolitiTrack_Icon_Assets.zip` in `assets/branding/polititrack/`, with source/archive
+SHA-256 provenance. Publish only the required web variants through the existing
+dashboard generators and the retained React frontend. Store the Windows ICO for
+packaging/shortcut use without inventing a Windows installer configuration.
+
+**Reason:** The approved artwork must remain recoverable at original resolution,
+and adding images beside templates alone does not put them into generated Pages
+output. Both the main and standalone Investor Edge generators need complete
+favicon/manifest assets even when invoked independently.
+
+**Consequence:** One small copying helper stages the runtime icons and manifest.
+Relative URLs preserve repository-subpath hosting. Existing header dimensions,
+wording, navigation and responsive layout remain unchanged; the large portrait
+Wallboard keeps its 54px icon. The main manifest uses browser display mode and
+does not add a service worker or alter application behavior. No collector, score,
+state, workflow, alert, simulation, credential or hosting setting changes.

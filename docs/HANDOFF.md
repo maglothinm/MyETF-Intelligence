@@ -1,10 +1,74 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-31 UTC**
-Work record: [issue #4 — dashboard shell](https://github.com/maglothinm/MyETF-Intelligence/issues/4),
+## Current task — approved icon integration ready for release checks
+
+The owner requested deployment of the newly created PolitiTrack icon package,
+favicon/header wiring, applicable Windows icon references, checks and a commit.
+The previously missing ZIP was supplied and inspected. Canonical repository ID
+**1349678672**, current name **maglothinm/MyETF-Intelligence**, default **main**,
+was reverified at `ecc031dad297f6878e086dbe0b62861cbb4a6441` before implementation.
+Work is isolated on `codex/polititrack-icon-assets` in the task's `polititrack-icons`
+clone. Shared checkout files and unrelated worktrees remain untouched.
+
+The complete 22-file source package is preserved unchanged under
+`assets/branding/polititrack/`, including the 1254px original and seven-frame
+Windows ICO. Its README and manifest document provenance and usage. Source ZIP
+SHA-256: `0fbc21472cce75ee3d1f47040683dfe8e4a1b1044cd892f12e75c599b40cf65a`.
+No Windows packaging configuration or existing app-icon reference was found.
+
+Production web variants live under `scripts/dashboard_assets/icons/`.
+`scripts/dashboard_branding.py` copies those 11 assets plus `site.webmanifest`
+from both `build_trade_dashboard.py` and the standalone Investor Edge generator.
+Root, 404, Wallboard, Filing Vault and Investor Edge receive relative favicon,
+Apple touch and manifest links. Root/Vault/Wallboard replace only the old header
+mark; surrounding text, spacing and navigation remain unchanged. Header sizes
+stay 35px desktop, 32px mobile and 54px for the existing large portrait Wallboard.
+The React frontend uses the same approved icon bytes and retains its 50px header
+footprint and existing manifest display/theme settings. Only its circular icon
+crop and obsolete React sample install name were corrected.
+
+Local checks so far: all 22 source files and both sets of generated web copies
+match the ZIP exactly; all 30 favicon/touch/manifest links resolve in full-site
+and standalone output. PNG dimensions, seven Windows ICO frames and source
+manifest hashes passed. Browser comparisons at 1440px, 390px and 320px show
+identical root header/brand/sidebar rectangles and no horizontal overflow.
+Filing Vault desktop/mobile and Wallboard desktop/1440x2560 portrait comparisons
+also match, with loaded icons. Investor Edge retains its text-only heading;
+browser warning/error logs are empty. The full existing Python suite passed
+**524 tests without skips in 258.80 seconds**, including nested dashboard release
+and DOM checks. Isolated declared dependencies and an external test directory
+were used; Windows dependency ACL access required a reviewed escalated run.
+No source/test safety guards or ACLs were changed. Linux `verify.sh` remains a
+remote CI check. The separate retained React test/build checks are still running;
+record their result before merging this change.
+
+Read-only preflight examined issue #4, 180 runs and 198 global artifacts.
+Current protected inputs are Legislative `9764350004` (run `33408974583` / 1,
+job `99543508327`), Executive `9760298853` (`33398375467` / 1, job `99508337018`),
+and AI `9764387095` (`33409079174` / 1, job `99543844689`). Their successful
+producer attempts/upload windows, expiry, ancestry and high-water marks passed.
+The two-row simulator remains `9734790733` (`33320677882` / 1, job `99281977011`).
+Existing Pages `33409174140` / 1 succeeded for `ecc031d`, artifact `9764416987`,
+and its logs consumed those exact inputs. All five ZIP exports passed CRC and
+independent SHA-256 checks, with inventories of 7 Legislative, 4 Executive,
+45 AI, 2 simulator and 239 Pages files. Evidence is outside Git in the task's
+`icon-release-evidence/`. This is pre-release evidence only.
+
+**Delivery state:** tested implementation prepared for a commit referencing issue
+#4 and canonical PR/CI review; no icon deployment yet. Finish the React checks,
+require successful CI, then verify the existing Pages publisher and live icon
+bytes. Generator changes already match its push trigger; do not add a workflow.
+No production writer, simulation, alert, state, schedule, credential or setting
+was changed or dispatched. Existing manual-writer/cutover/device gates remain
+separate. The prior release and runtime evidence below is retained unchanged.
+
+## Prior persistent-shell release — retained evidence
+
+Prior work record: [issue #4 — dashboard shell](https://github.com/maglothinm/MyETF-Intelligence/issues/4),
 with shared help compatibility in [issue #6](https://github.com/maglothinm/MyETF-Intelligence/issues/6).
 
-## Current task — persistent-shell deployment verified
+### Persistent-shell deployment verified
 
 The owner's explicit **Deploy** instruction authorized canonical PR/CI/merge and
 the existing read-only Pages publisher. Repository ID **1349678672**, live name
