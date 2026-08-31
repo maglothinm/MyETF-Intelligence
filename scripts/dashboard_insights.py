@@ -296,9 +296,9 @@ def _flat_record(row: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, A
     return {field: _text(row.get(field)) for field in fields}
 
 
-_FILING_PUBLIC = ("filing_key", "source", "branch", "report_id", "filer", "title", "agency", "status", "access_mode")
-_REVIEW_PUBLIC = ("review_id", "source", "branch", "report_id", "filer", "title", "agency", "reason")
-_SIGNAL_PUBLIC = ("analysis_id", "trade_id", "source", "branch", "report_id", "filer", "owner", "ticker", "asset", "amount", "transaction_type", "classification")
+_FILING_PUBLIC = ("filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "status", "access_mode")
+_REVIEW_PUBLIC = ("review_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
+_SIGNAL_PUBLIC = ("analysis_id", "trade_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "owner", "ticker", "asset", "amount", "transaction_type", "classification")
 
 
 def _filing(row: Mapping[str, Any]) -> dict[str, Any]:

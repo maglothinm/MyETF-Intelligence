@@ -1,0 +1,11 @@
+[Unit]
+Description=Check PolitiTrack Filing Vault retention and source metadata daily
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=polititrack-filing-vault-reconcile.service
+
+[Install]
+WantedBy=timers.target

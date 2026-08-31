@@ -20,6 +20,14 @@ portfolio accounting, alert delivery, or production-state continuity.
 
 ## Dashboard views
 
+The optional [30-Day Filing Vault](docs/FILING_VAULT.md) adds consistent
+**View Filing** and **Official Source** actions to evidence-bearing records.
+`filing-vault.html` provides a searchable inventory, acknowledgement, original
+document viewer and provenance. Its private Flask/PostgreSQL/Supabase runtime
+must be configured separately; static Pages alone does not cache documents.
+The publisher reads the public repository variable `FILING_VAULT_API_ORIGIN`.
+Never put Vault storage credentials in GitHub Pages or its build variables.
+
 The static root dashboard has six directly linkable destinations:
 
 | Destination | Contents |

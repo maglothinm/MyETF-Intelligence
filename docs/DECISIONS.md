@@ -456,3 +456,43 @@ in a fresh live browser at desktop/mobile widths. Current protected inputs remai
 unchanged. This documentation successor integrates both releases on top of
 `895bc57`, preserving decision 026 and all production-acceptance gates; neither
 publication establishes live Investor Edge population or market backlog progress.
+
+## D-2026-08-31-028 — Keep raw Filing Vault evidence in private runtime storage
+
+**Decision:** Issue #13 adds the Vault to the existing Flask/SQLAlchemy/Supabase
+architecture and links it from the existing generated dashboard. Private runtime
+objects and additive vault tables are separate from all protected tracker artifacts.
+GitHub/Pages contain code and safe metadata only, never cached government documents.
+
+**Reason:** Static Pages cannot safely implement persistent server retrieval,
+acknowledgement enforcement, hash validation, expiration and source access gates.
+An optional runtime preserves the existing deployment and ingestion contracts.
+
+**Consequence:** Absolute retention is 30 days from actual retrieval; metadata checks
+do not renew it. Exact IDs and immutable version/source snapshots survive expiration.
+Government requirements remain distinct from the versioned PolitiTrack notice.
+Synthetic records are rejected by server admission, and no simulation gets Vault
+credentials. Known request-only disclosures remain request-only. Source endpoint
+checks never pretend to discover separate amendments without authoritative catalog
+relationships. Local PDF.js rendering preserves original bytes and avoids blank
+native embeds; its code assets and licenses are pinned locally. API/storage
+configuration, verified catalog delivery, runtime timer installation and publication
+must be verified separately before the feature can be described as operational.
+
+## D-2026-08-31-029 — Publish the approved Filing Vault through canonical Pages
+
+**Decision:** The owner's explicit Publish instruction authorizes pushing the
+Vault branch, canonical PR/CI, merge and the existing read-only Pages publisher.
+Preserve current main's Operations-history and Investor Edge fixes and all previous
+release evidence.
+
+**Reason:** The implemented source-aware runtime and integrated interface can be
+released without changing protected state. Deployment status must still distinguish
+published code/catalog UI from configured, operational cached-document retrieval.
+
+**Consequence:** Require successful CI on the exact integrated source, validated
+protected producer attempts/high-water marks, and verified Pages artifact/live
+content. With no runtime configuration, publish the honest catalog-only state;
+never invent API/storage credentials, source acknowledgements or cached availability.
+No production writer, simulation or real alert dispatch is authorized. Keep issue
+#13 open until private runtime and source/device acceptance are verified.

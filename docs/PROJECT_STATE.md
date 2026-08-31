@@ -1,13 +1,81 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Investor Edge bootstrap and Operations newest-first history are
-published in build `676701ac`; CI, live content and Operations desktop/mobile-width
-scrolling passed. Actual historical population and market backlog progress await
-normal writer runs; physical-device, state and cutover gates remain separate.**
+Status: **Filing Vault publication authorized in PR #16; integrating current main
+and verifying CI/Pages. Private retrieval remains unconfigured. Operations and
+Investor Edge releases and protected-state continuity are preserved.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Filing Vault — publication authorized, 2026-08-31
+
+Work record: [issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13).
+Canonical GitHub ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
+default `main`. The isolated branch started at **9d9e7bef326a0e24a5f846ea1310dec24a647019**
+and incorporates **f2df59740b095417e3883fd81ac0a16c1d16fdad** plus the newer
+Operations-history merge **7a1108fb2e32c39f6af943395c1bb9b9a550d26f** and
+Investor Edge merge **676701ac1521458aefd72e2329d4e87c8781e41f**, followed by
+its verified-release documentation **895bc5739d14524bb7d4a1d7b546cd4e105665a4**
+and Operations receipt **b5169f3f2f6462c84b8d85822e4c1b463cab5a05**.
+The owner explicitly requested **Publish** after implementation commit
+`71b55ec3e35128f438c860ce01f4fb64b22100cc` and runtime limits were reported.
+Canonical publication is authorized and opened in [PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16); integrated CI, merge and Pages verification are pending.
+It adds the source-aware Filing Vault API, private runtime storage, acknowledgements,
+30-day hashed document retention, version history, lifecycle tooling and dashboard
+links/viewer. No protected artifact, ingestion ledger, producer workflow, schedule,
+external alert, simulation history or repository setting is changed. Existing
+read-only CI now covers the Vault; Pages receives only its public API-origin
+configuration and generated-output checks.
+
+The deployment architecture remains static Pages plus the optional existing Flask /
+PostgreSQL / Supabase runtime. Vault storage/API hosting, private bucket, schema
+migration, verified catalog supply and the daily runtime timer are **not configured
+or deployed by this session**. Pages publication alone cannot activate this feature.
+See [FILING_VAULT.md](FILING_VAULT.md) for configuration and source limitations.
+Separate amendment records require exact source relationships from catalog ingestion;
+endpoint revalidation is not a claim of exhaustive amendment discovery.
+
+Original local validation: **463 tests passed**, including **168 Vault cases**, the existing
+regressions and optional DOM suites. The Vault cases run **22 generated-page DOM**
+and **7 PDF-helper scenarios**. Python/JS syntax, all workflow YAML, dashboard
+generation, input-byte preservation and 201 vendor hashes/sizes passed. Real local
+PDF rendering, unchanged-refresh timestamps, notice reuse and explicit request-only
+behavior passed at desktop/mobile viewport sizes. Physical iPhone/Safari and live
+PostgreSQL/Supabase enforcement remain unverified. The PostgreSQL migration now
+secures only the six Vault tables atomically with RLS and revoked browser grants.
+
+A fresh read-only GitHub audit corrected the earlier publication-pending handoff:
+PR #10 merged as `9d9e7be`; PR CI **33384840936**, main CI **33385044349** and
+Pages **33385044313**, all attempt 1, succeeded. Pages artifact **9755242103**
+restored the exact protected inputs below. All 158 run records were inspected;
+producer high-water marks, exact successful jobs/attempt windows, ancestor commits,
+unexpired artifact metadata, and existing archive SHA-256/size comparisons passed.
+Retained JSON/JSONL entries parse with unchanged recorded counts. The final
+12:01 UTC recheck found 160 runs; the only additions were two unrelated CI runs.
+The newest protected producer attempts and artifact IDs/digests remain unchanged.
+
+| Protected artifact | ID | Producing run / attempt | Job |
+|---|---:|---|---:|
+| legislative-tracker-state | 9749549239 | 33369634244 / 1 | 99417536057 |
+| executive-tracker-state | 9746602231 | 33360633323 / 1 | 99391153447 |
+| ai-analysis-state | 9749567326 | 33369677492 / 1 | 99417669143 |
+
+This is evidence for the **existing release**, not CI/deployment of Filing Vault.
+Existing local release receipt records 21 live files matching Pages at 11:04:50 UTC;
+this session's fresh remote HTTP probes failed, so current live bytes were not
+independently reverified. No writer or simulation was dispatched. Obsolete queued
+runs `33219808359` and `33221027676` remain. Rename/privacy, legacy retirement,
+held PR #3 and external credential/device acceptance remain separate work.
+
+Publication integration: the first combined suite passed **464 tests** without
+skips after PR #14. PR #15 and its release receipt are now integrated. Final combined verification
+passed **524 tests with no skips**, plus **6 shared filing-link DOM cases**.
+The release review closed a misleading-ID fallback: explicit conflicts remain
+visible, preserve original provenance, and cannot open another filing through
+compact dashboard projections. Read-only audit of 166 runs confirms unchanged protected ZIP/member
+hashes, inventories and simulator history. Latest pre-Vault Pages **33391179240 /
+attempt 1**, artifact **9757512563**, successfully published `676701ac`.
 
 ## Investor Edge release — published and verified 2026-08-31
 

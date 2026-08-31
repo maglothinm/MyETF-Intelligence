@@ -6,6 +6,10 @@ on:
       - "scripts/investor_edge.py"
       - "scripts/ai_filing_analyst.py"
       - "scripts/build_trade_dashboard.py"
+      - "scripts/filing_resources.py"
+      - "scripts/dashboard_assets/**"
+      - "backend/filing_vault/**"
+      - "backend/api/__init__.py"
       - "scripts/create_manual_test_filing.py"
       - "scripts/run_investor_edge_simulation.py"
       - "scripts/government_trade_tracker.py"
@@ -26,9 +30,16 @@ on:
       - "tests/test_investor_edge_surfaces.py"
       - "tests/test_ai_filing_analyst.py"
       - "tests/test_trade_dashboard.py"
+      - "tests/test_filing_vault*.py"
+      - "tests/filing_vault_dom.test.cjs"
+      - "tests/filing_pdf_dom.test.cjs"
+      - "tests/filing_resolution_dom.test.cjs"
       - "tests/test_create_manual_test_filing.py"
       - "requirements-ai.txt"
       - "requirements-tracker.txt"
+      - "requirements-vault.txt"
+      - ".env.filing-vault.example"
+      - "config/filing-vault/**"
       - ".env.tracker.example"
       - "README.md"
       - "README_AI_FILING_ANALYST.md"
@@ -46,6 +57,10 @@ on:
       - "scripts/investor_edge.py"
       - "scripts/ai_filing_analyst.py"
       - "scripts/build_trade_dashboard.py"
+      - "scripts/filing_resources.py"
+      - "scripts/dashboard_assets/**"
+      - "backend/filing_vault/**"
+      - "backend/api/__init__.py"
       - "scripts/create_manual_test_filing.py"
       - "scripts/run_investor_edge_simulation.py"
       - "scripts/government_trade_tracker.py"
@@ -66,9 +81,16 @@ on:
       - "tests/test_investor_edge_surfaces.py"
       - "tests/test_ai_filing_analyst.py"
       - "tests/test_trade_dashboard.py"
+      - "tests/test_filing_vault*.py"
+      - "tests/filing_vault_dom.test.cjs"
+      - "tests/filing_pdf_dom.test.cjs"
+      - "tests/filing_resolution_dom.test.cjs"
       - "tests/test_create_manual_test_filing.py"
       - "requirements-ai.txt"
       - "requirements-tracker.txt"
+      - "requirements-vault.txt"
+      - ".env.filing-vault.example"
+      - "config/filing-vault/**"
       - ".env.tracker.example"
       - "README.md"
       - "README_AI_FILING_ANALYST.md"
@@ -99,9 +121,19 @@ jobs:
           cache-dependency-path: |
             requirements-ai.txt
             requirements-tracker.txt
+            requirements-vault.txt
+      - name: Set up Node for isolated DOM fixtures
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
       - name: Install dependencies
-        run: python -m pip install --requirement requirements-ai.txt pytest==9.0.2
-      - name: Run Investor Edge and integration tests
+        run: |
+          python -m pip install --requirement requirements-ai.txt --requirement requirements-vault.txt pytest==9.0.2
+          npm install --prefix .remediation/ui-test-tools --no-save --package-lock=false --ignore-scripts --no-audit --no-fund jsdom@26.1.0 axe-core@4.10.3
+      - name: Run Investor Edge, Filing Vault and integration tests
+        env:
+          POLITITRACK_TEST_NODE: node
+          POLITITRACK_TEST_NODE_MODULES: ${{ github.workspace }}/.remediation/ui-test-tools/node_modules
         run: |
           python -m pytest -q \
             tests/test_monitor_disclosures.py \
@@ -115,7 +147,11 @@ jobs:
             tests/test_investor_edge_surfaces.py \
             tests/test_ai_filing_analyst.py \
             tests/test_trade_dashboard.py \
+            tests/test_filing_vault.py \
+            tests/test_filing_vault_providers.py \
+            tests/test_filing_vault_ui.py \
             tests/test_create_manual_test_filing.py
+          node --test tests/filing_resolution_dom.test.cjs
       - name: Verify repository safety contract
         shell: bash
         run: bash verify.sh
