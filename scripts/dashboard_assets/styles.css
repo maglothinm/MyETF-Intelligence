@@ -57,3 +57,22 @@ html.app-shell {
 @media(max-width:600px) {
   .app-shell .header-actions {flex-wrap:wrap}
 }
+
+/* Scheduling details remain readable within each worker card and the measured
+   sticky shell. Long timestamps and status labels wrap rather than widen it. */
+.header-status > span {overflow-wrap:anywhere}
+.header-status [tabindex="0"] {cursor:help}
+.health-facts {grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}
+.health-facts > div {min-width:0}
+.health-explanation {line-height:1.6;overflow-wrap:anywhere}
+#operations-health header {display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#operations-health p {font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.scheduling-note {margin-bottom:20px}
+#build-details {font-size:11px;line-height:1.7;overflow-wrap:anywhere}
+@media(max-width:900px) {
+  .app-shell .app-header {flex-wrap:wrap}
+  .app-shell .header-status {display:flex;order:3;flex-basis:100%}
+}
+@media(max-width:420px) {
+  .health-facts {gap:12px 10px}
+}

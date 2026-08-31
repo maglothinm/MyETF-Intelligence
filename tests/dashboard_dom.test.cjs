@@ -82,8 +82,8 @@ function fixtures() {
     filed_date: `2026-08-${String(index % 28 + 1).padStart(2, '0')}`, first_seen_utc: `2026-08-${String(index % 28 + 1).padStart(2, '0')}T12:00:00Z`,
     source_url: 'https://example.test/filing/' + index}));
   const runs = ['legislative', 'executive', 'ai'].map(branch => ({id: branch + ':fixture', run_key: branch + ':fixture', branch,
-    success: true, status: 'success', conclusion: 'success', error_count: 0, errors: [], finished_utc: '2026-08-30T11:00:00Z',
-    at: '2026-08-30T11:00:00Z', run_url: 'https://example.test/runs/' + branch, url: 'https://example.test/runs/' + branch, new_record_count: 0}));
+    success: true, status: 'success', conclusion: 'success', error_count: 0, errors: [], started_utc: '2026-08-30T11:49:00Z', finished_utc: '2026-08-30T11:50:00Z',
+    at: '2026-08-30T11:50:00Z', run_url: 'https://example.test/runs/' + branch, url: 'https://example.test/runs/' + branch, new_record_count: 0}));
   const transactions = [{trade_id: 'trade-fixture', transaction_date: '2026-08-01', filed_date: '2026-08-10', observed_at_utc: '2026-08-11T12:00:00Z',
     source: 'house', filer: 'Fixture Filer', owner: 'Spouse', ticker: 'TEST', asset: 'Fixture company', amount: '$1,001–$15,000', transaction_type: 'purchase', source_url: 'https://example.test/filing/1'}];
   const model = {...copy(builtModel), generated_utc: '2026-08-30T12:00:00Z', data_through_utc: '2026-08-30T11:00:00Z', signals: [], signals_truncated: false,
@@ -92,8 +92,13 @@ function fixtures() {
     reviews: {access_required: 0, manual_exception: 0, other: 0, total: 0, latest: []},
     simulation: {available: false, status: 'unavailable'}, paper: {open_positions: 0}, latest_filings: filings.slice(0, 5),
     synthetic: {filings: 0, transactions: 0, analyses: 0},
-    health: {status: 'success', branches: runs.map(row => ({branch: row.branch, status: 'success', last_run_utc: row.at, last_success_utc: row.at,
-      errors: [], new_record_count: 0, run_url: row.run_url, expected_cadence_seconds: null, timeline: [row]}))},
+    health: {status: 'success', required_branches: ['legislative', 'executive', 'ai'], policy: {
+      legislative: {expected_interval_minutes: 15, stale_after_minutes: 30},
+      executive: {expected_interval_minutes: 30, stale_after_minutes: 60},
+      ai: {expected_interval_minutes: 15, stale_after_minutes: 75, cadence_label: 'After collector success (about every 15m)'}},
+    branches: runs.map(row => ({branch: row.branch, status: 'success', last_run_utc: row.at, last_attempt_utc: row.started_utc, last_success_utc: row.at,
+      latest_run_success: true, latest_conclusion: 'success', trigger_source: 'schedule', evidence_incomplete: false,
+      error_count: 0, errors: [], new_record_count: 0, run_url: row.run_url, timeline: [row]}))},
     notifications: {filing_ids: filings.map(row => row.filing_key), trade_ids: transactions.map(row => row.trade_id), qualifying_signals: [], runs, simulation_results: [], current_incidents: []}};
   return {'dashboard-insights': model, filings, transactions, 'pending-reviews': [], 'ai-analyses': [], 'paper-portfolio': [],
     runs: runs.filter(row => row.branch !== 'ai'), 'ai-runs': runs.filter(row => row.branch === 'ai')};
@@ -112,9 +117,19 @@ async function dashboard(options = {}) {
   if (options.change) options.change(data);
   const requests = [], errors = [], failures = new Set(), virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', error => errors.push(error.message));
-  const dom = new JSDOM(fs.readFileSync(path.join(build, 'index.html'), 'utf8'), {url: 'https://dashboard.test/PolitiTrack/' + (options.hash || ''),
+  const wallboard = options.page === 'wallboard';
+  const dom = new JSDOM(fs.readFileSync(path.join(build, wallboard ? 'wallboard.html' : 'index.html'), 'utf8'), {url: 'https://dashboard.test/PolitiTrack/' + (wallboard ? 'wallboard.html' : '') + (options.hash || ''),
     runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole});
   const {window} = dom;
+  // The production clock ages evidence independently of fetch. Tests control both
+  // Date and timer callbacks; no health assertion depends on execution wall time.
+  let now = Date.parse(options.asOf || '2026-08-30T12:00:00Z');
+  const RealDate = window.Date, intervals = [];
+  window.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
+  };
+  window.setInterval = (callback, delay) => { intervals.push({callback, delay}); return intervals.length; };
   window.matchMedia = query => ({matches: Boolean(options.coarse && /pointer:\s*coarse|hover:\s*none/.test(query)), media: query,
     addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}});
   if (options.visualViewport) window.visualViewport = Object.assign(new window.EventTarget(), options.visualViewport);
@@ -135,9 +150,9 @@ async function dashboard(options = {}) {
   // Audio is intentionally unavailable; the page must never initialize it on load.
   window.AudioContext = function () { errors.push('Audio initialized without gesture'); throw new Error('Unexpected audio'); };
   if (options.beforeScript) options.beforeScript(window);
-  window.eval(fs.readFileSync(path.join(build, 'app.js'), 'utf8'));
+  window.eval(fs.readFileSync(path.join(build, wallboard ? 'wallboard.js' : 'app.js'), 'utf8'));
   const doc = window.document, byId = id => doc.getElementById(id);
-  await waitFor(() => !byId('refresh-button').disabled, 'initial dashboard render');
+  await waitFor(() => wallboard ? requests.length && byId('overall-state').textContent !== '◌ Unknown' : !byId('refresh-button').disabled, 'initial dashboard render');
   async function navigate(hash, predicate) {
     window.location.hash = hash;
     await waitFor(predicate || (() => true), 'navigation ' + hash);
@@ -148,7 +163,9 @@ async function dashboard(options = {}) {
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
   }
-  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, close: () => {
+  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh,
+    advanceTime(milliseconds) { now += milliseconds; intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
+    close: () => {
     // Disconnect any active tooltip layout observers before destroying the DOM.
     doc.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
     window.close();
@@ -173,6 +190,120 @@ test('Overview loads only compact insights; sections fetch their ledgers lazily'
   assert.match(env.byId('paper-position-status').textContent, /No open paper positions/);
   await env.navigate('#operations', () => env.requests.includes('ai-runs'));
   assert.ok(env.requests.includes('runs'));
+  assert.deepEqual(env.errors, []);
+});
+
+function setBranchAge(data, name, minutes, extra = {}) {
+  const branch = data['dashboard-insights'].health.branches.find(row => row.branch === name);
+  const finished = new Date(Date.parse('2026-08-30T12:00:00Z') - minutes * 60000).toISOString();
+  Object.assign(branch, {last_run_utc: finished, last_success_utc: finished, last_attempt_utc: finished, ...extra});
+  branch.timeline = [{id: name + '-retained', branch: name, finished_utc: finished, status: branch.latest_run_success === false ? 'failure' : 'success',
+    success: branch.latest_run_success, error_count: branch.error_count, new_record_count: 0, run_url: branch.run_url}];
+  return branch;
+}
+
+test('overdue collectors cannot show a green header; Operations exposes scheduling evidence and shared stale help', async t => {
+  const env = await dashboard({hash: '#operations', change(data) {
+    setBranchAge(data, 'legislative', 70, {trigger_source: 'external_scheduler'});
+    data['dashboard-insights'].data_through_utc = '2026-08-30T10:50:00Z';
+  }}); t.after(env.close);
+  assert.match(env.byId('overall-state').textContent, /Legislative polling overdue/);
+  assert.equal(env.byId('overall-state').classList.contains('success'), false);
+  assert.equal(env.byId('overall-state').classList.contains('stale'), true);
+  assert.equal(env.byId('attention-health').textContent, 'Overdue');
+  const card = env.byId('operations-health').querySelector('[data-branch="legislative"]');
+  const facts = Object.fromEntries([...card.querySelectorAll('.health-facts > div')].map(node => [node.querySelector('dt').textContent, node.querySelector('dd').textContent]));
+  assert.equal(facts['Last attempted run'], env.window.PT.date('2026-08-30T10:50:00Z'));
+  assert.equal(facts['Last successful run'], env.window.PT.date('2026-08-30T10:50:00Z'));
+  assert.equal(facts['Expected cadence'], 'Every 15m');
+  assert.equal(facts['Freshness window'], '30m');
+  assert.equal(facts['Next expected run'], env.window.PT.date('2026-08-30T11:05:00Z'));
+  assert.equal(facts['Successful run age'], '1h 10m');
+  assert.equal(facts['Overdue by'], '55m');
+  assert.equal(facts['Estimated missed intervals'], '3');
+  assert.equal(facts['Latest conclusion'], 'Success');
+  assert.equal(facts['Error count'], '0');
+  assert.equal(facts['Triggered by'], 'External scheduler');
+  assert.equal(card.querySelector('a').href, 'https://example.test/runs/legislative');
+  assert.equal(env.byId('updated-at').textContent, 'Source data through ' + env.window.PT.date('2026-08-30T10:50:00Z'));
+  assert.match(env.byId('build-details').textContent, /Dashboard generated/);
+  env.byId('overall-state').focus();
+  assert.match(env.byId('tooltip').textContent, /older than PolitiTrack’s freshness window/);
+  assert.match(env.byId('tooltip').textContent, /delayed or missed scheduled execution/);
+  env.byId('updated-at').focus();
+  assert.match(env.byId('tooltip').textContent, /not simply the time this dashboard page was generated/);
+  assert.deepEqual(env.errors, []);
+});
+
+test('freshness ages while the page remains open without publication and preserves the newest-first run strip and focus', async t => {
+  const env = await dashboard({hash: '#operations', change: data => setBranchAge(data, 'legislative', 29)}); t.after(env.close);
+  assert.equal(env.byId('overall-state').textContent, '✓ Monitoring current');
+  const sourceTime = env.byId('updated-at').textContent, baseline = env.window.localStorage.getItem(KEY);
+  const runLink = env.byId('operations-health').querySelector('.timeline a');
+  runLink.focus(); runLink.parentElement.scrollLeft = 32;
+  const requests = env.requests.slice(), ids = historyIds(env);
+  env.advanceTime(2 * 60000);
+  assert.match(env.byId('overall-state').textContent, /Legislative polling overdue/);
+  assert.equal(env.byId('overall-state').classList.contains('success'), false);
+  assert.equal(env.byId('updated-at').textContent, sourceTime);
+  assert.deepEqual(env.requests, requests, 'A clock tick only ages evidence; it does not dispatch or fetch');
+  assert.deepEqual(historyIds(env), ids);
+  assert.equal(env.doc.activeElement.href, runLink.href);
+  assert.equal(env.byId('operations-health').querySelector('.timeline').scrollLeft, 32);
+  assert.equal(env.window.localStorage.getItem(KEY), baseline, 'Clock aging creates no invented notification/run evidence');
+  assert.match(env.byId('overview-signals').textContent, /overdue, missing or failing/);
+  assert.deepEqual(env.errors, []);
+});
+
+test('a new dashboard publication cannot refresh stale source data; a fresh collector success can clear it', async t => {
+  const env = await dashboard({change: data => setBranchAge(data, 'legislative', 70)}); t.after(env.close);
+  const dataThrough = env.byId('updated-at').textContent;
+  env.data['dashboard-insights'].generated_utc = '2026-08-30T12:01:00Z';
+  env.advanceTime(60000); await env.refresh();
+  assert.match(env.byId('overall-state').textContent, /polling overdue/);
+  assert.equal(env.byId('updated-at').textContent, dataThrough);
+  setBranchAge(env.data, 'legislative', 0);
+  await env.refresh();
+  assert.equal(env.byId('overall-state').textContent, '✓ Monitoring current');
+  assert.equal(env.byId('overall-state').classList.contains('success'), true);
+});
+
+test('latest collector failure outranks stale even with a recent previous success; missing evidence remains gray', async t => {
+  const env = await dashboard({hash: '#operations', change(data) {
+    setBranchAge(data, 'legislative', 70);
+    setBranchAge(data, 'executive', 5, {status: 'failure', latest_run_success: false, latest_conclusion: 'failure', errors: ['TEST retained collector error'], error_count: 1});
+  }}); t.after(env.close);
+  assert.match(env.byId('overall-state').textContent, /Executive collector failed/);
+  assert.equal(env.byId('overall-state').classList.contains('failure'), true);
+  Object.assign(env.data['dashboard-insights'].health.branches[0], {last_success_utc: null, latest_run_success: null, status: 'unknown'});
+  Object.assign(env.data['dashboard-insights'].health.branches[1], {status: 'success', latest_run_success: true, latest_conclusion: 'success', errors: [], error_count: 0});
+  await env.refresh();
+  assert.equal(env.byId('overall-state').textContent, '◌ Monitoring status incomplete');
+  assert.equal(env.byId('overall-state').classList.contains('unknown'), true);
+});
+
+test('Operations never exposes an unrecognized scheduler trigger string', async t => {
+  const env = await dashboard({hash: '#operations', change: data => setBranchAge(data, 'legislative', 10, {trigger_source: 'https://private.test/token=SECRET'})}); t.after(env.close);
+  const card = env.byId('operations-health').querySelector('[data-branch="legislative"]');
+  assert.ok(!card.textContent.includes('SECRET'));
+  const label = [...card.querySelectorAll('dt')].find(node => node.textContent === 'Triggered by');
+  assert.equal(label.nextElementSibling.textContent, 'Unavailable');
+});
+
+test('Monitor Mode uses the same freshness policy and ages to stale without a new publication', async t => {
+  const env = await dashboard({page: 'wallboard', change(data) {
+    setBranchAge(data, 'legislative', 29);
+    data['dashboard-insights'].data_through_utc = '2026-08-30T11:31:00Z';
+  }}); t.after(env.close);
+  assert.equal(env.byId('overall-state').textContent, '✓ Monitoring current');
+  const source = env.byId('data-through').textContent;
+  assert.equal(source, 'Source data through ' + env.window.PT.date('2026-08-30T11:31:00Z'));
+  env.advanceTime(2 * 60000);
+  assert.match(env.byId('overall-state').textContent, /Legislative polling overdue/);
+  assert.equal(env.byId('overall-state').classList.contains('stale'), true);
+  assert.equal(env.byId('data-through').textContent, source);
+  assert.match(env.byId('source-strip').textContent, /expected every 15m/);
+  assert.equal(env.requests.length, 1);
   assert.deepEqual(env.errors, []);
 });
 
@@ -288,6 +419,23 @@ test('Operations history uses a valid start fallback and puts unknown timestamps
   assert.deepEqual(env.errors, []);
 });
 
+test('Operations places queued and running Actions observations newest first with truthful timestamp labels', async t => {
+  const rows = [healthRun('collector-complete', '2026-08-30T11:30:00Z'),
+    healthRun('workflow-queued', null, {status: 'unknown', success: null, evidence_source: 'github_actions', conclusion: 'queued', workflow_created_utc: '2026-08-30T11:55:00Z'}),
+    healthRun('job-started', null, {status: 'unknown', success: null, evidence_source: 'github_actions', conclusion: 'in_progress', producer_job_started_utc: '2026-08-30T11:52:00Z', workflow_started_utc: '2026-08-30T11:10:00Z'}),
+    healthRun('workflow-running', null, {status: 'unknown', success: null, evidence_source: 'github_actions', conclusion: 'in_progress', workflow_started_utc: '2026-08-30T11:50:00Z'})];
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, rows)}); t.after(env.close);
+  assert.deepEqual(historyIds(env), ['workflow-queued', 'job-started', 'workflow-running', 'collector-complete']);
+  const links = historyLinks(env);
+  assert.match(links[0].getAttribute('aria-label'), /Workflow created/);
+  assert.match(links[1].getAttribute('aria-label'), /Producer job started/);
+  assert.match(links[2].getAttribute('aria-label'), /Workflow started/);
+  assert.equal(rows[0].finished_utc, '2026-08-30T11:30:00Z');
+  assert.equal(rows[1].finished_utc, null);
+  assert.equal(rows[2].finished_utc, null);
+  assert.deepEqual(env.errors, []);
+});
+
 test('Operations history breaks equal-instant ties by stable run identity across reordered refreshes', async t => {
   const runs = [
     healthRun('tie-a', '2026-08-30T06:45:00Z'),
@@ -387,6 +535,7 @@ test('Operations refresh replaces a scrolled history with its newest run first, 
   const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
   const oldStrip = env.byId('operations-health').querySelector('.timeline');
   oldStrip.scrollLeft = 180;
+  const focusedRun = oldStrip.querySelector('a'); focusedRun.focus();
   const newRun = healthRun('refresh-new', '2026-08-30T07:00:00Z');
   setHealthHistory(env.data, [runs[1], runs[0], newRun]);
   await env.refresh();
@@ -394,6 +543,7 @@ test('Operations refresh replaces a scrolled history with its newest run first, 
   assert.notEqual(newStrip, oldStrip);
   assert.equal(newStrip.scrollLeft, 0, 'A rebuilt strip starts at its newest item, not the prior historical offset');
   assert.deepEqual(historyIds(env), ['refresh-new', 'refresh-current', 'refresh-old']);
+  assert.equal(env.doc.activeElement.href, focusedRun.href, 'New history must preserve the same focused run, not its old array position');
   assert.deepEqual(historyIds(env, 'health-chart'), historyIds(env));
   const reloaded = await dashboard({hash: '#operations', change: data => setHealthHistory(data, [newRun, ...runs])}); t.after(reloaded.close);
   assert.deepEqual(historyIds(reloaded), historyIds(env));

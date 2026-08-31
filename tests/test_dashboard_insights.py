@@ -369,7 +369,7 @@ def test_empty_missing_evidence_is_unknown_and_not_a_zero_valued_replay():
     assert model["paper"]["empty_note"] == "No open paper positions"
 
 
-def test_run_health_uses_branch_evidence_with_failure_errors_age_and_no_invented_cadence():
+def test_run_health_uses_branch_evidence_with_failure_errors_and_freshness_policy():
     model = build_insights(payload(
         runs=[run(), run("executive", key="41:1", finished_utc="2026-08-29T10:00:00Z"),
               run("executive", success=False, errors=["Access failed"])],
@@ -377,19 +377,22 @@ def test_run_health_uses_branch_evidence_with_failure_errors_age_and_no_invented
     ))
     branches = {row["branch"]: row for row in model["health"]["branches"]}
     assert model["health"]["status"] == "failure"
-    assert branches["legislative"]["status"] == "success"
+    assert branches["legislative"]["status"] == "stale"
     assert branches["legislative"]["new_record_count"] == 0
     assert branches["executive"]["last_success_utc"] == "2026-08-29T10:00:00Z"
     assert branches["ai"]["status"] == "failure"
     assert branches["ai"]["last_success_utc"] is None
-    assert all(row["expected_cadence_seconds"] is None and row["age_seconds"] == 3600 for row in branches.values())
+    assert branches["legislative"]["expected_cadence_seconds"] == 900
+    assert branches["legislative"]["age_seconds"] == 3600
+    assert branches["executive"]["age_seconds"] == 26 * 3600
+    assert branches["ai"]["age_seconds"] is None
     assert {row["branch"] for row in model["notifications"]["current_incidents"]} == {"executive", "ai"}
 
 
 def test_successful_later_run_preserves_failed_timeline_and_establishes_recovery_evidence():
     model = build_insights(payload(
         runs=[run(success=False, key="41:1", finished_utc="2026-08-30T10:00:00Z"), run(), run("executive")], ai_runs=[run("ai")],
-    ))
+    ), as_of="2026-08-30T11:15:00Z")
     assert model["health"]["status"] == "success"
     assert model["notifications"]["current_incidents"] == []
     timeline = model["health"]["branches"][0]["timeline"]
@@ -397,11 +400,12 @@ def test_successful_later_run_preserves_failed_timeline_and_establishes_recovery
     assert timeline[0]["id"] != timeline[1]["id"]
 
 
-def test_old_successful_run_is_old_not_unsupported_stale_failure():
+def test_old_successful_run_is_stale_without_fabricating_a_failed_run():
     model = build_insights(payload(runs=[run(finished_utc="2024-01-01T00:00:00Z")]))
     branch = model["health"]["branches"][0]
     assert branch["age_seconds"] > 365 * 86400
-    assert branch["status"] == "success"
+    assert branch["status"] == "stale"
+    assert branch["timeline"][0]["status"] == "success"
     assert model["notifications"]["current_incidents"] == []
 
 

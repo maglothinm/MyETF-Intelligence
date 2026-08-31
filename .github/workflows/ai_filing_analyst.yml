@@ -35,6 +35,7 @@ permissions:
   contents: read
 
 concurrency:
+  # Redundant successful collectors enqueue this same serialized, deduplicating analyst.
   group: ai-filing-analyst
   cancel-in-progress: false
 
@@ -57,6 +58,8 @@ env:
 jobs:
   analyze:
     if: >-
+      github.repository_id == '1349678672' &&
+      github.ref_name == github.event.repository.default_branch &&
       vars.AI_ANALYSIS_ENABLED == 'true' &&
       (
         github.event_name == 'workflow_dispatch' ||
@@ -295,6 +298,13 @@ jobs:
               later_writers="$(sort -V -u <<< "$later_writers")"
               echo "${workflow_name} high-water violation at run attempt(s) ${later_writers//$'\n'/, }; refusing stale protected state." >&2
               exit 1
+            fi
+
+            if [[ "$access_mode" == "writable" ]]; then
+              # Keep repeated collector triggers from replaying unretained alerts/analysis.
+              GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
+                --guard-branch ai \
+                --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
             fi
 
             temp_dir="$(mktemp -d)"

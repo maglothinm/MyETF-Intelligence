@@ -676,7 +676,6 @@ def test_operations_history_ordering() -> None:
 def test_dashboard_release_checks(tmp_path: Path) -> None:
     """Keep additive UI regressions in the existing fixed-file CI test selection.
 
-    Workflow configuration deliberately remains unchanged for this UI release.
     Linux CI also executes the repository's complete retired-overlay verifier;
     Windows development without Bash still exercises the fixture-only UI suites.
     """

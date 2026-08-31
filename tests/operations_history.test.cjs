@@ -43,6 +43,10 @@ const cases = [
   ['valid start fallback and unknown times last', [run('unknown', 'invalid'),
     run('finished', '2026-08-30T06:45:00Z'), run('fallback', 'invalid', {started_utc: '2026-08-30T07:00:00Z'}),
     run('start-only', null, {started_utc: '2026-08-30T06:50:00Z'})], ['fallback', 'start-only', 'finished', 'unknown']],
+  ['workflow-only starts and queued creation observations', [run('finished', '2026-08-30T06:45:00Z'),
+    run('queued', null, {status: 'unknown', workflow_created_utc: '2026-08-30T07:00:00Z'}),
+    run('job-start', null, {status: 'unknown', producer_job_started_utc: '2026-08-30T06:55:00Z', workflow_started_utc: '2026-08-30T06:30:00Z'}),
+    run('running', null, {status: 'unknown', workflow_started_utc: '2026-08-30T06:50:00Z'})], ['queued', 'job-start', 'running', 'finished']],
   ['stable URL fallback without IDs', ['url-a', 'url-c', 'url-b'].map(id =>
     run(id, '2026-08-30T06:45:00Z', {id: null})), ['url-c', 'url-b', 'url-a']],
   ['a single run', [chronological[3]], ['run-3']],
@@ -81,4 +85,124 @@ test('history labels keep each sorted record status, counts and authoritative ti
   assert.equal(newest['aria-label'], PT.esc(`${PT.statusText('failure')} ${timestamp}; 3 errors; 1 new records`));
   assert.equal(newest.title, PT.esc(`${PT.statusText('failure')} · ${timestamp}`));
   assert.equal(links[1]['aria-label'], PT.esc(`${PT.statusText('success')} ${PT.date(rows[0].finished_utc)}; 0 errors; 12 new records`));
+});
+
+test('workflow-only observations label their actual timestamp kind without inventing collector completion', () => {
+  const rows = [run('created', null, {status: 'unknown', workflow_created_utc: '2026-08-30T07:00:00Z'}),
+    run('job-start', null, {status: 'unknown', producer_job_started_utc: '2026-08-30T06:55:00Z'}),
+    run('started', null, {status: 'unknown', workflow_started_utc: '2026-08-30T06:50:00Z'}),
+    run('job', '2026-08-30T06:45:00Z', {status: 'failure', evidence_source: 'github_actions'})];
+  const {links} = timelineLinks(rows, true);
+  assert.match(links[0]['aria-label'], /Workflow created/);
+  assert.match(links[1]['aria-label'], /Producer job started/);
+  assert.match(links[2]['aria-label'], /Workflow started/);
+  assert.match(links[3]['aria-label'], /Workflow job finished/);
+  assert.equal(rows[0].finished_utc, null);
+  assert.equal(rows[1].finished_utc, null);
+});
+
+const asOf = Date.parse('2026-08-31T12:00:00Z');
+const before = minutes => new Date(asOf - minutes * 60000).toISOString();
+function freshnessModel(ages = {}) {
+  return {generated_utc: before(0), data_through_utc: before(10), health: {as_of_utc: before(0),
+    required_branches: ['legislative', 'executive', 'ai'],
+    policy: {legislative: {expected_interval_minutes: 15, stale_after_minutes: 30},
+      executive: {expected_interval_minutes: 30, stale_after_minutes: 60},
+      ai: {expected_interval_minutes: 15, stale_after_minutes: 75}},
+    branches: ['legislative', 'executive', 'ai'].map(branch => ({branch, status: 'success',
+      last_attempt_utc: before((ages[branch] ?? 10) + 1), last_success_utc: before(ages[branch] ?? 10),
+      latest_run_success: true, latest_conclusion: 'success', errors: [], error_count: 0,
+      trigger_source: 'schedule', new_record_count: 0, timeline: []}))}};
+}
+
+for (const [branch, minutes, expected] of [
+  ['legislative', 10, 'success'], ['legislative', 29, 'success'], ['legislative', 30, 'success'],
+  ['legislative', 30.01, 'stale'], ['legislative', 70, 'stale'],
+  ['executive', 45, 'success'], ['executive', 60, 'success'], ['executive', 60.01, 'stale'],
+  ['ai', 75, 'success'], ['ai', 75.01, 'stale'],
+]) test(`${branch} successful execution ${minutes}m old is ${expected} at a fixed instant`, () => {
+  const model = PT.healthAt(freshnessModel({[branch]: minutes}), asOf);
+  assert.equal(model.health.branches.find(row => row.branch === branch).status, expected);
+  assert.equal(model.health.status, expected);
+});
+
+test('freshness calculations preserve attempt time, distinguish failed attempts and retain a recent prior success', () => {
+  const model = freshnessModel();
+  Object.assign(model.health.branches[0], {last_attempt_utc: before(5), latest_run_success: false, latest_conclusion: 'failure', error_count: 1, errors: ['Collector failed']});
+  const health = PT.healthAt(model, asOf).health;
+  assert.equal(health.status, 'failure');
+  assert.equal(health.branches[0].status, 'failure');
+  assert.equal(health.branches[0].fresh, true, 'Recency of prior success does not mask latest failure');
+  assert.equal(health.branches[0].last_attempt_utc, before(5));
+  assert.equal(health.branches[0].last_success_utc, before(10));
+  assert.equal(health.branches[0].next_expected_utc, new Date(asOf + 5 * 60000).toISOString());
+  assert.equal(health.branches[0].age_minutes, 10);
+  assert.equal(health.branches[0].overdue_minutes, 0);
+});
+
+test('an aging page cannot remain green when publishers and collectors stop', () => {
+  const input = freshnessModel({legislative: 29});
+  const original = JSON.stringify(input);
+  input.health.branches.forEach(Object.freeze); Object.freeze(input.health.branches); Object.freeze(input);
+  assert.equal(PT.healthAt(input, asOf).health.status, 'success');
+  const aged = PT.healthAt(input, asOf + 41 * 60000);
+  assert.equal(aged.health.status, 'stale');
+  assert.equal(aged.health.branches[0].age_minutes, 70);
+  assert.equal(aged.health.branches[0].overdue_minutes, 55);
+  assert.equal(aged.health.branches[0].estimated_missed_intervals, 3);
+  assert.equal(aged.health.branches[0].next_expected_utc, new Date(Date.parse(before(29)) + 15 * 60000).toISOString());
+  assert.equal(JSON.stringify(input), original, 'Aging is a view, not a production-state mutation');
+});
+
+test('a device clock behind the publisher cannot turn already stale production evidence green', () => {
+  const input = freshnessModel({legislative: 70});
+  input.health.status = input.health.branches[0].status = 'stale';
+  const result = PT.healthAt(input, asOf - 60 * 60000);
+  assert.equal(result.health.status, 'stale');
+  assert.equal(result.health.branches[0].age_minutes, 70);
+  assert.equal(result.health.as_of_utc, before(0));
+  assert.equal(PT.healthAt(input, NaN).health.status, 'unknown', 'An invalid clock never proves current');
+});
+
+test('overall precedence is failure then stale then unknown then success', () => {
+  const model = freshnessModel({executive: 70});
+  assert.equal(PT.healthAt(model, asOf).health.status, 'stale');
+  Object.assign(model.health.branches[2], {latest_run_success: null, last_success_utc: null});
+  assert.equal(PT.healthAt(model, asOf).health.status, 'stale');
+  model.health.branches[0].latest_run_success = false;
+  assert.equal(PT.healthAt(model, asOf).health.status, 'failure');
+  const fresh = freshnessModel();
+  assert.equal(PT.healthAt(fresh, asOf).health.status, 'success');
+  fresh.health.branches[2].evidence_incomplete = true;
+  assert.equal(PT.healthAt(fresh, asOf).health.status, 'unknown');
+  fresh.health.branches = [];
+  assert.equal(PT.healthAt(fresh, asOf).health.status, 'unknown');
+});
+
+test('missing policy, missing or future success time, and unknown latest conclusion cannot claim current', () => {
+  for (const change of [m => { m.health.policy = {}; },
+    m => { m.health.branches[0].last_success_utc = null; },
+    m => { m.health.branches[0].last_success_utc = before(-1); },
+    m => { m.health.branches[0].latest_run_success = null; }]) {
+    const model = freshnessModel(); change(model);
+    assert.equal(PT.healthAt(model, asOf).health.status, 'unknown');
+  }
+});
+
+test('new publications and synthetic simulation timeline records do not refresh admitted production evidence', () => {
+  const model = freshnessModel({legislative: 70});
+  model.generated_utc = before(0);
+  model.health.branches[0].timeline = [run('simulation', before(0), {is_synthetic_test: true, trigger_source: 'manual_test'})];
+  model.notifications = {runs: [{branch: 'publish', success: true, finished_utc: before(0)}]};
+  const result = PT.healthAt(model, asOf);
+  assert.equal(result.health.status, 'stale');
+  assert.equal(result.health.branches[0].last_success_utc, before(70));
+  assert.equal(result.data_through_utc, before(10));
+});
+
+test('public trigger display accepts coarse values only and never echoes authentication metadata', () => {
+  assert.equal(PT.triggerLabel('external_scheduler'), 'External scheduler');
+  assert.equal(PT.triggerLabel('workflow_dispatch'), 'Workflow dispatch', 'Dispatch alone does not prove a human or external scheduler initiated it');
+  for (const value of ['token=private', 'https://private.test/key', '<script>bad</script>', 'constructor', '__proto__', ['external_scheduler'], null])
+    assert.equal(PT.triggerLabel(value), 'Unavailable');
 });

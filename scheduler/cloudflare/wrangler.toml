@@ -1,0 +1,20 @@
+name = "polititrack-scheduler"
+main = "worker.mjs"
+compatibility_date = "2026-08-31"
+workers_dev = false
+preview_urls = false
+
+[vars]
+# The API resolves an in-place rename and validates numeric repository identity.
+GITHUB_REPOSITORY = "maglothinm/MyETF-Intelligence"
+SCHEDULER_ENABLED = "false"
+
+[triggers]
+# Activation is a separate reviewed operation; keep the checked-in example inert.
+# After prerequisites: ["5,20,35,50 * * * *", "11,41 * * * *"] (UTC)
+crons = []
+
+[observability]
+enabled = true
+
+# GITHUB_DISPATCH_TOKEN is a Cloudflare secret, never a variable in this file.

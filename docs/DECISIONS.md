@@ -590,3 +590,51 @@ both CI runs and automatic Pages publication passed. All 250 served files plus
 root match the published archive; live desktop/mobile geometry is preserved.
 See [the release receipt](validation/icon-assets-2026-08-31.md) for full evidence
 and unchanged protected input provenance.
+
+## D-2026-08-31-033 — Separate execution success from monitoring freshness
+
+**Decision:** Issue #19 defines one Python freshness policy: Legislative 15-minute
+cadence / 30-minute stale threshold; Executive 30 / 60; collector-triggered AI
+15-minute nominal input opportunity / 75-minute completion threshold. Overall
+health uses failure > stale > unknown > success. A latest failure outranks an
+earlier recent success. Browser aging uses the published policy and immutable
+successful collector timestamps even when publication stops.
+
+**Reason:** Historical run conclusions concealed materially overdue collection.
+Protected state is uploaded only by successful producers, so it cannot alone
+describe a later failed attempt. Dashboard generation, AI analysis and portfolio
+refresh are also different from source collection.
+
+**Consequence:** Add sanitized, exact-attempt Actions observations to the read-only
+publisher without making them production-state authority. Failed collectors can
+trigger a new health publication; skipped/cancelled publication is never a collector
+failure. Source data through reflects production source observations and collector
+completion; generation is separate. Operations exposes last attempt/success,
+cadence, age, next expected check, overdue duration and trigger. Missing or
+malformed evidence is unavailable; no synthetic or missing run is invented.
+
+## D-2026-08-31-034 — Prepare external dispatch without switching authority
+
+**Decision:** External scheduling uses authenticated workflow_dispatch into the
+same two canonical collectors, with an allowlisted trigger_source input. The
+provider-neutral client and inert Cloudflare Worker validate repository ID
+1349678672, workflow identity and live default branch. Legislative GitHub cron
+stays 7,22,37,52; Executive becomes 13,43. Proposed external times are 5,20,35,50
+and 11,41, respectively. Preserve existing fixed concurrency groups with
+cancel-in-progress false and validated latest-state restore.
+
+**Reason:** Measured multi-hour cron gaps require independent delivery, but adding
+a dispatch client alone does not establish provisioning or cadence. Concurrent
+successful triggers must continue through one writer and retained deduplication.
+A failed attempt can have sent an external alert before saving durable state.
+
+**Consequence:** Block automatic replay when a later unretained producer attempt
+may have entered the collector/analyst side-effect step; demonstrably unstarted or
+skipped steps can recover normally. Review/recover ambiguous delivery rather than
+silently resending. This does not claim atomic exactly-once delivery across GitHub
+artifacts and external providers. The Worker has no public trigger endpoint and
+ships with scheduling disabled and no secrets. Require legitimate infrastructure
+configuration, existing obsolete-writer clearance, several real dispatch cycles
+and continuity verification before activation or any later GitHub-cron removal.
+The current task authorizes staged PR/CI/merge/Pages deployment; it does not approve
+rebaselining, revival of retired writers, or bypass of existing recovery gates.

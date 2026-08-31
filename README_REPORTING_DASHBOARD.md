@@ -118,10 +118,21 @@ dollar exposure. Review inventory distinguishes **Access/request required**,
 **Manual/parser exception**, and **Other/uncategorized**; OGE access requests are
 informational inventory rather than thousands of system failures.
 
-Run health reflects retained branch-level evidence, including errors, last run,
-last success, and data age. Missing evidence is **Unknown**. Zero new records is
-not failure. No stale threshold or source-specific failure attribution is inferred
-when the retained evidence does not support it.
+Run health distinguishes successful execution from current monitoring. The central
+Python freshness policy requires Legislative success within 30 minutes (15-minute
+cadence), Executive success within 60 minutes (30-minute cadence), and downstream
+AI success within 75 minutes (collector-triggered, allowing its 45-minute runtime).
+Overall precedence is **failure > stale > unknown > success**. A latest failure
+outranks a recent earlier success; zero new filings is not a failure.
+
+**Monitoring current** appears only when all required workers meet the policy.
+Open pages age the retained evidence even if publishing stops. **Source data
+through** comes from production source observations/collector completion; page
+generation and AI/portfolio refresh do not advance it. Operations separately shows
+generation time and each worker's attempt, success, cadence, next expected check,
+age, overdue duration, estimated missed intervals, conclusion/errors and trigger.
+Unknown timestamps stay unavailable. See [freshness semantics and root cause](docs/SCHEDULER_FRESHNESS.md)
+and [external scheduler activation](docs/EXTERNAL_SCHEDULER.md).
 
 ## GitHub Pages deployment
 

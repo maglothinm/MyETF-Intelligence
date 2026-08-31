@@ -68,7 +68,7 @@ for filename, expected_name in expected_names.items():
 
 expected_schedules = {
     "legislative_trade_tracker_v2.yml": ("7,22,37,52 * * * *", "America/New_York"),
-    "executive_trade_tracker.yml": ("13 * * * *", "America/New_York"),
+    "executive_trade_tracker.yml": ("13,43 * * * *", "America/New_York"),
 }
 for filename, (cron, timezone) in expected_schedules.items():
     schedules = parsed[filename]["on"]["schedule"]

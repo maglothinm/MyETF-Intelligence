@@ -28,6 +28,7 @@ from bs4 import BeautifulSoup
 from requests import Response, Session
 
 try:  # Support both ``python -m scripts...`` and direct script execution.
+    from .run_trigger import trigger_source
     from .monitor_disclosures import (
         DEFAULT_MAX_DOWNLOAD_BYTES,
         DEFAULT_MAX_OCR_PAGES,
@@ -52,6 +53,7 @@ try:  # Support both ``python -m scripts...`` and direct script execution.
         utc_now,
     )
 except ImportError:  # pragma: no cover - direct execution path
+    from run_trigger import trigger_source
     from monitor_disclosures import (  # type: ignore
         DEFAULT_MAX_DOWNLOAD_BYTES,
         DEFAULT_MAX_OCR_PAGES,
@@ -1348,6 +1350,7 @@ def append_run_history(path: Path, result: TrackerResult) -> None:
         "errors": result.errors,
         "run_url": run_url,
         "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "trigger_source": trigger_source(),
         "run_attempt": run_attempt,
     }
     append_jsonl(path, (record,))
