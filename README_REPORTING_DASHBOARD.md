@@ -195,6 +195,12 @@ does not claim investment performance; a portfolio without open positions says
 
 ## Acceptance limits
 
+The [scheduler freshness release receipt](docs/validation/scheduler-freshness-2026-08-31.md)
+records the deployed source, exact CI/Pages attempts, protected-state continuity
+and live overdue result. External scheduling is prepared but inactive; successful
+publication does not establish actual collector cadence. Clock uncertainty stays
+unknown or stale, and elapsed age survives repeat or delayed publications.
+
 Automated checks and emulated viewport reviews do not establish real-device
 acceptance. Actual Chrome desktop, current iPhone Safari touch behavior, and the
 physical rotated CHG90 display have not yet been validated for this redesign.
