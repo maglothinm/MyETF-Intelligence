@@ -9,11 +9,12 @@ Implement the owner's staged scheduler/freshness rollout. Canonical repository
 ID **1349678672**, current name **maglothinm/MyETF-Intelligence**, default **main**.
 Use isolated branch `codex/scheduler-freshness` in `.worktrees/scheduler-freshness`.
 The original checkout, local main and unrelated worktrees are preserved.
-Initial base `ecc031d`; concurrent approved icon merge `6bd7684` must be integrated
-before release. Never implement or dispatch in legacy `maglothinm/MyETF`.
+Initial base `ecc031d`; approved icon merge `6bd7684` and release receipt
+`6384c76` are integrated. Never implement or dispatch in legacy `maglothinm/MyETF`.
 
-**Current delivery state:** implementation and focused tests in progress. No issue
-#19 PR, merge, deployment or external-scheduler activation is claimed yet.
+**Current delivery state:** implementation, independent review and local regression
+are complete. PR CI, merge and deployment remain pending. No external scheduler
+has been activated.
 
 ## Completed implementation and evidence
 
@@ -23,12 +24,12 @@ cadence policy, open pages did not age health, and failed attempts could be abse
 from successful protected artifacts. The live page reproduced green with
 Legislative 1h33m and Executive 3h22m old at 17:06 UTC.
 
-The changes centralize Legislative15/30, Executive30/60 and collector-triggered
-AI15/75 minute cadence/freshness policy; failure > stale > unknown > success.
+The changes centralize Legislative 15/30, Executive 30/60 and collector-triggered
+AI 15/75 minute cadence/freshness policy; failure > stale > unknown > success.
 Source time excludes generation/AI/portfolio refresh; Operations exposes timing,
 overdue and trigger evidence. The page ages without new publication. New exact
 Actions-attempt observations supplement health without becoming state authority.
-Executive cron is changed to13,43; manual dispatch remains. The external dispatch
+Executive cron is changed to `13,43`; manual dispatch remains. The external dispatch
 client/Cloudflare example is disabled by default and keeps GitHub fallback cron.
 
 Existing noncancelling concurrency/validated restore/deduplication are preserved.
@@ -36,12 +37,22 @@ An additional retry guard blocks an unretained attempt that might have sent an
 alert; it never resets state or guesses delivery. Read the exact implementation
 and external activation documentation before operating it.
 
-Focused root backend check: **130 passed**. Agent integrated backend/dashboard
-check: **142 passed**. Frontend native tests: **32 passed**; full DOM rerun and
-combined regression suite pending. Initial rendered390px preview shows amber
-polling overdue, source time11:32 from collector evidence, readable Operations
-facts and no horizontal overflow. Final integrated CI/browser/Pages acceptance
-remains pending. Preview uses isolated validated artifact copies only.
+Final full local regression: **633 passed, no skips, in 131.00 seconds**.
+Worker tests: **11 passed**. This includes generated dashboard/Vault/PDF DOM
+checks; the dashboard's 63 DOM cases and 35 native JS cases also passed separately.
+Initial missing dependencies were resolved using the repository's existing
+declared dependency installation, without changing permissions or weakening tests.
+Rendered 320px/390px previews show amber polling overdue, source time 11:32 from
+collector evidence, readable Operations facts and no horizontal page overflow.
+Preview uses isolated validated artifact copies only.
+
+Independent review fixed slow-device-clock false green, impossible chronology,
+missing/malformed Actions snapshots, pending reruns hiding failure, late jobs
+whose workflow queued earlier, optional heartbeat errors, and history focus.
+Read-only live integration at 17:26 UTC made 53 API reads: all three observation
+branches are available, exact jobs/attempts match validated producers, and all
+three retry guards allow the clean current authority. The model correctly reports
+all three stale while source currency remains 15:32:55 UTC.
 
 Read-only baseline audit completed17:03 UTC:
 
@@ -65,11 +76,13 @@ was restored or advanced by this task.
 
 ## Next safe action and blockers
 
-Finish integrated tests and independent review; integrate current main's icons,
-commit implementation/docs, open canonical PR, require exact-head CI, merge and
+Commit the integrated implementation/docs, open canonical PR, require CI for the
+tested commit, merge and
 verify actual Pages inputs/attempts/artifact/live header/Operations. Requery live
 producer state before any operation. Do not claim real15/30-minute cadence until
-several subsequent actual runs establish it.
+several subsequent actual runs establish it. A repeated 17:27 UTC preflight
+confirmed the same protected artifacts and live icon deployment with continuity
+passing; no newer collector run had arrived.
 
 Cloudflare account/Worker/token configuration is not connected or activated.
 The dispatcher is code only. Keep GitHub cron enabled. Obsolete queued writers

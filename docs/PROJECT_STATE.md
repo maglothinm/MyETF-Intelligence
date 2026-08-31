@@ -1,8 +1,9 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Scheduler/freshness work in progress under issue #19. Local changes are
-not yet a deployed release or active external scheduler. Existing dashboard,
+Status: **Scheduler/freshness implementation under issue #19 passes all 633 local
+regression tests and 11 Worker tests. CI/merge/deployment remain pending; the
+external scheduler is inactive. Existing dashboard,
 Vault/Investor Edge/Operations/shell releases are preserved; private Vault runtime,
 obsolete-writer clearance, device and cutover gates remain separate.**
 
@@ -14,6 +15,8 @@ live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 [Issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) tracks the
 owner's staged freshness and scheduler rollout. Work is isolated on
 `codex/scheduler-freshness`, initially based on canonical `main` `ecc031d`.
+The concurrent approved icon release and its final receipt through `6384c76`
+are integrated without altering its assets or layout.
 [Root cause and semantics](SCHEDULER_FRESHNESS.md) record the actual collector ->
 artifact -> AI/Pages -> dashboard path before behavior changes. Historical success
 without an SLA caused a green dashboard despite hours between collector runs.
@@ -53,6 +56,52 @@ about 1h33m and Executive about 3h22m old at 17:06 UTC. The obsolete queued runs
 `33219808359` and `33221027676` still exist; existing manual-writer/activation
 clearance gates are unchanged. Evidence is ignored under
 `.worktrees/scheduler-freshness/.remediation/baseline/`.
+
+At 17:26 UTC, the new read-only observer and retry guard were exercised against
+live canonical Actions evidence: all branches available, exact attempts/jobs
+matched, and all current authorities allowed. The resulting model is correctly
+stale for all three workers; source timestamp remains 15:32:55 UTC. A repeated
+17:27 UTC full artifact/live-site audit confirmed unchanged authorities and
+continuity. The final local suite passes 633 tests with no skips; Worker tests
+pass all 11 cases. PR/Pages production verification is still pending.
+
+## Approved PolitiTrack icon package — deployed and verified, 2026-08-31
+
+Canonical repository ID **1349678672**, current name
+**maglothinm/MyETF-Intelligence**, default **main**.
+[PR #18](https://github.com/maglothinm/MyETF-Intelligence/pull/18) merged source
+`aa8201a7b3b95c575adf069f39688e1ac811f0c6` as
+`6bd76843e604941efef757aab434699feb1944f1`; both have tree
+`c2300379c6347fdf2b652f86c7a25d2886f554f7`. The isolated
+`codex/polititrack-icon-assets` checkout preserves shared files and worktrees.
+
+All 22 owner-supplied images, including the 1254px original and seven-frame
+Windows ICO, are preserved byte-for-byte under `assets/branding/polititrack/`.
+Both dashboard generators publish the 11 web images and manifest. Main page,
+Wallboard, Filing Vault and the retained React frontend use the approved header
+image with unchanged dimensions/layout; Investor Edge retains its text heading.
+No Windows packaging configuration exists. No workflows, collectors, state,
+alerts, schedules, credentials, hosting settings or Vault runtime were changed.
+
+Local verification passed **524 Python tests**, **1 React App test**, production
+React build, source/generated-byte checks and responsive layout comparisons.
+Existing React warnings remain in unchanged legacy code/dependencies.
+PR CI **33416929114 / 1** and main CI **33417300859 / 1** each passed 441 tests,
+6 DOM cases and Linux verification. Automatic Pages **33417300834 / 1** succeeded
+at **17:02:40 UTC**, source `6bd76843`, artifact **9767514649**.
+The final archive and **250 served files plus root** match byte-for-byte;
+live desktop/mobile checks show the new image with unchanged layout and no
+browser warnings/errors. All 12 added web assets match the approved source.
+
+Pages consumed unchanged Legislative **9764350004** (run **33408974583 / 1**),
+Executive **9760298853** (**33398375467 / 1**), AI **9764387095**
+(**33409079174 / 1**) and simulator **9734790733** (**33320677882 / 1**).
+Fresh producer high-water checks passed with no later producer run.
+No production writer, simulation or external alert was dispatched.
+See [the icon release receipt](validation/icon-assets-2026-08-31.md) for exact
+jobs, archive hashes, state continuity, rollback and acceptance limits.
+The icon request is complete; existing device/runtime/cutover gates remain
+separate and no settings changes or additional operational dispatch are needed.
 
 ## Persistent header and Workspace shell — deployed and verified, 2026-08-31
 
