@@ -1,6 +1,12 @@
 /* The Overview downloads only the additive insights model. Full ledgers are lazy. */
 (() => {
   "use strict";
+  // Share the actual border-box height: the header wraps on mobile and at zoom.
+  const header=document.querySelector(".app-header");
+  const measureHeader=()=>document.documentElement.style.setProperty("--header-height",`${header.getBoundingClientRect().height}px`);
+  measureHeader();
+  if(typeof ResizeObserver==="function")new ResizeObserver(measureHeader).observe(header);
+  else window.addEventListener("resize",measureHeader);
   const {el,esc,helpButton,numeric,number,money,percent,title,date,age,safeUrl,link,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief}=PT;
   const PAGE_SIZE = 50;
   const reviewLabels={manual_exception:"Manual Parser Exceptions",access_required:"Access / request required",other:"Other / uncategorized"};
@@ -113,7 +119,7 @@
   const pendingTables={};
   async function fetchTable(key){if(pendingTables[key])return pendingTables[key];pendingTables[key]=(async()=>{const rows=await checkedJson(`data/${definitions[key].file}.json`);if(!Array.isArray(rows)||rows.some(r=>!r||typeof r!=="object"||Array.isArray(r)))throw new Error("Published ledger contains malformed records");if(key==="runs"){const ai=await checkedJson("data/ai-runs.json");if(!Array.isArray(ai)||ai.some(r=>!r||typeof r!=="object"||Array.isArray(r)))throw new Error("AI run ledger contains malformed records");return [...rows,...ai.map(r=>({...r,branch:"ai"}))];}return rows;})();try{return await pendingTables[key];}finally{delete pendingTables[key];}}
   async function loadTable(key){if(state.data[key]){renderTable(key);return;}el(`${key}-count-label`).textContent="Loading retained records…";if(!state.model)return;try{const rows=await fetchTable(key);if(key==="reviews")validateReviews(rows,state.model);state.data[key]=rows;populateFilters(key);renderTable(key);}catch(e){el(`${key}-count-label`).textContent=`Unable to load records: ${e.message}. Reopen this section to retry.`;}}
-  async function navigate(){const [path,query=""]=(location.hash.slice(1)||"overview").split("?");let [section,record]=path.split("/");const params=new URLSearchParams(query);const aliases={ai:"signals",portfolio:"agent",filings:"records",transactions:"records",reviews:"records",runs:"operations"};if(aliases[section]){record=section;section=aliases[section];}
+  async function navigate(initial=false){const navigationHash=location.hash;const [path,query=""]=(navigationHash.slice(1)||"overview").split("?");let [section,record]=path.split("/");const params=new URLSearchParams(query);const aliases={ai:"signals",portfolio:"agent",filings:"records",transactions:"records",reviews:"records",runs:"operations"};if(aliases[section]){record=section;section=aliases[section];}
     if(section==="notifications"){openDialog("notifications-dialog",el("changes-card"));section="overview";}
     if(!["overview","signals","investor-edge","agent","records","operations"].includes(section))section="overview";
     state.section=section;state.record=["filings","transactions","reviews"].includes(record)?record:"filings";
@@ -128,12 +134,15 @@
     document.querySelectorAll("[data-record]").forEach(a=>{if(a.dataset.record===state.record)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
     el("review-categories").hidden=state.record!=="reviews";
     if(section==="investor-edge")await loadEdge();if(section==="records")await loadTable(state.record);if(section==="signals")await loadTable("ai");if(section==="agent")await loadTable("portfolio");if(section==="operations")await loadTable("runs");
+    // Do not let a slow route move a newer page or steal an open dialog's focus.
+    if(location.hash!==navigationHash||document.querySelector("dialog[open]"))return;
     if(section==="records"&&state.tables[state.record].selected){const selected=el(`selected-${state.record}-title`);selected?.focus({preventScroll:true});selected?.scrollIntoView?.({block:"nearest"});}
     else if(section==="records"&&state.record==="reviews"&&state.tables.reviews.filters.category==="manual_exception"){
       const links=el("reviews-body").querySelectorAll(".record-link"),target=links.length===1?links[0]:el("reviews-count-label");
       if(!links.length||links.length>1)target.setAttribute("tabindex","-1");
       target.focus({preventScroll:true});target.scrollIntoView?.({block:"nearest"});
     }
+    else if(!initial||navigationHash)el(section).scrollIntoView?.({block:"start"});
   }
   const edgeCount=value=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0?value:null;
   const edgeStats=[["published_profile_count","Profiles"],["completed_profile_count","Complete"],["building_profile_count","Building"],["historical_transaction_count","Historical trades"],["backfill_processed_this_run","Processed this run"],["backfill_pending_observation_count","Pending observations"]];
@@ -221,5 +230,5 @@
   el("sound-mode").onchange=e=>notificationAction(()=>notifications.setSettings({mode:e.target.value}));el("sound-volume").onchange=e=>notificationAction(()=>notifications.setSettings({volume:Number(e.target.value)/100}));
   for(const id of ["quiet-enabled","quiet-start","quiet-end"])el(id).onchange=()=>notificationAction(()=>notifications.setSettings({quietHours:{enabled:el("quiet-enabled").checked,start:el("quiet-start").value,end:el("quiet-end").value}}));
   el("enable-sound").onclick=e=>notificationAction(()=>notifications.enableSound(e));el("test-sound").onclick=e=>notificationAction(()=>notifications.testSound(e));
-  setInterval(clock,1000);setInterval(loadData,300000);clock();renderNotifications();loadData().then(navigate);
+  setInterval(clock,1000);setInterval(loadData,300000);clock();renderNotifications();loadData().then(()=>navigate(true));
 })();

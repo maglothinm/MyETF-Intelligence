@@ -503,3 +503,50 @@ catalog/viewer is published while private retrieval remains inactive; build
 configuration contains no API origin. Protected producer attempts, artifacts and
 retained simulator history remain unchanged. Runtime/source/device acceptance
 stays open in issue #13; this publication cannot be described as an operating cache.
+
+## D-2026-08-31-030 — Keep one measured dashboard shell and the document scroller
+
+**Decision:** Implement persistent navigation in the existing shared dashboard
+shell. Observe the header's actual border-box height and share that measurement
+with the desktop sidebar position, remaining viewport height and document anchor
+offset. Keep the document as the main content scroller. Only the persistent
+Workspace panel receives independent vertical overflow, and only while its
+desktop layout applies; preserve the existing narrow-screen navigation.
+
+**Reason:** Header wrapping, viewport changes and zoom make a guessed fixed offset
+unreliable. A shared shell keeps all six dashboard hash routes consistent without
+route copies or an additional scrolling page wrapper. Removing the shell's table
+height cap avoids a third vertical scroll context while preserving horizontal
+access to wide records. Native dialog/popover layering and the existing shared
+tooltip remain above the pinned header and sidebar.
+
+**Consequence:** Preserve branding, controls, navigation semantics, focus order
+and breakpoints, including current main's seven-link Workspace and separate
+Filing Vault page. Scope the shell class to the root dashboard. Change only
+presentation assets, related frontend fixtures and project records; preserve
+upstream workflows, collectors, scores, state, alerts, simulations and hosting.
+Report local, integrated, deployed and physical-device validation separately.
+This shell decision was locally numbered 025 before integration; published
+Operations decision 025 and subsequent decisions 026–029 retain their identities.
+
+## D-2026-08-31-031 — Deploy the approved persistent shell through canonical Pages
+
+**Decision:** The owner's explicit **Deploy** instruction authorizes publishing
+the tested shell through a canonical pull request, successful CI, merge and the
+existing read-only Pages publisher. Integrate the already-approved Operations,
+Investor Edge and Filing Vault releases from main without reverting their changes
+or discarding their release and continuity evidence.
+
+**Reason:** The shell can be deployed without a production writer or changed
+workflow configuration. Asset-only changes require explicit dispatch of the
+existing publisher when its unchanged push-path filter does not trigger a run.
+The owner authorized deployment after native-input/device limitations were reported.
+
+**Consequence:** Validate the exact combined source, protected producer attempts,
+ancestry and high-water marks; require successful canonical CI and independently
+verify the Pages artifact, consumed inputs and live content. Record exact release
+IDs after verification. This checkpoint records authorization and integration,
+not a completed deployment. No production writer, simulation, external alert,
+private Vault runtime activation, repository setting or rebaseline is authorized.
+Device acceptance, obsolete queues, historical simulator concerns, held PR #3,
+cutover and external-delivery proof remain separate open work.

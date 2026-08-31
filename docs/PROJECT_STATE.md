@@ -1,13 +1,61 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Filing Vault code and catalog interface published through PR #16 at
-`104fc51`; PR/main CI and Pages succeeded. Private cached-document retrieval is
-not activated. Operations, Investor Edge and protected-state continuity remain
-preserved; runtime, physical-device and cutover gates stay separate.**
+Status: **Persistent dashboard header and Workspace deployment is authorized and
+being integrated with main `d6b1e41` in PR #17; integrated validation, canonical CI and
+Pages verification remain pending. Filing Vault source/catalog is published at
+`104fc51`; private retrieval remains inactive. Existing state/device/cutover gates
+are preserved.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Persistent header and Workspace shell — deployment in progress, 2026-08-31
+
+Work record: [issue #4](https://github.com/maglothinm/MyETF-Intelligence/issues/4),
+with shared help compatibility related to [issue #6](https://github.com/maglothinm/MyETF-Intelligence/issues/6).
+The owner explicitly requested **Deploy** after receiving the local validation
+results and native-input/device limits. This authorizes the normal canonical
+push/PR/CI/merge path and the existing read-only Pages publisher; it does not
+authorize a protected writer, simulation, external alert or runtime activation.
+
+Canonical repository ID **1349678672**, live name
+**maglothinm/MyETF-Intelligence**, default **main**. The isolated branch
+`codex/persistent-shell-layout` contains shell implementation
+`73193d91088efecbecf228220c0580f986039832`. Integrated head `b1897d7` is pushed in
+[PR #17](https://github.com/maglothinm/MyETF-Intelligence/pull/17); integration now
+also preserves canonical main's documentation-only successor
+`d6b1e4199cde3bb393d8b11b2a666b6c195598e2`. Preserve the approved Operations,
+Investor Edge and Filing Vault implementation and their evidence below, including
+the seven-link Workspace and the separate Filing Vault page. The shared checkout
+and unrelated worktrees are not release targets.
+
+The header is sticky across the six dashboard hash routes. Its measured height
+sets the desktop sidebar offset, remaining viewport height and anchor clearance.
+Workspace gains independent vertical scrolling only when needed; the document
+remains the content scroller. Table vertical height caps are removed within this
+shell, with horizontal table access retained. Existing mobile navigation, native
+dialog/popover layering, help and focus behavior are preserved. The shell class
+is limited to the root dashboard; standalone pages retain their own layouts.
+
+The shell delta changes only `scripts/dashboard_assets/{app.js,index.html,styles.css}`,
+`tests/{dashboard_dom.test.cjs,dashboard_notification_integration.test.cjs}` and
+these project records. It introduces no collector, scoring, state schema, alert,
+simulation, workflow or hosting configuration change relative to current main.
+
+Original shell validation at `73193d9`: **295 active Python tests passed**,
+including **41 DOM scenarios** and **32 notification scenarios** through existing
+wrappers; syntax and diff checks passed. Static generation produced **5,079 filings /
+60 transactions / 1,496 reviews / 11 analyses** from unchanged read-only fixtures.
+Rendered checks covered six routes and 320px through 3840px without horizontal
+page overflow. These are pre-integration results, not proof of the combined tree
+or a new deployment. The canonical prepublication provenance/high-water audit
+passed at **12:57:41 UTC** with unchanged protected inputs; it does not establish
+a future restore or successful publication. Combined tests are running. PR/main
+CI, Pages artifact and live-byte verification remain pending.
+The preceding published build and complete release receipts are recorded below.
+Native wheel containment, physical keyboard/touch/Safari, audio and physical
+CHG90 acceptance remain unverified; issue #4/#6 gates are not closed by deployment.
 
 ## Full deployment follow-up — Investor Edge production gate remains
 
@@ -23,7 +71,7 @@ AI-only processing cannot reconstruct catalog-only transactions and would not
 complete the bootstrap. No writer, simulation, rebaseline, external alert or
 infrastructure configuration was performed in this follow-up. The next safe action
 requires GitHub clearance, fresh provenance checks and the existing bounded
-tracker -> AI -> Pages chain; see [the active handoff](HANDOFF.md).
+tracker -> AI -> Pages chain; see the retained Investor Edge prerequisite record in [the handoff](HANDOFF.md).
 
 ## Filing Vault — published interface, private runtime inactive, 2026-08-31
 
@@ -408,7 +456,7 @@ is content/deployment acceptance, not physical-device acceptance.
 
 | Role | Repository | Repository ID | Recorded head | Status |
 |---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified combined release / Pages `676701ac` plus documentation-only evidence successors | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
+| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified Filing Vault release / Pages `104fc51`, documentation successor `d6b1e41`; shell PR #17 pending | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
 | Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
 | Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
 
