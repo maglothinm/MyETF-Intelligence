@@ -310,3 +310,44 @@ protected upload. Rollback means a reviewed code revert that continues from the
 newest valid state. It never means replacing current state with an older copy.
 Manual production verification remains subject to every existing writer-safety
 gate. No proxy or unofficial data source is authorized by this decision.
+
+
+## D-2026-08-31-023 — Share review classification and existing record navigation
+
+**Decision:** Project every retained review through the existing Python category
+classifier for both the Overview count and public JSON/CSV inventory. Publish
+exact-match filing availability, retained metadata and synthetic ancestry as
+additive presentation fields; never mutate the source ledgers. Use the existing
+hash router for category and record selection and the existing tables for detail.
+Source options carry their retained source/branch dimension. Workspace explanations
+continue through `PT.HELP` and the single existing tooltip.
+
+**Reason:** A count that opens an unfiltered, differently classified inventory
+makes the underlying parser exception difficult to find. A shared projection
+keeps the count and list consistent without a second browser classifier.
+
+**Consequence:** Opening the card clears stale table filters, selects manual
+exceptions, and brings the result into view. Synthetic reviews remain labeled in
+full Records but are excluded from production exception counts. A contradictory
+or missing filing match opens the original review instead of guessing a filing.
+Refresh stages newly opened tables too and rejects mismatched review counts.
+No new resolution action, production write, workflow or simulation behavior is
+introduced. This local implementation is not authorization or proof of publication.
+
+
+## D-2026-08-31-024 — Publish approved review UX through canonical Pages
+
+**Decision:** The owner's explicit “Publish” instruction authorizes releasing
+the tested review UX via a canonical pull request, successful CI and the existing
+read-only Pages workflow. Preserve the separately approved recovery documentation
+already on main and leave the local recovery branch/commit untouched.
+
+**Reason:** The dashboard fixes are tested presentation changes. Publication
+does not require a production writer or modification of protected state, and
+does not resolve the separate obsolete queue or physical-device acceptance gates.
+
+**Consequence:** Revalidate exact protected producer attempts, high-water marks,
+ZIP hashes and inventories before and after publication, and verify the deployed
+artifact/build and live content. Keep issues #4 and #6 open for outstanding device
+acceptance. No collector, AI, simulation or external-alert dispatch is authorized
+by this UI publication decision. Publication remains pending until verified.

@@ -16,10 +16,10 @@ from typing import Any, Iterable, Mapping, Sequence
 
 try:  # Support both package and direct-script execution.
     from .investor_edge import build_dashboard_addon
-    from .dashboard_insights import build_insights, public_payload
+    from .dashboard_insights import build_insights, public_payload, review_rows
 except ImportError:  # pragma: no cover - direct execution path
     from investor_edge import build_dashboard_addon  # type: ignore
-    from dashboard_insights import build_insights, public_payload  # type: ignore
+    from dashboard_insights import build_insights, public_payload, review_rows  # type: ignore
 
 DEFAULT_OUTPUT = Path("trade-dashboard-site")
 
@@ -92,6 +92,17 @@ REVIEW_FIELDS = (
     "reason",
     "title",
     "agency",
+    "category",
+    "filing_key",
+    "filing_available",
+    "filing_status",
+    "review_status",
+    "status",
+    "access_mode",
+    "review_reason",
+    "first_seen_utc",
+    "updated_at_utc",
+    "is_synthetic_test",
 )
 
 RUN_FIELDS = (
@@ -716,6 +727,7 @@ WALLBOARD_JS = _SHARED_JS + "\n" + (ASSET_DIR / "wallboard.js").read_text(encodi
 def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
     # Public projection only; never publish private delivery payloads or modify inputs.
     payload = public_payload(payload)
+    payload["reviews"] = review_rows(payload)
     output_dir = output_dir.resolve()
     parent = output_dir.parent
     parent.mkdir(parents=True, exist_ok=True)

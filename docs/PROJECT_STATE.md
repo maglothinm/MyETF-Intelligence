@@ -1,13 +1,67 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Senate resilience verified in scheduled production; state continuity,
-accepted success heartbeats and live dashboard content passed. Requested manual
-rerun remains blocked by two obsolete queues that GitHub cannot cancel/delete.
-Device acceptance, PR #3 and cutover remain open.**
+Status: **Dashboard review UX publication authorized; PR/CI/Pages verification
+in progress. Senate recovery evidence preserved. Device acceptance, obsolete
+queues, held PR #3 and cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Dashboard review UX — approved publication in progress, 2026-08-31
+
+Work record: issue #4, with workspace help related to issue #6. This branch starts
+at canonical remote `main` commit `3902968d5d70cd00030248ae4a6bcea18aa2e6ea`.
+The owner explicitly requested “Publish” after reviewing local implementation
+`8f5aa724628b5480c8b6280904d57d96253e596c` and its disclosed device limits.
+The branch incorporates the separately approved upstream recovery-document
+commit `ac6342ac85e5a395f1b8bab251b8f608c47249e0`, preserving its incident
+evidence unchanged. Local `main` at `9e5de909d7f939c0088914511cca72852e95508e`
+remains untouched. Runtime code is unchanged by this documentation integration.
+
+The dashboard card now deep-links to
+`#records/reviews?category=manual_exception`. The full public review projection
+and Overview share the existing Python classifier, including synthetic-record
+exclusion. Exact matched filing keys support selection in the existing table;
+unmatched reviews retain their own detail. Explicit Source filters use retained
+branch/source fields; OGE, House, Senate, Executive and Legislative are available.
+Signals, Records and Operations reuse the existing shared tooltip behavior.
+No workflow, collector, scoring, state schema, alert, simulation or hosting path
+changed. This remains read-only presentation, with no dashboard retry/resolution.
+
+Local validation: **295 active Python tests passed**, including the nested release
+checks; **34 DOM scenarios** and **32 notification scenarios** passed. Final
+focused DOM rerun passed after mobile focus/layout adjustments. JavaScript syntax,
+Python compilation and diff checks pass. Windows has no Bash runtime: local
+`verify.sh` execution is not claimed. Publication is authorized through the existing canonical PR/CI and read-only
+Pages path; new remote CI, merge and live release verification are pending. In-app rendered desktop/mobile
+checks passed at 1440×1000 and 390×844 for exception navigation, source filtering,
+focus/visibility and all five mouse-hover bubbles. Keyboard/touch behavior passed
+DOM fixtures; native keyboard automation, physical touch/Safari/audio and physical
+ultrawide acceptance remain unverified. See the active handoff for exact limits.
+
+Fresh baseline audit at **10:53 UTC** independently verified GitHub authority,
+exact successful producer attempts/jobs, ancestor commits, producer high-water
+marks, expiry, ZIP digests, inventories and retained-state continuity:
+
+| Protected input | Artifact | Run / attempt | Producer job |
+|---|---:|---|---:|
+| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` |
+| Executive | `9746602231` | `33360633323` / 1 | `99391153447` |
+| AI | `9749567326` | `33369677492` / 1 | `99417669143` |
+
+Existing Pages run `33369728437` / 1 succeeded, artifact `9749580990`; all 21
+checked live URLs at 10:56 UTC matched its bytes, build `3902968`. This verifies the existing
+release only. Local generation from isolated, hash-verified copies reconciles
+5,079 filings, 60 transactions, 1,496 reviews and 11 analyses; exactly one manual
+exception has an exact retained filing match. Inputs are unchanged, not restored
+for production. Implementation evidence is in ignored `.remediation/dashboard-review-ux/`;
+fresh publication evidence is in `.remediation/dashboard-review-publish/`.
+The two obsolete queued runs remain; this task did not dispatch any writer.
+
+The following Senate recovery section is preserved from the approved upstream
+documentation. Manual-dispatch, settings and external-delivery gates remain
+separate from this read-only dashboard publication.
 
 ## Senate recovery — verified 2026-08-31 09:51 UTC
 

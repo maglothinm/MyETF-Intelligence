@@ -112,7 +112,7 @@ async function dashboard(options = {}) {
   if (options.change) options.change(data);
   const requests = [], errors = [], failures = new Set(), virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', error => errors.push(error.message));
-  const dom = new JSDOM(fs.readFileSync(path.join(build, 'index.html'), 'utf8'), {url: 'https://dashboard.test/PolitiTrack/',
+  const dom = new JSDOM(fs.readFileSync(path.join(build, 'index.html'), 'utf8'), {url: 'https://dashboard.test/PolitiTrack/' + (options.hash || ''),
     runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole});
   const {window} = dom;
   window.matchMedia = query => ({matches: Boolean(options.coarse && /pointer:\s*coarse|hover:\s*none/.test(query)), media: query,
@@ -359,6 +359,9 @@ test('core navigation, Actions and signal concepts resolve authoritative context
   }}); t.after(env.close);
   assert.equal(Object.isFrozen(env.window.PT.HELP), true, 'Core definitions share a frozen source');
   const checks = [
+    ['nav a[href="#signals"]', 'signalsWorkspace', /qualifying trading signals/],
+    ['nav a[href="#records"]', 'recordsWorkspace', /manual parser exceptions/],
+    ['nav a[href="#operations"]', 'operationsWorkspace', /retained pipeline run evidence/],
     ['.nav-links a[href="#investor-edge"], nav a[href="#investor-edge"]', 'investorEdge', /historical investments performed relative to relevant benchmarks/],
     ['nav a[href="#agent"]', 'agentWorkspace', /simulated \$10,000 historical replay/],
     ['.header-actions [data-dialog="actions-dialog"]', 'actions', /Opens controls/],
@@ -449,7 +452,7 @@ test('touch workflow help uses separate controls and never launches an action wh
 test('only explanatory touch navigation previews on first tap; second tap and ordinary navigation work', async t => {
   const env = await dashboard({coarse: true}); t.after(env.close);
   const tip = env.byId('tooltip');
-  for (const selector of ['nav a[href="#investor-edge"]', 'nav a[href="#agent"]']) {
+  for (const selector of ['nav a[href="#investor-edge"]', 'nav a[href="#agent"]', 'nav a[href="#signals"]', 'nav a[href="#records"]', 'nav a[href="#operations"]']) {
     const link = env.doc.querySelector(selector);
     pointer(env, link, 'pointerdown', {pointerType: 'touch'});
     assert.equal(activationWasBlocked(env, link, 'touch'), true, 'First explanatory tap stays on the current page');
@@ -461,7 +464,7 @@ test('only explanatory touch navigation previews on first tap; second tap and or
     assert.equal(activationWasBlocked(env, link, 'touch'), false, 'Second intentional tap executes navigation');
     assert.equal(tip.hidden, true);
   }
-  const ordinary = env.doc.querySelector('nav a[href="#signals"]');
+  const ordinary = env.doc.querySelector('nav a[href="#overview"]');
   pointer(env, ordinary, 'pointerdown', {pointerType: 'touch'});
   assert.equal(activationWasBlocked(env, ordinary, 'touch'), false, 'Ordinary navigation never needs a second tap');
   assert.equal(env.window.PT.isCoarsePointer({pointerType: 'mouse'}), false, 'Actual mouse input overrides coarse device capability');
@@ -643,4 +646,234 @@ test('axe reports no serious/critical DOM accessibility violations (layout/color
   env.byId('notifications-dialog').close();
   await env.navigate('#records', () => env.byId('filings-body').children.length === 50); await check('Records table');
   env.doc.querySelector('.sidebar-footer [data-dialog="risk-dialog"]').click(); await check('Methodology dialog');
+});
+
+
+function reviewFixture(data, count = 1) {
+  const review = {review_id: 'review:paper/&?=', filing_key: data.filings[0].filing_key, filing_available: true,
+    source: 'senate', branch: 'legislative', report_id: data.filings[0].report_id, filer: 'Paper Filing Official',
+    category: 'manual_exception', is_synthetic_test: false, filed_date: '2026-08-01',
+    observed_at_utc: '2026-08-28T17:46:35Z', reason: 'Paper images need manual parser review',
+    filing_status: 'review_required', source_url: 'https://example.test/paper'};
+  data.filings[0] = {...data.filings[0], filer: review.filer, status: review.filing_status, review_reason: review.reason};
+  data['pending-reviews'] = Array.from({length: count}, (_, i) => ({...review, review_id: review.review_id + i, report_id: i ? 'paper-' + i : review.report_id}));
+  data['pending-reviews'].push(
+    {...review, review_id: 'request', source: 'oge', branch: 'executive', filer: 'Access Required Official', category: 'access_required'},
+    {...review, review_id: 'house', source: 'house', branch: 'legislative', filer: 'House Review Official', category: 'other'},
+    {...review, review_id: 'custom', source: 'ethics-office', branch: 'executive', filer: 'Custom Source Official', category: 'other'},
+    {...review, review_id: 'TEST:synthetic', filer: 'TEST ONLY', is_synthetic_test: true});
+  Object.assign(data['dashboard-insights'].reviews, {manual_exception: count, access_required: 1, other: 2, total: count + 3, latest: data['pending-reviews'].slice(0, 8)});
+  data['dashboard-insights'].source_filters.push({value: 'ethics-office', label: 'Ethics Office', field: 'source'});
+}
+
+function choose(env, id, value) {
+  const control = env.byId(id); control.value = value;
+  control.dispatchEvent(new env.window.Event('change', {bubbles: true}));
+}
+
+test('dashboard parser card clears stale filters and opens the actual exception and retained filing', async t => {
+  const env = await dashboard({change: reviewFixture}); t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent, '1');
+  await env.navigate('#records/reviews', () => env.byId('reviews-body').children.length === 5);
+  choose(env, 'reviews-source', 'oge'); choose(env, 'reviews-date-from', '2026-08-30');
+  env.byId('reviews-search').value = 'no match';
+  env.byId('reviews-search').dispatchEvent(new env.window.Event('input', {bubbles: true}));
+  await env.navigate('#overview');
+  env.byId('attention-exceptions').closest('a').click();
+  await waitFor(() => env.byId('reviews-category').value === 'manual_exception' && env.byId('reviews-body').children.length === 1, 'parser card routing');
+  await tick(220); // A pending debounced search must not overwrite the deep link.
+  assert.equal(env.byId('records').hidden, false);
+  assert.equal(env.byId('reviews-source').value, '');
+  assert.equal(env.byId('reviews-date-from').value, '');
+  assert.equal(env.byId('reviews-search').value, '');
+  assert.match(env.byId('review-categories').textContent, /Manual Parser Exceptions: 1/);
+  assert.match(env.byId('reviews-body').textContent, /Paper Filing Official/);
+  assert.ok(!env.byId('reviews-body').textContent.includes('TEST ONLY'));
+  assert.match(env.byId('reviews-body').textContent, /Paper images need manual parser review/);
+  const row = env.byId('reviews-body').firstElementChild;
+  assert.ok(row.querySelector('a.record-link'));
+  row.querySelectorAll('td')[2].click();
+  await waitFor(() => env.byId('selected-filings-title'), 'underlying source record selection');
+  assert.equal(env.byId('panel-filings').hidden, false);
+  assert.match(env.byId('filings-body').textContent, /fixture-0/);
+  assert.match(env.byId('filings-body').textContent, /Paper images need manual parser review/);
+  assert.equal(env.doc.activeElement.id, 'selected-filings-title');
+  env.byId('filings-clear').click();
+  assert.equal(env.byId('filings-body').children.length, 50);
+  assert.equal(env.window.location.hash, '#records/filings');
+  assert.deepEqual(env.errors, []);
+});
+
+test('parser links survive reload and history; chip and clear filters restore normal records', async t => {
+  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  await waitFor(() => env.byId('reviews-body').children.length === 1, 'initial deep link');
+  assert.equal(env.byId('reviews-category').value, 'manual_exception');
+  env.byId('clear-review-category').click();
+  assert.equal(env.byId('reviews-category').value, '');
+  assert.equal(env.byId('reviews-body').children.length, 5);
+  assert.equal(env.window.location.hash, '#records/reviews');
+  choose(env, 'reviews-category', 'manual_exception');
+  assert.match(env.window.location.hash, /category=manual_exception/);
+  await env.navigate('#signals');
+  env.window.history.back();
+  await waitFor(() => !env.byId('records').hidden, 'back to exceptions');
+  assert.equal(env.byId('reviews-body').children.length, 1);
+  env.byId('reviews-clear').click();
+  assert.equal(env.byId('reviews-body').children.length, 5);
+  assert.equal(env.window.location.hash, '#records/reviews');
+});
+
+test('complete parser collection is paginated beyond the compact eight-row overview', async t => {
+  const env = await dashboard({change: data => reviewFixture(data, 53), hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  await waitFor(() => env.byId('reviews-body').children.length === 50, 'full exceptions');
+  assert.equal(env.byId('attention-exceptions').textContent, '53');
+  assert.match(env.byId('reviews-count-label').textContent, /1–50 of 53/);
+  env.byId('reviews-more').click();
+  assert.equal(env.byId('reviews-body').children.length, 3);
+  assert.equal(env.byId('reviews-more').disabled, true);
+  assert.ok([...env.byId('reviews-body').children].every(row => row.querySelector('.record-link')));
+});
+
+test('no parser exceptions has a positive empty state without an empty table', async t => {
+  const env = await dashboard({hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  await waitFor(() => env.requests.includes('pending-reviews'), 'empty review ledger');
+  assert.equal(env.byId('attention-exceptions').textContent, '0');
+  assert.equal(env.byId('reviews-count-label').textContent, 'No records currently require manual parser review.');
+  assert.equal(env.doc.querySelector('#panel-reviews .table-wrap').hidden, true);
+  assert.equal(env.doc.querySelector('#panel-reviews .pagination').hidden, true);
+});
+
+test('Review Source uses canonical branch fields plus all narrow sources and uppercase OGE', async t => {
+  const env = await dashboard({change: reviewFixture, hash: '#records/reviews'}); t.after(env.close);
+  await waitFor(() => env.byId('reviews-body').children.length === 5, 'review taxonomy');
+  const options = [...env.byId('reviews-source').options].map(option => option.textContent);
+  for (const label of ['All Sources', 'Executive', 'Legislative', 'OGE', 'Senate', 'House', 'Ethics Office']) assert.ok(options.includes(label), label);
+  assert.ok(!options.includes('Oge'));
+  for (const [source, count] of [['branch:executive', 2], ['branch:legislative', 3], ['senate', 2], ['house', 1], ['oge', 1], ['ethics-office', 1], ['', 5]]) {
+    choose(env, 'reviews-source', source);
+    assert.equal(env.byId('reviews-body').children.length, count, source);
+  }
+  assert.equal(env.window.PT.title('Oge Form 278-T'), 'OGE Form 278-T');
+  choose(env, 'reviews-source', 'oge');
+  assert.match(env.byId('reviews-body').textContent, /OGE/);
+  choose(env, 'reviews-category', 'manual_exception');
+  assert.match(env.byId('reviews-body').textContent, /No parser exceptions match these additional filters/);
+});
+
+test('orphan and hostile review records remain inspectable without inventing filings or markup', async t => {
+  const hostile = '<img src=x onerror="window.hostileExecuted=1">';
+  const env = await dashboard({change(data) {
+    reviewFixture(data); const row = data['pending-reviews'][0];
+    delete row.filing_key; row.filing_available = false; row.filer = hostile; row.reason = hostile;
+    row.review_id = 'review:/?&=%'; row.source_url = 'javascript:window.hostileExecuted=2';
+  }, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  await waitFor(() => env.byId('reviews-body').querySelector('.record-link'), 'orphan review');
+  env.byId('reviews-body').querySelector('.record-link').click();
+  await waitFor(() => env.byId('selected-reviews-title'), 'orphan review selected');
+  assert.equal(env.byId('panel-reviews').hidden, false);
+  assert.match(env.byId('reviews-body').textContent, /No matching filing is retained/);
+  assert.match(env.byId('reviews-body').textContent, /review:\/\?&=%/);
+  assert.equal(env.byId('reviews-body').querySelectorAll('img,[onerror],script,a[href^="javascript:"]').length, 0);
+  assert.equal(env.window.hostileExecuted, undefined);
+});
+
+test('review refresh advances card and list together, and rejects a partial publication', async t => {
+  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  await waitFor(() => env.byId('reviews-body').children.length === 1, 'initial exception');
+  const before = env.window.localStorage.getItem(KEY);
+  env.data['dashboard-insights'].reviews.manual_exception = 2;
+  env.data['dashboard-insights'].reviews.total = 5;
+  await env.refresh();
+  assert.equal(env.byId('error-banner').hidden, false);
+  assert.match(env.byId('error-banner').textContent, /different publications/);
+  assert.equal(env.byId('attention-exceptions').textContent, '1');
+  assert.equal(env.byId('reviews-body').children.length, 1);
+  assert.equal(env.window.localStorage.getItem(KEY), before);
+  env.data['pending-reviews'].push({...env.data['pending-reviews'][0], review_id: 'second'});
+  await env.refresh();
+  assert.equal(env.byId('error-banner').hidden, true);
+  assert.equal(env.byId('attention-exceptions').textContent, '2');
+  assert.equal(env.byId('reviews-body').children.length, 2);
+  assert.match(env.byId('review-categories').textContent, /Manual Parser Exceptions: 2/);
+});
+
+test('opening reviews during an in-flight refresh commits the card and newly loaded list together', async t => {
+  const env = await dashboard({change: reviewFixture}); t.after(env.close);
+  await env.navigate('#records/filings', () => env.byId('filings-body').children.length === 50);
+  env.data['dashboard-insights'].generated_utc = '2026-08-31T12:00:00Z';
+  Object.assign(env.data['dashboard-insights'].reviews, {manual_exception: 2, total: 5});
+
+  // Hold an already-open table while the user opens Reviews for the first time.
+  // That lazy load legitimately sees the old model; the refresh must restage it.
+  const originalFetch = env.window.fetch;
+  let releaseFilings;
+  env.window.fetch = async value => {
+    if (new URL(value, env.window.location.href).pathname.endsWith('/filings.json')) {
+      return new Promise(resolve => {
+        releaseFilings = () => resolve({ok: true, status: 200, json: async () => copy(env.data.filings)});
+      });
+    }
+    return originalFetch(value);
+  };
+  t.after(() => releaseFilings?.());
+  env.byId('refresh-button').click();
+  await waitFor(() => releaseFilings, 'refresh waiting on existing filing table');
+  await env.navigate('#records/reviews?category=manual_exception', () => env.byId('reviews-body').children.length === 1);
+  assert.equal(env.byId('attention-exceptions').textContent, '1');
+  assert.match(env.byId('reviews-body').textContent, /Paper Filing Official/);
+
+  env.data['pending-reviews'].push({...env.data['pending-reviews'][0], review_id: 'arrived-during-refresh'});
+  releaseFilings();
+  await waitFor(() => !env.byId('refresh-button').disabled, 'refresh includes newly opened reviews');
+  assert.equal(env.byId('error-banner').hidden, true);
+  assert.equal(env.byId('attention-exceptions').textContent, '2');
+  assert.equal(env.byId('reviews-body').children.length, 2);
+  assert.match(env.byId('reviews-count-label').textContent, /1–2 of 2 matching records/);
+  assert.match(env.byId('review-categories').textContent, /Manual Parser Exceptions: 2/);
+  assert.equal(env.requests.filter(name => name === 'pending-reviews').length, 2, 'Refresh fetches the newly opened review ledger again');
+  assert.deepEqual(env.errors, []);
+});
+
+test('switching from a filing detail to an orphan review focuses the visible selected record', async t => {
+  const env = await dashboard({change(data) {
+    reviewFixture(data);
+    data['pending-reviews'].push({...data['pending-reviews'][0], review_id: 'orphan-after-filing',
+      filing_key: 'missing-filing', filing_available: false, filer: 'Orphan Review Official'});
+    Object.assign(data['dashboard-insights'].reviews, {manual_exception: 2, total: 5});
+  }}); t.after(env.close);
+  await env.navigate('#records/reviews?category=manual_exception', () => env.byId('reviews-body').children.length === 2);
+  const filingLink = [...env.byId('reviews-body').querySelectorAll('.record-link')].find(link => link.textContent.includes('Paper Filing Official'));
+  filingLink.click();
+  await waitFor(() => env.byId('selected-filings-title'), 'retained filing detail');
+  assert.equal(env.doc.activeElement.id, 'selected-filings-title');
+
+  await env.navigate('#records/reviews?category=manual_exception', () => env.byId('panel-reviews').hidden === false);
+  const orphanLink = [...env.byId('reviews-body').querySelectorAll('.record-link')].find(link => link.textContent.includes('Orphan Review Official'));
+  assert.match(orphanLink.getAttribute('href'), /#records\/reviews\?review=/, 'An unverified retained filing key must use the review fallback');
+  orphanLink.click();
+  await waitFor(() => env.byId('selected-reviews-title'), 'original orphan review detail');
+  assert.equal(env.byId('panel-filings').hidden, true);
+  assert.equal(env.byId('panel-reviews').hidden, false);
+  assert.equal(env.doc.activeElement, env.byId('selected-reviews-title'));
+  assert.equal(env.doc.activeElement.closest('.record-panel').id, 'panel-reviews');
+  assert.match(env.byId('reviews-body').textContent, /No matching filing is retained/);
+  const ids = [...env.doc.querySelectorAll('[id]')].map(node => node.id);
+  assert.equal(new Set(ids).size, ids.length, 'Retained details in inactive panels must not duplicate element IDs');
+  assert.deepEqual(env.errors, []);
+});
+
+test('new workspace tooltips share mouse delay, immediate focus and immediate desktop activation', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const clock = tooltipClock(env.window); t.after(clock.restore);
+  for (const section of ['signals', 'records', 'operations', 'investor-edge', 'agent']) {
+    const target = env.doc.querySelector(`nav a[href="#${section}"]`);
+    pointer(env, target, 'pointerover'); clock.advance(299);
+    assert.equal(env.byId('tooltip').hidden, true);
+    clock.advance(1); assert.equal(env.byId('tooltip').hidden, false);
+    pointer(env, target, 'pointerout', {relatedTarget: env.doc.body}); clock.advance(150);
+    target.focus(); assert.equal(env.byId('tooltip').hidden, false);
+    assert.equal(target.getAttribute('aria-describedby'), 'tooltip');
+    assert.equal(activationWasBlocked(env, target), false);
+    target.blur(); clock.advance(150);
+  }
 });

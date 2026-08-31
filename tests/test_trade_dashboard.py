@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import copy
 import hashlib
 import json
 import os
@@ -303,6 +304,61 @@ def test_dashboard_merges_state_artifacts_and_builds_static_site(tmp_path: Path)
     with (output_dir / "data/transactions.csv").open(encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))
     assert {row["ticker"] for row in csv_rows} == {"EXM", "SEC", "OLD"}
+
+
+def test_published_review_inventory_matches_overview_without_preview_truncation(tmp_path: Path) -> None:
+    """The dashboard count and full JSON/CSV use the same classified review rows."""
+    payload = build_payload(load_branch(None, "legislative"), load_branch(None, "executive"),
+                            repository_url="https://github.com/example/PolitiTrack")
+    payload["filings"] = [
+        {"filing_key": f"senate|retained:{index}", "source": "senate", "branch": "legislative",
+         "report_id": f"retained:{index}", "status": "review_required", "filed_date": "2026-08-29",
+         "filer": f"Fixture Official {index}", "review_reason": "PDF parser requires manual review"}
+        for index in range(12)
+    ] + [
+        {"filing_key": "oge|request", "source": "oge", "branch": "executive", "report_id": "request",
+         "status": "review_required", "access_mode": "request"},
+        {"filing_key": "senate|test", "source": "senate", "branch": "legislative", "report_id": "test",
+         "review_reason": "PDF parser requires manual review", "is_temporary": True},
+    ]
+    payload["reviews"] = [
+        {"review_id": f"review|retained:{index}", "source": "senate", "report_id": f"retained:{index}",
+         "observed_at_utc": "2026-08-30T10:01:00Z", "retained_extra": {"id": index}}
+        for index in range(12)
+    ] + [
+        {"review_id": "review|request", "source": "oge", "report_id": "request", "reason": "Manual review"},
+        {"review_id": "review|other", "reason": "Source clarification"},
+        {"review_id": "review|test", "source": "senate", "report_id": "test"},
+    ]
+    before = copy.deepcopy(payload)
+    output = tmp_path / "site"
+    build_site(payload, output)
+    assert payload == before
+    rows = json.loads((output / "data/pending-reviews.json").read_text(encoding="utf-8"))
+    model = json.loads((output / "data/dashboard-insights.json").read_text(encoding="utf-8"))
+    assert len(rows) == 15
+    assert [row["review_id"] for row in rows] == [row["review_id"] for row in payload["reviews"]]
+    production = [row for row in rows if not row["is_synthetic_test"]]
+    exceptions = [row for row in production if row["category"] == "manual_exception"]
+    assert len(exceptions) == model["reviews"]["manual_exception"] == 12
+    assert len(production) == model["reviews"]["total"] == 14
+    assert len(model["reviews"]["latest"]) == 8
+    assert model["reviews"]["access_required"] == model["reviews"]["other"] == 1
+    assert model["synthetic"]["reviews"] == 1
+    assert rows[-1]["is_synthetic_test"] is True
+    assert rows[-1]["category"] == "manual_exception"
+    assert rows[0]["filing_key"] == "senate|retained:0"
+    assert rows[0]["filing_status"] == "review_required"
+    assert rows[0]["branch"] == "legislative"
+    assert rows[0]["reason"] == "PDF parser requires manual review"
+    assert rows[0]["retained_extra"] == {"id": 0}
+    with (output / "data/pending-reviews.csv").open(encoding="utf-8", newline="") as handle:
+        csv_rows = list(csv.DictReader(handle))
+    assert len(csv_rows) == len(rows)
+    assert [row["review_id"] for row in csv_rows] == [row["review_id"] for row in rows]
+    assert sum(row["category"] == "manual_exception" and row["is_synthetic_test"] == "False" for row in csv_rows) == 12
+    assert csv_rows[0]["filing_key"] == "senate|retained:0"
+    assert csv_rows[0]["filing_status"] == "review_required"
 
 
 def test_dashboard_handles_missing_branch_artifacts(tmp_path: Path) -> None:
