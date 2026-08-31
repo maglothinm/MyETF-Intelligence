@@ -496,3 +496,10 @@ content. With no runtime configuration, publish the honest catalog-only state;
 never invent API/storage credentials, source acknowledgements or cached availability.
 No production writer, simulation or real alert dispatch is authorized. Keep issue
 #13 open until private runtime and source/device acceptance are verified.
+
+Release verification: PR #16 merged as `104fc51` with a tree identical to tested
+`7553499`. PR/main CI and Pages `33392608680` / attempt 1 succeeded. The live
+catalog/viewer is published while private retrieval remains inactive; build
+configuration contains no API origin. Protected producer attempts, artifacts and
+retained simulator history remain unchanged. Runtime/source/device acceptance
+stays open in issue #13; this publication cannot be described as an operating cache.

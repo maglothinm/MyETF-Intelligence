@@ -1,8 +1,9 @@
 # 30-Day Filing Vault
 
 Work record: [issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13).
-The implementation is prepared for authorized publication in PR #16. Database
-migration, private bucket configuration and an operating daily timer require the application runtime
+The implementation and catalog interface are published through PR #16 at
+`104fc51`. Cached-document retrieval is not activated. Database migration, private
+bucket configuration and an operating daily timer require the application runtime
 described below. Publishing static Pages alone cannot provide document caching.
 
 ## Architecture and storage
@@ -255,8 +256,11 @@ YAML passed. Actual PDF rendering, refresh timestamps, notice reuse and request-
 errors passed against a disposable in-memory TEST API at desktop/mobile sizes.
 
 Publication integration with the released Operations and Investor Edge changes
-passed **524 tests with no skips**, plus **6 filing-link DOM cases**. GitHub CI
-and Pages publication remain pending at this checkpoint. The configured PostgreSQL/Supabase
+passed **524 tests with no skips**, plus **6 filing-link DOM cases**. PR/main GitHub CI each passed **441 tests**, those **6 DOM cases**, and Linux
+`verify.sh`. Pages **33392608680 / attempt 1** published `104fc51`; the live
+interface correctly reports unavailable retrieval with an empty public API origin.
+See the [publication receipt](validation/filing-vault-release-2026-08-31.md) for
+exact artifacts, continuity and live verification. The configured PostgreSQL/Supabase
 project, real government-source access, distributed limits, HTTPS/CORS, daily timer
 and physical iPhone/Safari still need runtime acceptance. No production artifact,
 real alert or simulation was written or dispatched for these tests.
