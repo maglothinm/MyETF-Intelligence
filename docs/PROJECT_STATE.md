@@ -1,13 +1,68 @@
 # PolitiTrack project state
 
-Last updated: **2026-08-30 UTC**
+Last updated: **2026-08-31 UTC**
 Status: **state-safety PR #3 remains draft/unmerged and now conflicts with the
 newly deployed UI on main. Obsolete queued writers remain a GitHub-service
 blocker; no support response or containment. Newer protected state must be
 revalidated against the reconciled release commit before promotion. Hourly
-follow-up active; no PR #3 production acceptance or repository cutover.**
+follow-up active; no PR #3 production acceptance or repository cutover. The latest
+Legislative collection failed on a Senate HTTP 403 without uploading protected
+state.**
 
-## Hourly release checkpoint — 2026-08-30 17:41 UTC
+## Hourly release checkpoint — 2026-08-31 00:40–00:43 UTC
+
+Canonical repository ID **1349678672**, name, main **92f5c44**, and PR #3 remain
+unchanged. Release head before this documentation update is
+**03276c5ca7980ea24f7d045a5920b5ddd7ec9a57**. PR #3 is still draft/open/unmerged,
+with `mergeable=false` / `mergeable_state=dirty`; no CI run exists for that
+documentation-only head. Old branch CI is not integration acceptance.
+
+The GitHub escalation still has zero replies and no newer comments/replies;
+complete pagination was checked. Both obsolete runs remain queued attempt 1,
+null conclusion, zero jobs/artifacts, with exact historical identity unchanged.
+No cancellation retry, duplicate post, rerun or production dispatch was made.
+
+Existing schedules advanced all three protected pipelines. All 141 runs and
+176 global artifacts were inspected; latest unexpired metadata is:
+
+| Pipeline | Artifact | Successful run / attempt | Producer job |
+|---|---:|---|---:|
+| Legislative | `9739239507` | `33336684309` / 1 | `99324758702` |
+| Executive | `9740811832` | `33341859738` / 1 | `99338815835` |
+| AI | `9740823050` | `33341962248` / 1 | `99339106923` |
+
+All producers are expected canonical workflows/jobs on main
+**92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae**. Artifact timestamps fit exact
+successful job/attempt windows. No later successful producer lacks successor
+state and no permitted producer is active. This was **metadata only**, not ZIP
+download, inventory/ledger continuity, restore, or exact allowlist verification.
+Do not use the historical tables below as restore pins. Reconcile main and
+revalidate latest authority/content before PR #3 promotion; allowlisting is
+unchanged. Simulation metadata remains `9734790733` / `33320677882` / attempt 1.
+
+**New source-access failure:** [Legislative run 33342768435](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33342768435),
+attempt 1, job `99341272661`, failed at 2026-08-30 23:48:40 UTC because the Senate
+disclosure landing page returned HTTP 403. Its restore and offline tests passed;
+collection failed and protected-state upload was skipped. Sole artifact
+`9741053661` is diagnostic `legislative-purchase-output-33342768435`, not
+production-state authority. Downstream AI `33342795427`, attempt 1, job
+`99341344082`, was skipped with no artifacts. These attempts did not advance
+protected state. No access-control bypass or automatic retry was attempted.
+
+Latest successful [Pages run 33342006255](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33342006255),
+attempt 1 on main `92f5c44`, used build `99339220833` and deploy `99339277038`;
+its sole artifact is `9740830324` (`github-pages`). Later publisher runs
+`33342795433` and `33342797588` were skipped after the failed collector/AI chain.
+The source-defined public `/data/dashboard-insights.json` returned HTTP 200 with
+build SHA `92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae`. This is a live build check,
+not fresh ZIP/content equality, browser/device acceptance or a new deployment.
+
+This heartbeat changed only release documentation. Root main and production
+state/settings were untouched. Continue scheduled checks; source availability,
+GitHub containment, PR reconciliation and fresh state/integration acceptance
+remain open. Do not infer success from the unaffected last-good dashboard.
+
+## Previous release checkpoint — 2026-08-30 17:41 UTC
 
 Canonical ID **1349678672** remains `maglothinm/MyETF-Intelligence`. Main advanced
 to **92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae**, the documentation successor of

@@ -1,6 +1,6 @@
 # PolitiTrack active handoff
 
-Updated: **2026-08-30 UTC**
+Updated: **2026-08-31 UTC**
 Status: **hourly follow-up active; PR #3 held for obsolete-run containment and new main merge conflicts**
 Work record: [issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3), unmerged.
@@ -23,7 +23,7 @@ Branch: **codex/production-remediation**. Verified default main is now
 **92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae**, the documentation successor of
 deployed UI/contextual-help commit **1aa87398b53689873de350155d33afdb993fb036**.
 Published release head before this documentation-only heartbeat update:
-**884a344bcb6e7fef650a52cdb0fb5f3e177319e4**.
+**03276c5ca7980ea24f7d045a5920b5ddd7ec9a57**.
 Implementation: **020351a86861020d1a0f579b8ccdd7f218be3994**.
 Fresh-checkout CI setup fix: **4cb6d5677daa60fff507d86502e156b70200a8ff**.
 
@@ -33,6 +33,8 @@ No merge, production dispatch, protected upload, mail, Pages deployment, rename,
 visibility change, legacy shutdown or archive was performed.
 
 ## New release blocker and preserved main work — 17:41 UTC
+
+This section records the 2026-08-30 integration blocker; it remains unresolved.
 
 PR #3 remains draft/open/unmerged and GitHub now reports **mergeable=false**,
 **mergeable_state=dirty**. Main's independent UI and contextual-help releases
@@ -62,7 +64,7 @@ The sanitized submitted message and receipt are in
 [SUPPORT_ESCALATION.md](SUPPORT_ESCALATION.md). No credentials or production
 ledger contents were shared. Do not create duplicate posts.
 
-An authenticated API read during this **17:38 UTC heartbeat** confirmed the posted comment, zero
+An authenticated API read during the **2026-08-31 00:37 UTC heartbeat** confirmed the posted comment, zero
 replies to it, and no newer discussion comments; pagination was complete.
 The older incident discussion does not establish containment for these runs.
 
@@ -129,7 +131,7 @@ fresh integration verification.
 - Static checks: 49 Python files, 5 embedded Python blocks, 5 JSON, 11 YAML;
   three generated JavaScript files, recovery manifest and credential scan passed.
 - Windows has no Bash; Linux provides the full 58 shell checks and verify.sh.
-- Latest published-head CI:
+- Last release-branch CI (older tested head, not current-main integration):
   [33320353688](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33320353688),
   **success**, attempt **1**, job **99281111335**, head **884a344**.
   Full 244-test suite and verify.sh passed; no artifacts were uploaded.
@@ -138,12 +140,39 @@ fresh integration verification.
   on a fresh checkout; corrected by **4cb6d56**, not suppressed.
 - This heartbeat-documentation follow-up requires its own CI check after push;
   even a pass will not resolve the conflicts or validate integration with main.
+- No CI run was observed for documentation-only head `03276c5`. No new local
+  implementation tests were run for this metadata/documentation-only heartbeat.
 - Prior actual-input dashboard and deterministic TEST scoring passed without
   model/market/notification calls and with original input hashes unchanged.
 
 ## Latest verified protected-state checkpoint
 
-**Newest metadata at 2026-08-30 17:41 UTC:** Legislative **9734211271**, run
+**Current metadata at 2026-08-31 00:40–00:43 UTC:** all 141 runs and 176 global
+artifacts were inspected. Newest unexpired protected state:
+
+| Pipeline | Artifact | Successful run / attempt | Job |
+|---|---:|---|---:|
+| Legislative | `9739239507` | `33336684309` / 1 | `99324758702` |
+| Executive | `9740811832` | `33341859738` / 1 | `99338815835` |
+| AI | `9740823050` | `33341962248` / 1 | `99339106923` |
+
+All expected workflow/job identities and exact successful attempt windows passed
+metadata checks on main **92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae**. No later
+successful producer is missing successor state; no permitted producer is active.
+ZIP contents, inventories, ledger continuity and allowlist eligibility were
+**not reverified**. Do not pin older tables or fall back around ancestry gates.
+Simulation remains `9734790733` / `33320677882` / attempt 1 / job `99281977011`.
+
+**Later failed attempt:** Legislative **33342768435**, attempt **1**, job
+**99341272661**, failed at 2026-08-30 23:48:40 UTC: the Senate disclosure landing
+page returned **HTTP 403**. Restore/offline tests succeeded; protected-state
+upload was skipped. Its sole artifact **9741053661** is diagnostic output only,
+not protected state. Downstream AI **33342795427**, attempt **1**, job
+**99341344082**, was skipped with zero artifacts. No retry or restriction bypass
+was attempted. This source-access problem remains separate from GitHub's queued
+run defect and PR #3's merge conflicts.
+
+**Previous metadata at 2026-08-30 17:41 UTC:** Legislative **9734211271**, run
 **33318579174** / attempt **1**, job **99276401831** remains unchanged.
 Executive advanced to **9736054489**, run **33325239324** / attempt **1**, job
 **99294089255**; downstream AI advanced to **9736064296**, run **33325343519** /
@@ -223,7 +252,15 @@ Re-query before promotion; these IDs are not permanent restore pins.
 
 Other unchanged limits:
 
-- Existing [Pages](https://maglothinm.github.io/MyETF-Intelligence/) is now the
+- Latest successful Pages is now
+  [33342006255](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33342006255),
+  attempt 1, build `99339220833`, deploy `99339277038`, sole artifact
+  `9740830324`. Public `/data/dashboard-insights.json` is HTTP 200 at build
+  `92f5c449a6b69bf081d5ec6c70a5d63aa701e2ae`. Later publisher runs `33342795433`
+  and `33342797588` skipped after the collection failure. No fresh browser/device
+  or full published-content comparison was performed by this heartbeat.
+
+- Earlier [Pages](https://maglothinm.github.io/MyETF-Intelligence/) evidence was the
   independently published UI/help release `1aa8739`, not PR #3. Main CI
   [33325629684](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629684)
   and Pages [33325629663](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629663)
