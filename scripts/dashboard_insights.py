@@ -436,8 +436,11 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
     status = _run_status(row)
     return {"id": f"{branch}:{key}", "branch": branch, "started_utc": optional_timestamp(row.get("started_utc")),
             "workflow_started_utc": optional_timestamp(row.get("workflow_started_utc")),
+            "producer_job_started_utc": optional_timestamp(row.get("producer_job_started_utc")),
             "workflow_created_utc": optional_timestamp(row.get("workflow_created_utc")),
             "finished_utc": optional_timestamp(row.get("finished_utc")),
+            "timestamp_evidence_invalid": any(row.get(field) not in (None, "") and _instant(row.get(field)) is None
+                                              for field in ("started_utc", "finished_utc", "workflow_started_utc", "producer_job_started_utc")),
             "success": row.get("success") if isinstance(row.get("success"), bool) else None,
             "status": status, "conclusion": _text(row.get("conclusion")) or status,
             "error_count": max(len(_errors(row.get("errors"))), _count(row.get("error_count")) or 0),
@@ -449,8 +452,31 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
 
 
 def _run_time(row: Mapping[str, Any]) -> float:
-    instant = _instant(row.get("started_utc") or row.get("workflow_started_utc") or row.get("finished_utc") or row.get("workflow_created_utc"))
+    # A workflow can be queued before a producer that executes first. Actual
+    # collector/job execution, then completion, outranks queue/workflow time.
+    instant = _instant(row.get("started_utc") or row.get("producer_job_started_utc") or row.get("finished_utc")
+                       or row.get("workflow_started_utc") or row.get("workflow_created_utc"))
     return instant.timestamp() if instant else float("-inf")
+
+
+def _completion_time(row: Mapping[str, Any], as_of: datetime | None) -> datetime | None:
+    """Reject impossible execution chronology without inventing missing starts."""
+    finished = _instant(row.get("finished_utc"))
+    if not finished or row.get("timestamp_evidence_invalid") or (as_of and finished > as_of):
+        return None
+    for field in ("started_utc", "workflow_started_utc", "producer_job_started_utc"):
+        if row.get(field) not in (None, ""):
+            started = _instant(row.get(field))
+            if not started or started > finished:
+                return None
+    return finished
+
+
+def _known_attempt(row: Mapping[str, Any], as_of: datetime | None) -> bool:
+    started = _instant(row.get("started_utc") or row.get("producer_job_started_utc") or row.get("workflow_started_utc"))
+    finished = _instant(row.get("finished_utc"))
+    return bool(started and as_of and started <= as_of and not row.get("timestamp_evidence_invalid")
+                and (finished is None or started <= finished))
 
 
 def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_of: datetime | None,
@@ -484,12 +510,12 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
         all_runs.extend(ordered)
         pending = {"queued", "in_progress", "pending", "waiting"}
         newest = ordered[0] if ordered else {}
-        attempted = next((row for row in ordered if row.get("started_utc") or row.get("workflow_started_utc")), {})
+        attempted = next((row for row in ordered if _known_attempt(row, as_of)), {})
         last = next((row for row in ordered if row.get("conclusion") not in pending), {})
         success = next((row for row in ordered if row["state_evidence"] and row["status"] == "success"
-                        and (instant := _instant(row.get("finished_utc"))) and as_of and instant <= as_of), {})
+                        and as_of and _completion_time(row, as_of)), {})
         incomplete = available is False or any(_run_time(row) == float("-inf") for row in ordered)
-        latest_time = _instant(last.get("finished_utc"))
+        latest_time = _completion_time(last, as_of)
         incomplete = incomplete or bool(last and (latest_time is None or as_of is None or latest_time > as_of))
         incomplete = incomplete or last.get("status") == "unknown"
         latest_success = (True if last.get("state_evidence") and last.get("status") == "success"
@@ -499,8 +525,10 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
                                      as_of=as_of, evidence_incomplete=incomplete)
         branches.append({**freshness,
                          "last_run_utc": last.get("finished_utc"),
-                         "last_attempt_utc": attempted.get("started_utc") or attempted.get("workflow_started_utc"),
-                         "last_attempt_timestamp_kind": "collector_start" if attempted.get("started_utc") else ("workflow_start" if attempted.get("workflow_started_utc") else None),
+                         "last_attempt_utc": attempted.get("started_utc") or attempted.get("producer_job_started_utc") or attempted.get("workflow_started_utc"),
+                         "last_attempt_timestamp_kind": ("collector_start" if attempted.get("started_utc") else "producer_job_start"
+                                                         if attempted.get("producer_job_started_utc") else "workflow_start"
+                                                         if attempted.get("workflow_started_utc") else None),
                          "latest_conclusion": last.get("conclusion", "unknown"),
                          "attempt_conclusion": newest.get("conclusion", "unknown"),
                          "trigger_source": newest.get("trigger_source"),
@@ -526,7 +554,7 @@ def source_data_through(payload: Mapping[str, Any], *, as_of: datetime | None = 
                   for row in _rows(payload.get(name)) if not is_test(row) for field in fields]
     timestamps.extend(row.get("finished_utc") for row in _rows(payload.get("runs"))
                       if not is_synthetic(row) and production_run(row, str(row.get("branch") or ""))
-                      and _run_status(row) == "success")
+                      and _run_status(row) == "success" and _completion_time(row, clock))
     valid = [instant for raw in timestamps if (instant := _instant(raw)) and (clock is None or instant <= clock)]
     newest = max(valid, default=None)
     return optional_timestamp(newest.isoformat()) if newest else None

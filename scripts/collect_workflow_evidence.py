@@ -109,7 +109,8 @@ def repository_context(get: Callable, repository: str) -> tuple[str, str]:
 
 
 def matches_run(run: Mapping, spec: Mapping, branch: str) -> bool:
-    return (run.get("repository", {}).get("id") == REPOSITORY_ID
+    return (isinstance(run, Mapping) and isinstance(run.get("repository"), Mapping)
+            and run["repository"].get("id") == REPOSITORY_ID
             and run.get("head_branch") == branch
             and run.get("name") == spec["name"]
             and str(run.get("path", "")).split("@", 1)[0] == ".github/workflows/" + spec["file"]
@@ -127,7 +128,8 @@ def validate_ancestry(get: Callable, repository: str, head: str, consumer: str) 
 def jobs_for(get: Callable, repository: str, run_id: int, attempt: int) -> list[dict]:
     payload = get(f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100")
     jobs = payload.get("jobs")
-    if not isinstance(jobs, list) or payload.get("total_count", len(jobs)) > len(jobs):
+    if (not isinstance(jobs, list) or any(not isinstance(job, dict) for job in jobs)
+            or payload.get("total_count", len(jobs)) > len(jobs)):
         raise EvidenceError("incomplete_job_evidence")
     return jobs
 
@@ -159,9 +161,10 @@ def observation(run: Mapping, jobs: list[dict], branch: str, repository: str) ->
     pending = job.get("status") if job.get("status") in PENDING else run.get("status")
     if conclusion is None and pending in PENDING:
         conclusion = "queued" if pending == "requested" else pending
-    errors = sum(step.get("conclusion") in FAILED for step in job.get("steps", []))
-    if conclusion in FAILED:
-        errors = max(1, errors)
+    # Optional continue-on-error Healthchecks/diagnostics do not fail collection.
+    # Failure of the authoritative job is the qualifying operational error.
+    errors = (max(1, sum(step.get("conclusion") in FAILED for step in job.get("steps", [])))
+              if conclusion in FAILED else 0)
     return {
         "run_key": f"{run['id']}:{run['run_attempt']}", "branch": branch,
         "run_attempt": run["run_attempt"], "evidence_source": "github_actions",
@@ -190,7 +193,7 @@ def collect(get: Callable, repository: str, consumer: str, observed_at: str) -> 
             summaries = run_summaries(get, repository, default, spec)
             # Five recent attempts plus the newest failure and success suffice for
             # latest-conclusion overlay; the protected JSONL owns the full timeline.
-            summaries.sort(key=lambda row: utc(row.get("run_started_at")) or utc(row.get("updated_at")) or "", reverse=True)
+            summaries.sort(key=lambda row: max(utc(row.get("run_started_at")) or "", utc(row.get("updated_at")) or ""), reverse=True)
             runs = summaries[:5]
             for conclusions in (FAILED, {"success"}):
                 extra = next((row for row in summaries if row.get("conclusion") in conclusions), None)
@@ -201,15 +204,23 @@ def collect(get: Callable, repository: str, consumer: str, observed_at: str) -> 
                 if not matches_run(summary, spec, default):
                     continue
                 run_id, attempt = positive_int(summary.get("id")), positive_int(summary.get("run_attempt"))
-                if not run_id or not attempt:
+                if not run_id or not attempt or attempt > 50:
                     raise EvidenceError("invalid_attempt_evidence")
-                # Bind the observation to a specific attempt, never the aggregate run.
-                run = get(f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}")
-                if not matches_run(run, spec, default) or run.get("run_attempt") != attempt or run.get("id") != run_id:
-                    raise EvidenceError("attempt_identity_mismatch")
-                validate_ancestry(get, repository, run["head_sha"], consumer)
-                attempts.append(observation(run, jobs_for(get, repository, run_id, attempt), branch, repository))
-            attempts.sort(key=lambda row: row.get("workflow_started_utc") or "", reverse=True)
+                # A pending rerun must not hide its previously failed attempt.
+                # Walk backwards until an actual success/failure job is observed.
+                for exact_attempt in range(attempt, 0, -1):
+                    run = get(f"/repos/{repository}/actions/runs/{run_id}/attempts/{exact_attempt}")
+                    if (not matches_run(run, spec, default) or run.get("run_attempt") != exact_attempt
+                            or run.get("id") != run_id):
+                        raise EvidenceError("attempt_identity_mismatch")
+                    validate_ancestry(get, repository, run["head_sha"], consumer)
+                    item = observation(run, jobs_for(get, repository, run_id, exact_attempt), branch, repository)
+                    attempts.append(item)
+                    if item["conclusion"] in FAILED | {"success"}:
+                        break
+            attempts.sort(key=lambda row: (row.get("producer_job_started_utc")
+                                          or row.get("workflow_started_utc")
+                                          or row.get("workflow_created_utc") or ""), reverse=True)
             result["branches"][branch] = {"available": True, "attempts": attempts}
         except (EvidenceError, KeyError, TypeError, ValueError):
             # Fail to unavailable, not to a fabricated successful or failed run.
@@ -234,7 +245,13 @@ def assert_no_unretained_side_effects(get: Callable, repository: str, consumer: 
             or producer.get("run_attempt") != producer_attempt or producer.get("conclusion") != "success"):
         raise EvidenceError("invalid_restored_producer")
     validate_ancestry(get, repository, producer["head_sha"], consumer)
-    boundary = utc(producer.get("run_started_at"))
+    producer_jobs = [job for job in jobs_for(get, repository, producer_run, producer_attempt)
+                     if job.get("name") == spec["job"] and job.get("conclusion") == "success"]
+    if len(producer_jobs) != 1:
+        raise EvidenceError("invalid_restored_producer_job")
+    # Queue/start timestamps do not establish execution order. The successful
+    # producing job completion is the safe boundary for subsequent side effects.
+    boundary = utc(producer_jobs[0].get("completed_at"))
     if not boundary:
         raise EvidenceError("missing_producer_time")
     for page in range(1, 101):
@@ -259,9 +276,6 @@ def assert_no_unretained_side_effects(get: Callable, repository: str, consumer: 
                 run = get(f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}")
                 if not matches_run(run, spec, default) or run.get("id") != run_id or run.get("run_attempt") != attempt:
                     raise EvidenceError("attempt_identity_mismatch")
-                started = utc(run.get("run_started_at"))
-                if started and started < boundary:
-                    continue
                 jobs = jobs_for(get, repository, run_id, attempt)
                 matching = [job for job in jobs if job.get("name") == spec["job"]]
                 if not matching and run.get("status") in {"queued", "waiting", "requested", "pending"}:
@@ -271,6 +285,11 @@ def assert_no_unretained_side_effects(get: Callable, repository: str, consumer: 
                 if len(matching) != 1:
                     raise EvidenceError("ambiguous_authoritative_job")
                 job = matching[0]
+                if job.get("status") in {"queued", "pending", "waiting", "requested"} and not job.get("started_at"):
+                    continue
+                finished = utc(job.get("completed_at"))
+                if finished and finished < boundary:
+                    continue
                 if job.get("conclusion") == "skipped":
                     continue
                 steps = [step for step in job.get("steps", []) if step.get("name") == spec["step"]]

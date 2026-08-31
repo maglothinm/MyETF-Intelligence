@@ -204,7 +204,7 @@ def test_actions_success_without_retained_state_never_advances_source_or_success
 def test_same_actions_attempt_keeps_collector_timestamp_and_coarse_external_trigger():
     retained = run(trigger_source="external_scheduler")
     source = payload(runs=[retained], workflow_evidence=observation(action_attempt(
-        run_key=retained["run_key"], success=True, conclusion="success", error_count=0)))
+        run_key=retained["run_key"], workflow_started_utc=stamp(13), success=True, conclusion="success", error_count=0)))
     row = branches(build_insights(source, as_of=AS_OF))["legislative"]
     assert row["status"] == "success"
     assert row["last_success_utc"] == stamp(10)
@@ -291,3 +291,51 @@ def test_builder_summary_and_insights_share_source_time_without_generation_fallb
                           ai={"runs": [run("ai", 1)], "state": {}, "analyses": [], "portfolio": []})
     assert built["summary"]["data_through_utc"] == stamp(70)
     assert build_insights(built, as_of=AS_OF)["data_through_utc"] == stamp(70)
+
+
+@pytest.mark.parametrize("contents", [
+    None, "", "not-json", "[]", "{}", '{"available":true,"branches":{}}',
+    '{"schema_version":1,"available":true,"branches":{}}',
+    '{"schema_version":1,"available":"false","branches":{}}',
+    '{"schema_version":1,"available":false,"branches":{"legislative":{"available":true},"executive":{"available":true},"ai":{"available":true}}}',
+])
+def test_requested_missing_or_malformed_actions_file_never_reverts_to_green_compatibility(tmp_path, contents):
+    from scripts.build_trade_dashboard import load_workflow_evidence
+
+    path = tmp_path / "workflow-evidence.json"
+    if contents is not None:
+        path.write_text(contents, encoding="utf-8")
+    observation = load_workflow_evidence(path)
+    assert observation["available"] is False
+    model = build_insights(payload(runs=[run(), run("executive")], ai_runs=[run("ai")],
+                                   workflow_evidence=observation), as_of=AS_OF)
+    assert model["health"]["status"] == "unknown"
+    assert all(row["workflow_evidence_available"] is False for row in model["health"]["branches"])
+    assert load_workflow_evidence(None) == {}
+
+
+def test_valid_actions_observation_file_keeps_branch_availability(tmp_path):
+    import json
+    from scripts.build_trade_dashboard import load_workflow_evidence
+
+    expected = {"schema_version": 1, "available": True,
+                "branches": {branch: {"available": True, "attempts": []} for branch in FRESHNESS_POLICY}}
+    path = tmp_path / "workflow-evidence.json"
+    path.write_text(json.dumps(expected), encoding="utf-8")
+    assert load_workflow_evidence(path) == expected
+
+
+@pytest.mark.parametrize("started", [stamp(-60), stamp(4), "not-a-timestamp", 123])
+def test_impossible_or_malformed_start_cannot_refresh_production_success(started):
+    invalid = run(minutes_ago=5, started_utc=started)
+    only = build_insights(payload(runs=[invalid]), as_of=AS_OF)
+    row = branches(only)["legislative"]
+    assert row["status"] == "unknown"
+    assert row["last_success_utc"] is None
+    assert row["last_attempt_utc"] is None
+    assert only["data_through_utc"] is None
+
+    model = build_insights(payload(runs=[invalid, run(minutes_ago=10)]), as_of=AS_OF)
+    row = branches(model)["legislative"]
+    assert row["status"] == "unknown"
+    assert row["last_success_utc"] == model["data_through_utc"] == stamp(10)

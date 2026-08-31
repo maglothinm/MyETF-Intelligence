@@ -169,11 +169,11 @@
   }
   function updateHealthCards(id,m,detailed=false,preserveHistory=false) {
     const host=el(id),focused=host.contains(document.activeElement)?document.activeElement:null;
-    const focusedIndex=focused?[...host.querySelectorAll("a,button")].indexOf(focused):-1;
+    const focusKey=focused?{href:focused.getAttribute("href"),label:focused.getAttribute("aria-label"),text:focused.textContent}:null;
     const offsets=[...host.querySelectorAll(".timeline")].map(node=>node.scrollLeft);
     host.innerHTML=healthCards(m,detailed);
     if(preserveHistory)host.querySelectorAll(".timeline").forEach((node,index)=>{node.scrollLeft=offsets[index]||0;});
-    if(focusedIndex>=0)host.querySelectorAll("a,button")[focusedIndex]?.focus({preventScroll:true});
+    if(focusKey)[...host.querySelectorAll("a,button")].find(node=>node.getAttribute("href")===focusKey.href&&node.getAttribute("aria-label")===focusKey.label&&node.textContent===focusKey.text)?.focus({preventScroll:true});
   }
   function renderHealth(m,changes={},preserveHistory=false) {
     const summary=PT.monitoringSummary(m),status=m.health.status;

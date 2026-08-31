@@ -43,6 +43,10 @@ const cases = [
   ['valid start fallback and unknown times last', [run('unknown', 'invalid'),
     run('finished', '2026-08-30T06:45:00Z'), run('fallback', 'invalid', {started_utc: '2026-08-30T07:00:00Z'}),
     run('start-only', null, {started_utc: '2026-08-30T06:50:00Z'})], ['fallback', 'start-only', 'finished', 'unknown']],
+  ['workflow-only starts and queued creation observations', [run('finished', '2026-08-30T06:45:00Z'),
+    run('queued', null, {status: 'unknown', workflow_created_utc: '2026-08-30T07:00:00Z'}),
+    run('job-start', null, {status: 'unknown', producer_job_started_utc: '2026-08-30T06:55:00Z', workflow_started_utc: '2026-08-30T06:30:00Z'}),
+    run('running', null, {status: 'unknown', workflow_started_utc: '2026-08-30T06:50:00Z'})], ['queued', 'job-start', 'running', 'finished']],
   ['stable URL fallback without IDs', ['url-a', 'url-c', 'url-b'].map(id =>
     run(id, '2026-08-30T06:45:00Z', {id: null})), ['url-c', 'url-b', 'url-a']],
   ['a single run', [chronological[3]], ['run-3']],
@@ -83,10 +87,24 @@ test('history labels keep each sorted record status, counts and authoritative ti
   assert.equal(links[1]['aria-label'], PT.esc(`${PT.statusText('success')} ${PT.date(rows[0].finished_utc)}; 0 errors; 12 new records`));
 });
 
+test('workflow-only observations label their actual timestamp kind without inventing collector completion', () => {
+  const rows = [run('created', null, {status: 'unknown', workflow_created_utc: '2026-08-30T07:00:00Z'}),
+    run('job-start', null, {status: 'unknown', producer_job_started_utc: '2026-08-30T06:55:00Z'}),
+    run('started', null, {status: 'unknown', workflow_started_utc: '2026-08-30T06:50:00Z'}),
+    run('job', '2026-08-30T06:45:00Z', {status: 'failure', evidence_source: 'github_actions'})];
+  const {links} = timelineLinks(rows, true);
+  assert.match(links[0]['aria-label'], /Workflow created/);
+  assert.match(links[1]['aria-label'], /Producer job started/);
+  assert.match(links[2]['aria-label'], /Workflow started/);
+  assert.match(links[3]['aria-label'], /Workflow job finished/);
+  assert.equal(rows[0].finished_utc, null);
+  assert.equal(rows[1].finished_utc, null);
+});
+
 const asOf = Date.parse('2026-08-31T12:00:00Z');
 const before = minutes => new Date(asOf - minutes * 60000).toISOString();
 function freshnessModel(ages = {}) {
-  return {generated_utc: before(0), data_through_utc: before(10), health: {
+  return {generated_utc: before(0), data_through_utc: before(10), health: {as_of_utc: before(0),
     required_branches: ['legislative', 'executive', 'ai'],
     policy: {legislative: {expected_interval_minutes: 15, stale_after_minutes: 30},
       executive: {expected_interval_minutes: 30, stale_after_minutes: 60},
@@ -136,6 +154,16 @@ test('an aging page cannot remain green when publishers and collectors stop', ()
   assert.equal(JSON.stringify(input), original, 'Aging is a view, not a production-state mutation');
 });
 
+test('a device clock behind the publisher cannot turn already stale production evidence green', () => {
+  const input = freshnessModel({legislative: 70});
+  input.health.status = input.health.branches[0].status = 'stale';
+  const result = PT.healthAt(input, asOf - 60 * 60000);
+  assert.equal(result.health.status, 'stale');
+  assert.equal(result.health.branches[0].age_minutes, 70);
+  assert.equal(result.health.as_of_utc, before(0));
+  assert.equal(PT.healthAt(input, NaN).health.status, 'unknown', 'An invalid clock never proves current');
+});
+
 test('overall precedence is failure then stale then unknown then success', () => {
   const model = freshnessModel({executive: 70});
   assert.equal(PT.healthAt(model, asOf).health.status, 'stale');
@@ -174,7 +202,7 @@ test('new publications and synthetic simulation timeline records do not refresh 
 
 test('public trigger display accepts coarse values only and never echoes authentication metadata', () => {
   assert.equal(PT.triggerLabel('external_scheduler'), 'External scheduler');
-  assert.equal(PT.triggerLabel('workflow_dispatch'), 'Manual dispatch');
+  assert.equal(PT.triggerLabel('workflow_dispatch'), 'Workflow dispatch', 'Dispatch alone does not prove a human or external scheduler initiated it');
   for (const value of ['token=private', 'https://private.test/key', '<script>bad</script>', 'constructor', '__proto__', ['external_scheduler'], null])
     assert.equal(PT.triggerLabel(value), 'Unavailable');
 });

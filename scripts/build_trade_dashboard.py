@@ -276,6 +276,39 @@ def read_json_object(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def load_workflow_evidence(path: Path | None) -> dict[str, Any]:
+    """An explicitly requested but missing/malformed observation is unavailable.
+
+    Omitted observations support older/local builders. A requested observation
+    must never fall back to that compatibility mode and make fresh state green.
+    """
+    if path is None:
+        return {}
+    unavailable = {"schema_version": 1, "available": False, "branches": {}}
+    try:
+        value = read_json_object(path)
+    except (OSError, ValueError):
+        return unavailable
+    if (type(value.get("schema_version")) is not int or value["schema_version"] != 1
+            or not isinstance(value.get("available"), bool) or not isinstance(value.get("branches"), dict)):
+        return unavailable
+    for details in value["branches"].values():
+        if (not isinstance(details, dict) or not isinstance(details.get("available"), bool)
+                or not isinstance(details.get("attempts"), list)
+                or any(not isinstance(row, dict) for row in details["attempts"])):
+            return unavailable
+    if value["available"]:
+        for branch in ("legislative", "executive", "ai"):
+            details = value["branches"].get(branch)
+            if (not isinstance(details, dict) or details.get("available") is not True
+                    or not isinstance(details.get("attempts"), list)
+                    or any(not isinstance(row, dict) for row in details["attempts"])):
+                return unavailable
+    elif all(value["branches"].get(branch, {}).get("available") is True for branch in ("legislative", "executive", "ai")):
+        return unavailable
+    return value
+
+
 def latest_by(records: Iterable[Mapping[str, Any]], key: str) -> list[dict[str, Any]]:
     latest: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -810,7 +843,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     executive = load_branch(args.executive_dir, "executive")
     ai = load_ai(args.ai_dir)
     simulation = load_simulation(args.simulation_dir)
-    workflow_evidence = read_json_object(args.workflow_evidence_file) if args.workflow_evidence_file else {}
+    workflow_evidence = load_workflow_evidence(args.workflow_evidence_file)
     payload = build_payload(
         legislative,
         executive,

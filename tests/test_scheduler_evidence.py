@@ -31,6 +31,7 @@ class FakeAPI:
     def __init__(self, runs=None, jobs=None):
         self.runs = runs or [run()]
         self.jobs = jobs or {(10, 1): [job()]}
+        self.attempts = {(row["id"], row["run_attempt"]): row for row in self.runs}
         self.calls = []
         self.repository = dict(id=evidence.REPOSITORY_ID, full_name=REPO, default_branch="main")
 
@@ -42,12 +43,14 @@ class FakeAPI:
             return {"status": "ahead"}
         if "/actions/workflows/" in path:
             name = path.split("/workflows/")[1].split("/")[0]
-            return {"workflow_runs": [row for row in self.runs if row["path"].endswith(name)]}
+            page = int(re.search(r"[?&]page=(\d+)", path).group(1))
+            rows = [row for row in self.runs if row["path"].endswith(name)]
+            return {"workflow_runs": rows[(page - 1) * 100:page * 100]}
         match = re.search(r"/runs/(\d+)/attempts/(\d+)", path)
         run_id, attempt = map(int, match.groups())
         if "/jobs?" in path:
-            return {"jobs": self.jobs[(run_id, attempt)]}
-        return next(row for row in self.runs if row["id"] == run_id and row["run_attempt"] == attempt)
+            return {"jobs": self.jobs.get((run_id, attempt), [job()])}
+        return self.attempts[(run_id, attempt)]
 
 
 @pytest.mark.parametrize("event,label,expected", [
@@ -88,6 +91,14 @@ def test_failed_job_exports_coarse_count_and_no_raw_secrets():
     assert row["conclusion"] == "failure"
     assert row["error_count"] == 1
     assert "secret" not in str(result)
+
+
+def test_optional_healthcheck_failure_is_not_a_collector_failure():
+    successful_job = job()
+    successful_job["steps"].insert(0, {"name": "Signal tracker start", "conclusion": "failure"})
+    api = FakeAPI(jobs={(10, 1): [successful_job]})
+    row = evidence.collect(api, REPO, SHA, "2026-08-31T12:05:00Z")["branches"]["legislative"]["attempts"][0]
+    assert row["conclusion"] == "success" and row["error_count"] == 0
 
 
 def test_pending_run_does_not_invent_a_collector_attempt_or_completion():
@@ -138,6 +149,65 @@ def test_late_rerun_of_old_id_is_newest_evidence():
     assert any("/runs/2/attempts/3/jobs" in path for path in api.calls)
 
 
+def test_late_rerun_on_second_summary_page_is_not_missed():
+    ordinary = [run(number, start="2026-08-31T11:00:00Z") for number in range(100, 200)]
+    rerun = run(2, attempt=3, conclusion="failure", start="2026-08-31T12:15:00Z")
+    api = FakeAPI(ordinary + [rerun], {(2, 3): [job(conclusion="failure")]})
+    rows = evidence.collect(api, REPO, SHA, "2026-08-31T12:20:00Z")["branches"]["legislative"]["attempts"]
+    assert rows[0]["run_key"] == "2:3"
+    assert any("page=2" in path for path in api.calls)
+
+
+def test_pending_rerun_cannot_hide_previous_failed_attempt():
+    queued = run(11, attempt=2, start="2026-08-31T12:20:00Z")
+    queued.update(status="queued", conclusion=None)
+    failed = run(11, attempt=1, conclusion="failure", start="2026-08-31T12:15:00Z")
+    api = FakeAPI([run(), queued], {(10, 1): [job()], (11, 2): [], (11, 1): [job(conclusion="failure")]})
+    api.attempts[(11, 1)] = failed
+    rows = evidence.collect(api, REPO, SHA, "2026-08-31T12:25:00Z")["branches"]["legislative"]["attempts"]
+    assert {row["run_key"]: row["conclusion"] for row in rows} == {"10:1": "success", "11:1": "failure", "11:2": "queued"}
+
+
+def test_pending_rerun_observer_drives_real_dashboard_failure_not_green(monkeypatch):
+    from scripts.dashboard_insights import build_insights
+
+    monkeypatch.setenv("GITHUB_SHA", SHA)
+    queued = run(11, attempt=2, start="2026-08-31T12:20:00Z")
+    queued.update(status="queued", conclusion=None)
+    failed = run(11, attempt=1, conclusion="failure", start="2026-08-31T12:15:00Z")
+    failure_job = job(conclusion="failure", step_conclusion="failure")
+    failure_job.update(started_at="2026-08-31T12:15:00Z", completed_at="2026-08-31T12:16:00Z")
+    api = FakeAPI([run(), queued], {(10, 1): [job()], (11, 2): [], (11, 1): [failure_job]})
+    api.attempts[(11, 1)] = failed
+    observed = evidence.collect(api, REPO, SHA, "2026-08-31T12:25:00Z")
+    retained = {"run_key": "10:1", "branch": "legislative", "success": True, "errors": [],
+                "event_name": "schedule", "started_utc": "2026-08-31T12:00:30Z", "finished_utc": "2026-08-31T12:01:00Z"}
+    model = build_insights({"runs": [retained], "workflow_evidence": observed}, as_of="2026-08-31T12:25:00Z")
+    legislative = next(row for row in model["health"]["branches"] if row["branch"] == "legislative")
+    assert legislative["status"] == model["health"]["status"] == "failure"
+    assert legislative["last_success_utc"] == "2026-08-31T12:01:00Z"
+    assert legislative["latest_conclusion"] == "failure"
+    assert legislative["attempt_conclusion"] == "queued"
+
+
+def test_early_queued_late_failed_job_is_newer_than_retained_collector_success(monkeypatch):
+    from scripts.dashboard_insights import build_insights
+
+    monkeypatch.setenv("GITHUB_SHA", SHA)
+    late_failure = run(2, conclusion="failure", start="2026-08-31T11:59:00Z")
+    late_failure["updated_at"] = "2026-08-31T12:16:00Z"
+    failure_job = job(conclusion="failure", step_conclusion="failure")
+    failure_job.update(started_at="2026-08-31T12:15:00Z", completed_at="2026-08-31T12:16:00Z")
+    api = FakeAPI([run(), late_failure], {(10, 1): [job()], (2, 1): [failure_job]})
+    observed = evidence.collect(api, REPO, SHA, "2026-08-31T12:25:00Z")
+    retained = {"run_key": "10:1", "branch": "legislative", "success": True, "errors": [],
+                "event_name": "schedule", "started_utc": "2026-08-31T12:00:30Z", "finished_utc": "2026-08-31T12:01:00Z"}
+    model = build_insights({"runs": [retained], "workflow_evidence": observed}, as_of="2026-08-31T12:25:00Z")
+    legislative = next(row for row in model["health"]["branches"] if row["branch"] == "legislative")
+    assert legislative["status"] == model["health"]["status"] == "failure"
+    assert legislative["last_success_utc"] == "2026-08-31T12:01:00Z"
+
+
 def guard(api):
     evidence.assert_no_unretained_side_effects(api, REPO, SHA, "legislative", 10, 1, 99, 1)
 
@@ -160,9 +230,27 @@ def test_proven_precollector_failure_allows_safe_retry():
     guard(api)
 
 
+def test_job_queued_but_never_started_does_not_block_following_safe_run():
+    queued = run(11, start="2026-08-31T12:15:00Z")
+    queued.update(status="queued", conclusion=None)
+    waiting_job = {"name": "track", "status": "queued", "conclusion": None, "started_at": None, "steps": []}
+    guard(FakeAPI([run(), queued], {(10, 1): [job()], (11, 1): [waiting_job]}))
+
+
 def test_failed_old_run_rerun_also_blocks_despite_lower_run_id():
     old = run(2, conclusion="failure", start="2026-08-31T12:15:00Z")
     api = FakeAPI([run(), old], {(10, 1): [job()], (2, 1): [job(conclusion="failure")]})
+    with pytest.raises(evidence.EvidenceError, match="run_2_attempt_1"):
+        guard(api)
+
+
+def test_early_queued_run_with_late_failed_collector_cannot_replay_alerts():
+    late_execution = run(2, conclusion="failure", start="2026-08-31T11:59:00Z")
+    late_execution["updated_at"] = "2026-08-31T12:16:00Z"
+    late_job = job(conclusion="failure", step_conclusion="failure")
+    late_job.update(started_at="2026-08-31T12:15:00Z", completed_at="2026-08-31T12:16:00Z")
+    late_job["steps"][0]["started_at"] = "2026-08-31T12:15:30Z"
+    api = FakeAPI([run(), late_execution], {(10, 1): [job()], (2, 1): [late_job]})
     with pytest.raises(evidence.EvidenceError, match="run_2_attempt_1"):
         guard(api)
 

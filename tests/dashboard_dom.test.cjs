@@ -419,6 +419,23 @@ test('Operations history uses a valid start fallback and puts unknown timestamps
   assert.deepEqual(env.errors, []);
 });
 
+test('Operations places queued and running Actions observations newest first with truthful timestamp labels', async t => {
+  const rows = [healthRun('collector-complete', '2026-08-30T11:30:00Z'),
+    healthRun('workflow-queued', null, {status: 'unknown', success: null, evidence_source: 'github_actions', conclusion: 'queued', workflow_created_utc: '2026-08-30T11:55:00Z'}),
+    healthRun('job-started', null, {status: 'unknown', success: null, evidence_source: 'github_actions', conclusion: 'in_progress', producer_job_started_utc: '2026-08-30T11:52:00Z', workflow_started_utc: '2026-08-30T11:10:00Z'}),
+    healthRun('workflow-running', null, {status: 'unknown', success: null, evidence_source: 'github_actions', conclusion: 'in_progress', workflow_started_utc: '2026-08-30T11:50:00Z'})];
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, rows)}); t.after(env.close);
+  assert.deepEqual(historyIds(env), ['workflow-queued', 'job-started', 'workflow-running', 'collector-complete']);
+  const links = historyLinks(env);
+  assert.match(links[0].getAttribute('aria-label'), /Workflow created/);
+  assert.match(links[1].getAttribute('aria-label'), /Producer job started/);
+  assert.match(links[2].getAttribute('aria-label'), /Workflow started/);
+  assert.equal(rows[0].finished_utc, '2026-08-30T11:30:00Z');
+  assert.equal(rows[1].finished_utc, null);
+  assert.equal(rows[2].finished_utc, null);
+  assert.deepEqual(env.errors, []);
+});
+
 test('Operations history breaks equal-instant ties by stable run identity across reordered refreshes', async t => {
   const runs = [
     healthRun('tie-a', '2026-08-30T06:45:00Z'),
@@ -518,6 +535,7 @@ test('Operations refresh replaces a scrolled history with its newest run first, 
   const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
   const oldStrip = env.byId('operations-health').querySelector('.timeline');
   oldStrip.scrollLeft = 180;
+  const focusedRun = oldStrip.querySelector('a'); focusedRun.focus();
   const newRun = healthRun('refresh-new', '2026-08-30T07:00:00Z');
   setHealthHistory(env.data, [runs[1], runs[0], newRun]);
   await env.refresh();
@@ -525,6 +543,7 @@ test('Operations refresh replaces a scrolled history with its newest run first, 
   assert.notEqual(newStrip, oldStrip);
   assert.equal(newStrip.scrollLeft, 0, 'A rebuilt strip starts at its newest item, not the prior historical offset');
   assert.deepEqual(historyIds(env), ['refresh-new', 'refresh-current', 'refresh-old']);
+  assert.equal(env.doc.activeElement.href, focusedRun.href, 'New history must preserve the same focused run, not its old array position');
   assert.deepEqual(historyIds(env, 'health-chart'), historyIds(env));
   const reloaded = await dashboard({hash: '#operations', change: data => setHealthHistory(data, [newRun, ...runs])}); t.after(reloaded.close);
   assert.deepEqual(historyIds(reloaded), historyIds(env));
