@@ -35,6 +35,9 @@ try:  # Support both ``python -m scripts...`` and direct script execution.
         PUSHOVER_MESSAGES_URL,
         MonitorError,
         Report,
+        SenateAccessDenied,
+        SenateClient,
+        SenateInvalidResponse,
         SourceChangedError,
         _senate_page_response,
         build_session,
@@ -56,6 +59,9 @@ except ImportError:  # pragma: no cover - direct execution path
         PUSHOVER_MESSAGES_URL,
         MonitorError,
         Report,
+        SenateAccessDenied,
+        SenateClient,
+        SenateInvalidResponse,
         SourceChangedError,
         _senate_page_response,
         build_session,
@@ -318,6 +324,9 @@ class TrackerResult:
     branch: str
     started_utc: str
     finished_utc: str = ""
+    source_statuses: dict[str, str] = field(default_factory=dict)
+    overall_status: str = "pending"
+    discovery_complete: bool = False
     source_counts: dict[str, int] = field(default_factory=dict)
     new_filing_counts: dict[str, int] = field(default_factory=dict)
     cataloged_filing_counts: dict[str, int] = field(default_factory=dict)
@@ -973,10 +982,7 @@ def parse_senate_html_transactions(html: str, report: Report) -> list[Trade]:
             )
 
     if not parsed:
-        excerpt = normalize_text(soup.get_text(" ", strip=True))[:500]
-        raise SourceChangedError(
-            f"Senate electronic PTR {report.report_id} contains no parseable transaction rows: {excerpt!r}"
-        )
+        raise SenateInvalidResponse("report", "no_parseable_transaction_rows")
     return parsed
 
 
@@ -1323,6 +1329,8 @@ def append_run_history(path: Path, result: TrackerResult) -> None:
         "started_utc": result.started_utc,
         "finished_utc": result.finished_utc,
         "success": result.success,
+        "source_statuses": result.source_statuses,
+        "overall_status": result.overall_status,
         "source_counts": result.source_counts,
         "new_filing_counts": result.new_filing_counts,
         "cataloged_filing_counts": result.cataloged_filing_counts,
@@ -1366,14 +1374,16 @@ def scan_house_report(session: Session, report: Report, config: TrackerConfig) -
 
 
 def _senate_pdf_from_viewer(
-    session: Session,
+    session: SenateClient,
     response: Response,
     data: bytes,
     config: TrackerConfig,
 ) -> tuple[bytes, str]:
     content_type = response.headers.get("Content-Type", "").lower()
-    if data.startswith(b"%PDF") or "application/pdf" in content_type:
+    if data.startswith(b"%PDF"):
         return data, response.url
+    if "application/pdf" in content_type:
+        raise SenateInvalidResponse("report_pdf", "invalid_pdf_signature")
     soup = BeautifulSoup(data, "html.parser")
     link = soup.find("a", href=re.compile(r"\.pdf(?:$|\?)", re.IGNORECASE))
     if not link or not link.get("href"):
@@ -1386,24 +1396,37 @@ def _senate_pdf_from_viewer(
                 "Senate paper PTR is rendered as page images and exposes no direct PDF; "
                 "manual review is required"
             )
-        excerpt = page_text[:300]
-        raise SourceChangedError(
-            f"Senate paper PTR page contains no PDF link: {excerpt!r}"
-        )
+        raise SenateInvalidResponse("report_viewer", "missing_pdf_link")
     pdf_url = urljoin(response.url, str(link["href"]))
     pdf_response = checked_response(
         session.get(pdf_url, timeout=DEFAULT_TIMEOUT),
-        f"Senate paper PTR PDF {pdf_url}",
+        "Senate paper PTR PDF",
     )
-    return (
-        response_bytes(pdf_response, f"Senate paper PTR PDF {pdf_url}", config.max_download_bytes),
-        pdf_url,
+    pdf_bytes = response_bytes(
+        pdf_response, "Senate paper PTR PDF", config.max_download_bytes, safe_diagnostics=True,
     )
+    if not pdf_bytes.startswith(b"%PDF"):
+        raise SenateInvalidResponse("report_pdf", "invalid_pdf_signature")
+    return pdf_bytes, pdf_url
 
 
-def scan_senate_report(session: Session, report: Report, config: TrackerConfig) -> tuple[list[Trade], PendingReview | None]:
+def scan_senate_report(session: SenateClient, report: Report, config: TrackerConfig) -> tuple[list[Trade], PendingReview | None]:
     response = _senate_page_response(session, report)
-    data = response_bytes(response, f"Senate PTR {report.url}", config.max_download_bytes)
+    try:
+        return _parse_senate_report_response(session, response, report, config)
+    except SenateAccessDenied:
+        raise
+    except Exception:
+        # Shared PDF/parsing helpers can expose exception text from document
+        # content. Only a classified Senate error may cross this boundary.
+        session.reject_report(response)
+        raise SenateInvalidResponse("report", "invalid_report_content") from None
+
+
+def _parse_senate_report_response(
+    session: SenateClient, response: Response, report: Report, config: TrackerConfig,
+) -> tuple[list[Trade], PendingReview | None]:
+    data = response_bytes(response, "Senate PTR", config.max_download_bytes, safe_diagnostics=True)
     content_type = response.headers.get("Content-Type", "").lower()
 
     if report.format == "pdf" or data.startswith(b"%PDF") or "application/pdf" in content_type:
@@ -1423,7 +1446,7 @@ def scan_senate_report(session: Session, report: Report, config: TrackerConfig) 
             )
 
         try:
-            text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
+            text = extract_pdf_text(pdf_bytes, config.max_ocr_pages, safe_diagnostics=True)
             transactions = parse_generic_transactions_text(
                 text,
                 report,
@@ -1868,69 +1891,110 @@ def run_legislative(
     session: Session,
     filing_index: dict[str, dict[str, Any]],
 ) -> None:
+    """Discover every required source before making any durable or alert side effect.
+
+    The Senate client stays alive through report/PDF downloads. Its authenticated
+    cookies are never shared with House downloads or the notification session.
+    """
     current_year = utc_now().year
-    for source in _selected_legislative_sources(config.legislative_source):
-        if source == "house":
-            reports = fetch_house_reports(
-                session,
-                years=(current_year - 1, current_year),
-                max_download_bytes=config.max_download_bytes,
-            )
-            scanner = scan_house_report
-        else:
-            reports = fetch_senate_reports(
-                session,
-                lookback_days=config.senate_lookback_days,
-            )
-            scanner = scan_senate_report
+    sources = _selected_legislative_sources(config.legislative_source)
+    catalogs: dict[str, list[Report]] = {}
+    baselines: dict[str, bool] = {}
+    result.source_statuses = {source: "pending" for source in sources}
+    senate_client = SenateClient() if "senate" in sources else None
+    try:
+        # Discovery is read-only: even the attempt timestamp and run history wait.
+        for source in sources:
+            try:
+                if source == "house":
+                    reports = fetch_house_reports(
+                        session,
+                        years=(current_year - 1, current_year),
+                        max_download_bytes=config.max_download_bytes,
+                    )
+                else:
+                    reports = fetch_senate_reports(
+                        senate_client,
+                        lookback_days=config.senate_lookback_days,
+                    )
+                if not isinstance(reports, list) or any(
+                    not isinstance(report, Report)
+                    or report.source != source
+                    or not report.report_id
+                    or not report.url
+                    for report in reports
+                ):
+                    raise SourceChangedError(f"{source.title()} returned an invalid PTR catalog")
+                if not reports and not config.allow_empty_sources:
+                    raise SourceChangedError(f"{source.title()} returned zero PTRs")
+                catalogs[source] = reports
+                result.source_counts[source] = len(reports)
+                result.source_statuses[source] = "ok"
+            except Exception as exc:
+                result.source_statuses[source] = (
+                    "blocked" if isinstance(exc, SenateAccessDenied) else "error"
+                )
+                result.overall_status = "degraded"
+                raise
 
-        result.source_counts[source] = len(reports)
-        result.transaction_counts[source] = 0
-        result.purchase_counts[source] = 0
-        result.pending_review_counts[source] = 0
-        result.alerted_filing_counts[source] = 0
-        if not reports and not config.allow_empty_sources:
-            raise SourceChangedError(f"{source.title()} returned zero PTRs")
+        # A missing source baseline must also fail before another source writes.
+        for source in sources:
+            baselines[source] = should_baseline_source(state, source, config)
+        result.discovery_complete = True
+        state.last_attempt_utc = result.started_utc
+        save_state(config.state_path, state)
 
-        source_bootstrap = should_baseline_source(state, source, config)
-        unseen = [report for report in reports if not state.is_filing_seen(source, report.report_id)]
-        result.new_filing_counts[source] = len(unseen)
-        result.baseline_counts[source] = 0
+        for source in sources:
+            reports = catalogs[source]
+            result.transaction_counts[source] = 0
+            result.purchase_counts[source] = 0
+            result.pending_review_counts[source] = 0
+            result.alerted_filing_counts[source] = 0
+            source_bootstrap = baselines[source]
+            unseen = [report for report in reports if not state.is_filing_seen(source, report.report_id)]
+            result.new_filing_counts[source] = len(unseen)
+            result.baseline_counts[source] = 0
 
-        catalog_visible_filings(
-            config=config,
-            state=state,
-            result=result,
-            source=source,
-            reports=reports,
-            filing_index=filing_index,
-            treat_unseen_as_new=not (source_bootstrap and not config.bootstrap_alerts),
-        )
-
-        if source_bootstrap and not config.bootstrap_alerts:
-            _baseline_source(state, source, (report.report_id for report in reports), result)
-            state.last_counts[source] = len(reports)
-            save_state(config.state_path, state)
-            LOGGER.info("Baselined and cataloged %s existing %s PTRs", len(reports), source)
-            continue
-
-        for report in unseen:
-            LOGGER.info("Scanning new %s PTR for %s: %s", source, report.filer, report.url)
-            trades, review = scanner(session, report, config)
-            commit_filing_outcome(
-                session=session,
+            catalog_visible_filings(
                 config=config,
                 state=state,
                 result=result,
                 source=source,
-                filing=report,
-                filing_id=report.report_id,
-                filing_label=f"{source.title()} PTR",
-                trades=trades,
-                review=review,
+                reports=reports,
                 filing_index=filing_index,
+                treat_unseen_as_new=not (source_bootstrap and not config.bootstrap_alerts),
             )
-        state.last_counts[source] = len(reports)
+
+            if source_bootstrap and not config.bootstrap_alerts:
+                _baseline_source(state, source, (report.report_id for report in reports), result)
+                state.last_counts[source] = len(reports)
+                save_state(config.state_path, state)
+                LOGGER.info("Baselined and cataloged %s existing %s PTRs", len(reports), source)
+                continue
+
+            for report in unseen:
+                LOGGER.info("Scanning new %s PTR for %s: %s", source, report.filer, report.url)
+                if source == "house":
+                    trades, review = scan_house_report(session, report, config)
+                else:
+                    trades, review = scan_senate_report(senate_client, report, config)
+                commit_filing_outcome(
+                    session=session,
+                    config=config,
+                    state=state,
+                    result=result,
+                    source=source,
+                    filing=report,
+                    filing_id=report.report_id,
+                    filing_label=f"{source.title()} PTR",
+                    trades=trades,
+                    review=review,
+                    filing_index=filing_index,
+                )
+            state.last_counts[source] = len(reports)
+    finally:
+        if senate_client is not None:
+            senate_client.close()
 
 
 def run_executive(
@@ -2007,6 +2071,7 @@ def _write_step_summary(result: TrackerResult) -> None:
         "",
         f"- Branch: **{_markdown_cell(result.branch.title())}**",
         f"- Success: **{str(result.success).lower()}**",
+        f"- Status: **{_markdown_cell(result.overall_status)}**",
         f"- Started: `{result.started_utc}`",
         f"- Finished: `{result.finished_utc}`",
     ]
@@ -2019,19 +2084,22 @@ def _write_step_summary(result: TrackerResult) -> None:
             "",
             "### Source summary",
             "",
-            "| Source | Visible | New filings | Transactions | Purchases | Review items | Newly cataloged | Baselined |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|",
+            "| Source | Status | Visible | New filings | Transactions | Purchases | Review items | Newly cataloged | Baselined |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
-    for source in sorted(result.source_counts):
+    for source in sorted(result.source_counts.keys() | result.source_statuses.keys()):
+        unavailable = result.source_statuses.get(source) in {"pending", "blocked", "error"}
+        visible = "Unavailable" if unavailable else result.source_counts[source]
+        not_processed = "—" if not result.discovery_complete and result.branch == "legislative" else 0
         lines.append(
-            f"| {source.title()} | {result.source_counts[source]} | "
-            f"{result.new_filing_counts.get(source, 0)} | "
-            f"{result.transaction_counts.get(source, 0)} | "
-            f"{result.purchase_counts.get(source, 0)} | "
-            f"{result.pending_review_counts.get(source, 0)} | "
-            f"{result.cataloged_filing_counts.get(source, 0)} | "
-            f"{result.baseline_counts.get(source, 0)} |"
+            f"| {source.title()} | {result.source_statuses.get(source, 'ok')} | {visible} | "
+            f"{result.new_filing_counts.get(source, not_processed)} | "
+            f"{result.transaction_counts.get(source, not_processed)} | "
+            f"{result.purchase_counts.get(source, not_processed)} | "
+            f"{result.pending_review_counts.get(source, not_processed)} | "
+            f"{result.cataloged_filing_counts.get(source, not_processed)} | "
+            f"{result.baseline_counts.get(source, not_processed)} |"
         )
 
     if result.filings:
@@ -2138,23 +2206,30 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
             )
 
         state, _brand_new_state = load_state(config.state_path)
-        state.last_attempt_utc = started
-        save_state(config.state_path, state)
         filing_index = latest_records(config.filings_path, "filing_key")
         if config.branch == "legislative":
             run_legislative(config, state, result, session, filing_index)
         else:
+            state.last_attempt_utc = started
+            save_state(config.state_path, state)
             run_executive(config, state, result, session, filing_index)
         state.last_success_utc = iso_utc()
         save_state(config.state_path, state)
         result.success = True
+        result.overall_status = "ok"
         return result
     except Exception as exc:
-        result.errors.append(f"{type(exc).__name__}: {exc}")
+        result.overall_status = "degraded" if config.branch == "legislative" else "error"
+        if config.branch == "legislative" and not result.discovery_complete:
+            # Senate response diagnostics belong in sanitized client logs only.
+            # Exception text can include source content/URLs; never export it here.
+            result.errors.append(f"{type(exc).__name__}: required discovery incomplete")
+        else:
+            result.errors.append(f"{type(exc).__name__}: {exc}")
         raise
     finally:
         result.finished_utc = iso_utc()
-        # Produce human-readable/exportable snapshots even when a later source fails.
+        # Diagnostic exports are separate from the protected continuity directory.
         try:
             write_latest_csv(config.ledger_path, config.latest_csv_path)
             write_latest_csv(
@@ -2165,11 +2240,13 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
                 config.filings_path,
                 config.latest_filings_csv_path,
             )
-            append_run_history(config.run_history_path, result)
+            if config.branch != "legislative" or result.discovery_complete:
+                append_run_history(config.run_history_path, result)
         except Exception as output_exc:  # pragma: no cover - defensive secondary failure path
             LOGGER.exception("Could not finalize tracker reporting outputs")
             result.errors.append(f"ReportingError: {output_exc}")
             result.success = False
+            result.overall_status = "degraded" if config.branch == "legislative" else "error"
         write_result(config.result_path, result)
         _write_step_summary(result)
 
@@ -2202,7 +2279,7 @@ def build_config(args: argparse.Namespace) -> TrackerConfig:
 
     user_agent = env.get(
         "DISCLOSURE_USER_AGENT",
-        "Mozilla/5.0 (compatible; PolitiTrackGovernmentTradeTracker/1.0; +https://github.com/maglothinm/PolitiTrack)",
+        "PolitiTrackGovernmentTradeTracker/1.0 (+https://github.com/maglothinm/MyETF-Intelligence)",
     ).strip()
     if not user_agent:
         raise ValueError("DISCLOSURE_USER_AGENT must not be empty")
@@ -2306,6 +2383,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     except Exception:
         LOGGER.exception("Unexpected government purchase tracking failure")
+        return 1
+    if not result.success:
+        LOGGER.error("Government purchase tracking did not complete successfully")
         return 1
     LOGGER.info(
         "Tracking succeeded: visible=%s new=%s purchases=%s pending=%s",

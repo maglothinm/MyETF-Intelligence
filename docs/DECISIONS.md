@@ -292,3 +292,21 @@ Scheduled Executive/AI successors were validated before release and remained
 unchanged through publication. Keep issue #6 open for device acceptance. Do not
 conflate publication with the separate cutover, PR #3, obsolete queues,
 repository settings or Gmail delivery gates.
+
+## D-2026-08-31-022 — Require complete discovery before Legislative processing
+
+**Decision:** Use a dedicated truthful Senate client with strict agreement,
+CSRF, search and report validation. Bound fresh-session recovery and keep masked
+form tokens distinct from cookie tokens. Both required catalogs must validate
+before filing processing, alerts, baselines or authoritative state changes.
+
+**Reason:** An unavailable source must produce an explicit degraded failure,
+not a partial-source success or an empty filing set.
+
+**Consequence:** Preserve existing IDs, deduplication, artifacts, restore
+authority, schedules and simulations. Produce safe classified diagnostics and
+one terminal heartbeat after retries; require complete-source validation before
+protected upload. Rollback means a reviewed code revert that continues from the
+newest valid state. It never means replacing current state with an older copy.
+Manual production verification remains subject to every existing writer-safety
+gate. No proxy or unofficial data source is authorized by this decision.
