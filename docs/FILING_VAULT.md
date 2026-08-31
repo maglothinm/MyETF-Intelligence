@@ -1,8 +1,8 @@
 # 30-Day Filing Vault
 
 Work record: [issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13).
-This feature is implemented locally. Deployment, database migration, private
-bucket configuration and an operating daily timer require the application runtime
+The implementation is prepared for authorized publication in PR #16. Database
+migration, private bucket configuration and an operating daily timer require the application runtime
 described below. Publishing static Pages alone cannot provide document caching.
 
 ## Architecture and storage
@@ -51,7 +51,9 @@ The generator exports `data/filing-resources.json`: schema version, canonical
 repository ID, generation time and existing filing metadata. `filing_id` retains
 the original `filing_key`; no tracker ID is changed. Transactions resolve only to
 one consistent retained filing using exact IDs/source/report/URL evidence.
-Contradictory or ambiguous records never select another filing. The API accepts
+Contradictory or ambiguous records never select another filing. Failed resolution
+remains explicit across compact dashboard projections; original keys and URLs stay
+visible, but View Filing cannot fall back to a conflicting retained ID. The API accepts
 registered IDs only; there is no public URL-fetch or document-upload endpoint.
 
 Import is a trusted server administration operation:
@@ -245,14 +247,16 @@ workflows, this guide and project-state/decision/handoff/dashboard documentation
 
 Tests: `tests/test_filing_vault.py`, `test_filing_vault_providers.py`,
 `test_filing_vault_ui.py`, `filing_vault_dom.test.cjs`, `filing_pdf_dom.test.cjs`,
-and updated existing dashboard/Investor Edge assertions. Final local validation on
+`filing_resolution_dom.test.cjs`, and updated existing dashboard/Investor Edge assertions. Original local validation on
 2026-08-31: **463 pytest cases passed with no skips**, including **168 Vault cases**,
 **22 generated Vault DOM scenarios** and **7 PDF-helper scenarios**. Source input
 bytes, private-data exclusions, vendor integrity, Python/JS syntax and workflow
 YAML passed. Actual PDF rendering, refresh timestamps, notice reuse and request-only
 errors passed against a disposable in-memory TEST API at desktop/mobile sizes.
 
-No Vault deployment or remote CI is claimed. The configured PostgreSQL/Supabase
+Publication integration with the released Operations and Investor Edge changes
+passed **524 tests with no skips**, plus **6 filing-link DOM cases**. GitHub CI
+and Pages publication remain pending at this checkpoint. The configured PostgreSQL/Supabase
 project, real government-source access, distributed limits, HTTPS/CORS, daily timer
 and physical iPhone/Safari still need runtime acceptance. No production artifact,
 real alert or simulation was written or dispatched for these tests.

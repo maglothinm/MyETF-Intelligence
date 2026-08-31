@@ -33,6 +33,7 @@ on:
       - "tests/test_filing_vault*.py"
       - "tests/filing_vault_dom.test.cjs"
       - "tests/filing_pdf_dom.test.cjs"
+      - "tests/filing_resolution_dom.test.cjs"
       - "tests/test_create_manual_test_filing.py"
       - "requirements-ai.txt"
       - "requirements-tracker.txt"
@@ -83,6 +84,7 @@ on:
       - "tests/test_filing_vault*.py"
       - "tests/filing_vault_dom.test.cjs"
       - "tests/filing_pdf_dom.test.cjs"
+      - "tests/filing_resolution_dom.test.cjs"
       - "tests/test_create_manual_test_filing.py"
       - "requirements-ai.txt"
       - "requirements-tracker.txt"
@@ -149,6 +151,7 @@ jobs:
             tests/test_filing_vault_providers.py \
             tests/test_filing_vault_ui.py \
             tests/test_create_manual_test_filing.py
+          node --test tests/filing_resolution_dom.test.cjs
       - name: Verify repository safety contract
         shell: bash
         run: bash verify.sh

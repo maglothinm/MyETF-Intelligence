@@ -68,8 +68,11 @@ runs `33219808359` and `33221027676` remain. Rename/privacy, legacy retirement,
 held PR #3 and external credential/device acceptance remain separate work.
 
 Publication integration: the first combined suite passed **464 tests** without
-skips after PR #14. PR #15 is now integrated; combined regression verification
-is pending. Read-only audit of 166 runs confirms unchanged protected ZIP/member
+skips after PR #14. PR #15 and its release receipt are now integrated. Final combined verification
+passed **524 tests with no skips**, plus **6 shared filing-link DOM cases**.
+The release review closed a misleading-ID fallback: explicit conflicts remain
+visible, preserve original provenance, and cannot open another filing through
+compact dashboard projections. Read-only audit of 166 runs confirms unchanged protected ZIP/member
 hashes, inventories and simulator history. Latest pre-Vault Pages **33391179240 /
 attempt 1**, artifact **9757512563**, successfully published `676701ac`.
 

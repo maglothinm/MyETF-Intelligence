@@ -267,6 +267,12 @@ window.PT = (() => {
   }
   function filingActions(row) {
     const id=row.filing_id||row.filing_key, url=safeUrl(row.official_source_url||row.source_url);
+    const conflict=row.filing_key&&row.filing_id&&String(row.filing_key)!==String(row.filing_id);
+    const resolution=row.filing_resolution;
+    if(conflict||(resolution&&resolution!=="matched")){
+      const reason=conflict||resolution==="conflict"?"Filing identity conflict — review the official source":"Exact filing unavailable — review the official source";
+      return `<span class="filing-actions"><span class="muted">${esc(reason)}</span>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Official Source ↗</a>`:""}</span>`;
+    }
     if(!id&&!url)return '<span class="muted">Filing evidence unavailable</span>';
     const query=new URLSearchParams(id?{filing:id}:{url,...(row.source?{source:row.source}:{}),...(row.report_id?{report:row.report_id}:{})});
     return `<span class="filing-actions"><a href="filing-vault.html?${esc(query.toString())}">View Filing</a>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Official Source ↗</a>`:""}</span>`;

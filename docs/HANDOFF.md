@@ -59,7 +59,8 @@ workflow or production state was changed or dispatched.
 
 The original full run passed **463 tests** with no skips. Integration with
 Operations passed **464 tests**, also without skips. The combined suite after
-Investor Edge integration is pending. This includes **168
+Investor Edge integration passed **524 tests**, with no skips. All **6 new
+filing-link DOM cases** also passed; the existing CI now runs these cases. This includes **168
 Vault cases** (62 backend, 72 provider, 34 UI), which run 22 generated Vault DOM
 scenarios and 7 PDF-helper scenarios. Existing dashboard/notification/simulation
 regressions and nested release checks pass. Python/JS syntax, all workflow YAML,
@@ -121,7 +122,10 @@ source notices. Supply catalog metadata from verified canonical publisher output
 install the runtime daily timer, then set the public `FILING_VAULT_API_ORIGIN`
 repository variable and release through canonical CI/Pages. Static publication
 alone cannot activate cached viewing. No credentials or settings were changed. Source acknowledgements are not
-implied by publication authorization.
+implied by publication authorization. Local runtime environment/config files are
+absent. A bounded configured Git credential-helper read returned no usable
+credential, so remote API-origin variables, secret names and runtime environments
+remain unverified; no alternative credential search was attempted.
 
 Verify private storage/database isolation, HTTPS/CORS, aggregate proxy/egress rate
 limits, exact source access, timer execution and physical mobile acceptance before

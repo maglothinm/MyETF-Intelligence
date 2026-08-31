@@ -61,13 +61,19 @@ def filing_catalog(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def attach_filing_ids(value: Any, catalog: Mapping[str, Any]) -> Any:
-    """Attach only unique, consistent matches; never guess a source from a ticker."""
-    by_key = {r["filing_id"]: r for r in catalog["filings"]}
+    """Project explicit resolution without erasing conflicting retained evidence.
+
+    Link consumers must honor ``filing_resolution`` rather than falling back to
+    the retained ``filing_key`` after a failed match. Original keys, source IDs
+    and URLs remain available for review, including when they disagree.
+    """
+    by_key: dict[str, list[dict]] = defaultdict(list)
     by_url: dict[str, list[dict]] = defaultdict(list)
     by_report: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for row in by_key.values():
-        if row.get("source_url"):
-            by_url[str(row["source_url"])].append(row)
+    for row in catalog["filings"]:
+        by_key[str(row["filing_id"])].append(row)
+        for url in {str(row.get(field) or "") for field in ("source_url", "official_source_url")} - {""}:
+            by_url[url].append(row)
         if row.get("source") and row.get("report_id"):
             by_report[(str(row["source"]), str(row["report_id"]))].append(row)
 
@@ -77,17 +83,43 @@ def attach_filing_ids(value: Any, catalog: Mapping[str, Any]) -> Any:
         if not isinstance(item, dict):
             return item
         result = {k: visit(v) for k, v in item.items()}
-        key = str(item.get("filing_key") or item.get("filing_id") or "")
-        url = str(item.get("source_url") or "")
+        # A later compact projection may omit the contradictory fields. It must
+        # not silently promote a previously rejected match using a weaker URL.
+        if item.get("filing_resolution") in {"conflict", "ambiguous", "unresolved"}:
+            return result
+        retained_key = str(item.get("filing_key") or "")
+        explicit_id = str(item.get("filing_id") or "")
+        key = retained_key or explicit_id
+        url = str(item.get("official_source_url") or item.get("source_url") or "")
         source, report = str(item.get("source") or ""), str(item.get("report_id") or "")
-        candidates = ([by_key[key]] if key in by_key else []) if key else by_report.get((source, report), [])
+        if not (key or url or (source and report)):
+            return result
+        if retained_key and explicit_id and retained_key != explicit_id:
+            result["filing_resolution"] = "conflict"
+            return result
+        candidates = by_key.get(key, []) if key else by_report.get((source, report), [])
         if not candidates and not key:
             candidates = by_url.get(url, []) if url else []
         if len(candidates) == 1:
             candidate = candidates[0]
-            if all(not item.get(field) or not candidate.get(field) or
-                   str(item[field]) == str(candidate[field])
-                   for field in ("source_url", "report_id", "source")):
+            comparisons = [(item.get(field), candidate.get(field))
+                           for field in ("report_id", "source", "external_filing_id")]
+            comparisons.extend((item.get(field), candidate.get(field) or candidate.get(alternative))
+                               for field, alternative in (("source_url", "official_source_url"),
+                                                          ("official_source_url", "source_url")))
+            if all(not supplied or not expected or str(supplied) == str(expected)
+                   for supplied, expected in comparisons):
                 result["filing_id"] = candidate["filing_id"]
+                result["filing_resolution"] = "matched"
+            else:
+                result["filing_resolution"] = "conflict"
+        else:
+            if candidates:
+                result["filing_resolution"] = "ambiguous"
+            elif key:
+                result["filing_resolution"] = "unresolved"
+            # A URL-only record without a catalog candidate retains the existing
+            # unique-URL lookup behavior. Do not rewrite isolated replay output
+            # merely because its original source is absent from this catalog.
         return result
     return visit(value)

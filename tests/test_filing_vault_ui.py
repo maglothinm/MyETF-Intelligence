@@ -142,21 +142,22 @@ def test_catalog_omits_nested_private_paths_credentials_and_storage_details() ->
     {"source": "senate"},
     {"report_id": "TEST-wrong-report"},
     {"source_url": "https://official.example.test/TEST-other.pdf"},
+    {"official_source_url": "https://official.example.test/TEST-other.pdf"},
 ])
 def test_attach_rejects_source_report_or_url_substitution(contradiction: dict) -> None:
     catalog = filing_catalog({"filings": [_row()]})
     item = {"filing_key": "TEST-house-42", **contradiction}
     result = attach_filing_ids(item, catalog)
     assert "filing_id" not in result
-    assert result == item
+    assert result == {**item, "filing_resolution": "conflict"}
 
 
 def test_attach_does_not_replace_an_explicit_unknown_filing_identity() -> None:
     catalog = filing_catalog({"filings": [_row()]})
     record = {"filing_id": "TEST-unknown", "source": "house", "report_id": "TEST-report-42"}
-    assert attach_filing_ids(record, catalog) == record
+    assert attach_filing_ids(record, catalog) == {**record, "filing_resolution": "unresolved"}
     keyed = {"filing_key": "TEST-unknown", "source": "house", "report_id": "TEST-report-42"}
-    assert attach_filing_ids(keyed, catalog) == keyed
+    assert attach_filing_ids(keyed, catalog) == {**keyed, "filing_resolution": "unresolved"}
 
 
 def test_ambiguous_retained_urls_never_pick_a_filing_by_order() -> None:
@@ -165,9 +166,48 @@ def test_ambiguous_retained_urls_never_pick_a_filing_by_order() -> None:
         _row("TEST-senate-42", source="senate"),
     ]})
     original = {"source_url": "https://official.example.test/TEST-42.pdf"}
-    assert attach_filing_ids(original, catalog) == original
+    assert attach_filing_ids(original, catalog) == {**original, "filing_resolution": "ambiguous"}
     exact = {"source": "senate", "report_id": "TEST-report-42"}
     assert attach_filing_ids(exact, catalog)["filing_id"] == "TEST-senate-42"
+
+
+@pytest.mark.parametrize("item", [
+    {"filing_id": "TEST-house-42", "source_url": "https://official.example.test/OTHER.pdf"},
+    {"filing_key": "TEST-house-42", "filing_id": "TEST-other"},
+    {"filing_key": "TEST-other", "filing_id": "TEST-house-42"},
+])
+def test_conflicting_explicit_ids_remain_provenance_but_are_not_viewable(item: dict) -> None:
+    before = deepcopy(item)
+    result = attach_filing_ids(item, filing_catalog({"filings": [_row()]}))
+    assert result == {**before, "filing_resolution": "conflict"}
+    assert item == before
+
+
+@pytest.mark.parametrize("resolution", ["conflict", "ambiguous", "unresolved"])
+def test_failed_resolution_survives_compact_insights_and_second_attachment(resolution: str) -> None:
+    from scripts.dashboard_insights import _filing, _review, _signal
+    catalog = filing_catalog({"filings": [_row()]})
+    original = {"filing_key": "TEST-house-42", "filing_id": "TEST-house-42",
+                "source_url": "https://official.example.test/TEST-42.pdf",
+                "filing_resolution": resolution}
+    for projection in (_filing, lambda row: _review(row, "manual_exception"), _signal):
+        compact = projection(original)
+        result = attach_filing_ids(compact, catalog)
+        assert result["filing_resolution"] == resolution
+        assert result["filing_key"] == original["filing_key"]
+        assert result["filing_id"] == original["filing_id"]
+
+
+def test_duplicate_catalog_identity_is_ambiguous_instead_of_last_row_wins() -> None:
+    catalog = filing_catalog({"filings": [_row(), _row(source_url="https://official.example.test/OTHER.pdf")]})
+    original = {"filing_key": "TEST-house-42"}
+    assert attach_filing_ids(original, catalog) == {**original, "filing_resolution": "ambiguous"}
+
+
+def test_approved_official_url_alias_can_resolve_without_rewriting_source() -> None:
+    original = {"official_source_url": "https://official.example.test/TEST-42.pdf"}
+    result = attach_filing_ids(original, filing_catalog({"filings": [_row()]}))
+    assert result == {**original, "filing_id": "TEST-house-42", "filing_resolution": "matched"}
 
 
 def _generated_fixture(tmp_path: Path) -> Path:
