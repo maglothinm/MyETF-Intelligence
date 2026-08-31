@@ -134,6 +134,7 @@ async function dashboard(options = {}) {
   };
   // Audio is intentionally unavailable; the page must never initialize it on load.
   window.AudioContext = function () { errors.push('Audio initialized without gesture'); throw new Error('Unexpected audio'); };
+  if (options.beforeScript) options.beforeScript(window);
   window.eval(fs.readFileSync(path.join(build, 'app.js'), 'utf8'));
   const doc = window.document, byId = id => doc.getElementById(id);
   await waitFor(() => !byId('refresh-button').disabled, 'initial dashboard render');
@@ -876,4 +877,159 @@ test('new workspace tooltips share mouse delay, immediate focus and immediate de
     assert.equal(activationWasBlocked(env, target), false);
     target.blur(); clock.advance(150);
   }
+});
+
+// These spies verify route/focus intent. Header/sidebar geometry and actual
+// wheel, touch and keyboard scrolling still require a rendered browser.
+function recordScrollRequests(env) {
+  const requests = [];
+  env.window.HTMLElement.prototype.scrollIntoView = function (options) {
+    requests.push({target: this, block: options?.block, hidden: Boolean(this.closest('[hidden]'))});
+  };
+  return requests;
+}
+
+function deferLedger(env, name) {
+  const originalFetch = env.window.fetch;
+  let release;
+  env.window.fetch = async value => {
+    if (new URL(value, env.window.location.href).pathname.endsWith(`/${name}.json`)) {
+      return new Promise(resolve => { release = () => resolve(originalFetch(value)); });
+    }
+    return originalFetch(value);
+  };
+  return {get waiting() { return Boolean(release); }, release() { const pending = release; release = undefined; pending?.(); },
+    restore() { env.window.fetch = originalFetch; }};
+}
+
+test('initial landing keeps wrapped Workspace navigation in view while returning to an empty route positions Overview', async t => {
+  const scrolls = [];
+  const env = await dashboard({beforeScript(window) {
+    window.HTMLElement.prototype.scrollIntoView = function () { scrolls.push(this); };
+  }}); t.after(env.close);
+  await tick(15);
+  assert.equal(env.window.location.hash, '');
+  assert.equal(scrolls.length, 0, 'Initial no-hash landing must not scroll past the mobile Workspace rows');
+  await env.navigate('#signals', () => scrolls.length === 1);
+  assert.equal(scrolls[0], env.byId('signals'));
+  await env.navigate('', () => scrolls.length === 2);
+  assert.equal(env.window.location.hash, '');
+  assert.equal(scrolls[1], env.byId('overview'), 'Later navigation to an empty hash still returns to Overview');
+  assert.equal(env.byId('overview').hidden, false);
+  assert.deepEqual(env.errors, []);
+});
+
+test('ordinary routes reveal their destination after lazy loading without resetting keyboard focus or refresh position', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const scrolls = recordScrollRequests(env), ledger = deferLedger(env, 'filings'); t.after(ledger.release);
+  env.data['investor-edge'] = {investors: []};
+  const workspaceLink = env.doc.querySelector('[data-section="records"]');
+  workspaceLink.focus();
+  await env.navigate('#records/filings', () => ledger.waiting);
+  assert.equal(scrolls.length, 0, 'Do not choose a final position before the lazy table exists');
+  ledger.release();
+  await waitFor(() => scrolls.length === 1, 'filing route scroll after loading');
+  assert.equal(env.byId('filings-body').children.length, 50);
+  assert.equal(scrolls[0].target, env.byId('records'));
+  assert.equal(scrolls[0].block, 'start');
+  assert.equal(scrolls[0].hidden, false);
+  assert.equal(env.doc.activeElement, workspaceLink, 'Workspace keyboard navigation keeps its normal tab order');
+
+  for (const route of ['signals', 'investor-edge', 'agent', 'operations', 'overview']) {
+    const before = scrolls.length;
+    await env.navigate(`#${route}`, () => scrolls.length > before);
+    assert.equal(scrolls.length, before + 1, `One position request for ${route}`);
+    assert.equal(scrolls.at(-1).target, env.byId(route));
+    assert.equal(scrolls.at(-1).hidden, false);
+    assert.equal(scrolls.at(-1).block, 'start');
+  }
+  // Refreshing a page is not navigation and must not pull a reader to its top.
+  ledger.restore();
+  const beforeRefresh = scrolls.length;
+  await env.refresh();
+  assert.equal(scrolls.length, beforeRefresh);
+  assert.deepEqual(env.errors, []);
+});
+
+test('a slow old route cannot scroll the newer visible destination', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const scrolls = recordScrollRequests(env), ledger = deferLedger(env, 'filings'); t.after(ledger.release);
+  await env.navigate('#records/filings', () => ledger.waiting);
+  await env.navigate('#signals', () => scrolls.length === 1);
+  assert.equal(scrolls[0].target, env.byId('signals'));
+  const focused = env.doc.querySelector('[data-section="signals"]'); focused.focus();
+  ledger.release();
+  await waitFor(() => env.byId('filings-body').children.length === 50, 'old filing request completed');
+  await tick(15);
+  assert.equal(env.byId('records').hidden, true);
+  assert.equal(env.byId('signals').hidden, false);
+  assert.equal(scrolls.length, 1, 'Settling a stale route must not reposition the current page');
+  assert.equal(env.doc.activeElement, focused);
+  assert.deepEqual(env.errors, []);
+});
+
+test('notification hash opens its overlay without moving the underlying document or its dialog focus', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const scrolls = recordScrollRequests(env);
+  await env.navigate('#notifications', () => env.byId('notifications-dialog').open);
+  const dialog = env.byId('notifications-dialog');
+  assert.equal(scrolls.length, 0);
+  assert.equal(env.doc.activeElement, dialog.querySelector('[data-close-dialog]'));
+  dialog.querySelector('[data-close-dialog]').click();
+  assert.equal(env.doc.activeElement, env.byId('changes-card'));
+  assert.equal(scrolls.length, 0);
+  assert.deepEqual(env.errors, []);
+});
+
+test('an awaited selected record does not scroll or steal focus from an Actions dialog opened meanwhile', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const scrolls = recordScrollRequests(env), ledger = deferLedger(env, 'filings'); t.after(ledger.release);
+  await env.navigate('#records/filings?filing=fixture-0', () => ledger.waiting);
+  const opener = env.doc.querySelector('.header-actions [data-dialog="actions-dialog"]');
+  opener.focus(); opener.click();
+  const dialog = env.byId('actions-dialog'), close = dialog.querySelector('[data-close-dialog]');
+  assert.equal(dialog.open, true);
+  assert.equal(env.doc.activeElement, close);
+  ledger.release();
+  await waitFor(() => env.byId('selected-filings-title'), 'selected record loaded behind dialog');
+  await tick(15);
+  assert.equal(scrolls.length, 0);
+  assert.equal(env.doc.activeElement, close);
+  close.click();
+  assert.equal(env.doc.activeElement, opener);
+  assert.deepEqual(env.errors, []);
+});
+
+test('shell header measurement tracks its rendered height when controls resize without a window resize', async t => {
+  let height = 84, headerObserver;
+  const env = await dashboard({beforeScript(window) {
+    const header = window.document.querySelector('.app-header');
+    header.getBoundingClientRect = () => rect(0, 0, 390, height);
+    window.ResizeObserver = class {
+      constructor(callback) { this.callback = callback; }
+      observe(target) { if (target === header) headerObserver = this; }
+      disconnect() {}
+    };
+  }}); t.after(env.close);
+  const measuredHeight = () => env.doc.documentElement.style.getPropertyValue('--header-height');
+  assert.equal(measuredHeight(), '84px');
+  assert.ok(headerObserver, 'Header content changes must be observed independently from viewport resizing');
+  height = 137.5; headerObserver.callback();
+  assert.equal(measuredHeight(), '137.5px');
+  height = 84; headerObserver.callback();
+  assert.equal(measuredHeight(), '84px', 'Returning to a single row must release unused sidebar/anchor offset');
+  assert.deepEqual(env.errors, []);
+});
+
+test('shell header measurement follows viewport resizing when ResizeObserver is unavailable', async t => {
+  let height = 132;
+  const env = await dashboard({beforeScript(window) {
+    window.ResizeObserver = undefined;
+    window.document.querySelector('.app-header').getBoundingClientRect = () => rect(0, 0, 390, height);
+  }}); t.after(env.close);
+  const measuredHeight = () => env.doc.documentElement.style.getPropertyValue('--header-height');
+  assert.equal(measuredHeight(), '132px');
+  height = 84; env.window.dispatchEvent(new env.window.Event('resize'));
+  assert.equal(measuredHeight(), '84px');
+  assert.deepEqual(env.errors, []);
 });

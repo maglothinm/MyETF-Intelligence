@@ -11,13 +11,14 @@ const vm = require('node:vm');
 function page(file, options = {}) {
   const nodes = new Map(), listeners = new Map(), calls = [];
   function element(id = '') {
-    return {id, dataset: {}, value: '', checked: false, disabled: false, hidden: false, innerHTML: '', textContent: '', attributes: {},
+    return {id, dataset: {}, value: '', checked: false, disabled: false, hidden: false, innerHTML: '', textContent: '', attributes: {}, style: {setProperty() {}},
       addEventListener(type, handler) { this[type] = handler; }, querySelectorAll() { return []; }, querySelector() { return null; },
       setAttribute(key, value) { this.attributes[key] = value; }, removeAttribute(key) { delete this.attributes[key]; },
       closest() { return null; }, focus() {}, close() { this.closed = true; }, getBoundingClientRect() { return {left: 0, top: 0, right: 20, bottom: 20, width: 20, height: 20}; }};
   }
   const document = {activeElement: element('body'), visibilityState: 'visible', documentElement: element('html'),
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, element(id)); return nodes.get(id); },
+    querySelector(selector) { return selector === '.app-header' ? this.getElementById('app-header') : null; },
     querySelectorAll() { return []; },
     addEventListener(name, handler) { const list = listeners.get(name) || []; list.push(handler); listeners.set(name, list); }};
   const saved = {events: options.events || [], unread: (options.events || []).length, actionable: 0,

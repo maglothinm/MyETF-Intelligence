@@ -1,14 +1,80 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Dashboard review UX publication authorized; PR/CI/Pages verification
-in progress. Senate recovery evidence preserved. Device acceptance, obsolete
-queues, held PR #3 and cutover remain open.**
+Status: **Dashboard review UX deployed and reverified. Persistent header and
+Workspace shell changes are implemented and validated locally; they are not
+published. Device acceptance, obsolete queues, held PR #3 and cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Dashboard review UX — approved publication in progress, 2026-08-31
+## Persistent header and Workspace shell — local implementation, 2026-08-31
+
+Work record: issue #4, with shared help compatibility related to issue #6. The
+isolated branch `codex/persistent-shell-layout` starts from canonical `main`
+`9d9e7bef326a0e24a5f846ea1310dec24a647019`. The original checkout's user files and untracked `.codex/` are preserved;
+concurrent tasks and their branches remain separate.
+
+The shared dashboard shell pins the existing header, measures its actual height
+for sidebar and anchor offsets, and keeps desktop Workspace navigation within the
+remaining viewport height. Workspace overflows independently when needed; the
+document remains the main content scroller. Existing narrow-screen navigation is
+preserved. The shell removes the dashboard tables' vertical height cap to avoid a
+third vertical scroll context while retaining horizontal table scrolling. Native
+dialogs/popovers and shared help remain above the shell layers.
+
+The local change is limited to `scripts/dashboard_assets/{app.js,index.html,styles.css}`,
+`tests/{dashboard_dom.test.cjs,dashboard_notification_integration.test.cjs}` and
+these project records. No collector, workflow, scoring, state schema, alert,
+simulation or hosting configuration changes. **295 active Python tests passed**,
+including **41 DOM scenarios** and **32 notification scenarios** in the existing
+wrappers. JavaScript syntax and diff checks passed. The static generator built
+5,079 filings / 60 transactions / 1,496 reviews / 11 analyses. Rendered checks
+passed across all six routes and 320px through 3840px viewports, with no horizontal
+page overflow. Native input/device acceptance remains unverified; see the handoff
+for exact synthetic-input limits and evidence. No push,
+merge or deployment has occurred for this shell change, and approval of the prior
+review UX payload is not publication approval for this new payload.
+
+## Dashboard review UX — deployed release verified at 11:14 UTC, 2026-08-31
+
+PR [#10](https://github.com/maglothinm/MyETF-Intelligence/pull/10) merged
+`ca0152044bec58032acc3c7604398e844b2ba12f` to canonical `main` as
+`9d9e7bef326a0e24a5f846ea1310dec24a647019` at 11:01:36 UTC. The previous
+publication-pending text below was a prepublication checkpoint; live GitHub and
+the deployed bytes now establish that this earlier release completed.
+
+| Release evidence | Verified result |
+|---|---|
+| PR CI | [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936), attempt 1, job `99465044563`; success |
+| Main CI | [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349), attempt 1, job `99465680760`; success |
+| Pages | [33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313), attempt 1; build `99465681041` and deploy `99465807219` successful |
+| Pages artifact | `9755242103`; fresh GitHub digest matches the retained ZIP, with creation inside the exact successful build-attempt window |
+| Pages ZIP SHA-256 | `ca3b63daecb7c4e6ce5e92e162cbb363e753c07d8983fddcc1306ca7ac7e4014` |
+| Live content | All 21 checked URLs returned HTTP 200 and exactly matched the digest-verified Pages artifact; published build is `9d9e7bef326a0e24a5f846ea1310dec24a647019` |
+
+Fresh exact producer/attempt/job bindings, expiry, commit ancestry and retained ZIP
+digests match the prior release evidence for Legislative artifact `9749549239`
+(`33369634244` / 1, job `99417536057`), Executive `9746602231` (`33360633323` / 1,
+job `99391153447`) and AI `9749567326` (`33369677492` / 1, job `99417669143`).
+Retained ledger counts are unchanged. All 158 run records were inspected; no later
+eligible producer was found, and only obsolete queued runs `33219808359` and
+`33221027676` remained. PR/main CI had no artifacts; Pages uploaded only
+`github-pages`. No production writer or simulation was dispatched by this task.
+
+**Audit limit:** fresh repository-global artifact-name enumeration was unavailable:
+public REST was rate-limited, the connector does not support that endpoint, and
+the local Git credential helper was unavailable. This is not a new complete
+restore-authority audit and does not authorize a production restore. The prior
+full release evidence is preserved in `.remediation/dashboard-review-publish/`;
+fresh read-only receipts are `.remediation/persistent-shell/live-github-metadata.json`
+and `.remediation/persistent-shell/live-byte-verification.json` in the parent
+checkout. HTTP byte acceptance is separate from physical-device acceptance.
+
+## Historical review UX prepublication checkpoint — superseded by release above
+
+The following records the implementation and prepublication validation at 10:53–10:56
+UTC. Statements about publication being pending describe that earlier checkpoint.
 
 Work record: issue #4, with workspace help related to issue #6. This branch starts
 at canonical remote `main` commit `3902968d5d70cd00030248ae4a6bcea18aa2e6ea`.
@@ -119,7 +185,7 @@ is content/deployment acceptance, not physical-device acceptance.
 
 | Role | Repository | Repository ID | Recorded head | Status |
 |---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified production and Pages `3902968` plus documentation-only evidence successor | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
+| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified main and Pages `9d9e7be`; protected producers remain at ancestor `3902968` | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
 | Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
 | Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
 

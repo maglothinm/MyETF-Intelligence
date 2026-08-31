@@ -351,3 +351,27 @@ ZIP hashes and inventories before and after publication, and verify the deployed
 artifact/build and live content. Keep issues #4 and #6 open for outstanding device
 acceptance. No collector, AI, simulation or external-alert dispatch is authorized
 by this UI publication decision. Publication remains pending until verified.
+
+## D-2026-08-31-025 — Keep one measured dashboard shell and the document scroller
+
+**Decision:** Implement persistent navigation in the existing shared dashboard
+shell. Observe the header's actual border-box height and share that measurement
+with the desktop sidebar position, remaining viewport height and document anchor
+offset. Keep the document as the main content scroller. Only the persistent
+Workspace panel receives independent vertical overflow, and only while its
+desktop layout applies; preserve the existing narrow-screen navigation.
+
+**Reason:** Header wrapping, viewport changes and zoom make a fixed guessed offset
+unreliable. A shared shell keeps all dashboard routes consistent without route
+copies or an additional scrolling page wrapper. Removing the shell's table height
+cap avoids a third vertical scroll context while preserving horizontal access to
+wide records. Native dialog/popover layering and the existing shared tooltip
+remain above the pinned header and sidebar.
+
+**Consequence:** Preserve existing branding, controls, navigation semantics, focus
+order and responsive breakpoints. Change only presentation assets, related
+frontend fixtures and project records; do not change workflows, collectors,
+scores, state, alerts, simulation contracts or hosting. Local validation and
+rendered acceptance must be reported separately from publication. The prior
+review UX authorization under decision 024 was fulfilled by PR #10 and Pages run
+`33385044313`; it does not authorize publishing this new shell payload.
