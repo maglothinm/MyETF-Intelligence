@@ -10,7 +10,77 @@ independent Senate fix has completed a successful scheduled Legislative/AI chain
 and Pages publication. Main now publishes its independent full state/content
 acceptance; PR #3 still requires fresh integrated-commit acceptance.**
 
-## New main release checkpoint — 2026-08-31 12:46 UTC
+## New upstream release and producer checkpoint — 2026-08-31 13:46 UTC
+
+Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
+Live main is **ecc031dad297f6878e086dbe0b62861cbb4a6441**, documentation
+successor of persistent-shell PR #17 merge **42351e2**. The exact delta from
+**642cebc** has six commits and nine files: root dashboard assets, frontend
+fixtures and documentation only. Preserve the measured header/Workspace offsets,
+document scrolling, mobile no-hash landing, asynchronous route/dialog focus guards,
+regressions, D-030/D-031 and the public shell release receipt. No AGENTS.md,
+workflow, collector, AI/Edge implementation, protected schema or simulation changed
+in this delta. Its reported 524 local tests, 441 CI tests, six filing-link DOM
+cases and 238-file live-content acceptance belong to the independent shell
+release, not a repeated full audit or PR #3 integration acceptance here.
+
+Main also retains **d6b1e41**'s separate Investor Edge activation prerequisite:
+the additional manual Legislative run remains gated by obsolete-run containment.
+An AI-only run cannot reconstruct catalog-only filings and does not complete
+historical bootstrap. This is not a new blanket AI ban and does not relax this
+task's containment-before-PR-#3-promotion requirement. Private Vault activation,
+simulator history and physical-device acceptance remain separate open gates.
+
+At **13:46:27 UTC**, all **176 runs / 194 global artifacts** were paginated.
+The existing Executive schedule and automatic AI successor completed on **ecc031d**;
+this heartbeat dispatched neither. Latest unexpired protected metadata:
+
+| Pipeline | Artifact | Successful run / attempt | Job | Producer SHA |
+|---|---:|---|---:|---|
+| Legislative, unchanged | `9749549239` | `33369634244` / 1 | `99417536057` | `3902968` |
+| Executive, new | `9760298853` | `33398375467` / 1 | `99508337018` | `ecc031d` |
+| AI, new | `9760330164` | `33398583790` / 1 | `99509035178` | `ecc031d` |
+
+Canonical identities, exact successful attempts/jobs, creation windows and producer
+ancestry to current main passed. No later producer gap or active permitted writer
+was found. These successful new-main runs do not alone prove bootstrap population,
+full successor ledger continuity or release allowlist eligibility. Legislative
+has not yet produced state using the historical-bootstrap code. The exact migration
+allowlist is unchanged; never restore an older allowed artifact to evade new state.
+Simulation remains **9734790733 / 33320677882 / 1**, unchanged metadata.
+
+At **13:49:11 UTC**, in-memory downloads of the two new archives matched GitHub's
+SHA-256 digests. Executive **9760298853** is **509,841 bytes**, digest
+`e4c95a6829fef8c431bb7f574d6cda9af585f887157d6b2bd8dcefeccb18a4e0`;
+AI **9760330164** is **272,396 bytes**, digest
+`b4444e5f3918561ac9175e19035b774c6f2e37f435a58b852392d111fca92ea9`.
+Their ZIP member-name/size inventories contain four and 35 files respectively.
+Executive has neither `historical-backfill.jsonl` nor
+`historical-source-documents.json`; embedded original-reference values were not
+inspected. The previously identified PR #3 receipt incompatibility remains a
+forward integration gate, not a demonstrated failure of these current archives.
+No extraction, member-content/schema validation, predecessor-prefix comparison,
+retained-ID validation or allowlist update was performed by this narrow check.
+
+Latest Pages **33398661550 / 1** succeeded on **ecc031d**, build **99509301253**,
+deploy **99509481543**, sole artifact **9760352094**, created within the successful
+build window and unexpired. Intermediate publisher **33398583688** was cancelled;
+its successor completed successfully. The public marker returned HTTP 200,
+SHA **ecc031d**, generated `2026-08-31T13:45:25Z`, canonical repository URL.
+This is a live marker check, not full new artifact/site equality or device acceptance.
+Latest main CI **33395366037 / 1**, job **99498489333**, succeeded on **42351e2**
+with no artifacts; no exact-head CI exists for documentation successor **ecc031d**.
+
+At **13:47 UTC**, the Community escalation still has zero replies and no newer
+comments/replies; complete pagination was checked. Both obsolete runs remain
+queued attempt 1, null conclusion, zero jobs/artifacts and the only active runs.
+PR #3 remains open/draft/unmerged and conflicting at **9996f49b5d4a55a8224966ea1409c372b94cb304**
+before this documentation update, with no exact-head CI. No containment, promotion,
+support post, cancellation retry, simulation or production mutation was performed.
+Only release documentation changes; the shared checkout and unrelated work remain
+untouched. Continue the existing hourly follow-up and fresh integration gates.
+
+## Previous main release checkpoint — 2026-08-31 12:46 UTC
 
 Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
 At the 12:46 checkpoint main was **104fc519d883c93153c639e85a2474d3d816a336**, including independently
