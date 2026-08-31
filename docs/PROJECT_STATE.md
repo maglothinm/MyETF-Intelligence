@@ -1,15 +1,69 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **state-safety PR #3 remains draft/unmerged and now conflicts with the
-newly deployed UI on main. Obsolete queued writers remain a GitHub-service
+Status: **state-safety PR #3 remains draft/unmerged and conflicts with newer
+main work. Obsolete queued writers remain a GitHub-service
 blocker; no support response or containment. Newer protected state must be
 revalidated against the reconciled release commit before promotion. Hourly
-follow-up active; no PR #3 production acceptance or repository cutover. The latest
-Legislative collection failed on a Senate HTTP 403 without uploading protected
-state.**
+follow-up active; no PR #3 production acceptance or repository cutover. The
+independent Senate fix has now completed a successful scheduled Legislative/AI
+chain and Pages publication. Full successor-state content continuity remains to
+be independently reverified.**
 
-## Hourly release checkpoint — 2026-08-31 00:40–00:43 UTC
+## Hourly release checkpoint — 2026-08-31 01:43–01:44 UTC
+
+Canonical repository ID **1349678672** remains public
+`maglothinm/MyETF-Intelligence`. Live main is now
+**3902968d5d70cd00030248ae4a6bcea18aa2e6ea**, the documentation successor of
+Senate resilience PR #9, merged as **19f7044e8bd12fd4d693cf7f468623f318034717**.
+This independent change adds validated Senate sessions, complete-source discovery
+before Legislative side effects, and classified terminal health reporting. Keep
+these changes, their workflow validation/upload gates and tests when reconciling
+PR #3. Main's published record reports passing PR/main CI and local tests; those
+checks do not validate integration with this state-safety branch.
+
+PR #3 remains draft/open/unmerged at **bce2d813fbf1f1e87558dadadf3cf6f2ced52937**
+before this documentation update, with `mergeable=false` / `mergeable_state=dirty`.
+The existing GitHub escalation has no replies or newer comments/replies; complete
+pagination was checked. Both obsolete runs remain queued attempt 1, null
+conclusion, zero jobs/artifacts and unchanged exact historical identity. No
+cancellation retry, duplicate support post, merge or manual dispatch was made.
+
+Existing schedules produced a successful Legislative run on new main, followed
+by automatic AI and Pages. All 147 runs / 182 global artifacts were paginated;
+no later successful producer lacks protected state and no permitted producer or
+publisher remains active. Latest unexpired protected metadata:
+
+| Pipeline | Artifact | Successful run / attempt | Producer job |
+|---|---:|---|---:|
+| Legislative | `9742750536` | `33348331610` / 1 | `99356670792` |
+| Executive | `9740811832` | `33341859738` / 1 | `99338815835` |
+| AI | `9742765890` | `33348368425` / 1 | `99356772221` |
+
+Legislative and AI are on main `3902968`; Executive remains on `92f5c44`.
+Exact successful producer attempts/jobs and artifact creation windows were
+checked. Legislative restored its preceding artifact `9739239507`; its logs show
+successful House and Senate discovery, complete-result validation, protected
+upload, and an HTTP 200 terminal success ping. This establishes a successful live
+workflow after the earlier source failure, not full independent ZIP/schema/ledger
+continuity or Healthchecks dashboard acceptance. No successor was allowlisted or
+download-validated by this heartbeat. Refresh complete authority/content/ancestry
+checks before PR #3 promotion; never fall back to older allowed artifacts.
+
+[Pages run 33348419022](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33348419022)
+succeeded, attempt 1, build `99356911987`, deploy `99356973501`, sole artifact
+`9742774495` (`github-pages`). Public `/data/dashboard-insights.json` returned
+HTTP 200, build `3902968d5d70cd00030248ae4a6bcea18aa2e6ea`, generated
+`2026-08-31T01:43:12Z`, with the canonical repository URL. This is a live build
+marker check, not full published-content equality or browser/device acceptance.
+
+Only release documentation is changed here. Root main, existing schedules,
+production state/settings and held features are untouched. Detailed incident
+exports described by main remain local and are not copied into this update.
+The next safe action remains checking GitHub containment, then reconciling PR #3
+with all current main work and refreshing state/CI acceptance before promotion.
+
+## Previous hourly release checkpoint — 2026-08-31 00:40–00:43 UTC
 
 Canonical repository ID **1349678672**, name, main **92f5c44**, and PR #3 remain
 unchanged. Release head before this documentation update is
