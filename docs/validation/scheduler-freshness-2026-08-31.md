@@ -12,9 +12,8 @@ head `c9dd3a5e129f41207ffbc7ce4278e9d0cf5d4692` as
 The first freshness deployment passed full artifact and live-content verification.
 A subsequent fixed-clock audit confirmed another edge case: a fresh publication
 could stop aging when the device clock was far behind the server. A follow-up
-clock fix passes 65 DOM and 42 native JS tests, including late publications after
-page suspension; CI/deployment are pending. Its final receipt follows below when
-deployed. External scheduling is **inactive**, not provisioned by this code.
+clock fix is now deployed from PR #21, with successful CI and final Pages/state
+verification. See the final acceptance receipt below. External scheduling is **inactive**, not provisioned by this code.
 
 ## Root cause and capability
 
@@ -138,3 +137,46 @@ it never restores older exports or initializes a new baseline. Exported artifact
 and API/proof reports live under ignored `.remediation/preflight`, `postflight`,
 `scheduler-live-integration`, and `scheduler-release-check` in the isolated
 scheduler worktree. Raw credentials and raw job logs are not published.
+
+## Final acceptance deployment — PR #21
+
+[PR #21](https://github.com/maglothinm/MyETF-Intelligence/pull/21) merged tested
+`2a13b6c6d2d3d51cf7a4ec5ac05a45e2451ad46c` as
+`5932a49950384fb9cb2bdab93c4093ea596789a1`. Their trees match exactly. Full local regression
+passed again: **633 tests, no skips, 82.45 seconds**. The clock follow-up passed
+**65 dashboard DOM cases, 36 Operations native cases and 6 filing-resolution cases**.
+Independent review verified same-publication refreshes, slow/frozen/backwards
+clocks, delayed newer publications, suspended-tab elapsed time, and recovery with
+valid new collector evidence. No known actionable clock issue remained in review.
+
+| Final CI | Exact run / attempt | Job | Result |
+|---|---|---|---|
+| PR | `33421833418` / 1 | `99585821204` | 550 Python; 6 filing DOM; 11 Worker; Linux verifier passed |
+| Main | `33421979782` / 1 | `99586311684` | 550 Python; 6 filing DOM; 11 Worker; Linux verifier passed |
+
+[Final Pages 33421979811](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33421979811)
+/ attempt 1 succeeded, build job **99586312069**, deploy job
+**99586627493**, artifact **9769279578**. ZIP SHA-256:
+`0d9f078884d523a025a52dd7b7b98c4ad8c4889ca6d3389198f6a22cc92fe3cc`.
+
+The final audit completed **2026-08-31T17:57:09Z**. All **250
+served content files** match this artifact. Exact final build logs again prove
+the same protected inputs/producing attempts listed above, and simulator
+9734790733 / 33320677882 / 1. Fresh producer high-water checks, full inventories,
+hashes and continuity passed. No protected producer advanced during this release.
+
+Published health remains **stale** for all required workers. Source through
+**15:32:55 UTC** did not advance to generation **2026-08-31T17:54:03Z**.
+The live dashboard/Operations and Monitor show overdue, retain the source time,
+and preserve newest-first history. Final browser verification found no warnings
+or errors. The change is deployed and verified; this does **not** establish
+actual 15/30-minute collector cadence or activate the external scheduler.
+
+GitHub cron remains enabled; the Cloudflare example is disabled with no cron
+triggers. Both obsolete queued runs remain present. The next safe operation is
+GitHub clearance plus authorized Cloudflare account/secret configuration, followed
+by several real dispatch/collector/AI/Pages cycles and state/alert verification.
+Issue #19 remains open for those operational acceptance requirements. No manual
+writer, simulation, alert test, rebaseline, credentials or settings change occurred.
+Final ignored proof is under `.remediation/final-postflight` and
+`.remediation/scheduler-release-check/33421979811-1` in the isolated worktree.

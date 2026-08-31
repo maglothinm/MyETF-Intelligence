@@ -2,19 +2,27 @@
 
 Last updated: **2026-08-31 UTC**
 Status: **Scheduler freshness deployed from PR #20; live overdue health, state
-continuity and all served files verified. The device-clock follow-up passes local
-tests and awaits CI/deployment. External scheduling remains inactive.**
+continuity and all served files verified. The device-clock follow-up is deployed
+and verified from PR #21. External scheduling remains inactive.**
 
 This snapshot does not replace live GitHub evidence. Follow `AGENTS.md`.
 
-## Scheduler freshness — first deployment verified, clock follow-up awaiting release
+## Scheduler freshness — deployed and verified; external activation remains gated
 
-[PR #20](https://github.com/maglothinm/MyETF-Intelligence/pull/20) merged tested
+Final deployed source is **5932a49950384fb9cb2bdab93c4093ea596789a1**, PR #21. Final Pages
+**33421979811 / 1**, artifact **9769279578**, and both final CI runs succeeded.
+All 250 live content files match; exact input lineage and unchanged protected
+state/simulator continuity passed at **2026-08-31T17:57:09Z**. Full local suite
+passed 633 tests with no skips; final clock checks passed 65 DOM and 42 native
+cases. Source time remains 15:32:55 UTC; all workers are correctly stale. No newer
+collector has established cadence. Full final details are in the release receipt.
+
+The initial [PR #20](https://github.com/maglothinm/MyETF-Intelligence/pull/20) merged tested
 `c9dd3a5` as **b9380f231d09eb8610a96c6d4c83399ace67b008**, with identical trees.
 Repository ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
 default **main**. Original checkout and unrelated work remain preserved.
 [Issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) stays open.
-Follow-up work is on `codex/freshness-clock-audit` in the isolated scheduler worktree.
+Release work used `codex/freshness-clock-audit` in the isolated scheduler worktree.
 
 Central policy: Legislative expected 15 / stale >30 minutes; Executive 30 / >60;
 downstream AI >75. Failure > stale > unknown > success. Header, Operations and
@@ -50,8 +58,8 @@ are unverified. No manual producer, simulation, rebaseline or alert test occurre
 
 A final fixed-clock audit found a fresh publication could stop aging while the
 device clock trails the server. The shared elapsed-clock fix passes 65 DOM and
-42 native JS tests, including late publications and suspended tabs. CI/deployment
-remain pending before final acceptance. GitHub clearance for obsolete queued
+42 native JS tests, including late publications and suspended tabs. Final CI/Pages verification passed;
+clock behavior is covered by fixed-time and actual generated-DOM regressions. GitHub clearance for obsolete queued
 writers **33219808359** and **33221027676** still gates external activation.
 Cloudflare account/secret setup and several real cycles remain infrastructure
 work. GitHub cron remains enabled; no credentials/settings changed. Full evidence,

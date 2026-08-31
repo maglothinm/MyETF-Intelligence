@@ -657,3 +657,9 @@ device clock was behind. A fixed-time audit after PR #20 reproduced this case.
 progress. Missing/invalid clock evidence has contextual help and cannot assert
 current monitoring. This changes no cadence policy, source timestamp, state,
 writer, alert, scheduler activation or protected artifact authority.
+
+**Release verification for D-035:** PR #21 merged as `5932a49950384fb9cb2bdab93c4093ea596789a1`;
+final Pages `33421979811` / 1, artifact `9769279578`, both final CI runs,
+633 local tests and exact protected-state/live-content verification passed.
+External activation remains gated; GitHub cron stays enabled. See the
+[final release receipt](validation/scheduler-freshness-2026-08-31.md).

@@ -3,11 +3,12 @@
 Updated: **2026-08-31 UTC**
 Work: [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19).
 
-## Current task — finalize scheduler freshness rollout
+## Current task — external scheduler activation remains gated
 
 Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
-default **main**. PR #20 merged tested `c9dd3a5` as
-`b9380f231d09eb8610a96c6d4c83399ace67b008`, with identical trees. Work is isolated
+default **main**. PR #20 and its clock follow-up PR #21 are merged.
+Final deployed source **5932a49950384fb9cb2bdab93c4093ea596789a1** has a tree identical
+to tested source `2a13b6c6d2d3d51cf7a4ec5ac05a45e2451ad46c`. Work is isolated
 in `.worktrees/scheduler-freshness`, now branch `codex/freshness-clock-audit`.
 Original checkout `9d9e7be`, local main and unrelated work remain preserved.
 Never implement or dispatch from legacy `maglothinm/MyETF`.
@@ -24,8 +25,8 @@ Local **633 tests, no skips**, plus **11 Worker cases** passed. PR CI
 6 filing DOM, 11 Worker and Linux verification. The old schedule expectation in
 verify.sh and its checksum were corrected; safety assertions remain intact.
 
-Pages **33420549071 / 1** succeeded, source `b9380f2`, artifact **9768730400**.
-All **250 live files** match. Exact logs and full authority audit confirm:
+Initial Pages **33420549071 / 1** succeeded, source `b9380f2`, artifact **9768730400**.
+All **250 live files** matched at that checkpoint. Exact logs and full authority audit confirm:
 Legislative **9764350004 -> 33408974583 / 1**;
 Executive **9760298853 -> 33398375467 / 1**;
 AI **9764387095 -> 33409079174 / 1**. Provenance/high-water/expiry/hashes and
@@ -37,14 +38,24 @@ are in [the release receipt](validation/scheduler-freshness-2026-08-31.md).
 Ignored proof is under this worktree's `.remediation/preflight`, `postflight`,
 `scheduler-live-integration` and `scheduler-release-check`.
 
-## Active follow-up and next safe action
+## Final verified result and next safe action
 
-A final fixed-clock audit confirmed fresh evidence could stop aging when device
-time trails the server. The shared monotonic age anchor and regressions now pass
-65 DOM and 42 native JS tests. It retains elapsed time across repeat/newer late
-publications, latches clock uncertainty, and preserves failure/stale precedence.
-Require follow-up PR CI, merge and verify
-its exact Pages artifact/live state. First deployment is not final acceptance.
+Clock follow-up deployed from PR #21, source `5932a49950384fb9cb2bdab93c4093ea596789a1`.
+PR CI **33421833418 / 1** and main CI **33421979782 / 1**
+succeeded. Final Pages **33421979811 / 1**, artifact **9769279578**, succeeded;
+all 250 live files match. Fresh exact-attempt provenance/high-water/hashes and
+continuity passed at **2026-08-31T17:57:09Z**. Protected/simulator inputs remain
+unchanged. The live header is correctly overdue; source time remains 15:32:55 UTC.
+Full regression again passed **633 tests, no skips**; clock coverage passed
+**65 DOM + 42 native cases** and independent review. No known code blocker remains.
+
+Repository/UI rollout is verified. Next safe action is to resolve the GitHub
+clearance gate and provision the external scheduler, then observe several actual
+cycles before claiming cadence or choosing cron redundancy. No production writer
+was manually dispatched. Issue #19 remains open for infrastructure acceptance.
+Final proof: `.remediation/final-postflight` and
+`.remediation/scheduler-release-check/33421979811-1`; committed release receipt
+contains exact jobs, hashes, input counts and remaining limitations.
 
 ## Infrastructure blockers
 
@@ -52,7 +63,7 @@ External scheduler activation remains blocked by GitHub backend clearance for
 obsolete queued writers **33219808359** and **33221027676**. No diagnostic writer
 or external scheduler may bypass that gate. Cloudflare account/Worker/scoped
 secret configuration and multiple real 15/30-minute cycles are still required.
-At 17:39 no new collector had arrived; latest measured gaps were 468.5/493.8m.
+At 17:57 no new collector had arrived; latest measured gaps were 468.5/493.8m.
 Actual post-release source advancement and external delivery remain unverified.
 Keep GitHub cron until a separately recorded redundancy decision. No producer,
 simulation, alert test, rebaseline, credential or repository setting was manually
