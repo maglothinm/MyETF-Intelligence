@@ -24,10 +24,27 @@ automatic resumption after containment. On **2026-08-30**, task follow-up
 **polititrack-production-unblock** was created successfully and verified
 **ACTIVE**, hourly, attached to this task. It stops after verified completion or
 an owner stop request; it does not bypass state gates or post duplicate reports.
-The Support portal remains at sign-in if a private ticket is desired; the public
-contact above succeeded without changing account credentials.
+At the original submission, the Support portal remained at sign-in; the public
+contact above succeeded without changing account credentials. See the later
+checkpoint below for the separately attempted signed-in private-ticket route.
 
-## Message
+## Subsequent checkpoint — 2026-08-31 10:46 UTC
+
+The existing Community comment remains present and unchanged, with zero replies
+and no newer discussion comments/replies; pagination was complete. Both runs
+remain queued attempt 1 with zero jobs/artifacts. This follow-up made no new post,
+cancellation retry or deletion attempt.
+
+Canonical main `ac6342ac85e5a395f1b8bab251b8f608c47249e0` now publishes a separate
+owner-approved recovery record at `docs/incidents/senate-efd-2026-08-30.md`.
+It records additional independently authorized cancellation/deletion/UI attempts,
+all unsuccessful, and an unsent private Support draft because the signed-in
+portal offered no applicable Actions route. That unsent draft does not replace
+this submitted public escalation. No private ticket or containment is established.
+Do not duplicate either report or repeat unchanged requests; continue the existing
+hourly status checks. This follow-up retains its no-deletion and held-feature scope.
+
+## Original submitted message
 
 I am reporting another reproducible instance of the queued/not-yet-queued
 contradiction, on behalf of the owner of public repository

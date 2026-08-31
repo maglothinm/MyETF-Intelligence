@@ -6,9 +6,64 @@ main work. Obsolete queued writers remain a GitHub-service
 blocker; no support response or containment. Newer protected state must be
 revalidated against the reconciled release commit before promotion. Hourly
 follow-up active; no PR #3 production acceptance or repository cutover. The
-independent Senate fix has now completed a successful scheduled Legislative/AI
-chain and Pages publication. Full successor-state content continuity remains to
-be independently reverified.**
+independent Senate fix has completed a successful scheduled Legislative/AI chain
+and Pages publication. Main now publishes its independent full state/content
+acceptance; PR #3 still requires fresh integrated-commit acceptance.**
+
+## Hourly release checkpoint — 2026-08-31 10:46 UTC
+
+Canonical repository ID **1349678672** remains public
+`maglothinm/MyETF-Intelligence`. Main advanced to documentation-only commit
+**ac6342ac85e5a395f1b8bab251b8f608c47249e0**, parent **3902968**. Its public
+diff changes only the two operational status documents and adds
+`docs/incidents/senate-efd-2026-08-30.md`; it changes no runtime or workflow.
+Preserve this published recovery evidence when reconciling the release branch.
+PR #3 remains draft/open/unmerged, `mergeable=false` / `mergeable_state=dirty`,
+at **1a0ee5b9f77842ff12158229327dcbfc36dc316a** before this documentation update.
+No exact-head release CI or run on new documentation main was found.
+
+Main's owner-approved public record now reports independent full ZIP/inventory,
+predecessor-ledger/ID continuity and 21-file Pages content acceptance, refreshed
+at **10:24 UTC**, for the same protected state below. This supersedes the earlier
+publication restriction for that already-published evidence. This heartbeat
+reviewed its public commit; it did not repeat those content downloads or grant
+new publication authority over other local drafts. Read the public incident
+record for that audit's exact scope. PR #3 allowlisting remains unchanged and
+fresh consumer ancestry/content/integration acceptance is still required.
+
+All **155 runs / 190 global artifacts** were paginated at **10:46:28 UTC**.
+No new/updated run, later producer gap or active permitted writer/publisher was
+found. Latest unexpired successful attempt-1 metadata remains:
+
+| Pipeline | Artifact | Successful run / attempt | Producer job |
+|---|---:|---|---:|
+| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` |
+| Executive | `9746602231` | `33360633323` / 1 | `99391153447` |
+| AI | `9749567326` | `33369677492` / 1 | `99417669143` |
+
+All protected producers are on main **3902968**, with expected identities and
+exact successful attempt/job windows. Latest successful Pages is `33369728437`
+/ 1, build `99417832272`, deploy `99417945412`, artifact `9749580990`.
+The public build marker returned HTTP 200, SHA **3902968**, generated
+`2026-08-31T07:45:12Z`, with the canonical repository URL. Simulation remains
+`9734790733` / `33320677882` / 1. These are metadata/build-marker checks, not
+new independent content or device acceptance by this heartbeat.
+
+The existing Community escalation remains unchanged with zero replies and no
+newer comments/replies; complete pagination was checked. Both obsolete runs
+remain queued attempt 1, null conclusion, zero jobs/artifacts, exact historical
+identity unchanged. Main separately records owner-authorized cancellation and
+empty-record deletion/UI attempts on August 31, all unsuccessful; its private
+Support draft remains unsent because no applicable portal route was available.
+That does not replace the already-submitted Community report or establish
+containment. This heartbeat retried no cancellation/deletion, posted nothing,
+and did not change the no-deletion scope of its own approved follow-up.
+
+Only release documentation is updated here. The shared checkout is now
+`codex/dashboard-review-ux` at **3902968**, with concurrent uncommitted dashboard,
+test and documentation changes plus `.codex/`; all were left untouched. The
+existing release worktree remains the only target for this status update.
+Continue hourly containment checks; no PR #3 promotion or manual dispatch.
 
 ## Hourly release checkpoint — 2026-08-31 01:43–01:44 UTC
 
