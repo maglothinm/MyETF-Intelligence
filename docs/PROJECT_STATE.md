@@ -1,22 +1,28 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Senate resilience merged; PR/main CI and local verification passed.
-Production recovery awaits the existing writer-safety gate. Contextual help
-remains published; device acceptance, PR #3 and cutover remain open.**
+Status: **Senate resilience verified in scheduled production; state continuity,
+accepted success heartbeats and live dashboard content passed. Requested manual
+rerun remains blocked by two obsolete queues that GitHub cannot cancel/delete.
+Device acceptance, PR #3 and cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Senate resilience implementation — merged
+## Senate recovery — verified 2026-08-31 09:51 UTC
 
 Issue #8 adds strict official-source session validation, bounded retries and
 complete Legislative discovery before processing. The code preserves existing
-production artifacts, stable IDs, baselines and alert deduplication. Local tests
-are not proof of production recovery. Production validation is pending the
-existing writer-queue safety gate; no recovery dispatch is claimed. Detailed
-incident exports remain local pending approval for public disclosure. The
-historical deployment and artifact tables below remain historical checkpoints.
+production artifacts, stable IDs, baselines and alert deduplication. Two later
+scheduled runs used the merged fix and passed independent operational validation.
+The owner explicitly approved the new recovery evidence for issue #8, PR #9 and
+main. It is published in [issue comment 5477003406](https://github.com/maglothinm/MyETF-Intelligence/issues/8#issuecomment-5477003406)
+and linked from [PR comment 5477009236](https://github.com/maglothinm/MyETF-Intelligence/pull/9#issuecomment-5477009236).
+This documentation-only publication records the same checkpoint. A fresh audit
+at **10:24 UTC** reconfirmed unchanged authority, full continuity, both obsolete
+queues and all 21 live Pages files. See [the incident evidence](incidents/senate-efd-2026-08-30.md) for
+exact run URLs, jobs, hashes, continuity and queue-cleanup receipts. Older tables
+below remain historical checkpoints, not current artifact authority.
 
 PR [#9](https://github.com/maglothinm/MyETF-Intelligence/pull/9) merged source
 `125eac1aba5a5f5324040cbfac7f30b63a2f0347` as
@@ -24,15 +30,42 @@ PR [#9](https://github.com/maglothinm/MyETF-Intelligence/pull/9) merged source
 283 passed. PR CI [33346339195](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346339195)
 and main CI [33346456045](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346456045)
 both succeeded with 212 selected tests and `VERIFICATION PASSED` from Linux
-`verify.sh`. The following documentation-only successor changes no runtime code.
-No new production run, protected-state successor or dashboard publication is
-claimed. Healthchecks recovery remains unverified.
+`verify.sh`. The audited runtime commit is
+`3902968d5d70cd00030248ae4a6bcea18aa2e6ea`; this evidence update changes no code.
+
+Scheduled Legislative runs
+[33348331610](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33348331610)
+and [33369634244](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369634244),
+both attempt 1, succeeded with House **883** / Senate **91**, complete discovery,
+zero baseline changes and zero alerts. Each delivered exactly one classified
+Healthchecks success request accepted with **HTTP 200**. Provider-side UP/status
+history was not separately queried. Neither run was manually dispatched by this
+session. The additional requested manual run has **not** been dispatched.
+
+| Current protected checkpoint | Artifact | Successful run / attempt | Job | Retained counts |
+|---|---:|---|---:|---|
+| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` | 983 filings; 65 transactions; 19 purchases; 1 review; 31 runs |
+| Executive | `9746602231` | `33360633323` / 1 | `99391153447` | 4,109 filings; 1,495 reviews; 23 runs |
+| AI | `9749567326` | `33369677492` / 1 | `99417669143` | 12 analyses; 36 runs |
+
+Exact workflow/job/attempt provenance, commit ancestry, producer high-water
+marks, expiration, ZIP digests, complete inventories, ledger prefixes and
+protected IDs passed. Legislative actual restore lineage is
+`9739239507 → 9742750536 → 9749549239`; run-history counts advanced 29 → 30 → 31.
+All pre-incident non-run ledgers remain byte-identical. No rebaseline occurred.
+
+Pages [33369728437](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369728437)
+/ attempt 1 succeeded, artifact `9749580990`. It restored exactly the three
+checkpoints above. All **21** checked live files returned HTTP 200 and matched
+the artifact; published build is `3902968`, with 5,079 filings, 60 transactions,
+1,496 reviews and 11 analyses. Existing contextual help remains deployed. This
+is content/deployment acceptance, not physical-device acceptance.
 
 ## Repository identity
 
 | Role | Repository | Repository ID | Recorded head | Status |
 |---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Tooltip deployment `1aa8739` plus documentation-only evidence successor | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
+| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified production and Pages `3902968` plus documentation-only evidence successor | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
 | Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
 | Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
 
@@ -258,14 +291,24 @@ same run ID.
 
 ## Known blockers
 
-Legacy workflow runs `33219808359` and `33221027676` remain stale and queued.
+Obsolete canonical workflow runs `33219808359` and `33221027676` remain stale and queued.
 They must be cancelled or otherwise proven incapable of running before the
 duplicate-writer retirement and cutover can be called complete. Their queued state
 is not evidence of successful work. Exact-identity cancellation attempts with
 both the ordinary and force-cancel Actions endpoints returned HTTP 409 because
 GitHub reports the runs as queued while its cancellation service considers them
 pre-queued. The retired workflow is absent from the default branch, but those two
-pre-existing run records remain a stop condition.
+pre-existing run records remain a stop condition. On August 31 the owner
+authorized clearing both. Ordinary/force cancellation still returned HTTP 409;
+supported exact deletion after hash-verified exports of their empty job/artifact
+records returned HTTP 403. Signed-in UI cancellation also failed for both. Fresh
+readback at 09:52 UTC still shows queued, attempt 1, zero jobs/artifacts and
+workflow ID `344663675` in `deleted` state. No clearance is claimed. A concrete
+GitHub Support draft is prepared locally and submission is authorized, but it
+remains unsent: the signed-in portal offered no applicable Actions ticket route.
+No ticket number exists and no unrelated category was submitted. GitHub must clear the
+server-side records or confirm they cannot execute before the requested fresh
+manual production run. Existing schedules were not changed.
 
 GitHub settings still report the canonical repository as public and pre-rename,
 and the legacy repository as public, unarchived, and Pages-enabled. The browser
