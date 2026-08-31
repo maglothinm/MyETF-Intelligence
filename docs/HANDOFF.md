@@ -1,117 +1,83 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-31 UTC**
-Work record: [issue #13 — 30-Day Filing Vault](https://github.com/maglothinm/MyETF-Intelligence/issues/13).
+Work record: [issue #11 — Investor Edge historical bootstrap](https://github.com/maglothinm/MyETF-Intelligence/issues/11).
 
-## Current task — publication delivered; private runtime activation remains
+## Current task — full deployment requested; production bootstrap gated
 
-The owner's explicit **Publish** instruction was carried through canonical PR,
-CI, merge and existing Pages. Repository ID **1349678672**, current live name
-**maglothinm/MyETF-Intelligence**, default **main**. Never implement or dispatch
-in legacy `maglothinm/MyETF`. The shared root checkout and unrelated worktrees
-remain untouched. Work used branch **codex/filing-vault**, isolated worktree
-**.worktrees/filing-vault**.
+The owner requested **Fully deploy** after the Investor Edge release. The code is
+already published, but this follow-up cannot establish full production bootstrap
+while the existing manual Legislative gate remains unresolved.
 
-[PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16) merged tested
-head `755349945bf8fdd4389a8c6aa6d770370df487af` as
-`104fc519d883c93153c639e85a2474d3d816a336`; the trees match exactly. This includes
-the final exact-ID safeguard and preserves Operations/Investor Edge releases and
-verified receipts through `b5169f3`. This documentation-only successor records
-the release; it does not advance production state or change deployed source.
+Canonical repository **1349678672** is currently **maglothinm/MyETF-Intelligence**,
+default **main**. This task uses clean isolated branch
+`codex/investor-edge-bootstrap` in `.remediation/investor-edge-worktree`,
+fast-forwarded to `642cebc45a489b7b3faf9b2840a716002828fafa`.
+The shared checkout and unrelated work are preserved. The documentation commit
+containing this handoff changes no executable source or production state.
 
-The [live Filing Vault](https://maglothinm.github.io/MyETF-Intelligence/filing-vault.html)
-has **5,079** cataloged filings, filters, exact-ID details and official links.
-**Private cached-document retrieval is inactive.** The generated public API origin
-is blank and the live page explicitly reports unavailable retrieval; no document
-was retrieved and no government acknowledgement was submitted by this publication.
+## Verified current deployment and continuity
 
-## Delivered source and verification
+Current published source is `104fc519d883c93153c639e85a2474d3d816a336`, which
+preserves Investor Edge release `676701a` and Operations ordering. Canonical
+[main CI 33392608687](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608687)
+and [Pages 33392608680](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608680)
+are successful on attempt 1. The new read-only audit verified Pages build/deploy,
+archive digest, and four live dashboard/Wallboard/Edge/summary surfaces against
+that publication. Earlier full-release tests and file/browser acceptance remain
+recorded in [PROJECT_STATE](PROJECT_STATE.md) and the
+[Filing Vault release receipt](validation/filing-vault-release-2026-08-31.md);
+no new source test suite was necessary for this documentation-only follow-up.
 
-The optional Flask/SQLAlchemy/Supabase Vault includes six additive tables, private
-storage, immutable SHA-256 evidence, exact 2,592,000-second expiry, acknowledgements,
-version history, known-ID catalog admission, source adapters and daily lifecycle
-commands/timer examples. Shared dashboard links and the responsive full-page
-viewer reuse existing surfaces; PDF.js assets/licenses are pinned locally.
-Rejected filing matches retain original provenance and cannot fall back to
-conflicting IDs after compact projection. No protected writer or ledger changed.
+Fresh exact-attempt provenance, producer high-water, expiration, ZIP/member
+inventory and continuity checks passed for the unchanged Legislative, Executive
+and AI authorities. Isolated simulator history remains unchanged. Both production
+trackers, the AI workflow and the existing Pages publisher report active.
+Tracker/analyst/bootstrap source, configuration and schedules are unchanged from
+the tested Investor Edge release. Their historical pass defaults to 20 filings;
+existing observation and network budgets remain unchanged.
 
-The full local suite passed **524 tests with no skips**; **6 additional filing-link
-DOM cases** passed. Syntax, all workflow YAML and **201 vendor hashes/sizes** pass.
-Government-source tests are mocked. PostgreSQL isolation SQL is fixture-tested,
-not verified against a live database. Earlier real PDF rendering used a disposable
-TEST API; it is not evidence of production storage access.
+Private audit exports are in the shared workspace's ignored
+`.remediation/investor-edge-bootstrap/full-deployment-audit-20260831/`.
+They are verification evidence, never production restore authority. The helper's
+held-PR migration-allowlist findings belong to PR #3; they do not invalidate the
+independently verified deployed-main artifact provenance.
 
-| Canonical run | Attempt | Result |
-|---|---:|---|
-| [PR CI 33392460770](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392460770) | 1 | Success; 441 tests, 6 DOM cases, Linux VERIFICATION PASSED |
-| [Main CI 33392608687](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608687) | 1 | Success; same 441 tests, 6 DOM cases and verifier |
-| [Pages 33392608680](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608680) | 1 | Success; build `104fc51`, artifact `9758066553` |
+## Exact blocker and next safe action
 
-Pages build/deploy jobs **99489550775 / 99489776345** succeeded. Archive size
-**3,872,316 bytes**, SHA-256
-`28dd09b87b99f55636f9b47fe1be4254323c0ca10c33d1edeafd00151696ad4c`.
-All **238 served public content files** matched the exact Pages archive at
-**12:43:45 UTC**, including all **201** pinned PDF assets. Only the empty
-`.nojekyll` marker was not HTTP-checked. Emitted and live configuration both contain
-exactly `{"api_origin":""}`; private-field/raw-document archive checks passed.
-Desktop/mobile-width live checks passed source filtering and exact filing details
-without horizontal overflow or console warnings/errors. Physical Safari/iPhone
-and live runtime acceptance remain unverified.
+Both obsolete runs **33219808359** and **33221027676** still report queued,
+attempt 1, zero jobs and zero artifacts. Their workflow is deleted, but this does
+not prove that their retained historical state-writing code cannot execute.
+Issues #8 and #1 contain no GitHub clearance; the latest recovery comment retains
+the gate and reports the Support submission unresolved. Prior unsuccessful
+cancellation/deletion attempts are documented in the
+[Senate incident record](incidents/senate-efd-2026-08-30.md).
+No cancellation retry, deletion, writer dispatch, rebaseline, simulation, alert,
+credential change or schedule change was performed by this task.
 
-## Protected continuity and retained evidence
+The gate specifically prevents the additional manual Legislative run. It is not
+a newly invented blanket ban on all AI operations. An AI-only run cannot repair
+catalog-only filings: it consumes retained transaction/purchase ledgers, whereas
+historical reconstruction runs inside the tracker. Dispatching AI alone would
+therefore not satisfy the requested population bootstrap.
 
-Exact producer repository/workflow/default branch, successful run attempts/jobs,
-artifact upload windows, expiry, commit ancestry and global producer high-water
-marks are checked independently of CI. Pages logs consume these exact inputs:
+**Next:** obtain GitHub backend clearance or an authoritative confirmation that
+both obsolete runs cannot execute. The user has been asked for any Support/ticket
+update. Then recheck live main and authoritative state, run the existing bounded
+Legislative producer without initialization, verify its exact successful artifact
+and preserved ledger/seen history, and verify the normal downstream AI/Pages
+successors plus actual profile and pending-observation progress. Keep issue #11
+open until that operational evidence exists. Never upload local acceptance
+copies or bypass the gate to make the dashboard appear populated.
 
-| Protected artifact | ID | Producing run / attempt | Successful job |
-|---|---:|---|---:|
-| legislative-tracker-state | 9749549239 | 33369634244 / 1 | 99417536057 |
-| executive-tracker-state | 9746602231 | 33360633323 / 1 | 99391153447 |
-| ai-analysis-state | 9749567326 | 33369677492 / 1 | 99417669143 |
+## Separate retained limits
 
-The final **12:45:06 UTC** audit checked **169 runs / 82 producer records**.
-Protected ZIP/member hashes, sizes, inventories and high-water marks remain unchanged. All producers
-are at `3902968`, an ancestor of this release; artifacts expire on 2026-11-29.
-Isolated simulator artifact **9734790733**, run **33320677882 / attempt 1**,
-job **99281977011**, remains two rows. No writer, simulation, rebaseline, alert,
-repository setting or credential was dispatched/changed by this publication.
+The newer Filing Vault catalog/viewer is published, but its private API/storage
+runtime remains inactive. Its existing host, database, private bucket, credentials,
+legitimate source acknowledgements and timer are separate issue #13 activation
+prerequisites; this task did not create infrastructure or infer source consent.
+See [FILING_VAULT.md](FILING_VAULT.md) for that distinct procedure.
 
-See [the release receipt](validation/filing-vault-release-2026-08-31.md) for exact
-run/job URLs, digests, counts, live file checks and limitations. Ignored evidence
-is in this worktree's `.remediation/publish-vault/` and `.remediation/browser-evidence/`.
-Raw state copies are read-only evidence, never production restore authority.
-
-## Remaining configuration and next safe action
-
-Issue #13 stays open. Activate the existing private application runtime only with
-its real PostgreSQL connection, private Supabase bucket, server-only storage and
-signing credentials and HTTPS API host. Run the explicit additive migration,
-verify private table/bucket isolation, supply catalog metadata from the verified
-canonical publisher, configure exact origins/agency hosts and legitimately accepted
-source notices, install the daily timer and verify its execution. Then set the
-public `FILING_VAULT_API_ORIGIN` repository variable and release through existing
-CI/Pages. Do not put documents or secrets in Git/Pages, create another repository,
-or use protected tracker artifacts as the document cache.
-
-Local Vault configuration/environment variables were absent. A bounded configured
-Git credential-helper read returned no usable credential; it did not retrieve
-remote secret metadata or runtime environments, and no alternative credential
-search was attempted. Published config proves only that this build has no API
-origin; credentials and externally provisioned infrastructure remain unverified.
-Static publication cannot activate the cache or imply government-source consent.
-Request-only reports remain request-only. Endpoint validation does not establish
-exhaustive discovery of separately published amendments.
-
-Verify real HTTPS/CORS, aggregate proxy/egress rate limits, storage/database isolation,
-source access, scheduled retention and physical devices before describing the
-cache as operational. Detailed architecture/configuration is in
-[FILING_VAULT.md](FILING_VAULT.md).
-
-Preserve the separate Senate recovery gate: obsolete queued writers **33219808359**
-and **33221027676** require backend clearance before the separately requested
-manual Legislative run; its support draft remains unsent. The historical simulator
-rewrite concern remains unresolved before future manual simulator work. Current
-unchanged history does not resolve that older concern. Held PR #3, same-ID
-rename/privacy, legacy retirement and external delivery/device acceptance remain
-separate tasks. Requery live GitHub provenance before any production operation.
+Source-original access, parser/OCR limitations, actual market completion, Gmail
+delivery proof, physical devices, held PR #3, the historical simulator-prefix
+concern, same-ID rename/privacy and legacy retirement remain as documented.

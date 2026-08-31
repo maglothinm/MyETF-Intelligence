@@ -9,6 +9,22 @@ preserved; runtime, physical-device and cutover gates stay separate.**
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
+## Full deployment follow-up — Investor Edge production gate remains
+
+The owner's **Fully deploy** request was checked against current main and live
+GitHub state after publication. Current code is deployed; the existing trackers,
+AI workflow and Pages publisher are active. Fresh read-only artifact provenance,
+inventory/continuity and live Pages checks passed with unchanged production inputs.
+No additional producer has yet supplied the historical bootstrap acceptance.
+
+The obsolete queued runs remain unresolved, with no GitHub clearance in the
+recovery issues. The existing manual Legislative gate therefore remains in force.
+AI-only processing cannot reconstruct catalog-only transactions and would not
+complete the bootstrap. No writer, simulation, rebaseline, external alert or
+infrastructure configuration was performed in this follow-up. The next safe action
+requires GitHub clearance, fresh provenance checks and the existing bounded
+tracker -> AI -> Pages chain; see [the active handoff](HANDOFF.md).
+
 ## Filing Vault — published interface, private runtime inactive, 2026-08-31
 
 [Issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13) remains open
