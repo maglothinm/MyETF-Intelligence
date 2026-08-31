@@ -9,7 +9,8 @@ Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
 default **main**. PR #20 and its clock follow-up PR #21 are merged.
 Final deployed source **5932a49950384fb9cb2bdab93c4093ea596789a1** has a tree identical
 to tested source `2a13b6c6d2d3d51cf7a4ec5ac05a45e2451ad46c`. Work is isolated
-in `.worktrees/scheduler-freshness`, now branch `codex/freshness-clock-audit`.
+in `.worktrees/scheduler-freshness`: implementation branch
+`codex/freshness-clock-audit`, final receipt branch `codex/scheduler-release-receipt`.
 Original checkout `9d9e7be`, local main and unrelated work remain preserved.
 Never implement or dispatch from legacy `maglothinm/MyETF`.
 
