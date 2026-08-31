@@ -16,11 +16,11 @@ from typing import Any, Iterable, Mapping, Sequence
 
 try:  # Support both package and direct-script execution.
     from .investor_edge import build_dashboard_addon
-    from .dashboard_insights import build_insights, public_payload, review_rows
+    from .dashboard_insights import build_insights, public_payload, review_rows, source_data_through
     from .filing_resources import filing_catalog, attach_filing_ids, api_origin
 except ImportError:  # pragma: no cover - direct execution path
     from investor_edge import build_dashboard_addon  # type: ignore
-    from dashboard_insights import build_insights, public_payload, review_rows  # type: ignore
+    from dashboard_insights import build_insights, public_payload, review_rows, source_data_through  # type: ignore
     from filing_resources import filing_catalog, attach_filing_ids, api_origin  # type: ignore
 
 DEFAULT_OUTPUT = Path("trade-dashboard-site")
@@ -123,6 +123,7 @@ RUN_FIELDS = (
     "errors",
     "run_url",
     "event_name",
+    "trigger_source",
     "run_attempt",
 )
 
@@ -237,6 +238,7 @@ AI_RUN_FIELDS = (
     "warnings",
     "run_url",
     "event_name",
+    "trigger_source",
     "run_attempt",
 )
 
@@ -592,6 +594,7 @@ def build_payload(
     repository_url: str,
     ai: dict[str, Any] | None = None,
     simulation: dict[str, Any] | None = None,
+    workflow_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     filings = legislative["filings"] + executive["filings"]
     transactions = legislative["transactions"] + executive["transactions"]
@@ -656,17 +659,10 @@ def build_payload(
     open_paper_pnl = sum(float(item.get("unrealized_pnl") or 0) for item in open_positions)
     realized_paper_pnl = sum(float(item.get("realized_pnl") or 0) for item in closed_positions)
     generated_utc = utc_now_iso()
-    latest_timestamp = max_timestamp(
-        [
-            *(str(item.get("updated_at_utc") or "") for item in filings),
-            *(str(item.get("observed_at_utc") or "") for item in transactions),
-            *(str(item.get("observed_at_utc") or "") for item in reviews),
-            *(str(item.get("finished_utc") or "") for item in runs),
-            *(str(item.get("analyzed_at_utc") or "") for item in analyses),
-            *(str(item.get("last_updated_utc") or item.get("opened_at_utc") or "") for item in portfolio),
-            *(str(item.get("finished_utc") or "") for item in ai_runs),
-        ]
-    ) or generated_utc
+    latest_timestamp = source_data_through({
+        "summary": {"generated_utc": generated_utc}, "filings": filings,
+        "transactions": transactions, "reviews": reviews, "runs": runs,
+    })
     states = [legislative.get("state", {}), executive.get("state", {})]
     sources = source_summary(filings, runs, states)
 
@@ -712,6 +708,7 @@ def build_payload(
         "portfolio": portfolio,
         "ai_runs": ai_runs,
         "simulation": simulation,
+        "workflow_evidence": dict(workflow_evidence or {}),
     }
 
 
@@ -791,6 +788,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--executive-dir", type=Path)
     parser.add_argument("--ai-dir", type=Path)
     parser.add_argument("--simulation-dir", type=Path)
+    parser.add_argument("--workflow-evidence-file", type=Path,
+                        help="Read-only validated canonical Actions attempt observations")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--repository-url",
@@ -808,12 +807,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     executive = load_branch(args.executive_dir, "executive")
     ai = load_ai(args.ai_dir)
     simulation = load_simulation(args.simulation_dir)
+    workflow_evidence = read_json_object(args.workflow_evidence_file) if args.workflow_evidence_file else {}
     payload = build_payload(
         legislative,
         executive,
         repository_url=args.repository_url,
         ai=ai,
         simulation=simulation,
+        workflow_evidence=workflow_evidence,
     )
     build_site(payload, args.output_dir)
     build_dashboard_addon(args.ai_dir, args.output_dir)

@@ -4,6 +4,27 @@
 
 This component detects newly published financial-disclosure filings from official U.S. government sources, preserves a complete filing inventory and normalized transaction records, sends prompt alerts, and publishes a searchable static review dashboard. It remains independent of the repository's older Flask/PostgreSQL/dbt/React stack so collection and reporting do not depend on that incomplete deployment.
 
+## Scheduling and freshness
+
+The canonical Legislative workflow polls at `7,22,37,52 * * * *` (15 minutes).
+Executive / OGE polls at `13,43 * * * *` (30 minutes). These staggered schedules
+remain GitHub fallback triggers; their presence does not prove timely execution.
+Both workflows retain manual dispatch and accept a safe `trigger_source` input
+for an independent authenticated scheduler using the same collector logic.
+
+Dashboard freshness is separate from the last run conclusion: Legislative becomes
+stale after 30 minutes without successful completion, Executive after 60 minutes.
+The collector-triggered AI allowance is 75 minutes; stale inputs still prevent
+overall success. Failure outranks stale, then unknown, then success. Operations
+shows timing and trigger evidence; no missing run records are invented.
+
+The [external scheduler guide](docs/EXTERNAL_SCHEDULER.md) describes Cloudflare
+Cron dispatch, server-only credentials, activation/rollback and duplicate-run
+safety. Worker code is not proof of active scheduling. GitHub cron stays enabled
+until several external cycles and state continuity have been verified. Existing
+production-recovery gates remain in force. The [freshness record](docs/SCHEDULER_FRESHNESS.md)
+documents the actual data path, measured gaps and deployment status.
+
 ## Coverage
 
 ### Legislative branch

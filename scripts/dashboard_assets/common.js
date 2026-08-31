@@ -34,7 +34,11 @@ window.PT = (() => {
     actionableSignals: "Analyses currently classified High Priority or Watchlist. Other AI-ranked records remain available under Signals but are not promoted to this board.",
     localChanges: "Changes detected by this browser after it successfully established a local baseline. This is not a server-side account history.",
     parserExceptions: "Records requiring manual parser review. Open the filtered review queue to inspect each exception; access/request inventory is tracked separately.",
-    systemEvidence: "Status derived from retained Legislative, Executive and AI run evidence. It is not an independent live probe of every upstream service.",
+    systemEvidence: "Status uses retained production run evidence and freshness targets. Failure takes precedence over stale, then unknown, then current. It is not an independent live probe of every upstream service.",
+    monitoringCurrent: "All required PolitiTrack collectors and the AI analyst have completed successfully within their freshness windows.",
+    monitoringStale: "The most recent retained collector run may have succeeded, but it is older than PolitiTrack’s freshness window. This can indicate a delayed or missed scheduled execution.",
+    sourceDataThrough: "Newest timestamp represented by retained production source evidence. It is not simply the time this dashboard page was generated.",
+    runHealth: "A successful run is current only within its freshness window. Stale or polling overdue can indicate a delayed or missed execution. Missing evidence is Unknown; zero new records is not failure.",
     notificationCenter: "Browser-local PolitiTrack activity history. Acknowledgement, snooze and mute affect this browser only; Gmail, Pushover and Healthchecks are unchanged.",
     sound: "In-page sound is local to this browser and requires a user gesture. It works while the dashboard is open; external background alert channels are separate.",
     monitorMode: "Opens passive Monitor Mode for portrait or ultrawide displays. It refreshes published data automatically and supports fullscreen/screen wake behavior; it does not run collectors or analysis.",
@@ -52,10 +56,10 @@ window.PT = (() => {
     const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? `${v}T12:00:00` : v);
     return Number.isNaN(d.getTime()) ? "Unavailable" : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? d.toLocaleDateString([], {month:"short",day:"numeric",year:"numeric"}) : d.toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
   };
-  const age = v => {
+  const age = (v,asOf=Date.now()) => {
     const d = v ? new Date(v).getTime() : NaN;
     if (!Number.isFinite(d)) return "age unavailable";
-    const m = Math.max(0,Math.floor((Date.now()-d)/60000));
+    const m = Math.max(0,Math.floor((asOf-d)/60000));
     return m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m/60)}h ${m%60}m ago` : `${Math.floor(m/1440)}d ago`;
   };
   const safeUrl = v => {if(typeof v!=="string"||!v.trim()||!/^https?:\/\//i.test(v))return "";try {const u = new URL(v, location.href); return ["http:","https:"].includes(u.protocol) && !u.username && !u.password && !/(healthchecks|hc-ping|api\.pushover)/i.test(u.hostname) ? u.href : "";} catch {return "";}};
@@ -70,8 +74,54 @@ window.PT = (() => {
     return response.json();
   }
   const statusText = status => ({success:"✓ Successful",failure:"! Failure",stale:"◷ Stale",unknown:"◌ Unknown"}[status] || "◌ Unknown");
+  const durationMinutes = value => {
+    const n=numeric(value);if(n===null||n<0)return "Unavailable";
+    const m=Math.floor(n);return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
+  };
+  const branchLabel = branch => branch==="ai"?"AI analyst":title(branch);
+  const triggerLabels = Object.freeze({schedule:"GitHub schedule",workflow_dispatch:"Manual dispatch",external_scheduler:"External scheduler",manual_test:"Manual TEST",workflow_run:"Upstream workflow"});
+  const triggerLabel = value => typeof value==="string"&&Object.hasOwn(triggerLabels,value)?triggerLabels[value]:"Unavailable";
+  // Python owns cadence policy and admission of production evidence. The browser
+  // only advances the age of that evidence, even if publication has stopped.
+  // Never infer a collector execution from a page load or manufacture a run row.
+  function healthAt(model,asOf=Date.now()) {
+    const now=typeof asOf==="number"?asOf:Date.parse(asOf),health=model.health||{};
+    const branches=(health.branches||[]).map(original=>{
+      const policy=health.policy?.[original.branch]||{},b={...original};
+      const interval=numeric(b.expected_interval_minutes??policy.expected_interval_minutes),threshold=numeric(b.stale_after_minutes??policy.stale_after_minutes);
+      const successful=Date.parse(b.last_success_utc),valid=Number.isFinite(now)&&Number.isFinite(successful)&&successful<=now;
+      const elapsed=valid?(now-successful)/60000:null,hasPolicy=interval!==null&&interval>0&&threshold!==null&&threshold>=interval;
+      const latest=Object.hasOwn(b,"latest_run_success")?(typeof b.latest_run_success==="boolean"?b.latest_run_success:null):["success","stale"].includes(b.status)?true:null;
+      const failed=b.status==="failure"||latest===false||b.latest_conclusion==="failure"||(numeric(b.error_count)??b.errors?.length??0)>0;
+      const fresh=hasPolicy&&valid?elapsed<=threshold:null;
+      b.expected_interval_minutes=interval;b.stale_after_minutes=threshold;b.age_minutes=elapsed;b.fresh=fresh;
+      b.next_expected_utc=hasPolicy&&valid?new Date(successful+interval*60000).toISOString():null;
+      b.overdue_minutes=hasPolicy&&valid?Math.max(0,elapsed-interval):null;
+      b.estimated_missed_intervals=hasPolicy&&valid?Math.max(0,Math.floor(elapsed/interval)-1):null;
+      b.status=failed?"failure":fresh===false?"stale":fresh===true&&latest===true&&!b.evidence_incomplete?"success":"unknown";
+      b.cadence_label=b.cadence_label||policy.cadence_label;
+      b.trigger_relationship=b.trigger_relationship||policy.trigger_relationship;
+      return b;
+    });
+    const required=health.required_branches||branches.map(b=>b.branch),statuses=required.map(name=>branches.find(b=>b.branch===name)?.status||"unknown");
+    const status=["failure","stale","unknown"].find(value=>statuses.includes(value))||(statuses.length?"success":"unknown");
+    return {...model,health:{...health,branches,status,as_of_utc:Number.isFinite(now)?new Date(now).toISOString():null}};
+  }
+  const cadenceText = branch => branch.cadence_label||(numeric(branch.expected_interval_minutes)>0?`Every ${durationMinutes(branch.expected_interval_minutes)}`:"Unavailable");
+  function healthDetail(branch) {
+    if(branch.status==="failure")return "Latest production attempt reported an error. A previous success does not clear it.";
+    if(branch.status==="unknown")return "No sufficient production execution evidence is available.";
+    return `Last successful check ${durationMinutes(branch.age_minutes)} ago · expected ${cadenceText(branch).replace(/^[A-Z]/,c=>c.toLowerCase())}`;
+  }
+  function monitoringSummary(model) {
+    const status=model.health.status,branch=model.health.branches.find(b=>b.status===status);
+    if(status==="failure")return {label:`! ${branchLabel(branch?.branch)} ${branch?.branch==="ai"?"failed":"collector failed"}`,detail:healthDetail(branch)};
+    if(status==="stale")return {label:`◷ ${branchLabel(branch?.branch)} ${branch?.branch==="ai"?"processing":"polling"} overdue`,detail:healthDetail(branch)};
+    if(status==="success")return {label:"✓ Monitoring current",detail:HELP.monitoringCurrent};
+    return {label:"◌ Monitoring status incomplete",detail:branch?healthDetail(branch):"No required production execution evidence is available."};
+  }
   const fact = (label,value,tip="") => `<div><dt>${esc(label)}${tip?` ${helpButton(tip,label)}`:""}</dt><dd>${esc(value === "" || value === null || value === undefined ? "Unavailable" : value)}</dd></div>`;
-  const emptySignals = model => `<div class="no-signals"><span class="empty-icon" aria-hidden="true">✓</span><div><h3>No qualifying signals</h3><p>${model.health.status==="success" ? "PolitiTrack’s latest retained runs succeeded, but no analysis presently meets the High Priority or Watchlist threshold." : "No analysis presently meets the High Priority or Watchlist threshold. Review Operations for missing or failing run evidence."}</p><small>Data as of ${esc(date(model.data_through_utc))} · No weak or archive records promoted.</small></div></div>`;
+  const emptySignals = model => `<div class="no-signals"><span class="empty-icon" aria-hidden="true">✓</span><div><h3>No qualifying signals</h3><p>${model.health.status==="success" ? "Monitoring is current. No analysis presently meets the High Priority or Watchlist threshold." : "No analysis presently meets the High Priority or Watchlist threshold. Review Operations for overdue, missing or failing run evidence."}</p><small>Source data through ${esc(date(model.data_through_utc))} · No weak or archive records promoted.</small></div></div>`;
   function signalCard(row,compact=false) {
     const n=numeric(row.edge_observation_count), insufficient=["insufficient_data","unavailable","disabled","error"].includes(row.edge_status) || n===null || n<3;
     const edge=insufficient ? `Building history — insufficient completed observations (n = ${number(n)})` : `Investor Edge ${number(row.edge_score)} · ${esc(row.edge_confidence_label || "Confidence")} ${numeric(row.edge_confidence)===null?"Unavailable":percent(row.edge_confidence*100)} · n = ${number(n)}`;
@@ -96,7 +146,7 @@ window.PT = (() => {
     });
   }
   function healthCards(model,detailed=false) {
-    return model.health.branches.map(b=>`<${detailed?"article":"div"} class="${detailed?"surface":"branch-health"}"><header><strong>${b.branch==="ai"?"AI analyst":esc(title(b.branch))}</strong><span class="status ${esc(b.status)}">${statusText(b.status)}</span></header><div class="timeline" aria-label="Recent ${esc(b.branch)} run results">${newestRuns(b.timeline||[]).map(r=>`<a href="${esc(safeUrl(r.run_url)||"#operations")}" class="${esc(r.status)}" aria-label="${esc(`${statusText(r.status)} ${date(runTime(r))}; ${number(r.error_count)} errors; ${number(r.new_record_count)} new records`)}" title="${esc(`${statusText(r.status)} · ${date(runTime(r))}`)}" target="_blank" rel="noopener"><span>${r.status==="success"?"✓":r.status==="failure"?"!":"◌"}</span></a>`).join("")||'<span class="muted">No retained evidence</span>'}</div><p>Last run ${esc(age(b.last_run_utc))} · ${number(b.new_record_count)} new</p>${detailed?`<dl class="facts">${fact("Last run",date(b.last_run_utc))}${fact("Last success",date(b.last_success_utc))}${fact("Run errors",number(b.errors.length))}${fact("Expected cadence","Unavailable")}</dl><p>${esc(b.errors.join(" · ") || "No retained error text.")}</p>${link(b.run_url,"Latest run")}`:`<p>Last success ${esc(age(b.last_success_utc))}</p>`}</${detailed?"article":"div"}>`).join("");
+    return model.health.branches.map(b=>`<${detailed?"article":"div"} data-branch="${esc(b.branch)}" class="${detailed?"surface":"branch-health"}"><header><strong>${esc(branchLabel(b.branch))}</strong><span class="status ${esc(b.status)}">${b.status==="success"?"✓ Current":statusText(b.status)}</span></header><div class="timeline" aria-label="Recent ${esc(b.branch)} run results">${newestRuns(b.timeline||[]).map(r=>`<a href="${esc(safeUrl(r.run_url)||"#operations")}" class="${esc(r.status)}" aria-label="${esc(`${statusText(r.status)} ${date(runTime(r))}; ${number(r.error_count)} errors; ${number(r.new_record_count)} new records`)}" title="${esc(`${statusText(r.status)} · ${date(runTime(r))}`)}" target="_blank" rel="noopener"><span>${r.status==="success"?"✓":r.status==="failure"?"!":"◌"}</span></a>`).join("")||'<span class="muted">No retained evidence</span>'}</div><p class="health-explanation ${esc(b.status)}">${esc(healthDetail(b))}</p>${detailed?`<dl class="facts health-facts">${fact("Last attempted run",date(b.last_attempt_utc))}${fact("Last successful run",date(b.last_success_utc))}${fact("Expected cadence",cadenceText(b))}${fact("Freshness window",durationMinutes(b.stale_after_minutes))}${fact("Next expected run",date(b.next_expected_utc))}${fact("Successful run age",durationMinutes(b.age_minutes))}${fact("Overdue by",durationMinutes(b.overdue_minutes))}${fact("Estimated missed intervals",number(b.estimated_missed_intervals))}${fact("Latest conclusion",title(b.latest_conclusion||"unknown"))}${fact("Error count",number(b.error_count??b.errors.length))}${fact("Triggered by",triggerLabel(b.trigger_source))}${fact("New records",number(b.new_record_count))}</dl>${b.trigger_relationship?`<p class="chart-note">${esc(b.trigger_relationship)}</p>`:""}<p>${esc(b.errors.join(" · ") || "No retained error text.")}</p>${link(b.run_url,"Latest run")}`:`<p>Last success ${esc(date(b.last_success_utc))}</p>`}</${detailed?"article":"div"}>`).join("");
   }
   function replay(model,compact=false) {
     const r=model.simulation;
@@ -115,7 +165,7 @@ window.PT = (() => {
     if(changes.transactions)bits.push(`${number(changes.transactions)} newly parsed transactions`);
     if(model.reviews.manual_exception)bits.push(`${number(model.reviews.manual_exception)} manual parsing exception${model.reviews.manual_exception===1?"":"s"}`);
     const bad=model.health.branches.filter(b=>b.status!=="success");
-    bits.push(bad.length?bad.map(b=>`${b.branch==="ai"?"AI":title(b.branch)} ${b.status==="failure"?"run failure":"evidence unknown"}`).join("; "):"all latest retained runs successful");
+    bits.push(bad.length?bad.map(b=>`${b.branch==="ai"?"AI":title(b.branch)} ${b.status==="failure"?"run failure":b.status==="stale"?"polling overdue":"evidence unknown"}`).join("; "):"monitoring current");
     if(changes.simulations)bits.push("latest historical replay result observed");
     return bits.join(" · ")+".";
   }
@@ -277,5 +327,5 @@ window.PT = (() => {
     const query=new URLSearchParams(id?{filing:id}:{url,...(row.source?{source:row.source}:{}),...(row.report_id?{report:row.report_id}:{})});
     return `<span class="filing-actions"><a href="filing-vault.html?${esc(query.toString())}">View Filing</a>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Official Source ↗</a>`:""}</span>`;
   }
-  return {el,esc,HELP,helpAttrs,helpButton,numeric,number,money,percent,title,date,age,safeUrl,link,filingActions,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief,validateModel,isCoarsePointer,setupDialogsAndTooltips};
+  return {el,esc,HELP,helpAttrs,helpButton,numeric,number,money,percent,title,date,age,durationMinutes,branchLabel,triggerLabel,healthAt,cadenceText,healthDetail,monitoringSummary,safeUrl,link,filingActions,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief,validateModel,isCoarsePointer,setupDialogsAndTooltips};
 })();

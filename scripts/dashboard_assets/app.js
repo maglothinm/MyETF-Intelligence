@@ -12,7 +12,7 @@
   const reviewLabels={manual_exception:"Manual Parser Exceptions",access_required:"Access / request required",other:"Other / uncategorized"};
   const filterLabel=field=>field==="category"?"Review status":title(field);
   const allLabel=field=>field==="source"?"All Sources":field==="category"?"All review statuses":`All ${title(field).toLowerCase()}`;
-  const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",nextRefreshAt:Date.now()+300000,renderedAt:null};
+  const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",nextRefreshAt:Date.now()+300000,renderedAt:null,healthMinute:null,changes:{},refreshError:false};
   const openDialog=PT.setupDialogsAndTooltips();
   const notifications=new PolitiTrackNotifications({onChange:()=>renderNotifications()});
   const definitions={
@@ -166,27 +166,49 @@
     el("coverage-chart").innerHTML=[["Cataloged only",c.cataloged_only],["Processed filings",c.processed],["Review-required filings",c.review_required],["Parsed transactions",c.transactions],["AI analyses",c.analyses],["Qualifying signals",c.qualifying_signals]].map(([label,count])=>`<div class="coverage-row"><span>${label}</span><strong>${number(count)}</strong><svg class="coverage-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect width="${100*count/max}" height="3" rx="1"/></svg></div>`).join("");
     const p=m.composition,total=p.population,den=Math.max(1,total),purchase=p.purchases/den*300,sales=p.sales/den*300;
     el("composition-chart").innerHTML=`<div class="mix-heading"><strong>${number(total)}</strong><span>parsed transactions</span></div><svg class="mix-svg" viewBox="0 0 300 16" preserveAspectRatio="none" role="img" aria-label="${number(p.purchases)} purchases; ${number(p.sales)} sales or dispositions; ${number(p.other)} exchanges or other"><rect x="0" width="${purchase}" height="16" class="mix-purchase"/><rect x="${purchase}" width="${sales}" height="16" class="mix-sale"/><rect x="${purchase+sales}" width="${p.other/den*300}" height="16" class="mix-other"/></svg><div class="mix-legend">${[["Purchases",p.purchases,""],["Sales / dispositions",p.sales,"sale"],["Exchanges / other",p.other,"other"]].map(([l,n,c])=>`<div><span class="swatch ${c}" aria-hidden="true"></span>${l}<b>${number(n)}</b></div>`).join("")}</div>`;
-    el("health-chart").innerHTML=healthCards(m);el("operations-health").innerHTML=healthCards(m,true);
   }
-  function renderModel(m,change){const summary={repository_url:m.repository_url};const signalCount=m.coverage.qualifying_signals;
-    el("overall-state").className=`status ${m.health.status}`;el("overall-state").textContent=m.health.status==="success"?"✓ Latest runs successful":m.health.status==="failure"?"! Attention required":"◌ Evidence incomplete";
-    el("updated-at").textContent=`Data as of ${date(m.data_through_utc)}`;
+  function updateHealthCards(id,m,detailed=false,preserveHistory=false) {
+    const host=el(id),focused=host.contains(document.activeElement)?document.activeElement:null;
+    const focusedIndex=focused?[...host.querySelectorAll("a,button")].indexOf(focused):-1;
+    const offsets=[...host.querySelectorAll(".timeline")].map(node=>node.scrollLeft);
+    host.innerHTML=healthCards(m,detailed);
+    if(preserveHistory)host.querySelectorAll(".timeline").forEach((node,index)=>{node.scrollLeft=offsets[index]||0;});
+    if(focusedIndex>=0)host.querySelectorAll("a,button")[focusedIndex]?.focus({preventScroll:true});
+  }
+  function renderHealth(m,changes={},preserveHistory=false) {
+    const summary=PT.monitoringSummary(m),status=m.health.status;
+    el("overall-state").className=`status ${state.refreshError&&status==="success"?"unknown":status}`;
+    el("overall-state").textContent=`${state.refreshError?"! Refresh unavailable · ":""}${summary.label}`;
+    el("overall-state").dataset.tooltipKey=status==="stale"?"monitoringStale":status==="success"?"monitoringCurrent":"systemEvidence";
+    el("overall-state").dataset.tooltipNote=summary.detail;
+    el("updated-at").textContent=`Source data through ${date(m.data_through_utc)}`;
+    el("attention-health").textContent=({success:"Current",failure:"Failure",stale:"Overdue",unknown:"Unknown"})[status]||"Unknown";
+    el("attention-health").className=`health-metric ${status}`;
+    el("situation-brief").textContent=brief(m,changes);
+    updateHealthCards("health-chart",m,false,preserveHistory);updateHealthCards("operations-health",m,true,preserveHistory);
+    const bad=m.health.branches.filter(b=>b.status!=="success");
+    el("exceptions-list").innerHTML=bad.map(b=>`<div class="activity-row"><span class="${b.status}" aria-hidden="true">${b.status==="stale"?"◷":b.status==="unknown"?"◌":"!"}</span><div><strong>${esc(PT.branchLabel(b.branch))}: ${statusText(b.status)}</strong><p>${esc(b.errors.join("; ")||PT.healthDetail(b))}</p>${link(b.run_url,"Run evidence")}</div></div>`).join("")+m.reviews.latest.filter(r=>r.category==="manual_exception").slice(0,2).map(r=>`<div class="activity-row"><span class="caution" aria-hidden="true">!</span><div><strong>Manual Parser Exception · ${esc(r.filer||"Unknown filer")}</strong><p>${esc(r.reason)}</p><a href="#records/reviews?category=manual_exception">Inspect parser exceptions →</a></div></div>`).join("")+`<div class="activity-row"><span aria-hidden="true">ⓘ</span><div><strong>${number(m.reviews.access_required)} access/request-required records</strong><p>Disclosure access inventory, not a red system failure. ${number(m.reviews.other)} other/uncategorized review items.</p></div></div>`;
+    el("build-details").textContent=`Dashboard generated ${date(m.generated_utc)} · build ${m.build_sha||"unavailable"} · Source data through ${date(m.data_through_utc)}. Publication does not establish collector success.`;
+    state.healthMinute=Math.floor(Date.now()/60000);
+  }
+  function refreshHealth() {
+    if(!state.model)return;
+    const m=PT.healthAt(state.model);renderHealth(m,state.changes,true);
+    if(!m.signals.length){el("overview-signals").innerHTML=emptySignals(m);el("all-signals").innerHTML=emptySignals(m);}
+  }
+  function renderModel(m,change){m=PT.healthAt(m);const summary={repository_url:m.repository_url};const signalCount=m.coverage.qualifying_signals;
     el("attention-signals").textContent=number(signalCount);el("nav-signal-count").textContent=number(signalCount);
     const delta=Object.values(change.changes||{}).filter(v=>typeof v==="number").reduce((a,b)=>a+b,0);el("attention-changes").textContent=change.firstVisit?"0":number(delta);el("attention-changes-note").textContent=change.firstVisit?"Baseline established quietly":"Changes on this browser";
     el("baseline-note").textContent=change.firstVisit?"Current records are your starting baseline. Future changes are tracked on this browser and device only.":"Compared with the previous successful review on this browser and device. Not synchronized account state.";
     el("attention-exceptions").textContent=number(m.reviews.manual_exception);el("attention-review-note").textContent=`${number(m.reviews.access_required)} access/request required · informational`;
-    el("attention-health").textContent=m.health.status==="success"?"Operational":m.health.status==="failure"?"Attention":"Unknown";el("attention-health").className=`health-metric ${m.health.status}`;
-    el("situation-brief").textContent=brief(m,change.changes);
     el("overview-signals").innerHTML=m.signals.length?m.signals.slice(0,2).map(s=>signalCard(s)).join(""):emptySignals(m);
     el("all-signals").innerHTML=m.signals.length?m.signals.map(s=>signalCard(s)).join("")+(m.signals_truncated?'<p class="notice">Showing the first 48 qualifying cards. All analyses remain available in the table and CSV below.</p>':""):emptySignals(m);
     renderCharts(m);
-    const bad=m.health.branches.filter(b=>b.status!=="success");
-    el("exceptions-list").innerHTML=bad.map(b=>`<div class="activity-row"><span class="${b.status}" aria-hidden="true">!</span><div><strong>${esc(title(b.branch))}: ${statusText(b.status)}</strong><p>${esc(b.errors.join("; ")||"No retained evidence. Do not assume healthy.")}</p>${link(b.run_url,"Run evidence")}</div></div>`).join("")+m.reviews.latest.filter(r=>r.category==="manual_exception").slice(0,2).map(r=>`<div class="activity-row"><span class="caution" aria-hidden="true">!</span><div><strong>Manual Parser Exception · ${esc(r.filer||"Unknown filer")}</strong><p>${esc(r.reason)}</p><a href="#records/reviews?category=manual_exception">Inspect parser exceptions →</a></div></div>`).join("")+`<div class="activity-row"><span aria-hidden="true">ⓘ</span><div><strong>${number(m.reviews.access_required)} access/request-required records</strong><p>Disclosure access inventory, not a red system failure. ${number(m.reviews.other)} other/uncategorized review items.</p></div></div>`;
+    renderHealth(m,change.changes);
     reviewSummary(m);
     el("ten-k-simulation-result").innerHTML=replay(m);el("ten-k-simulation-status").textContent=title(m.simulation.status);el("paper-position-status").textContent=m.paper.open_positions?`${number(m.paper.open_positions)} open simulated positions. Separate from historical replay.`:"No open paper positions. No performance implied.";
     if(state.edge)renderEdge(state.edge);
     el("inventory-summary").innerHTML=`<dl class="facts">${fact("Cataloged filings",number(m.coverage.filings))}${fact("Parsed transactions",number(m.coverage.transactions))}${fact("AI analyses",number(m.coverage.analyses))}${fact("Review inventory",number(m.reviews.total))}</dl>`;el("coverage-note").textContent=m.coverage.note;
-    el("build-details").textContent=`Published build ${m.build_sha||"unavailable"} · generated ${date(m.generated_utc)} · data ${age(m.data_through_utc)}`;
     el("run-simulation-link").href=workflowUrl(summary.repository_url)||"#";el("run-10k-agent-link").href=workflowUrl(summary.repository_url, "filing_simulation.yml")||"#";el("repository-link").href=safeUrl(m.repository_url)||"#";
     const tests=Object.values(m.synthetic).reduce((a,b)=>a+b,0);el("manual-test-notice").hidden=!tests;el("manual-test-note").textContent=`${number(m.synthetic.filings)} synthetic filings and ${number(m.synthetic.transactions)} synthetic transactions excluded from the production Overview. TEST records remain in detailed records.`;
   }
@@ -213,10 +235,10 @@
     const change=notifications.prepare(model),previous=state.model,oldData=state.data; if(change.olderSnapshot)throw new Error("Older publication rejected; keeping the last successful review");
     try{state.model=model;renderModel(model,change);state.data={...state.data,...staged};for(const key of Object.keys(staged)){populateFilters(key);renderTable(key);}}
     catch(e){state.model=previous;state.data=oldData;if(previous){renderModel(previous,{changes:{},firstVisit:false});for(const key of Object.keys(oldData)){populateFilters(key);renderTable(key);}}throw e;}
-    state.model=model;state.renderedAt=Date.now();state.nextRefreshAt=Date.now()+300000;el("error-banner").hidden=true;
+    state.model=model;state.changes=change.changes||{};state.renderedAt=Date.now();state.nextRefreshAt=Date.now()+300000;state.refreshError=false;el("error-banner").hidden=true;refreshHealth();
     await change.commit();renderNotifications();if(state.section==="investor-edge")await loadEdge();if(change.events.length){document.querySelectorAll(".attention-card").forEach(n=>n.classList.add("changed"));setTimeout(()=>document.querySelectorAll(".attention-card").forEach(n=>n.classList.remove("changed")),1200);}
-  }catch(e){el("error-banner").textContent=`Refresh unavailable — ${e.message}. ${state.model?"Last successfully rendered data remains visible; this view may be stale.":"No successful data load yet. Status is Unknown."}`;el("error-banner").hidden=false;el("overall-state").textContent="! Refresh unavailable";el("overall-state").className="status failure";state.nextRefreshAt=Date.now()+300000;}finally{state.loading=false;el("refresh-button").disabled=false;}}
-  function clock(){el("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});const s=Math.max(0,Math.ceil((state.nextRefreshAt-Date.now())/1000));el("refresh-countdown").textContent=`Next refresh ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;}
+  }catch(e){el("error-banner").textContent=`Refresh unavailable — ${e.message}. ${state.model?"Last successfully rendered data remains visible; this view may be stale.":"No successful data load yet. Status is Unknown."}`;state.refreshError=true;el("error-banner").hidden=false;if(state.model)renderHealth(PT.healthAt(state.model),state.changes);else{el("overall-state").textContent="! Refresh unavailable";el("overall-state").className="status unknown";}state.nextRefreshAt=Date.now()+300000;}finally{state.loading=false;el("refresh-button").disabled=false;}}
+  function clock(){el("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});const s=Math.max(0,Math.ceil((state.nextRefreshAt-Date.now())/1000));el("refresh-countdown").textContent=`Next refresh ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;if(state.healthMinute!==Math.floor(Date.now()/60000))refreshHealth();}
   initTables();window.addEventListener("hashchange",()=>navigate());el("refresh-button").onclick=loadData;
   document.addEventListener("click",e=>{
     if(e.defaultPrevented)return;
@@ -231,4 +253,6 @@
   for(const id of ["quiet-enabled","quiet-start","quiet-end"])el(id).onchange=()=>notificationAction(()=>notifications.setSettings({quietHours:{enabled:el("quiet-enabled").checked,start:el("quiet-start").value,end:el("quiet-end").value}}));
   el("enable-sound").onclick=e=>notificationAction(()=>notifications.enableSound(e));el("test-sound").onclick=e=>notificationAction(()=>notifications.testSound(e));
   setInterval(clock,1000);setInterval(loadData,300000);clock();renderNotifications();loadData().then(()=>navigate(true));
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshHealth();});
+  window.addEventListener("pageshow",refreshHealth);
 })();

@@ -35,6 +35,7 @@ from bs4 import BeautifulSoup
 from requests import Session
 
 try:  # Support both package and direct-script execution.
+    from .run_trigger import trigger_source
     from .government_trade_tracker import (
         PUSHOVER_MESSAGES_URL,
         append_jsonl,
@@ -58,6 +59,7 @@ try:  # Support both package and direct-script execution.
         apply_profile_to_analysis,
     )
 except ImportError:  # pragma: no cover - direct execution path
+    from run_trigger import trigger_source
     from government_trade_tracker import (  # type: ignore
         PUSHOVER_MESSAGES_URL,
         append_jsonl,
@@ -3031,6 +3033,7 @@ def append_run_history(config: AnalystConfig, result: AnalystRunResult) -> None:
         "warnings": result.warnings,
         "run_url": run_url,
         "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "trigger_source": trigger_source(),
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
     }
     append_jsonl(config.ai_dir / "runs.jsonl", [record])

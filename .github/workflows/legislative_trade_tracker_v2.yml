@@ -6,16 +6,27 @@ on:
     - cron: "7,22,37,52 * * * *"
       timezone: "America/New_York"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
+  # All trigger sources serialize through this one protected-state writer.
   group: legislative-purchase-tracker-v2
   cancel-in-progress: false
 
 env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
   STATE_FILE: ".trade-tracker/legislative/state.json"
   LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
   TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
@@ -37,6 +48,7 @@ env:
 
 jobs:
   track:
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -280,6 +292,12 @@ jobs:
             echo "${workflow_name} high-water violation at run attempt(s) ${later_writers//$'\n'/, }; refusing stale protected state." >&2
             exit 1
           fi
+
+          # An earlier failed/cancelled collector can have sent alerts without
+          # publishing its delivery state. Do not replay from the old artifact.
+          GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
+            --guard-branch legislative \
+            --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
 
           temp_dir="$(mktemp -d)"
           gh api \

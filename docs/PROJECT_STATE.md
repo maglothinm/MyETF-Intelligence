@@ -1,14 +1,58 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Persistent dashboard header and Workspace deployed from PR #17 merge
-`42351e2`; local tests, PR/main CI, Pages and full live-content/protected-state
-verification passed. Approved Vault/Investor Edge/Operations changes remain
-preserved. Private Vault retrieval, production bootstrap and separate device/
-cutover gates remain open.**
+Status: **Scheduler/freshness work in progress under issue #19. Local changes are
+not yet a deployed release or active external scheduler. Existing dashboard,
+Vault/Investor Edge/Operations/shell releases are preserved; private Vault runtime,
+obsolete-writer clearance, device and cutover gates remain separate.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Scheduler and freshness — implementation in progress, 2026-08-31
+
+[Issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) tracks the
+owner's staged freshness and scheduler rollout. Work is isolated on
+`codex/scheduler-freshness`, initially based on canonical `main` `ecc031d`.
+[Root cause and semantics](SCHEDULER_FRESHNESS.md) record the actual collector ->
+artifact -> AI/Pages -> dashboard path before behavior changes. Historical success
+without an SLA caused a green dashboard despite hours between collector runs.
+
+Central policy: Legislative cadence 15 / stale after 30 minutes; Executive
+cadence 30 / stale after 60; collector-triggered AI stale after 75 (30-minute
+collector window plus 45-minute maximum analyst job). Failure outranks stale,
+then unknown, then success. Source currency excludes dashboard build and AI/
+portfolio refresh. The browser ages retained evidence if publication stops.
+Operations exposes timing, cadence and coarse trigger evidence. The external
+Cloudflare-compatible dispatcher remains disabled pending configuration and
+real-cycle verification; GitHub cron remains enabled. No authority switch,
+production rebaseline, manual writer, simulation or alert test has occurred.
+
+A new read-only audit completed at **17:03 UTC**. Protected producer identity,
+exact successful attempts/jobs, commit ancestry, global high-water marks, expiry,
+ZIP hashes, full inventories and continuity from the prior checkpoint passed:
+
+| Protected input | Artifact | Run / attempt | Job | Retained ledger rows |
+|---|---:|---|---:|---|
+| Legislative | `9764350004` | `33408974583` / 1 | `99543508327` | 1,001 filings; 183 transactions; 73 purchases; 1 review; 32 runs; 20 historical receipts |
+| Executive | `9760298853` | `33398375467` / 1 | `99508337018` | 4,109 filings; 1,495 reviews; 24 runs |
+| AI | `9764387095` | `33409079174` / 1 | `99543844689` | 12 analyses; 38 runs |
+
+These successors contain approved bootstrap-era progress that was absent from
+the older documentation snapshot; no old state was restored. Collector run starts
+were **468.5 minutes apart** for Legislative and **493.8 minutes apart** for
+Executive in the latest pair, far beyond intended cadence. Run success alone
+does not establish reliable scheduling. Current retained simulator `9734790733`
+remains two unchanged rows; the separate historical simulator concern remains.
+
+Concurrent icon publication built `6bd76843e604941efef757aab434699feb1944f1`
+in Pages `33417300834` / attempt 1, artifact `9767514649`; all 250 served files
+matched that artifact. This verifies the prior/concurrent release, not issue #19.
+The live Operations page still showed green historical success with Legislative
+about 1h33m and Executive about 3h22m old at 17:06 UTC. The obsolete queued runs
+`33219808359` and `33221027676` still exist; existing manual-writer/activation
+clearance gates are unchanged. Evidence is ignored under
+`.worktrees/scheduler-freshness/.remediation/baseline/`.
 
 ## Persistent header and Workspace shell — deployed and verified, 2026-08-31
 

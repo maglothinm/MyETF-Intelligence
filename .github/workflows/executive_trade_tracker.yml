@@ -2,20 +2,31 @@ name: Executive purchase tracker
 
 on:
   schedule:
-    # The OGE collection is slower and browser-rendered; poll hourly off the top of the hour.
-    - cron: "13 * * * *"
+    # Twice hourly, staggered from Legislative and the busy :00/:30 boundaries.
+    - cron: "13,43 * * * *"
       timezone: "America/New_York"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
+  # All trigger sources serialize through this one protected-state writer.
   group: executive-purchase-tracker
   cancel-in-progress: false
 
 env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
   STATE_FILE: ".trade-tracker/executive/state.json"
   LEDGER_FILE: ".trade-tracker/executive/purchases.jsonl"
   TRANSACTIONS_FILE: ".trade-tracker/executive/transactions.jsonl"
@@ -37,6 +48,7 @@ env:
 
 jobs:
   track:
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -264,6 +276,11 @@ jobs:
             echo "${workflow_name} high-water violation at run attempt(s) ${later_writers//$'\n'/, }; refusing stale protected state." >&2
             exit 1
           fi
+
+          # Refuse replay when an unretained attempt may already have sent alerts.
+          GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
+            --guard-branch executive \
+            --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
 
           temp_dir="$(mktemp -d)"
           gh api \

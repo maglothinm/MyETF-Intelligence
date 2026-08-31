@@ -17,10 +17,17 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import parse_qsl, urlsplit
 
+try:
+    from .collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
+                                      overall_status, production_run, trigger_source)
+except ImportError:  # pragma: no cover - direct-script execution
+    from collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
+                                     overall_status, production_run, trigger_source)
+
 
 VERSION = 1
 QUALIFYING = {"high_priority": 0, "watchlist": 1}
-BRANCHES = ("legislative", "executive", "ai")
+BRANCHES = REQUIRED_BRANCHES
 _PRIVATE_KEY = re.compile(
     r"(?:secret|password|passwd|credential|recipient|heartbeat|healthcheck|"
     r"api[_-]?key|access[_-]?token|auth[_-]?token|user[_-]?key|app[_-]?token|"
@@ -167,9 +174,12 @@ def _flag(value: Any) -> bool:
 
 
 def is_synthetic(row: Mapping[str, Any]) -> bool:
-    if _flag(row.get("is_synthetic_test")) or _flag(row.get("is_temporary")):
+    if any(_flag(row.get(key)) for key in ("is_synthetic_test", "is_temporary", "is_simulation", "simulation", "is_test", "test")):
         return True
-    if _mapping(row.get("test_metadata")):
+    if _mapping(row.get("test_metadata")) or row.get("simulation_id"):
+        return True
+    if any(str(row.get(key) or "").casefold() in {"test", "synthetic", "simulation", "manual_test"}
+           for key in ("mode", "execution_mode", "trigger_source", "event_name")):
         return True
     return any(
         bool(re.search(r"(?:^|[|:])TEST(?:[-_:]|$)", str(row.get(key) or ""), re.I))
@@ -384,7 +394,16 @@ def _signal(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _run_status(row: Mapping[str, Any]) -> str:
-    if row.get("success") is False or _errors(row.get("errors")):
+    conclusion = str(row.get("conclusion") or "").casefold()
+    if _errors(row.get("errors")) or (_count(row.get("error_count")) or 0) > 0:
+        return "failure"
+    if conclusion in {"failure", "timed_out", "action_required", "startup_failure"}:
+        return "failure"
+    if conclusion in {"cancelled", "skipped", "neutral", "queued", "in_progress", "pending", "waiting"} or row.get("enabled") is False:
+        return "unknown"
+    if conclusion and conclusion != "success":
+        return "unknown"
+    if row.get("success") is False:
         return "failure"
     return "success" if row.get("success") is True else "unknown"
 
@@ -414,31 +433,103 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
     key = _text(row.get("run_key"), 200)
     if not key:
         key = hashlib.sha256((str(row.get("run_url") or "") + "|" + str(row.get("run_attempt") or "") + "|" + str(row.get("started_utc") or "") + "|" + str(row.get("finished_utc") or "")).encode()).hexdigest()[:24]
-    return {"id": f"{branch}:{key}", "branch": branch, "finished_utc": optional_timestamp(_first(row.get("finished_utc"), row.get("started_utc"))),
+    status = _run_status(row)
+    return {"id": f"{branch}:{key}", "branch": branch, "started_utc": optional_timestamp(row.get("started_utc")),
+            "workflow_started_utc": optional_timestamp(row.get("workflow_started_utc")),
+            "workflow_created_utc": optional_timestamp(row.get("workflow_created_utc")),
+            "finished_utc": optional_timestamp(row.get("finished_utc")),
             "success": row.get("success") if isinstance(row.get("success"), bool) else None,
-            "status": _run_status(row), "error_count": len(_errors(row.get("errors"))),
+            "status": status, "conclusion": _text(row.get("conclusion")) or status,
+            "error_count": max(len(_errors(row.get("errors"))), _count(row.get("error_count")) or 0),
             "errors": _errors(row.get("errors")), "run_url": safe_url(row.get("run_url")),
+            "trigger_source": trigger_source(row),
+            "evidence_source": "github_actions" if row.get("evidence_source") == "github_actions" else "retained_state",
+            "state_evidence": row.get("evidence_source") != "github_actions",
             "new_record_count": _count(row.get("completed_count")) if branch == "ai" else _sum_counts(row.get("new_filing_counts"))}
 
 
-def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_of: datetime | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _run_time(row: Mapping[str, Any]) -> float:
+    instant = _instant(row.get("started_utc") or row.get("workflow_started_utc") or row.get("finished_utc") or row.get("workflow_created_utc"))
+    return instant.timestamp() if instant else float("-inf")
+
+
+def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_of: datetime | None,
+            workflow_evidence: Mapping[str, Any] | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     branches, all_runs = [], []
+    observation = _mapping(workflow_evidence)
     for branch in BRANCHES:
         retained = ai_runs if branch == "ai" else [row for row in runs if row.get("branch") == branch]
-        ordered = sorted((_run(row, branch) for row in retained), key=lambda row: row["finished_utc"] or "", reverse=True)
+        by_id = {row["id"]: row for raw in retained if production_run(raw, branch) for row in [_run(raw, branch)]}
+        observed_branch = _mapping(_mapping(observation.get("branches")).get(branch))
+        available = observed_branch.get("available", observation.get("available")) if observation else None
+        for raw in _rows(observed_branch.get("attempts")):
+            if not production_run(raw, branch) or raw.get("evidence_source") != "github_actions":
+                continue
+            row = _run(raw, branch)
+            prior = by_id.get(row["id"])
+            if prior:
+                # Actions conclusions supplement a validated artifact, never replace
+                # its actual collector completion with workflow/job timestamps.
+                prior["workflow_started_utc"] = row["workflow_started_utc"]
+                if row["status"] == "failure":
+                    prior.update(status="failure", conclusion=row["conclusion"], success=False,
+                                 error_count=max(prior["error_count"], row["error_count"]))
+            else:
+                # A successful Actions job alone does not prove retained state or
+                # a successful collector execution. It cannot advance freshness.
+                if row["status"] == "success":
+                    row["status"] = "unknown"
+                by_id[row["id"]] = row
+        ordered = sorted(by_id.values(), key=lambda row: (_run_time(row), row["id"]), reverse=True)
         all_runs.extend(ordered)
-        last = ordered[0] if ordered else {}
-        success = next((row for row in ordered if row["status"] == "success"), {})
-        last_time = _instant(last.get("finished_utc"))
-        age = max(0, int((as_of - last_time).total_seconds())) if as_of and last_time else None
-        branches.append({"branch": branch, "status": last.get("status", "unknown"),
-                         "last_run_utc": last.get("finished_utc"), "last_success_utc": success.get("finished_utc"),
-                         "age_seconds": age, "expected_cadence_seconds": None,
-                         "errors": last.get("errors", []), "new_record_count": last.get("new_record_count"),
-                         "run_url": last.get("run_url"), "timeline": ordered[:10]})
-    statuses = {row["status"] for row in branches}
-    overall = "failure" if "failure" in statuses else ("success" if statuses == {"success"} else "unknown")
-    return {"status": overall, "branches": branches}, all_runs
+        pending = {"queued", "in_progress", "pending", "waiting"}
+        newest = ordered[0] if ordered else {}
+        attempted = next((row for row in ordered if row.get("started_utc") or row.get("workflow_started_utc")), {})
+        last = next((row for row in ordered if row.get("conclusion") not in pending), {})
+        success = next((row for row in ordered if row["state_evidence"] and row["status"] == "success"
+                        and (instant := _instant(row.get("finished_utc"))) and as_of and instant <= as_of), {})
+        incomplete = available is False or any(_run_time(row) == float("-inf") for row in ordered)
+        latest_time = _instant(last.get("finished_utc"))
+        incomplete = incomplete or bool(last and (latest_time is None or as_of is None or latest_time > as_of))
+        incomplete = incomplete or last.get("status") == "unknown"
+        latest_success = (True if last.get("state_evidence") and last.get("status") == "success"
+                          else False if last.get("status") == "failure" else None)
+        freshness = branch_freshness(branch, last_success_utc=success.get("finished_utc"),
+                                     latest_run_success=latest_success, latest_status=last.get("status", "unknown"),
+                                     as_of=as_of, evidence_incomplete=incomplete)
+        branches.append({**freshness,
+                         "last_run_utc": last.get("finished_utc"),
+                         "last_attempt_utc": attempted.get("started_utc") or attempted.get("workflow_started_utc"),
+                         "last_attempt_timestamp_kind": "collector_start" if attempted.get("started_utc") else ("workflow_start" if attempted.get("workflow_started_utc") else None),
+                         "latest_conclusion": last.get("conclusion", "unknown"),
+                         "attempt_conclusion": newest.get("conclusion", "unknown"),
+                         "trigger_source": newest.get("trigger_source"),
+                         "workflow_evidence_available": available,
+                         "errors": last.get("errors", []), "error_count": last.get("error_count", 0),
+                         "new_record_count": last.get("new_record_count"),
+                         "run_url": newest.get("run_url"), "timeline": ordered[:10]})
+    return {"status": overall_status(branches), "branches": branches,
+            "as_of_utc": optional_timestamp(as_of.isoformat()) if as_of else None,
+            "required_branches": list(REQUIRED_BRANCHES),
+            "policy": {branch: dict(policy) for branch, policy in FRESHNESS_POLICY.items()},
+            "workflow_evidence_observed_at_utc": optional_timestamp(observation.get("observed_at_utc")),
+            "workflow_evidence_available": observation.get("available") if observation else None}, all_runs
+
+
+def source_data_through(payload: Mapping[str, Any], *, as_of: datetime | None = None) -> str | None:
+    """Newest retained production source observation, never publication/AI time."""
+    is_test = _synthetic_predicate(payload)
+    clock = as_of or _instant(_mapping(payload.get("summary")).get("generated_utc"))
+    timestamps = [row.get(field)
+                  for name, fields in (("filings", ("updated_at_utc", "first_seen_utc")),
+                                       ("transactions", ("observed_at_utc",)), ("reviews", ("observed_at_utc",)))
+                  for row in _rows(payload.get(name)) if not is_test(row) for field in fields]
+    timestamps.extend(row.get("finished_utc") for row in _rows(payload.get("runs"))
+                      if not is_synthetic(row) and production_run(row, str(row.get("branch") or ""))
+                      and _run_status(row) == "success")
+    valid = [instant for raw in timestamps if (instant := _instant(raw)) and (clock is None or instant <= clock)]
+    newest = max(valid, default=None)
+    return optional_timestamp(newest.isoformat()) if newest else None
 
 
 def _simulation(value: Any) -> dict[str, Any]:
@@ -501,7 +592,7 @@ def _historical_bootstrap_predicate(payload: Mapping[str, Any]) -> Callable[[Map
     return matches
 
 
-def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
+def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None = None) -> dict[str, Any]:
     """Create a compact additive view model without mutating any source object."""
     summary = _mapping(payload.get("summary"))
     filings, transactions, reviews, analyses, runs, ai_runs, portfolio = (
@@ -529,19 +620,18 @@ def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
     purchases = sum(str(row.get("transaction_type") or "").casefold() in {"purchase", "buy"} for row in transactions)
     sales = sum(str(row.get("transaction_type") or "").casefold().startswith(("sale", "disposition", "sell")) for row in transactions)
     generated = optional_timestamp(summary.get("generated_utc"))
-    production_runs = [row for row in runs if not is_synthetic(row)]
-    production_ai_runs = [row for row in ai_runs if not is_synthetic(row)]
-    health, normalized_runs = _health(production_runs, production_ai_runs, _instant(generated))
+    clock = _instant(as_of.isoformat() if isinstance(as_of, datetime) else as_of) if as_of is not None else _instant(generated)
+    production_runs = [row for row in runs if not is_synthetic(row) and production_run(row, str(row.get("branch") or ""))]
+    production_ai_runs = [row for row in ai_runs if not is_synthetic(row) and production_run(row, "ai")]
+    health, normalized_runs = _health(production_runs, production_ai_runs, clock, _mapping(payload.get("workflow_evidence")))
     simulation = _simulation(payload.get("simulation"))
-    production_portfolio = [row for row in portfolio if not is_test(row)]
-    timestamps = [row.get(field) for rows, fields in ((filings, ("updated_at_utc", "first_seen_utc")), (transactions + reviews, ("observed_at_utc",)), (analyses, ("analyzed_at_utc",)), (production_runs + production_ai_runs, ("finished_utc",)), (production_portfolio, ("last_updated_utc", "opened_at_utc"))) for row in rows for field in fields]
-    valid_times = [value for raw in timestamps if (value := optional_timestamp(raw))]
-    data_through = max(valid_times, default=None)
+    data_through = source_data_through(payload, as_of=clock)
     incidents = []
     for branch in health["branches"]:
         if branch["status"] == "failure":
-            incidents.append({"id": "failure:" + branch["timeline"][0]["id"], "branch": branch["branch"], "kind": "failure",
-                              "since": branch["last_run_utc"], "url": branch["run_url"],
+            failed = next(row for row in branch["timeline"] if row["status"] == "failure")
+            incidents.append({"id": "failure:" + failed["id"], "branch": branch["branch"], "kind": "failure",
+                              "since": failed["finished_utc"], "url": failed["run_url"],
                               "summary": f"{branch['branch'].title()} latest retained run failed or reported errors."})
     open_positions = sum(row.get("status") == "open" and not is_test(row) for row in portfolio)
     closed_positions = sum(row.get("status") == "closed" and not is_test(row) for row in portfolio)
