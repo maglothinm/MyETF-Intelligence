@@ -1,67 +1,66 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-31 UTC**
-## Current task — approved icon integration ready for release checks
 
-The owner requested deployment of the newly created PolitiTrack icon package,
-favicon/header wiring, applicable Windows icon references, checks and a commit.
-The previously missing ZIP was supplied and inspected. Canonical repository ID
-**1349678672**, current name **maglothinm/MyETF-Intelligence**, default **main**,
-was reverified at `ecc031dad297f6878e086dbe0b62861cbb4a6441` before implementation.
-Work is isolated on `codex/polititrack-icon-assets` in the task's `polititrack-icons`
-clone. Shared checkout files and unrelated worktrees remain untouched.
+## Current task — approved icon integration deployed and verified
 
-The complete 22-file source package is preserved unchanged under
-`assets/branding/polititrack/`, including the 1254px original and seven-frame
-Windows ICO. Its README and manifest document provenance and usage. Source ZIP
-SHA-256: `0fbc21472cce75ee3d1f47040683dfe8e4a1b1044cd892f12e75c599b40cf65a`.
-No Windows packaging configuration or existing app-icon reference was found.
+The owner's icon request is complete. Canonical repository ID **1349678672**,
+current name **maglothinm/MyETF-Intelligence**, default **main**.
+[PR #18](https://github.com/maglothinm/MyETF-Intelligence/pull/18) merged source
+`aa8201a7b3b95c575adf069f39688e1ac811f0c6` as
+`6bd76843e604941efef757aab434699feb1944f1`; both trees are
+`c2300379c6347fdf2b652f86c7a25d2886f554f7`.
+Work is isolated on `codex/polititrack-icon-assets` in the task's
+`polititrack-icons` clone. Shared files and unrelated worktrees are untouched.
+The follow-up release-record commit changes documentation only; the verified
+published application source remains `6bd76843`.
 
-Production web variants live under `scripts/dashboard_assets/icons/`.
-`scripts/dashboard_branding.py` copies those 11 assets plus `site.webmanifest`
-from both `build_trade_dashboard.py` and the standalone Investor Edge generator.
-Root, 404, Wallboard, Filing Vault and Investor Edge receive relative favicon,
-Apple touch and manifest links. Root/Vault/Wallboard replace only the old header
-mark; surrounding text, spacing and navigation remain unchanged. Header sizes
-stay 35px desktop, 32px mobile and 54px for the existing large portrait Wallboard.
-The React frontend uses the same approved icon bytes and retains its 50px header
-footprint and existing manifest display/theme settings. Only its circular icon
-crop and obsolete React sample install name were corrected.
+All 22 files supplied in `PolitiTrack_Icon_Assets.zip` are preserved unchanged
+under `assets/branding/polititrack/`, including the 1254px original and seven-frame
+Windows ICO. The source README/manifest record provenance and hashes. No Windows
+packaging configuration or app-icon reference exists to update.
 
-Local checks so far: all 22 source files and both sets of generated web copies
-match the ZIP exactly; all 30 favicon/touch/manifest links resolve in full-site
-and standalone output. PNG dimensions, seven Windows ICO frames and source
-manifest hashes passed. Browser comparisons at 1440px, 390px and 320px show
-identical root header/brand/sidebar rectangles and no horizontal overflow.
-Filing Vault desktop/mobile and Wallboard desktop/1440x2560 portrait comparisons
-also match, with loaded icons. Investor Edge retains its text-only heading;
-browser warning/error logs are empty. The full existing Python suite passed
-**524 tests without skips in 258.80 seconds**, including nested dashboard release
-and DOM checks. Isolated declared dependencies and an external test directory
-were used; Windows dependency ACL access required a reviewed escalated run.
-No source/test safety guards or ACLs were changed. Linux `verify.sh` remains a
-remote CI check. The separate retained React test/build checks are still running;
-record their result before merging this change.
+Both dashboard generators stage the 11 web icons and manifest. Root, 404,
+Wallboard, Filing Vault and Investor Edge use relative favicon/touch/manifest
+links. Root/Vault/Wallboard replace only the old header mark, keeping 35px desktop,
+32px mobile and existing 54px large portrait Wallboard dimensions. The retained
+React frontend uses the same images and keeps its 50px header footprint and
+manifest display/theme settings; only the circular crop and obsolete React
+sample install name were corrected. Investor Edge keeps its text-only heading.
+Surrounding branding, navigation, spacing and layout are preserved.
 
-Read-only preflight examined issue #4, 180 runs and 198 global artifacts.
-Current protected inputs are Legislative `9764350004` (run `33408974583` / 1,
-job `99543508327`), Executive `9760298853` (`33398375467` / 1, job `99508337018`),
-and AI `9764387095` (`33409079174` / 1, job `99543844689`). Their successful
-producer attempts/upload windows, expiry, ancestry and high-water marks passed.
-The two-row simulator remains `9734790733` (`33320677882` / 1, job `99281977011`).
-Existing Pages `33409174140` / 1 succeeded for `ecc031d`, artifact `9764416987`,
-and its logs consumed those exact inputs. All five ZIP exports passed CRC and
-independent SHA-256 checks, with inventories of 7 Legislative, 4 Executive,
-45 AI, 2 simulator and 239 Pages files. Evidence is outside Git in the task's
-`icon-release-evidence/`. This is pre-release evidence only.
+Checks passed: **524 Python tests without skips**, **1 React App test**, React
+production build, full and standalone generation, source/generated-byte hashes,
+all 30 metadata links, and independent diff review. Existing React warnings are
+in unchanged legacy code/dependencies. Desktop/mobile/portrait preview geometry
+matches baseline, with no horizontal overflow or browser warning/error logs.
+No source/test safety guard or Windows ACL was changed for testing.
 
-**Delivery state:** tested implementation prepared for a commit referencing issue
-#4 and canonical PR/CI review; no icon deployment yet. Finish the React checks,
-require successful CI, then verify the existing Pages publisher and live icon
-bytes. Generator changes already match its push trigger; do not add a workflow.
-No production writer, simulation, alert, state, schedule, credential or setting
-was changed or dispatched. Existing manual-writer/cutover/device gates remain
-separate. The prior release and runtime evidence below is retained unchanged.
+PR CI **33416929114 / 1** and main CI **33417300859 / 1** passed **441 tests**,
+**6 DOM cases** and Linux verification. Automatic Pages **33417300834 / 1**
+succeeded on `6bd76843` at **17:02:40 UTC**, build **99570924086**, deploy
+**99571098216**. Its only uploaded artifact, `github-pages` **9767514649**, is
+**4,400,016 bytes**, SHA-256
+`73b3cf8fee7b1a82ba96d3e3e797c60eea288a958e8721d71a088b5b77d80ded`.
+All **250 served files plus root** match that archive; the 12 added icon/manifest
+files match the approved source. No prior file was removed. Live desktop/mobile
+checks show loaded icons, unchanged header dimensions and no overflow/errors.
+
+Publisher logs consumed unchanged Legislative **9764350004** (run
+**33408974583 / 1**, job **99543508327**), Executive **9760298853**
+(**33398375467 / 1**, job **99508337018**), AI **9764387095**
+(**33409079174 / 1**, job **99543844689**) and simulator **9734790733**
+(**33320677882 / 1**, job **99281977011**). Fresh producer high-water checks
+passed with no later producer run. Source/state archive hashes and inventories,
+exact run links, rollback and acceptance limits are in the
+[icon release receipt](validation/icon-assets-2026-08-31.md). Exported evidence
+and browser screenshots remain outside Git in the task's `icon-release-evidence/`.
+
+**Next safe action:** no further action is required for this icon request.
+Existing physical-device, obsolete writer queue, historical simulator, cutover
+and private Vault/runtime gates remain separate. No production writer,
+simulation or alert was dispatched; no protected state, schedule, credential,
+workflow or hosting setting changed. The prior release evidence below is retained.
 
 ## Prior persistent-shell release — retained evidence
 

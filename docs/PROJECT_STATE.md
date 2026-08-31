@@ -1,14 +1,53 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Persistent dashboard header and Workspace deployed from PR #17 merge
-`42351e2`; local tests, PR/main CI, Pages and full live-content/protected-state
-verification passed. Approved Vault/Investor Edge/Operations changes remain
-preserved. Private Vault retrieval, production bootstrap and separate device/
-cutover gates remain open.**
+Status: **Approved PolitiTrack icons deployed from PR #18 merge `6bd76843` on
+canonical `main`. Local tests/builds, PR/main CI, Pages and full live-content
+verification passed. Existing header/Workspace layout and approved
+Vault/Investor Edge/Operations changes remain preserved. Protected production
+inputs are unchanged. Private Vault retrieval, production bootstrap and
+separate device/cutover gates remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Approved PolitiTrack icon package — deployed and verified, 2026-08-31
+
+Canonical repository ID **1349678672**, current name
+**maglothinm/MyETF-Intelligence**, default **main**.
+[PR #18](https://github.com/maglothinm/MyETF-Intelligence/pull/18) merged source
+`aa8201a7b3b95c575adf069f39688e1ac811f0c6` as
+`6bd76843e604941efef757aab434699feb1944f1`; both have tree
+`c2300379c6347fdf2b652f86c7a25d2886f554f7`. The isolated
+`codex/polititrack-icon-assets` checkout preserves shared files and worktrees.
+
+All 22 owner-supplied images, including the 1254px original and seven-frame
+Windows ICO, are preserved byte-for-byte under `assets/branding/polititrack/`.
+Both dashboard generators publish the 11 web images and manifest. Main page,
+Wallboard, Filing Vault and the retained React frontend use the approved header
+image with unchanged dimensions/layout; Investor Edge retains its text heading.
+No Windows packaging configuration exists. No workflows, collectors, state,
+alerts, schedules, credentials, hosting settings or Vault runtime were changed.
+
+Local verification passed **524 Python tests**, **1 React App test**, production
+React build, source/generated-byte checks and responsive layout comparisons.
+Existing React warnings remain in unchanged legacy code/dependencies.
+PR CI **33416929114 / 1** and main CI **33417300859 / 1** each passed 441 tests,
+6 DOM cases and Linux verification. Automatic Pages **33417300834 / 1** succeeded
+at **17:02:40 UTC**, source `6bd76843`, artifact **9767514649**.
+The final archive and **250 served files plus root** match byte-for-byte;
+live desktop/mobile checks show the new image with unchanged layout and no
+browser warnings/errors. All 12 added web assets match the approved source.
+
+Pages consumed unchanged Legislative **9764350004** (run **33408974583 / 1**),
+Executive **9760298853** (**33398375467 / 1**), AI **9764387095**
+(**33409079174 / 1**) and simulator **9734790733** (**33320677882 / 1**).
+Fresh producer high-water checks passed with no later producer run.
+No production writer, simulation or external alert was dispatched.
+See [the icon release receipt](validation/icon-assets-2026-08-31.md) for exact
+jobs, archive hashes, state continuity, rollback and acceptance limits.
+The icon request is complete; existing device/runtime/cutover gates remain
+separate and no settings changes or additional operational dispatch are needed.
 
 ## Persistent header and Workspace shell — deployed and verified, 2026-08-31
 

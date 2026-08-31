@@ -583,3 +583,10 @@ wording, navigation and responsive layout remain unchanged; the large portrait
 Wallboard keeps its 54px icon. The main manifest uses browser display mode and
 does not add a service worker or alter application behavior. No collector, score,
 state, workflow, alert, simulation, credential or hosting setting changes.
+
+**Release:** [PR #18](https://github.com/maglothinm/MyETF-Intelligence/pull/18)
+merged `aa8201a` as `6bd76843` with an identical tree. Local Python/React checks,
+both CI runs and automatic Pages publication passed. All 250 served files plus
+root match the published archive; live desktop/mobile geometry is preserved.
+See [the release receipt](validation/icon-assets-2026-08-31.md) for full evidence
+and unchanged protected input provenance.
