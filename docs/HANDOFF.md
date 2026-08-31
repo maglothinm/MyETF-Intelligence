@@ -18,7 +18,9 @@ preserved. Never implement or dispatch in legacy `maglothinm/MyETF`.
 Release commit `71b55ec3e35128f438c860ce01f4fb64b22100cc` is being integrated
 with canonical main `676701ac1521458aefd72e2329d4e87c8781e41f` (Investor
 Edge PR #15), preserving its parent Operations history PR #14 at `7a1108f`
-and the verified Edge release documentation successor `895bc573` on main.
+and the verified Edge/Operations release receipts `895bc573` and `b5169f3`
+on main. These last integrations change documentation only; tested application
+code remains identical.
 [PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16) is open for this release. Push, canonical PR/CI, merge and existing Pages deployment are
 authorized without another confirmation. No Vault release has completed yet.
 Private runtime/storage/migration/timer activation remains separately unconfigured;
@@ -137,5 +139,8 @@ Preserve the separate Senate recovery incident/gate: obsolete queued writers
 **33219808359** and **33221027676** require backend clearance before the separately
 requested manual Legislative run. Its support draft remains unsent. Held PR #3,
 same-ID rename/privacy, legacy retirement and external delivery/device acceptance
-remain separate tasks. Never rebaseline or treat local cache as production-state
+remain separate tasks. Preserve the Operations receipt
+warning about a historical simulator-history rewrite before any future manual
+simulator work; unchanged current history is not proof resolving that concern.
+Never rebaseline or treat local cache as production-state
 authority. Requery live GitHub provenance before any production operation.
