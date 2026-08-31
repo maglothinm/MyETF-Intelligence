@@ -1,6 +1,6 @@
 # PolitiTrack active handoff
 
-Updated: **2026-08-31 11:48 UTC**
+Updated: **2026-08-31 12:46 UTC**
 Status: **hourly follow-up active; PR #3 held for obsolete-run containment and main reconciliation**
 Work record: [issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3), unmerged.
@@ -16,10 +16,11 @@ held. AGENTS.md and its state-safety rules are unchanged; see D-017/D-018.
 
 Canonical ID **1349678672** remains public **maglothinm/MyETF-Intelligence**.
 Remote: `https://github.com/maglothinm/MyETF-Intelligence.git`.
-Live default main: **f2df59740b095417e3883fd81ac0a16c1d16fdad**,
-documentation-only successor of deployed UI **9d9e7be** (PR #10).
+Live default main: **642cebc45a489b7b3faf9b2840a716002828fafa**, documentation
+successor of deployed **104fc519**: Operations PR #14, Investor Edge historical
+bootstrap PR #15 and Filing Vault PR #16.
 Release branch: **codex/production-remediation**, published head before this
-documentation update **b7ecb3899cd96e4de213aa20fa3e4c77620df01b**.
+documentation update **2831fc787758cecb94dafa5a4cd714d3d5efca54**.
 Implementation: **020351a86861020d1a0f579b8ccdd7f218be3994**;
 CI setup fix: **4cb6d5677daa60fff507d86502e156b70200a8ff**.
 
@@ -71,8 +72,38 @@ Its validated Senate sessions and complete-source discovery gate must survive
 PR #3 reconciliation, including Legislative upload validation, classified
 terminal health reporting, CI additions and tests. Preserve all earlier deployed
 UI/help work, view-model/assets, public-output sanitation and tests. Retain main
-decisions D-019 through D-024 alongside this branch's D-015 through D-018.
+decisions D-019 through D-029 alongside this branch's D-015 through D-018.
 Do not resolve conflicts by selecting one complete side.
+
+New main since **f2df597** includes 15 commits, not just a UI update. PR #15
+changes `government_trade_tracker.py`, `ai_filing_analyst.py`, `investor_edge.py`
+and new `historical_transaction_bootstrap.py`: silent bounded history recovery,
+combined retained transactions, building profiles, fair durable backfill cursor,
+cache-only continuation, historical-event exclusions and global maintenance
+publication/delivery gates. Combine these with PR #3's adjusted-price/minimum-sample
+and immutable-history safeguards. All three producer-workflow edits are test
+additions; schedules, writer ownership and restore/upload policy are unchanged.
+
+Preserve PR #14's copied newest-first timeline and regressions; PR #16's safe
+catalog, exact/conflict-aware filing resolution, cross-surface links and pinned
+PDF.js assets. Keep new Vault requirements, Node/JSDOM/axe and bootstrap/Vault/PDF/
+link-resolution tests when restoring the release's full CI suite. Merge vendor
+`-text` attributes with the release LF rules. AGENTS.md is unchanged. Private Vault
+database/storage/migration/timer/API and source/device acceptance are separate,
+unverified gates, not activated by this follow-up or proven by static publication.
+
+Additional reconciliation gates:
+
+- `scripts/protected_state.py` currently rejects main's new tracker receipt
+  `historical-backfill.jsonl`. Add narrow schema/inventory and byte-prefix validation
+  before promotion. Explicitly handle optional `historical-source-documents.json`
+  and validated original-document references; never discard new state or broadly
+  allow arbitrary files. No compatibility fix or allowlist update was made here.
+- Main's public bootstrap report/Operations receipt retain a simulator warning:
+  notification isolation reserializes predecessor history after prefix validation.
+  Unchanged current metadata is not exhaustive historical continuity clearance.
+  Resolve the applicable path and exact-byte lineage before any manual simulator;
+  this heartbeat did not reproduce history mutation or run a simulation.
 
 PR #10 is now merged as **9d9e7bef326a0e24a5f846ea1310dec24a647019**, with
 documentation successor **f2df597**. Preserve its shared public review projection,
@@ -109,9 +140,11 @@ and PR #3 integrated-commit acceptance remain unverified by this heartbeat.
 
 ## Latest protected metadata and deployment
 
-At **11:48:21 UTC**, all **160 runs / 190 global artifacts** were paginated.
+At **12:46:02 UTC**, all **169 runs / 190 global artifacts** were paginated.
 No later successful producer lacks protected state; no permitted producer or
 publisher is active. Only the two obsolete queued runs remain active.
+All nine new runs are successful CI/Pages. No protected producer has exercised
+the published historical-bootstrap code yet; live population progress is unproven.
 
 | Pipeline | Artifact | Successful run / attempt | Job | Producer SHA |
 |---|---:|---|---:|---|
@@ -133,17 +166,24 @@ verification evidence remains in PROJECT_STATE.md and
 Simulation remains `9734790733`, run `33320677882` / attempt 1, job
 `99281977011`; no simulation was run here.
 
-Latest [Pages 33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313)
-succeeded, attempt 1, build `99465681041`, deploy `99465807219`, sole artifact
-`9755242103`, unexpired and created within its exact build window.
+Latest [Pages 33392608680](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608680)
+succeeded, attempt 1, build `99489550775`, deploy `99489776345`, sole artifact
+`9758066553`, unexpired and created within its exact build window.
 Public `/data/dashboard-insights.json` returned HTTP 200 with
-build **9d9e7bef326a0e24a5f846ea1310dec24a647019**, generation
-`2026-08-31T11:02:05Z` and the canonical repository URL.
+build **104fc519d883c93153c639e85a2474d3d816a336**, generation
+`2026-08-31T12:37:14Z` and the canonical repository URL.
 This is live build-marker verification, not full artifact/content equality or
 browser/device acceptance.
 
 ## Checks and remaining acceptance
 
+- Main CI [33392608687](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608687)
+  / 1, job `99489550762`, succeeded on **104fc519**, zero artifacts. This heartbeat
+  did not inspect its test log or run local implementation tests. Documentation
+  successor **642cebc** now records the independent release's 441 tests, six link
+  DOM cases, Linux verification, and 238 live files matching the artifact with a
+  blank public API origin. Preserve its receipt; no full content audit was repeated
+  by this heartbeat, and private cached-document retrieval remains inactive.
 - PR #10 CI [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936)
   / 1, job `99465044563`, and main CI
   [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349)
@@ -157,7 +197,7 @@ browser/device acceptance.
   Main's public record reports 212 selected tests and Linux verify.sh passed.
 - Last release-branch CI [33320353688](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33320353688)
   succeeded, attempt 1, job `99281111335`, old head `884a344`: full 244 tests
-  and verify.sh, zero artifacts. No CI exists for documentation head `b7ecb38`
+  and verify.sh, zero artifacts. No CI exists for documentation head `2831fc7`
   or integration with new main.
 - This heartbeat changes only documentation. No new implementation test run,
   full artifact download, simulation or browser/device check is claimed.
@@ -174,7 +214,8 @@ browser/device acceptance.
 1. Continue checking the existing GitHub report and exact obsolete runs without
    duplicate posts or unchanged cancellation retries.
 2. After containment, reconcile PR #3 with current main while preserving all
-   deployed UI/help, PR #10 review navigation and Senate fixes. Refresh newest
+   deployed UI/help, Senate, historical bootstrap and Vault changes. Close the
+   new state-inventory compatibility and simulator-history gates above. Refresh
    exact-attempt producer high-water checks, export/hash/schema/ledger continuity, consuming ancestry and
    exact pre-manifest allowlisting. Drain permitted older producers before merge.
 3. Pass the integrated tests, full Linux verify.sh and exact-head CI. Merge only

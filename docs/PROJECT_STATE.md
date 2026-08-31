@@ -10,7 +10,77 @@ independent Senate fix has completed a successful scheduled Legislative/AI chain
 and Pages publication. Main now publishes its independent full state/content
 acceptance; PR #3 still requires fresh integrated-commit acceptance.**
 
-## New main release checkpoint — 2026-08-31 11:48 UTC
+## New main release checkpoint — 2026-08-31 12:46 UTC
+
+Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
+At the 12:46 checkpoint main was **104fc519d883c93153c639e85a2474d3d816a336**, including independently
+released Operations PR #14 (**7a1108f**), Investor Edge historical-bootstrap
+PR #15 (**676701ac**) and Filing Vault PR #16 (**104fc519**). The exact delta
+from **f2df597** contains 15 commits. This is not only a presentation change:
+PR #15 changes tracker/AI/Edge runtime behavior, while the three protected
+producer-workflow edits only add test selections. No schedule, protected artifact
+name, writer ownership, restore/upload policy, simulation workflow or AGENTS.md
+changed in that delta.
+
+Preserve silent bounded historical reconstruction, combined retained transaction
+history, discovery-first profiles, fair backfill and cache-only continuation,
+historical-event exclusions and initial/final AI maintenance gates alongside
+PR #3's adjusted-price, sample-size and immutable-history corrections. Preserve
+Operations chronology, Vault exact/conflict-aware source links, safe catalog-only
+availability, pinned PDF.js assets, all new Python/DOM tests, Vault dependencies,
+Node/JSDOM setup, vendor byte-preserving attributes and main decisions D-025–D-029.
+Private Vault API/storage/schema/timer/source acknowledgements remain separate
+activation gates; publication is not operational private retrieval.
+
+Read-only reconciliation review found a concrete compatibility gap: current
+PR #3 `scripts/protected_state.py` rejects new main's `historical-backfill.jsonl`
+when present in tracker state. Before promotion, add narrow receipt schema,
+inventory and append-prefix validation; explicitly handle the optional
+`historical-source-documents.json` and validated original-document references.
+Do not discard those records, accept arbitrary files or fall back to older state.
+No code fix or new state-file acceptance was implemented by this heartbeat.
+
+Main's public bootstrap validation report and Operations receipt also retain a
+simulator warning: the existing notification-isolation step reserializes history
+after prefix validation. The unchanged two-row artifact does not clear exhaustive
+historical append lineage. Resolve the applicable code path and verify exact
+predecessor bytes before any future manual simulator acceptance. This heartbeat
+did not download history, reproduce a historical rewrite or change simulation.
+
+At **12:46:02 UTC**, all **169 runs / 190 global artifacts** were paginated.
+Protected artifacts remain Legislative **9749549239**, Executive **9746602231**
+and AI **9749567326**, with the same successful attempt-1 runs/jobs in the 10:46
+table below. All are unexpired; exact identities/windows and **3902968** ancestry
+to current main passed. No later producer gap or permitted active writer exists.
+The nine new runs are successful CI/Pages, not protected-state producers. Thus
+the published Edge fix has not yet demonstrated new live population progress.
+Simulation remains **9734790733 / 33320677882 / 1**, unchanged metadata only.
+
+Main CI **33392608687 / 1**, job **99489550762**, succeeded with zero artifacts.
+Pages **33392608680 / 1** succeeded on **104fc519**, build **99489550775**, deploy
+**99489776345**, sole artifact **9758066553**, created within the successful build
+window and unexpired. The public build marker returned HTTP 200, SHA **104fc519**,
+generated `2026-08-31T12:37:14Z`. These checks establish run metadata and the
+live marker, not fresh full artifact/content equality, private runtime, device
+acceptance or PR #3 integration tests.
+
+Before this status commit, main advanced to documentation-only successor
+**642cebc45a489b7b3faf9b2840a716002828fafa**. Its published Vault receipt reports
+441 CI tests, six link DOM cases, Linux verification and 238 live files matching
+the deployed artifact, with blank public API origin. That is the independent
+release's content/configuration evidence, not a repeated full audit here. Runtime
+remains **104fc519**; private retrieval is not activated. Preserve the receipt.
+
+Both obsolete runs remain exact-identity queued attempt 1, null conclusion,
+zero jobs/artifacts and the only active runs. The Community report still has
+zero replies and no newer comments/replies with complete pagination checked.
+PR #3 remains draft/open/unmerged at **2831fc787758cecb94dafa5a4cd714d3d5efca54**
+before this documentation update, with no exact-head CI. No containment or
+promotion is claimed. Only release documentation is changed; the shared
+`codex/persistent-dashboard-shell` checkout and `.codex/` / `.worktrees/` are
+untouched. No production operation, retry, support post or runtime activation.
+
+## Previous main release checkpoint — 2026-08-31 11:48 UTC
 
 Canonical ID **1349678672** remains `maglothinm/MyETF-Intelligence`. Live main
 advanced to **f2df59740b095417e3883fd81ac0a16c1d16fdad**, documentation successor
