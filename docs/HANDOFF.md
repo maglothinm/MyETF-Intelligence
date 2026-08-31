@@ -17,7 +17,8 @@ preserved. Never implement or dispatch in legacy `maglothinm/MyETF`.
 **The owner now explicitly requests Publish for this Vault implementation.**
 Release commit `71b55ec3e35128f438c860ce01f4fb64b22100cc` is being integrated
 with canonical main `676701ac1521458aefd72e2329d4e87c8781e41f` (Investor
-Edge PR #15), preserving its parent Operations history PR #14 at `7a1108f`.
+Edge PR #15), preserving its parent Operations history PR #14 at `7a1108f`
+and the verified Edge release documentation successor `895bc573` on main.
 [PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16) is open for this release. Push, canonical PR/CI, merge and existing Pages deployment are
 authorized without another confirmation. No Vault release has completed yet.
 Private runtime/storage/migration/timer activation remains separately unconfigured;

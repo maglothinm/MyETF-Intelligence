@@ -414,14 +414,19 @@ population/backfill metadata independently of qualifying signals. Unknown legacy
 counts stay unknown. Workflow changes are coverage-only; no extra schedule,
 writer, protected artifact or hosting path is introduced. Local acceptance
 produced 17 building profiles and 122 pending observations from real artifact
-copies. Deployment and live pending reduction remain unverified; the existing
-manual-production, held-PR and cutover gates are not relaxed.
+copies. That local checkpoint did not establish deployment or live pending
+reduction; the existing manual-production, held-PR and cutover gates are not relaxed.
 
 
 Release authorization: the owner requested “Release the commit”. Integrate the
 already-approved Operations ordering change from canonical main, retain both
 regression suites, and publish through the existing PR/CI/Pages path. This does
 not authorize a new manual production or simulation run or relax existing gates.
+
+Release verification: PR #15 merged as `676701a`; integrated PR/main CI and the
+automatic Pages publication succeeded. The deployed tree matches the tested head
+and both dashboard surfaces were verified live. Production population progress
+still requires subsequent normal writer evidence; local acceptance is not live state.
 
 ## D-2026-08-31-027 — Keep raw Filing Vault evidence in private runtime storage
 
