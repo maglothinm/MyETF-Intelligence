@@ -1,13 +1,14 @@
 # PolitiTrack project state
 
-Last updated: **2026-08-30 UTC**
-Status: **Contextual help published; live content/state-continuity verification passed.
-Device acceptance, state-safety PR #3 and repository cutover remain open.**
+Last updated: **2026-08-31 UTC**
+Status: **Senate resilience merged; PR/main CI and local verification passed.
+Production recovery awaits the existing writer-safety gate. Contextual help
+remains published; device acceptance, PR #3 and cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Senate resilience implementation
+## Senate resilience implementation — merged
 
 Issue #8 adds strict official-source session validation, bounded retries and
 complete Legislative discovery before processing. The code preserves existing
@@ -16,6 +17,16 @@ are not proof of production recovery. Production validation is pending the
 existing writer-queue safety gate; no recovery dispatch is claimed. Detailed
 incident exports remain local pending approval for public disclosure. The
 historical deployment and artifact tables below remain historical checkpoints.
+
+PR [#9](https://github.com/maglothinm/MyETF-Intelligence/pull/9) merged source
+`125eac1aba5a5f5324040cbfac7f30b63a2f0347` as
+`19f7044e8bd12fd4d693cf7f468623f318034717`; their trees match. Local full suite:
+283 passed. PR CI [33346339195](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346339195)
+and main CI [33346456045](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346456045)
+both succeeded with 212 selected tests and `VERIFICATION PASSED` from Linux
+`verify.sh`. The following documentation-only successor changes no runtime code.
+No new production run, protected-state successor or dashboard publication is
+claimed. Healthchecks recovery remains unverified.
 
 ## Repository identity
 
