@@ -1,154 +1,212 @@
 # PolitiTrack active handoff
 
 Updated: **2026-08-31 UTC**
-Work record: **issue #4 — dashboard UX; issue #6 — shared contextual help**
+Work record: [issue #4 — dashboard shell](https://github.com/maglothinm/MyETF-Intelligence/issues/4),
+with shared help compatibility in [issue #6](https://github.com/maglothinm/MyETF-Intelligence/issues/6).
 
-## Current task and delivered state
+## Current task — deploy the persistent dashboard shell
 
-Implement the requested persistent dashboard header and Workspace navigation in
-one shared application shell. The header stays at the viewport top, the desktop
-sidebar remains below its measured height, and Workspace gains its own vertical
-scrolling only when its contents exceed the available height. Preserve mobile
-navigation, overlays, focus order, record/filter widths and the document scroller.
+The owner explicitly requested **Deploy** after the local shell result and
+native-input/device limits were disclosed. Complete canonical push/PR/CI/merge,
+then the existing read-only Pages publisher and independent live verification.
+No additional publication confirmation is pending. Do not dispatch a production
+writer, simulation, external alert or private Vault runtime activation.
 
-Canonical repository ID **1349678672**, current name
-**maglothinm/MyETF-Intelligence**, default `main`. Work is isolated on
-`codex/persistent-shell-layout`, based on live main
-`9d9e7bef326a0e24a5f846ea1310dec24a647019`, under the parent checkout's
-`.remediation/persistent-shell/worktree`. The original checkout's user files, untracked `.codex/`, held PR #3 and unrelated
-work are preserved; concurrent task branches remain separate. Never implement or dispatch in legacy `maglothinm/MyETF`.
+Repository ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
+default **main**. Work uses isolated branch **codex/persistent-shell-layout** at
+`.remediation/persistent-shell/worktree`. Original shell commit
+**73193d91088efecbecf228220c0580f986039832** is being integrated with canonical
+main **642cebc45a489b7b3faf9b2840a716002828fafa**. Preserve all concurrent approved
+Operations, Investor Edge and Filing Vault code/tests/evidence, shared checkout
+user files and unrelated worktrees. Never implement or dispatch in legacy
+`maglothinm/MyETF`.
 
-**Current delivery state: local implementation and validation complete, recorded
-in the commit containing this handoff. No push, pull request, merge or deployment
-for this shell payload.**
-The earlier review UX payload was explicitly authorized and is already published;
-that scoped approval is not publication authorization for this new layout change.
+**Delivery state at this checkpoint:** shell implementation is committed locally;
+current-main integration, its validation and publication remain in progress.
+No new shell PR/CI/Pages or live deployment result is claimed here. The last
+verified published source is Filing Vault release **104fc51**, with full receipts
+retained below and in [the release record](validation/filing-vault-release-2026-08-31.md).
 
-## Implementation scope
+## Shell scope and completed local evidence
 
-- Reuse the existing header's height and styling, measuring its actual border box
-  with `ResizeObserver` and a resize fallback. The shared height token controls
-  sidebar positioning and document anchor clearance when the header wraps.
-- Pin the header across dashboard routes. At the existing persistent-sidebar
-  breakpoint, limit Workspace to the remaining viewport height and enable
-  `overflow-y: auto`; retain accessible links and their existing focus behavior.
-- Preserve the document as the content scroller. Remove the shell's table vertical
-  height cap, retaining horizontal table access, and reserve scrollbar space to
-  avoid page-width shifts. Preserve the current narrow-screen navigation layout.
-- Keep the existing tooltip, native dialogs and popovers above the shell; do not
-  duplicate positioning across Overview, Signals, Investor Edge, Records,
-  Operations and the $10K Agent routes.
+- The existing header stays at the viewport top. `ResizeObserver` measures its
+  actual border box, with a resize fallback; the shared offset keeps the desktop
+  sidebar and anchored content clear when the header wraps.
+- Workspace fits the remaining desktop viewport and scrolls vertically only when
+  necessary. The document remains the page scroller; tables retain horizontal
+  access without a third vertical height-limited scrolling context. Preserve the
+  seven current Workspace links and separate Filing Vault page unchanged.
+- The root-only shell covers Overview, Signals, Investor Edge, Records,
+  Operations and the $10K Agent hash routes. Existing narrow-screen navigation,
+  tooltip, native dialogs/popovers and focus behavior remain intact.
+- The shell delta is limited to `scripts/dashboard_assets/{app.js,index.html,styles.css}`,
+  `tests/{dashboard_dom.test.cjs,dashboard_notification_integration.test.cjs}` and
+  `docs/{PROJECT_STATE.md,DECISIONS.md,HANDOFF.md}`. It adds no workflow, collector,
+  scoring, state, alert, simulation or hosting configuration change to current main.
 
-Changed implementation files:
-`scripts/dashboard_assets/{app.js,index.html,styles.css}` and
-`tests/{dashboard_dom.test.cjs,dashboard_notification_integration.test.cjs}`.
-Project records are `docs/{PROJECT_STATE.md,DECISIONS.md,HANDOFF.md}`.
-No collectors, scoring, state schemas, alerts, simulations, workflow files or
-hosting configuration are changed. No production state is written or restored,
-and no production writer, simulation or external alert has been dispatched.
+The original shell commit passed **295 active Python tests in 398.82 seconds**,
+including **41 DOM scenarios** (seven new shell/route/focus regressions) and
+**32 notification scenarios** through existing wrappers. Syntax and diff checks
+passed. The canonical generator produced **5,079 filings / 60 transactions /
+1,496 reviews / 11 analyses / zero paper positions** from read-only fixtures;
+all fixture hashes/sizes remained unchanged.
 
-## Local verification
+Rendered checks covered all six hash routes, record/exception focus, Source
+filtering, Actions and Notification dialogs, help overlays, deep document scroll,
+independent sidebar movement and widths **320px through 3840px**, with no horizontal
+page overflow. Mobile wrapping and initial no-hash navigation remained visible.
+These results predate integration with current main; rerun the combined tree before
+publication. New remote Linux CI and Pages verification are still pending.
 
-- Full active suite: **295 passed in 398.82 seconds**. Existing wrappers include
-  **41 DOM scenarios** (seven new shell/route/focus regressions) and **32 native
-  Node notification scenarios**, including six dashboard integration cases.
-- JavaScript syntax and `git diff --check` passed. The canonical Python static
-  generator built **5,079 filings / 60 transactions / 1,496 reviews / 11 analyses /
-  zero paper positions** from read-only local fixtures. Every fixture file's
-  hash/size still matches its original audited inventory; see the integrity receipt.
-- Rendered browser checks: 1440x1000/900, 1366x520/420, 3840x1080, 1920x1080,
-  1024x768, 902x600 (requested 901px rounded by browser), 900x600, 768x1024,
-  390x844 and 320x740. Header remains at top zero; desktop sidebar stays below
-  it within the viewport. No horizontal page overflow. Mobile keeps wrapped
-  navigation and initial no-hash landing does not scroll it away. At 320px,
-  header controls wrap instead of overflowing; the measured offset follows.
-- All six routes checked, including deep page scrolling, route titles, parser
-  exception and selected filing focus, Records Source filtering, full-height
-  tables with horizontal access, and independent sidebar/main scroll movement.
-  Actions and Notification dialogs remain in the native top layer. Run Simulation
-  help popover and Workspace hover help render without sidebar/header clipping.
-  No workflow link was dispatched. No new custom dropdown/popover/toast exists;
-  existing native select controls, notices, help and dialogs were checked.
-- **Native input limit:** browser-control diagnostics show synthetic wheel/key
-  events (`isTrusted=false`). At the sidebar boundary those scroll commands moved
-  the document despite computed `overscroll-behavior-y: contain`; this does not
-  establish native wheel containment. Tab automation did not establish native
-  traversal. DOM focus/navigation tests pass, but physical mouse/trackpad boundary
-  behavior, Page Up/Down/Home/End, touch/Safari, audio and physical CHG90 acceptance
-  remain unverified. No claim that these physical-device tests passed.
-- Windows has no configured Bash runtime; local `verify.sh` is not claimed.
-  New remote Linux CI and Pages have not run for this local shell commit.
+**Native-input limit:** browser-control wheel/key events were synthetic
+(`isTrusted=false`). At the sidebar boundary, tool scroll commands moved the
+document despite computed `overscroll-behavior-y: contain`; this does not establish
+native wheel containment. Tool Tab presses did not establish native traversal.
+DOM focus/navigation checks passed, but physical mouse/trackpad boundary behavior,
+Page Up/Down/Home/End, touch/Safari, audio and physical CHG90 acceptance remain
+unverified. Deployment authorization does not close those device gates.
 
-Evidence in the parent checkout: `.remediation/persistent-shell/validation-summary.json`,
-`input-integrity-final.json`, generated `preview/`, and `browser/` screenshots plus
-`responsive-checks.jsonl`. The implementation worktree's `.remediation/full-shell-tests/`
-contains test outputs; focused DOM fixture evidence is in the parent's
-`.remediation/persistent-shell/shell-dom-final/`. Temporary browser viewport
-settings were reset. Local preview: http://127.0.0.1:8766/.
+Original evidence in the parent checkout: `.remediation/persistent-shell/validation-summary.json`,
+`input-integrity-final.json`, `preview/`, `browser/` and `shell-dom-final/`.
+Original test output is under the isolated worktree's `.remediation/full-shell-tests/`.
+The local preview is http://127.0.0.1:8766/. New publication evidence belongs under
+`.remediation/persistent-shell-publish/`; pending receipts are not results.
+Raw state copies and local previews are evidence, never production authority.
 
-## Existing published release — fresh read-only verification at 11:14 UTC
+## Next safe publication actions and separate gates
 
-The earlier review UX PR
-[#10](https://github.com/maglothinm/MyETF-Intelligence/pull/10) merged at 11:01:36
-UTC as `9d9e7bef326a0e24a5f846ea1310dec24a647019`. This corrects the stale
-publication-pending checkpoint previously recorded in these documents.
+Finish current-main integration, review the exact delta and rerun combined tests
+and generated-dashboard checks. Refresh full GitHub artifact-name enumeration,
+exact producer attempts/jobs, expiry, ancestry and high-water marks. Push the
+isolated branch, create the canonical PR, require successful CI on its exact head,
+merge without discarding concurrent changes, and use the existing Pages workflow
+on canonical main. Verify its exact successful attempt, consumed artifact IDs,
+Pages artifact/live content and protected continuity before recording deployment
+as complete. Do not modify workflow triggers or production state as a shortcut.
 
-| Evidence | Result |
-|---|---|
-| PR CI | [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936), attempt 1, job `99465044563`; success |
-| Main CI | [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349), attempt 1, job `99465680760`; success |
-| Pages | [33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313), attempt 1; build `99465681041` and deploy `99465807219` successful |
-| Pages artifact | `9755242103`, SHA-256 `ca3b63daecb7c4e6ce5e92e162cbb363e753c07d8983fddcc1306ca7ac7e4014`; fresh GitHub digest matches retained ZIP |
-| Live result | All 21 checked URLs returned HTTP 200 and exactly matched the digest-verified Pages artifact, build `9d9e7bef326a0e24a5f846ea1310dec24a647019` |
+The Vault private API/cache remains inactive with published `{"api_origin":""}`;
+this shell publication must preserve that honest configuration. The prior runtime
+activation procedure below remains a separate task, not part of Deploy.
+Obsolete queued writers **33219808359** and **33221027676** still require backend
+clearance before the separately requested manual Legislative run; the support
+draft remains unsent. The historical simulator rewrite concern remains unresolved
+before future manual simulator work. Held PR #3, same-ID rename/privacy, legacy
+retirement, Gmail delivery proof and physical-device acceptance remain separate.
 
-Live [dashboard](https://maglothinm.github.io/MyETF-Intelligence/) remains this
-previous release. No new shell deployment is claimed.
+## Prior Filing Vault release and runtime handoff — retained evidence
 
-| Protected input | Artifact | Successful run / attempt | Producer job |
+The following is the completed Filing Vault publication checkpoint carried forward
+from main `642cebc4`. Its run/test/state results describe that prior release and
+do not establish the pending shell deployment. Ignored Vault evidence paths refer
+to its `.worktrees/filing-vault` worktree, not the active shell worktree.
+
+The owner's explicit **Publish** instruction was carried through canonical PR,
+CI, merge and existing Pages. Repository ID **1349678672**, current live name
+**maglothinm/MyETF-Intelligence**, default **main**. Never implement or dispatch
+in legacy `maglothinm/MyETF`. The shared root checkout and unrelated worktrees
+remain untouched. Work used branch **codex/filing-vault**, isolated worktree
+**.worktrees/filing-vault**.
+
+[PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16) merged tested
+head `755349945bf8fdd4389a8c6aa6d770370df487af` as
+`104fc519d883c93153c639e85a2474d3d816a336`; the trees match exactly. This includes
+the final exact-ID safeguard and preserves Operations/Investor Edge releases and
+verified receipts through `b5169f3`. This documentation-only successor records
+the release; it does not advance production state or change deployed source.
+
+The [live Filing Vault](https://maglothinm.github.io/MyETF-Intelligence/filing-vault.html)
+has **5,079** cataloged filings, filters, exact-ID details and official links.
+**Private cached-document retrieval is inactive.** The generated public API origin
+is blank and the live page explicitly reports unavailable retrieval; no document
+was retrieved and no government acknowledgement was submitted by this publication.
+
+### Filing Vault delivered source and verification
+
+The optional Flask/SQLAlchemy/Supabase Vault includes six additive tables, private
+storage, immutable SHA-256 evidence, exact 2,592,000-second expiry, acknowledgements,
+version history, known-ID catalog admission, source adapters and daily lifecycle
+commands/timer examples. Shared dashboard links and the responsive full-page
+viewer reuse existing surfaces; PDF.js assets/licenses are pinned locally.
+Rejected filing matches retain original provenance and cannot fall back to
+conflicting IDs after compact projection. No protected writer or ledger changed.
+
+The full local suite passed **524 tests with no skips**; **6 additional filing-link
+DOM cases** passed. Syntax, all workflow YAML and **201 vendor hashes/sizes** pass.
+Government-source tests are mocked. PostgreSQL isolation SQL is fixture-tested,
+not verified against a live database. Earlier real PDF rendering used a disposable
+TEST API; it is not evidence of production storage access.
+
+| Canonical run | Attempt | Result |
+|---|---:|---|
+| [PR CI 33392460770](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392460770) | 1 | Success; 441 tests, 6 DOM cases, Linux VERIFICATION PASSED |
+| [Main CI 33392608687](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608687) | 1 | Success; same 441 tests, 6 DOM cases and verifier |
+| [Pages 33392608680](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608680) | 1 | Success; build `104fc51`, artifact `9758066553` |
+
+Pages build/deploy jobs **99489550775 / 99489776345** succeeded. Archive size
+**3,872,316 bytes**, SHA-256
+`28dd09b87b99f55636f9b47fe1be4254323c0ca10c33d1edeafd00151696ad4c`.
+All **238 served public content files** matched the exact Pages archive at
+**12:43:45 UTC**, including all **201** pinned PDF assets. Only the empty
+`.nojekyll` marker was not HTTP-checked. Emitted and live configuration both contain
+exactly `{"api_origin":""}`; private-field/raw-document archive checks passed.
+Desktop/mobile-width live checks passed source filtering and exact filing details
+without horizontal overflow or console warnings/errors. Physical Safari/iPhone
+and live runtime acceptance remain unverified.
+
+### Filing Vault protected continuity and retained evidence
+
+Exact producer repository/workflow/default branch, successful run attempts/jobs,
+artifact upload windows, expiry, commit ancestry and global producer high-water
+marks are checked independently of CI. Pages logs consume these exact inputs:
+
+| Protected artifact | ID | Producing run / attempt | Successful job |
 |---|---:|---|---:|
-| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` |
-| Executive | `9746602231` | `33360633323` / 1 | `99391153447` |
-| AI | `9749567326` | `33369677492` / 1 | `99417669143` |
+| legislative-tracker-state | 9749549239 | 33369634244 / 1 | 99417536057 |
+| executive-tracker-state | 9746602231 | 33360633323 / 1 | 99391153447 |
+| ai-analysis-state | 9749567326 | 33369677492 / 1 | 99417669143 |
 
-Fresh exact repository/workflow/attempt/job bindings, expiry and commit ancestry
-match the prior release evidence. Fresh metadata digests match all three retained
-ZIP exports and their ledger counts are unchanged. All 158 run records were
-inspected; no later eligible producer was found. Only the two obsolete queued
-runs remain. The PR and main CI runs uploaded no artifacts; Pages uploaded only
-`github-pages`. This verification did not restore or mutate production state.
+The final **12:45:06 UTC** audit checked **169 runs / 82 producer records**.
+Protected ZIP/member hashes, sizes, inventories and high-water marks remain unchanged. All producers
+are at `3902968`, an ancestor of this release; artifacts expire on 2026-11-29.
+Isolated simulator artifact **9734790733**, run **33320677882 / attempt 1**,
+job **99281977011**, remains two rows. No writer, simulation, rebaseline, alert,
+repository setting or credential was dispatched/changed by this publication.
 
-**Audit limitation:** fresh repository-global artifact-name enumeration could not
-be performed because public REST was rate-limited, the connector disallows that
-endpoint, and local Git credential lookup was unavailable. Do not claim a new
-complete restore-authority audit or use this checkpoint as automatic authority
-for a future production restore. That requires a fresh complete selection audit.
+See [the release receipt](validation/filing-vault-release-2026-08-31.md) for exact
+run/job URLs, digests, counts, live file checks and limitations. Ignored evidence
+is in the Vault worktree's `.remediation/publish-vault/` and `.remediation/browser-evidence/`.
+Raw state copies are read-only evidence, never production restore authority.
 
-Evidence in the parent checkout:
+### Separate Filing Vault configuration and next safe action
 
-- `.remediation/persistent-shell/live-github-metadata.json`: fresh exact GitHub
-  metadata, attempts, jobs, ancestor comparison and all 158 run records.
-- `.remediation/persistent-shell/live-byte-verification.json`: all three retained
-  protected ZIP digests, retained counts and 21 current live byte matches.
-- `.remediation/dashboard-review-publish/deployment-verification.json`: preserved
-  full prior publication acceptance at 11:04:50 UTC, including actual publisher
-  restore IDs, protected continuity and two-row isolated simulation history.
-- `.remediation/persistent-shell/`: completed local preview and validation
-  receipts described above; these are not production authority.
+Issue #13 stays open. Activate the existing private application runtime only with
+its real PostgreSQL connection, private Supabase bucket, server-only storage and
+signing credentials and HTTPS API host. Run the explicit additive migration,
+verify private table/bucket isolation, supply catalog metadata from the verified
+canonical publisher, configure exact origins/agency hosts and legitimately accepted
+source notices, install the daily timer and verify its execution. Then set the
+public `FILING_VAULT_API_ORIGIN` repository variable and release through existing
+CI/Pages. Do not put documents or secrets in Git/Pages, create another repository,
+or use protected tracker artifacts as the document cache.
 
-## Remaining blockers and next safe action
+Local Vault configuration/environment variables were absent. A bounded configured
+Git credential-helper read returned no usable credential; it did not retrieve
+remote secret metadata or runtime environments, and no alternative credential
+search was attempted. Published config proves only that this build has no API
+origin; credentials and externally provisioned infrastructure remain unverified.
+Static publication cannot activate the cache or imply government-source consent.
+Request-only reports remain request-only. Endpoint validation does not establish
+exhaustive discovery of separately published amendments.
 
-Review the local shell commit and complete native-input/device acceptance when
-available. A future publication must follow the canonical PR/CI/Pages path and
-receive authorization for this new payload; refresh the complete artifact audit
-for that release. Do not dispatch production writers or alerts as a layout test.
+Verify real HTTPS/CORS, aggregate proxy/egress rate limits, storage/database isolation,
+source access, scheduled retention and physical devices before describing the
+cache as operational. Detailed architecture/configuration is in
+[FILING_VAULT.md](FILING_VAULT.md).
 
-The obsolete queued runs `33219808359` and `33221027676`, held PR #3, same-ID
-rename/privacy, legacy settings, physical-device acceptance and Gmail delivery
-proof remain separate open work. No credentials or settings were tested or changed.
-
-The Senate recovery evidence and incident record are unchanged. Supported
-cancellation/deletion and signed-in UI attempts did not clear the two obsolete
-queues. The authorized GitHub Support draft remains unsent because an applicable
-Actions route was unavailable. Backend clearance or confirmation that neither run
-can execute remains required before the separately requested manual Legislative
-run. Do not relax that gate or conflate it with read-only dashboard implementation.
+Preserve the separate Senate recovery gate: obsolete queued writers **33219808359**
+and **33221027676** require backend clearance before the separately requested
+manual Legislative run; its support draft remains unsent. The historical simulator
+rewrite concern remains unresolved before future manual simulator work. Current
+unchanged history does not resolve that older concern. Held PR #3, same-ID
+rename/privacy, legacy retirement and external delivery/device acceptance remain
+separate tasks. Requery live GitHub provenance before any production operation.

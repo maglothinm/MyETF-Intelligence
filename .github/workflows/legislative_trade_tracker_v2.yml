@@ -311,6 +311,7 @@ jobs:
             tests/test_senate_client.py \
             tests/test_legislative_healthcheck.py \
             tests/test_government_trade_tracker.py \
+            tests/test_historical_transaction_bootstrap.py \
             tests/test_oge_disclosures.py \
             tests/test_trade_dashboard.py
 

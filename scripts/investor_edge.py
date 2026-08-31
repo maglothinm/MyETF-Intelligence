@@ -1058,11 +1058,25 @@ class InvestorEdgeRuntime:
     attempted_observation_keys: set[str] = field(default_factory=set)
     last_observation_key: str = ""
     observations_pruned_this_run: int = 0
+    last_backfill_investor_key: str = ""
+    population_metadata: dict[str, Any] = field(default_factory=dict)
+    sector_mappings: dict[str, dict[str, Any]] = field(default_factory=dict)
+    population_maintenance_complete: bool = False
 
     def __post_init__(self) -> None:
         # Old methodology versions and long-lived unavailable attempts must not
         # make the durable artifact grow without bound.
         self._prune_observations()
+        for observation in sorted(
+            self.observations.values(),
+            key=lambda item: str(item.get("updated_utc") or ""),
+        ):
+            if observation.get("method_hash") == self.method_hash and isinstance(
+                observation.get("sector"), Mapping
+            ):
+                self.sector_mappings[str(observation.get("ticker") or "")] = dict(
+                    observation["sector"]
+                )
 
     @classmethod
     def create(
@@ -1104,6 +1118,9 @@ class InvestorEdgeRuntime:
             provider,
             {str(k): dict(v) for k, v in profiles.items() if isinstance(v, dict)},
             {str(k): dict(v) for k, v in observations.items() if isinstance(v, dict)},
+            last_backfill_investor_key=str(
+                (observation_payload.get("backfill") or {}).get("last_investor_key") or ""
+            ) if isinstance(observation_payload, dict) else "",
         )
 
     @property
@@ -1184,6 +1201,7 @@ class InvestorEdgeRuntime:
                     "limit_per_run": self.backfill_limit,
                     "processed_this_run": self.backfill_processed_this_run,
                     "last_observation_key": self.last_observation_key,
+                    "last_investor_key": self.last_backfill_investor_key,
                     "retention_limit": self.observation_retention_limit,
                     "stored_observation_count": len(self.observations),
                     "pruned_this_run": self.observations_pruned_this_run,
@@ -1253,6 +1271,7 @@ class InvestorEdgeRuntime:
         sector: Mapping[str, Any],
         as_of: date,
         horizons: Sequence[int],
+        allow_backfill: bool = True,
     ) -> tuple[dict[str, Any], str]:
         ticker = _ticker_symbol(item.get("ticker"))
         tx_date = _parse_date(item.get("transaction_date"))
@@ -1275,7 +1294,8 @@ class InvestorEdgeRuntime:
         retry_after_as_of = _parse_date(cached.get("retry_after_as_of"))
         attempt_token = f"{observation_key}|{as_of.isoformat()}"
         can_attempt = (
-            bool(missing)
+            allow_backfill
+            and bool(missing)
             and attempt_token not in self.attempted_observation_keys
             and (last_attempted_as_of is None or as_of > last_attempted_as_of)
             and (retry_after_as_of is None or as_of >= retry_after_as_of)
@@ -1287,8 +1307,11 @@ class InvestorEdgeRuntime:
         )
         status = "cached" if cached else "deferred"
         if can_attempt:
-            self.attempted_observation_keys.add(attempt_token)
-            self.backfill_processed_this_run += 1
+            request_budget = getattr(self.provider, "request_budget", None)
+            cache_only = (
+                request_budget is not None
+                and self.provider.network_requests >= request_budget
+            )
             minimum_date = min(tx_date, public_date) - timedelta(days=10)
             stock_rows = self._provider_daily(
                 ticker, minimum_date=minimum_date, required_through=as_of
@@ -1296,6 +1319,16 @@ class InvestorEdgeRuntime:
             benchmark_rows = self._provider_daily(
                 benchmark, minimum_date=minimum_date, required_through=as_of
             )
+            if cache_only and (not stock_rows or not benchmark_rows):
+                # The provider enforces its request cap, but its local caches
+                # remain useful after exhaustion. A cache miss without any
+                # possible request is deferred work, not a failed observation.
+                return self._observation_for_trade(
+                    item, key=key, sector=sector, as_of=as_of,
+                    horizons=horizons, allow_backfill=False,
+                )
+            self.attempted_observation_keys.add(attempt_token)
+            self.backfill_processed_this_run += 1
             if stock_rows and benchmark_rows:
                 picker_new = _outcomes_for_anchor(
                     stock_rows, benchmark_rows, tx_date, horizons, as_of=as_of
@@ -1402,6 +1435,50 @@ class InvestorEdgeRuntime:
             status = "cached"
         return visible, status
 
+    def _sector_for_trade(
+        self, item: Mapping[str, Any], *, allow_market: bool
+    ) -> dict[str, Any]:
+        """Render discovered profiles without spending requests on deferred work."""
+        ticker = _ticker_symbol(item.get("ticker"))
+        default = _ticker_symbol(self.config.get("benchmark_default")) or "SPY"
+        request_budget = getattr(self.provider, "request_budget", None)
+        cache_only = (
+            request_budget is not None
+            and self.provider.network_requests >= request_budget
+        )
+        if allow_market and not (cache_only and ticker in self.sector_mappings):
+            # Keep the benchmark attached to cached observations when no new
+            # lookup is possible. For an unobserved ticker the provider may
+            # still resolve a sector from its own disk cache at zero requests.
+            self.sector_mappings[ticker] = _normalized_sector_mapping(
+                self.provider.sector(ticker), default
+            )
+        return dict(self.sector_mappings.get(ticker) or _normalized_sector_mapping({}, default))
+
+    def _pending_attempt(
+        self,
+        item: Mapping[str, Any],
+        *,
+        as_of: date,
+        horizons: Sequence[int],
+    ) -> tuple[bool, Mapping[str, Any]]:
+        sector = self._sector_for_trade(item, allow_market=False)
+        observation_key = self._observation_key(item, benchmark=str(sector["benchmark"]))
+        cached = self.observations.get(observation_key) or {}
+        missing = any(
+            not isinstance((cached.get(field_name) or {}).get(str(horizon)), Mapping)
+            for field_name in ("picker_outcomes", "followable_outcomes")
+            for horizon in horizons
+        )
+        last_attempted = _parse_date(cached.get("last_attempted_as_of"))
+        retry_after = _parse_date(cached.get("retry_after_as_of"))
+        return bool(
+            missing
+            and f"{observation_key}|{as_of.isoformat()}" not in self.attempted_observation_keys
+            and (last_attempted is None or as_of > last_attempted)
+            and (retry_after is None or as_of >= retry_after)
+        ), cached
+
     def profile_for_trade(
         self,
         trade: Mapping[str, Any],
@@ -1436,6 +1513,7 @@ class InvestorEdgeRuntime:
             current_ticker=current_ticker,
             as_of=as_of,
             identity=identity,
+            allow_backfill=not self.population_maintenance_complete,
         )
         public_date = _public_date(trade)
         profile = dict(profile)
@@ -1458,6 +1536,7 @@ class InvestorEdgeRuntime:
         records: Sequence[Mapping[str, Any]],
         *,
         as_of: date | None = None,
+        allow_backfill: bool = True,
     ) -> dict[str, Any]:
         as_of = as_of or _utc_now().date()
         seeds = [item for item in records if investor_key(item) == key]
@@ -1492,6 +1571,7 @@ class InvestorEdgeRuntime:
             current_ticker="",
             as_of=as_of,
             identity=identity,
+            allow_backfill=allow_backfill,
         )
 
     @staticmethod
@@ -1598,6 +1678,7 @@ class InvestorEdgeRuntime:
         current_ticker: str,
         as_of: date | None = None,
         identity: Mapping[str, Any] | None = None,
+        allow_backfill: bool = True,
     ) -> dict[str, Any]:
         as_of = as_of or _utc_now().date()
         identity_payload = dict(identity or investor_identity({"filer": filer, "owner": owner}))
@@ -1605,7 +1686,10 @@ class InvestorEdgeRuntime:
         max_history = max(0, min(250, int(self.config.get("max_history_trades", 40))))
         history_sorted = sorted(
             history,
-            key=lambda item: _parse_date(item.get("transaction_date")) or date.min,
+            key=lambda item: (
+                _parse_date(item.get("transaction_date")) or date.min,
+                str(item.get("trade_id") or ""),
+            ),
             reverse=True,
         )
         assessed = [(item, history_trade_eligibility(item)) for item in history_sorted]
@@ -1613,7 +1697,7 @@ class InvestorEdgeRuntime:
         excluded_pairs = [pair for pair in assessed if not pair[1].get("eligible")]
         default_benchmark = _ticker_symbol(self.config.get("benchmark_default")) or "SPY"
         current_sector = (
-            _normalized_sector_mapping(self.provider.sector(current_ticker), default_benchmark)
+            self._sector_for_trade({"ticker": current_ticker}, allow_market=allow_backfill)
             if current_ticker
             else {
                 "benchmark": "",
@@ -1673,7 +1757,7 @@ class InvestorEdgeRuntime:
             reported_filed_date = _parse_date(item.get("filed_date"))
             if not ticker or tx_date is None or public_date is None:
                 continue
-            sector = _normalized_sector_mapping(self.provider.sector(ticker), default_benchmark)
+            sector = self._sector_for_trade(item, allow_market=allow_backfill)
             benchmark = str(sector.get("benchmark") or default_benchmark)
             observation, observation_status = self._observation_for_trade(
                 item,
@@ -1681,6 +1765,7 @@ class InvestorEdgeRuntime:
                 sector=sector,
                 as_of=as_of,
                 horizons=horizons,
+                allow_backfill=allow_backfill,
             )
             picker_outcomes = observation.get("picker_outcomes") or {}
             followable_outcomes = observation.get("followable_outcomes") or {}
@@ -2033,6 +2118,8 @@ class InvestorEdgeRuntime:
             "confidence": round(confidence, 4),
             "confidence_label": _confidence_label(confidence, n),
             "sample_count": n,
+            "minimum_completed_trades": minimum,
+            "minimum_sample_met": n >= minimum,
             "effective_sample_count": round(effective_n, 4),
             "considered_trade_count": considered,
             "eligible_trade_count": eligible_count,
@@ -2161,6 +2248,13 @@ class InvestorEdgeRuntime:
                 "investor_key": key,
             }
             preserved["last_refresh_attempt_utc"] = _iso_utc()
+            # Retain last-good scores, but never hide new pending work behind
+            # the old profile's completeness counters.
+            preserved["backfill_pending_trade_count"] = pending_trade_count
+            preserved["backfill_processed_this_run"] = self.backfill_processed_this_run
+            preserved["backfill_limit_per_run"] = self.backfill_limit
+            preserved["minimum_completed_trades"] = minimum
+            preserved["minimum_sample_met"] = previous_samples >= minimum
             preserved["data_errors"] = self.provider.errors[-10:]
             self.profiles[key] = preserved
             if previous_key and previous_key != key:
@@ -2176,8 +2270,22 @@ class InvestorEdgeRuntime:
         transactions: Sequence[Mapping[str, Any]],
         *,
         as_of: date | None = None,
+        allow_backfill: bool = True,
     ) -> list[dict[str, Any]]:
-        eligible = [item for item in transactions if _history_trade_eligible(item)]
+        """Discover the population first, then share bounded work across identities.
+
+        A candidate is not needed to advance this durable queue. The second,
+        cache-only pass can also publish after candidate scoring without spending
+        another market request or changing historical analysis decisions.
+        """
+        as_of = as_of or _utc_now().date()
+        assessed = [(item, history_trade_eligibility(item)) for item in transactions]
+        eligible = [
+            item for item, assessment in assessed
+            if assessment.get("eligible")
+            and (_parse_date(item.get("transaction_date")) or as_of) <= as_of
+            and (_public_date(item) or as_of) <= as_of
+        ]
         identified = [(item, investor_identity(item)) for item in eligible]
         stable_by_name_owner: dict[tuple[str, str], set[str]] = {}
         for _, identity in identified:
@@ -2202,12 +2310,141 @@ class InvestorEdgeRuntime:
                     key = f"id-{next(iter(stable_ids))}|{group[1]}"
             canonical_keys.append(key)
         counts = Counter(canonical_keys)
-        keys = [key for key, _ in counts.most_common(int(self.config.get("leaderboard_max_investors", 40))) if key]
-        leaderboard = [
-            self.profile_for_investor(key, transactions, as_of=as_of) for key in keys
+        population_limit = max(0, min(1_000, int(self.config.get("leaderboard_max_investors", 40))))
+        keys = sorted((key for key in counts if key), key=lambda key: (-counts[key], key))[
+            :population_limit
         ]
-        leaderboard.sort(key=lambda item: (float(item.get("edge_score") or 50), int(item.get("sample_count") or 0)), reverse=True)
+        # No provider calls occur during discovery, even for sector mappings.
+        # Every selected identity has a real, neutral/building profile on disk
+        # before one investor's market history is attempted.
+        leaderboard = [
+            self.profile_for_investor(key, transactions, as_of=as_of, allow_backfill=False)
+            for key in keys
+        ]
+        self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard)
+        self.save(leaderboard)
+        if allow_backfill and self.enabled:
+            self._backfill_population(keys, transactions, as_of=as_of)
+            self.population_maintenance_complete = True
+            leaderboard = [
+                self.profile_for_investor(key, transactions, as_of=as_of, allow_backfill=False)
+                for key in keys
+            ]
+        leaderboard.sort(key=lambda item: (
+            -float(item.get("edge_score") if item.get("edge_score") is not None else 50),
+            -int(item.get("sample_count") or 0),
+            str(item.get("investor_key") or ""),
+        ))
+        self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard)
+        self.save(leaderboard)
         return leaderboard
+
+    def _backfill_population(
+        self,
+        keys: Sequence[str],
+        transactions: Sequence[Mapping[str, Any]],
+        *,
+        as_of: date,
+    ) -> None:
+        max_history = max(0, min(250, int(self.config.get("max_history_trades", 40))))
+        horizons = list(dict.fromkeys(
+            int(value) for value in (self.config.get("horizons") or [5, 20, 60, 120])
+            if int(value) > 0
+        ))
+        queues: dict[str, list[Mapping[str, Any]]] = {}
+        for key in keys:
+            seeds = [item for item in transactions if investor_key(item) == key]
+            compatible = _matching_investor_records(seeds[-1], transactions) if seeds else []
+            history = sorted(
+                (
+                    item for item in compatible
+                    if _history_trade_eligible(item)
+                    and (_parse_date(item.get("transaction_date")) or as_of) <= as_of
+                    and (_public_date(item) or as_of) <= as_of
+                ),
+                key=lambda item: (
+                    _parse_date(item.get("transaction_date")) or date.min,
+                    str(item.get("trade_id") or ""),
+                ),
+                reverse=True,
+            )[:max_history]
+            ready = []
+            for item in history:
+                can_attempt, cached = self._pending_attempt(item, as_of=as_of, horizons=horizons)
+                if can_attempt:
+                    # Untouched work goes before partial/unavailable retries.
+                    # This also prevents a recent, not-yet-mature trade from
+                    # permanently occupying this identity's first queue slot.
+                    ready.append((item, str(cached.get("last_attempted_as_of") or "")))
+            ready.sort(key=lambda pair: (bool(pair[1]), pair[1]))
+            queues[key] = [item for item, _ in ready]
+
+        order = list(keys)
+        if self.last_backfill_investor_key in order:
+            cursor = order.index(self.last_backfill_investor_key) + 1
+            order = order[cursor:] + order[:cursor]
+        while self.backfill_processed_this_run < self.backfill_limit:
+            attempted_in_round = False
+            for key in order:
+                if self.backfill_processed_this_run >= self.backfill_limit:
+                    break
+                while queues[key]:
+                    item = queues[key].pop(0)
+                    can_attempt, _ = self._pending_attempt(item, as_of=as_of, horizons=horizons)
+                    if not can_attempt:
+                        continue
+                    sector = self._sector_for_trade(item, allow_market=True)
+                    before = self.backfill_processed_this_run
+                    self._observation_for_trade(
+                        item, key=key, sector=sector, as_of=as_of, horizons=horizons
+                    )
+                    if self.backfill_processed_this_run > before:
+                        self.last_backfill_investor_key = key
+                        self._save_observations()
+                        attempted_in_round = True
+                        break
+            if not attempted_in_round:
+                break
+
+    def _update_population_metadata(
+        self,
+        transactions: Sequence[Mapping[str, Any]],
+        assessed: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
+        eligible: Sequence[Mapping[str, Any]],
+        counts: Mapping[str, int],
+        leaderboard: Sequence[Mapping[str, Any]],
+    ) -> None:
+        exclusions = Counter(
+            reason for _, assessment in assessed
+            for reason in assessment.get("excluded_reasons") or []
+        )
+        minimum = max(1, int(self.config.get("minimum_completed_trades", 3)))
+        completed = sum(
+            int(profile.get("backfill_pending_trade_count") or 0) == 0
+            and int(profile.get("sample_count") or 0) >= minimum
+            for profile in leaderboard
+        )
+        branches = Counter(_normal(item.get("branch")).casefold() for item in transactions)
+        self.population_metadata = {
+            "historical_transaction_count": len(transactions),
+            "eligible_purchase_count": len(eligible),
+            "unique_investor_identity_count": sum(bool(key) for key in counts),
+            "published_profile_count": len(leaderboard),
+            "completed_profile_count": completed,
+            "building_profile_count": len(leaderboard) - completed,
+            "backfill_processed_this_run": self.backfill_processed_this_run,
+            "backfill_pending_observation_count": sum(
+                int(profile.get("backfill_pending_trade_count") or 0) for profile in leaderboard
+            ),
+            "backfill_limit_per_run": self.backfill_limit,
+            "network_requests_this_run": self.provider.network_requests,
+            "branch_transaction_counts": {
+                "legislative": branches["legislative"],
+                "executive": branches["executive"],
+            },
+            "excluded_reason_counts": dict(sorted(exclusions.items())),
+            "leaderboard_max_investors": max(0, min(1_000, int(self.config.get("leaderboard_max_investors", 40)))),
+        }
 
     def save(self, leaderboard: Sequence[Mapping[str, Any]] | None = None) -> None:
         self._save_observations()
@@ -2230,6 +2467,7 @@ class InvestorEdgeRuntime:
                     "method_hash": self.method_hash,
                     "generated_utc": _iso_utc(),
                     "investors": list(leaderboard),
+                    **self.population_metadata,
                 },
             )
 
@@ -2548,6 +2786,13 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             if href
             else "—"
         )
+        if href:
+            from urllib.parse import urlencode
+            vault_query = urlencode({"url": href})
+            source_html = (
+                f"<span class='filing-actions'><a href='filing-vault.html?{html.escape(vault_query, quote=True)}'>View Filing</a> "
+                f"<a href='{html.escape(href, quote=True)}' target='_blank' rel='noopener noreferrer'>Official Source</a></span>"
+            )
         counts = counts_toward_edge(trade)
         counts_text = "Yes" if counts is True else "No" if counts is False else "—"
         exclusions = trade.get("excluded_reasons") or []
@@ -2610,6 +2855,51 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         else []
     )
     investors = public_payload({"investors": [dict(item) for item in investors if isinstance(item, Mapping)]})["investors"]
+    # The durable producer owns population accounting. Never infer zero pending
+    # work (or completed coverage) from a legacy publication without telemetry.
+    history_fields = (
+        "historical_transaction_count", "eligible_purchase_count",
+        "unique_investor_identity_count", "published_profile_count",
+        "completed_profile_count", "building_profile_count",
+        "backfill_processed_this_run", "backfill_pending_observation_count",
+        "backfill_limit_per_run", "network_requests_this_run",
+    )
+    source_metadata = leaderboard_payload if isinstance(leaderboard_payload, dict) else {}
+
+    def history_count(value: Any) -> int | None:
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+    history = {key: history_count(source_metadata.get(key)) for key in history_fields}
+    branches = source_metadata.get("branch_transaction_counts")
+    history["branch_transaction_counts"] = {
+        branch: history_count(branches.get(branch)) if isinstance(branches, Mapping) else None
+        for branch in ("legislative", "executive")
+    }
+    exclusions = source_metadata.get("excluded_reason_counts")
+    history["excluded_reason_counts"] = public_payload({
+        str(key): count for key, value in exclusions.items()
+        if (count := history_count(value)) is not None
+    }) if isinstance(exclusions, Mapping) else None
+    pending_count = history["backfill_pending_observation_count"]
+    history_status = (
+        "Historical backfill status unavailable" if pending_count is None
+        else "Historical backfill in progress" if pending_count > 0
+        else "Historical backfill current"
+    )
+
+    def history_value(key: str) -> str:
+        value = history.get(key)
+        return "Unavailable" if value is None else integer_cell(value)
+
+    history_facts = "".join(
+        f"<div><dt>{label}</dt><dd>{history_value(key)}</dd></div>"
+        for key, label in (
+            ("published_profile_count", "Profiles"), ("completed_profile_count", "Complete"),
+            ("building_profile_count", "Building"), ("historical_transaction_count", "Historical trades"),
+            ("backfill_processed_this_run", "Processed this run"),
+            ("backfill_pending_observation_count", "Pending observations"),
+        )
+    )
     generated = (
         str((leaderboard_payload or {}).get("generated_utc") or _iso_utc())
         if isinstance(leaderboard_payload, dict)
@@ -2733,6 +3023,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             f"<td>{confidence_cell(item)}</td>"
             f"<td>{integer_cell(sample_number)}"
             + (f"<small class='history-building'>Building history — insufficient completed observations (n = {integer_cell(sample_number)})</small>" if not has_observations or (sample_number is not None and sample_number < 3) else "")
+            + (f"<small class='history-building'>Historical observations pending: {integer_cell(item.get('backfill_pending_trade_count'))}</small>" if (history_count(item.get('backfill_pending_trade_count')) or 0) > 0 else "")
             + "</td>"
             f"{horizon_cells}"
             f"<td class='{_heat_class(hit_value, neutral=50.0)}'>{'—' if hit_value is None else f'{hit_value:.1f}%'}</td>"
@@ -2772,10 +3063,16 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
   <article class='metric-card'><span>Positive edge</span><strong>{sum(value > 55 for value in valid_edges)}</strong></article>
   <article class='metric-card'><span>Generated</span><strong class='date'>{text_cell(generated)}</strong></article>
 </section>
+<section class='panel edge-bootstrap' aria-labelledby='edge-bootstrap-title'>
+  <div class='panel-header'><h2 id='edge-bootstrap-title'>Investor Edge History</h2><span id='edge-bootstrap-status' class='status' role='status'>{history_status}</span></div>
+  <dl class='facts edge-history-counts'>{history_facts}</dl>
+  <p>Eligible purchases: {history_value('eligible_purchase_count')} · Eligible filer / owner identities: {history_value('unique_investor_identity_count')} · Legislative trades: {integer_cell(history['branch_transaction_counts']['legislative'])} · Executive trades: {integer_cell(history['branch_transaction_counts']['executive'])}</p>
+  <p>Observation budget per run: {history_value('backfill_limit_per_run')} · Market requests this run: {history_value('network_requests_this_run')}. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns. Complete profiles meet the sample minimum and have no pending historical observations.</p>
+</section>
 <section class='panel'>
   <div class='panel-header'><div><h2>Investor performance heat map</h2><p>5/20/60/120-session values are average benchmark-relative returns from the first trading session after public observation. Open a drilldown to inspect transaction- and post-disclosure evidence.</p></div></div>
   <label class='search-label' for='edge-search'>Filter investors and historical trades<input id='edge-search' type='search' placeholder='Identity, filer, owner, ticker, sector…' autocomplete='off'></label>
-  <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Investor Edge leaderboard with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>Investor Edge has no scored historical observations yet. Profiles will populate as cached historical prices become available.</td></tr>"}</tbody></table></div>
+  <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Investor Edge leaderboard with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>No investor profiles are currently published. Check eligibility and retained historical coverage above; missing population telemetry is unavailable.</td></tr>"}</tbody></table></div>
 </section>
 <section class='panel methodology'><h2>Methodology</h2><p>Each filer + disclosed owner is scored separately. Returns are benchmarked to a sector ETF when the industry mapping is sufficiently confident, otherwise SPY. Historical outcomes are measured from the transaction date and from the first session after public observation. The score weights followable alpha 45%, picker alpha 20%, hit rate 15%, consistency 10%, and sector skill 10%, then shrinks small samples toward 50.</p></section>
 </main>
@@ -2911,7 +3208,7 @@ if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); fil
     (output_dir / "investor-edge.js").write_text(js, encoding="utf-8")
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_json(data_dir / "investor-edge.json", {"generated_utc": generated, "investors": investors})
+    _atomic_json(data_dir / "investor-edge.json", {"generated_utc": generated, "investors": investors, **history})
 
     index_path = output_dir / "index.html"
     if index_path.exists():

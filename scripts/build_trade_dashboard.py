@@ -17,9 +17,11 @@ from typing import Any, Iterable, Mapping, Sequence
 try:  # Support both package and direct-script execution.
     from .investor_edge import build_dashboard_addon
     from .dashboard_insights import build_insights, public_payload, review_rows
+    from .filing_resources import filing_catalog, attach_filing_ids, api_origin
 except ImportError:  # pragma: no cover - direct execution path
     from investor_edge import build_dashboard_addon  # type: ignore
     from dashboard_insights import build_insights, public_payload, review_rows  # type: ignore
+    from filing_resources import filing_catalog, attach_filing_ids, api_origin  # type: ignore
 
 DEFAULT_OUTPUT = Path("trade-dashboard-site")
 
@@ -728,6 +730,9 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
     # Public projection only; never publish private delivery payloads or modify inputs.
     payload = public_payload(payload)
     payload["reviews"] = review_rows(payload)
+    catalog = filing_catalog(payload)
+    payload = attach_filing_ids(payload, catalog)
+    vault_origin = api_origin(os.environ.get("FILING_VAULT_API_ORIGIN", ""))
     output_dir = output_dir.resolve()
     parent = output_dir.parent
     parent.mkdir(parents=True, exist_ok=True)
@@ -736,7 +741,9 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
         data_dir = temp_dir / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         write_json(data_dir / "summary.json", payload["summary"])
-        insights = build_insights(payload)
+        write_json(data_dir / "filing-resources.json", catalog)
+        write_json(data_dir / "filing-vault-config.json", {"api_origin": vault_origin})
+        insights = attach_filing_ids(build_insights(payload), catalog)
         (data_dir / "dashboard-insights.json").write_text(json.dumps(insights, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
         write_json(data_dir / "filings.json", payload["filings"])
         write_json(data_dir / "transactions.json", payload["transactions"])
@@ -760,6 +767,15 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
         (temp_dir / "wallboard.html").write_text(WALLBOARD_HTML, encoding="utf-8")
         (temp_dir / "wallboard.css").write_text(WALLBOARD_CSS, encoding="utf-8")
         (temp_dir / "wallboard.js").write_text(WALLBOARD_JS, encoding="utf-8")
+        vault_html = (ASSET_DIR / "filing-vault.html").read_text(encoding="utf-8")
+        if vault_origin:
+            vault_html = vault_html.replace("connect-src 'self';", f"connect-src 'self' {vault_origin};")
+        (temp_dir / "filing-vault.html").write_text(vault_html, encoding="utf-8")
+        (temp_dir / "filing-vault.css").write_text((ASSET_DIR / "filing-vault.css").read_text(encoding="utf-8"), encoding="utf-8")
+        (temp_dir / "filing-vault.js").write_text(_SHARED_JS + "\n" + (ASSET_DIR / "filing-vault.js").read_text(encoding="utf-8"), encoding="utf-8")
+        shutil.copyfile(ASSET_DIR / "filing-pdf.js", temp_dir / "filing-pdf.js")
+        shutil.copyfile(ASSET_DIR / "filing-pdf.css", temp_dir / "filing-pdf.css")
+        shutil.copytree(ASSET_DIR / "vendor" / "pdfjs", temp_dir / "vendor" / "pdfjs")
         (temp_dir / ".nojekyll").write_text("", encoding="utf-8")
         if output_dir.exists():
             shutil.rmtree(output_dir)

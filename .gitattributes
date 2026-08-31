@@ -1,0 +1,2 @@
+# Preserve upstream renderer bytes and their integrity manifest on every platform.
+scripts/dashboard_assets/vendor/pdfjs/** -text

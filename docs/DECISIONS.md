@@ -350,9 +350,161 @@ does not resolve the separate obsolete queue or physical-device acceptance gates
 ZIP hashes and inventories before and after publication, and verify the deployed
 artifact/build and live content. Keep issues #4 and #6 open for outstanding device
 acceptance. No collector, AI, simulation or external-alert dispatch is authorized
-by this UI publication decision. Publication remains pending until verified.
+by this UI publication decision. PR #10 merged as `9d9e7be`; PR/main CI and
+Pages run `33385044313` / attempt 1 succeeded. Post-deployment audit verified all
+21 live files against artifact `9755242103`, exact consumed inputs, unchanged
+protected inventories and simulator history. Physical-device acceptance remains
+open. The final documentation-only evidence was prepared in an isolated worktree
+because another task switched the shared checkout.
 
-## D-2026-08-31-025 — Keep one measured dashboard shell and the document scroller
+## D-2026-08-31-025 — Present Operations run history newest first
+
+**Decision:** Issue #12 orders a copied health timeline by the actual retained
+execution timestamp, descending, with stable descending run ID and URL ties.
+Use a valid finish timestamp, falling back to a valid start timestamp when needed;
+undated records follow dated records. The shared Overview preview uses the same
+ordering as Operations.
+
+**Reason:** The renderer reversed the model's already newest-first history.
+Explicit datetime ordering also handles ascending or mixed API results without
+reversing CSS, focus order, labels or record links.
+
+**Consequence:** Native horizontal scrolling moves toward older runs on the right.
+Each refresh starts at the latest item. Source arrays, stored chronology,
+health status, schedules and state writers remain unchanged. No extra chronology
+copy, slider controls or selection state is introduced. Native Node regression
+checks complement optional DOM tests in the existing watched dashboard CI test file.
+
+## D-2026-08-31-026 — Bootstrap retained history without creating new events
+
+**Decision:** Issue #11 uses the combined normalized Legislative/Executive
+transaction universe independently of AI candidate selection. Discover and
+persist all configured historical profiles before bounded breadth-first market
+work; retain a deterministic investor cursor and cache-only continuation when
+network capacity is exhausted. Keep scoring, time censoring and all existing
+40/40/30/40/2,200 defaults unchanged.
+
+**Reason:** Provenance-verified production artifacts held only one eligible
+purchase/identity, while 5,066 cataloged filings had no normalized transactions.
+Main already refreshed globally from both branches; ordinary baseline/unseen-only
+tracking never reconstructed the cataloged history. Sequential market processing
+and missing population telemetry made the sparse result harder to diagnose.
+
+**Consequence:** Existing tracker writers get a separate 20-filing bounded
+historical pass using official scanners and original-document caches validated
+by source identity, contained path and SHA-256. Access-request listings remain
+blocked without legitimately available originals. Preserve parser IDs, original
+observation timestamps, baselines and all prior ledger/seen state. Append silent
+`historical_bootstrap` records and receipts; exclude them from new filing alerts,
+model candidate/reanalysis selection, candidate upgrades/delivery and new local
+Notification Center events. Partial parsing and missing prices remain explicitly
+pending or blocked; no fabricated returns or completed-history claim is allowed.
+
+Candidate-specific Edge failure remains fail-open, but global population
+initialization/refresh/persistence is required for a successful AI state writer.
+Initial maintenance failure stops candidate/market work. Pending and newly queued
+candidate alerts use the existing bounded channel-deduplicated path only after
+final maintenance succeeds and no earlier errors remain. This prevents the new
+fatal maintenance gate from knowingly sending alerts in an unpublishable run;
+it does not claim an atomic transaction across GitHub artifacts and external
+delivery services.
+
+The root and standalone dashboards publish full bounded profiles and actual
+population/backfill metadata independently of qualifying signals. Unknown legacy
+counts stay unknown. Workflow changes are coverage-only; no extra schedule,
+writer, protected artifact or hosting path is introduced. Local acceptance
+produced 17 building profiles and 122 pending observations from real artifact
+copies. That local checkpoint did not establish deployment or live pending
+reduction; the existing manual-production, held-PR and cutover gates are not relaxed.
+
+
+Release authorization: the owner requested “Release the commit”. Integrate the
+already-approved Operations ordering change from canonical main, retain both
+regression suites, and publish through the existing PR/CI/Pages path. This does
+not authorize a new manual production or simulation run or relax existing gates.
+
+Release verification: PR #15 merged as `676701a`; integrated PR/main CI and the
+automatic Pages publication succeeded. The deployed tree matches the tested head
+and both dashboard surfaces were verified live. Production population progress
+still requires subsequent normal writer evidence; local acceptance is not live state.
+
+## D-2026-08-31-027 — Publish approved Operations ordering through canonical Pages
+
+**Decision:** The owner's explicit “Merge and publish” instruction authorizes
+merging tested PR #14 and dispatching the existing read-only Pages workflow on
+canonical `main`, without a production writer or workflow/configuration change.
+
+**Reason:** The narrow presentation fix has local regression coverage and exact
+PR/main CI evidence. The existing publisher's push paths do not include its
+frontend asset, so publication needs an explicit dispatch of that same workflow.
+
+**Consequence:** PR #14 merged as `7a1108f`; main CI `33390543725` and Pages
+`33390642511` succeeded on attempt 1. Artifact `9757309134` matches all 28 live
+public files. Pre/postflight checks verified exact consumed producer attempts,
+global high-water marks and unchanged protected payloads. The current two-entry
+simulator history stayed unchanged; its immediate-predecessor prefix check passed.
+The separately recorded historical rewrite concern remains unresolved before
+future manual simulator work. Publication does not close physical-device acceptance, obsolete queue,
+cutover, repository rename/privacy or external-delivery work. Release evidence is
+recorded in a documentation-only successor after deployment, preserving the
+concurrently used shared checkout and unrelated branches.
+
+The concurrent approved Investor Edge release subsequently published `676701ac`
+through Pages `33391179240` / attempt 1, artifact `9757512563`. It contains the
+unchanged Operations implementation, verified in all generated script bundles and
+in a fresh live browser at desktop/mobile widths. Current protected inputs remain
+unchanged. This documentation successor integrates both releases on top of
+`895bc57`, preserving decision 026 and all production-acceptance gates; neither
+publication establishes live Investor Edge population or market backlog progress.
+
+## D-2026-08-31-028 — Keep raw Filing Vault evidence in private runtime storage
+
+**Decision:** Issue #13 adds the Vault to the existing Flask/SQLAlchemy/Supabase
+architecture and links it from the existing generated dashboard. Private runtime
+objects and additive vault tables are separate from all protected tracker artifacts.
+GitHub/Pages contain code and safe metadata only, never cached government documents.
+
+**Reason:** Static Pages cannot safely implement persistent server retrieval,
+acknowledgement enforcement, hash validation, expiration and source access gates.
+An optional runtime preserves the existing deployment and ingestion contracts.
+
+**Consequence:** Absolute retention is 30 days from actual retrieval; metadata checks
+do not renew it. Exact IDs and immutable version/source snapshots survive expiration.
+Government requirements remain distinct from the versioned PolitiTrack notice.
+Synthetic records are rejected by server admission, and no simulation gets Vault
+credentials. Known request-only disclosures remain request-only. Source endpoint
+checks never pretend to discover separate amendments without authoritative catalog
+relationships. Local PDF.js rendering preserves original bytes and avoids blank
+native embeds; its code assets and licenses are pinned locally. API/storage
+configuration, verified catalog delivery, runtime timer installation and publication
+must be verified separately before the feature can be described as operational.
+
+## D-2026-08-31-029 — Publish the approved Filing Vault through canonical Pages
+
+**Decision:** The owner's explicit Publish instruction authorizes pushing the
+Vault branch, canonical PR/CI, merge and the existing read-only Pages publisher.
+Preserve current main's Operations-history and Investor Edge fixes and all previous
+release evidence.
+
+**Reason:** The implemented source-aware runtime and integrated interface can be
+released without changing protected state. Deployment status must still distinguish
+published code/catalog UI from configured, operational cached-document retrieval.
+
+**Consequence:** Require successful CI on the exact integrated source, validated
+protected producer attempts/high-water marks, and verified Pages artifact/live
+content. With no runtime configuration, publish the honest catalog-only state;
+never invent API/storage credentials, source acknowledgements or cached availability.
+No production writer, simulation or real alert dispatch is authorized. Keep issue
+#13 open until private runtime and source/device acceptance are verified.
+
+Release verification: PR #16 merged as `104fc51` with a tree identical to tested
+`7553499`. PR/main CI and Pages `33392608680` / attempt 1 succeeded. The live
+catalog/viewer is published while private retrieval remains inactive; build
+configuration contains no API origin. Protected producer attempts, artifacts and
+retained simulator history remain unchanged. Runtime/source/device acceptance
+stays open in issue #13; this publication cannot be described as an operating cache.
+
+## D-2026-08-31-030 — Keep one measured dashboard shell and the document scroller
 
 **Decision:** Implement persistent navigation in the existing shared dashboard
 shell. Observe the header's actual border-box height and share that measurement
@@ -361,17 +513,40 @@ offset. Keep the document as the main content scroller. Only the persistent
 Workspace panel receives independent vertical overflow, and only while its
 desktop layout applies; preserve the existing narrow-screen navigation.
 
-**Reason:** Header wrapping, viewport changes and zoom make a fixed guessed offset
-unreliable. A shared shell keeps all dashboard routes consistent without route
-copies or an additional scrolling page wrapper. Removing the shell's table height
-cap avoids a third vertical scroll context while preserving horizontal access to
-wide records. Native dialog/popover layering and the existing shared tooltip
-remain above the pinned header and sidebar.
+**Reason:** Header wrapping, viewport changes and zoom make a guessed fixed offset
+unreliable. A shared shell keeps all six dashboard hash routes consistent without
+route copies or an additional scrolling page wrapper. Removing the shell's table
+height cap avoids a third vertical scroll context while preserving horizontal
+access to wide records. Native dialog/popover layering and the existing shared
+tooltip remain above the pinned header and sidebar.
 
-**Consequence:** Preserve existing branding, controls, navigation semantics, focus
-order and responsive breakpoints. Change only presentation assets, related
-frontend fixtures and project records; do not change workflows, collectors,
-scores, state, alerts, simulation contracts or hosting. Local validation and
-rendered acceptance must be reported separately from publication. The prior
-review UX authorization under decision 024 was fulfilled by PR #10 and Pages run
-`33385044313`; it does not authorize publishing this new shell payload.
+**Consequence:** Preserve branding, controls, navigation semantics, focus order
+and breakpoints, including current main's seven-link Workspace and separate
+Filing Vault page. Scope the shell class to the root dashboard. Change only
+presentation assets, related frontend fixtures and project records; preserve
+upstream workflows, collectors, scores, state, alerts, simulations and hosting.
+Report local, integrated, deployed and physical-device validation separately.
+This shell decision was locally numbered 025 before integration; published
+Operations decision 025 and subsequent decisions 026–029 retain their identities.
+
+## D-2026-08-31-031 — Deploy the approved persistent shell through canonical Pages
+
+**Decision:** The owner's explicit **Deploy** instruction authorizes publishing
+the tested shell through a canonical pull request, successful CI, merge and the
+existing read-only Pages publisher. Integrate the already-approved Operations,
+Investor Edge and Filing Vault releases from main without reverting their changes
+or discarding their release and continuity evidence.
+
+**Reason:** The shell can be deployed without a production writer or changed
+workflow configuration. Asset-only changes require explicit dispatch of the
+existing publisher when its unchanged push-path filter does not trigger a run.
+The owner authorized deployment after native-input/device limitations were reported.
+
+**Consequence:** Validate the exact combined source, protected producer attempts,
+ancestry and high-water marks; require successful canonical CI and independently
+verify the Pages artifact, consumed inputs and live content. Record exact release
+IDs after verification. This checkpoint records authorization and integration,
+not a completed deployment. No production writer, simulation, external alert,
+private Vault runtime activation, repository setting or rebaseline is authorized.
+Device acceptance, obsolete queues, historical simulator concerns, held PR #3,
+cutover and external-delivery proof remain separate open work.

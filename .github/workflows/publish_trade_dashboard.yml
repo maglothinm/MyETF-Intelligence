@@ -468,6 +468,9 @@ jobs:
 
       - name: Build searchable dashboard
         shell: bash
+        env:
+          # Public API origin only. All Vault credentials stay on its runtime host.
+          FILING_VAULT_API_ORIGIN: ${{ vars.FILING_VAULT_API_ORIGIN }}
         run: |
           python scripts/build_trade_dashboard.py \
             --legislative-dir dashboard-input/legislative \
@@ -484,6 +487,13 @@ jobs:
           test -s trade-dashboard-site/wallboard.html
           test -s trade-dashboard-site/wallboard.css
           test -s trade-dashboard-site/wallboard.js
+          test -s trade-dashboard-site/filing-vault.html
+          test -s trade-dashboard-site/filing-vault.js
+          test -s trade-dashboard-site/filing-pdf.js
+          test -s trade-dashboard-site/filing-pdf.css
+          test -s trade-dashboard-site/vendor/pdfjs/pdf.mjs
+          test -s trade-dashboard-site/vendor/pdfjs/pdf.worker.mjs
+          test -s trade-dashboard-site/data/filing-resources.json
           test -s trade-dashboard-site/investor-edge.html
           test -s trade-dashboard-site/investor-edge.css
           test -s trade-dashboard-site/investor-edge.js

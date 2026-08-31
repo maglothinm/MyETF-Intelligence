@@ -19,6 +19,9 @@ from scripts.ai_filing_analyst import (
     deterministic_score,
     eligible_trade,
     is_official_disclosure_url,
+    historical_trade_id,
+    load_complete_retained_transaction_history,
+    load_tracker_data,
     load_state,
     load_rules,
     open_paper_position,
@@ -28,6 +31,7 @@ from scripts.ai_filing_analyst import (
     repeated_same_direction_count,
     run_analyst,
     save_state,
+    select_new_analysis_candidates,
     signal_direction,
     update_paper_positions,
 )
@@ -146,6 +150,204 @@ def config_for(tmp_path: Path) -> AnalystConfig:
         max_ocr_pages=75,
         request_timeout=(1.0, 1.0),
     )
+
+
+def test_canonical_history_combines_both_branches_without_candidate_truncation(tmp_path: Path) -> None:
+    cfg = replace(config_for(tmp_path), max_analyses=1)
+    trades = [dict(sample_trade(), trade_id=f"trade:history-{index}", filer=f"Retained Filer {index}",
+                   branch="legislative" if index < 2 else "executive",
+                   source="house" if index < 2 else "oge") for index in range(4)]
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", trades[:2])
+    write_jsonl(cfg.executive_dir / "transactions.jsonl", trades[2:])
+    history, _ = load_complete_retained_transaction_history(cfg)
+    candidates, skipped = select_new_analysis_candidates(history, cfg, AIState(), "rules")
+    assert len(candidates) == 1 and skipped == 0
+    assert len(history) == 4
+    assert {trade["branch"] for trade in history} == {"legislative", "executive"}
+    assert {trade["trade_id"] for trade in history} == {trade["trade_id"] for trade in trades}
+    for original in trades:
+        loaded = next(trade for trade in history if trade["trade_id"] == original["trade_id"])
+        assert all(loaded[key] == value for key, value in original.items())
+
+
+def test_history_deduplicates_overlap_and_prefers_normalized_ledger(tmp_path: Path) -> None:
+    cfg = config_for(tmp_path)
+    original = sample_trade()
+    stale_purchase = dict(original, parse_confidence="low", equity_like=False)
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", [original, original])
+    write_jsonl(cfg.legislative_dir / "purchases.jsonl", [stale_purchase])
+    write_jsonl(cfg.executive_dir / "purchases.jsonl", [stale_purchase])
+    history, _ = load_complete_retained_transaction_history(cfg)
+    assert len(history) == 1
+    assert history[0]["trade_id"] == original["trade_id"]
+    assert history[0]["parse_confidence"] == "high"
+    assert history[0]["equity_like"] is True
+    assert {origin["ledger"] for origin in history[0]["history_provenance"]} == {
+        "transactions.jsonl", "purchases.jsonl"
+    }
+
+
+def test_legacy_id_fallback_is_deterministic_and_owner_specific(tmp_path: Path) -> None:
+    cfg = config_for(tmp_path)
+    old = sample_trade()
+    old.pop("trade_id")
+    spouse = dict(old, owner="Spouse")
+    joint = dict(old, owner="Joint")
+    dependent = dict(old, owner="Dependent")
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", [old, spouse, joint, dependent, old])
+    write_jsonl(cfg.executive_dir / "transactions.jsonl", [old])
+    first, _ = load_complete_retained_transaction_history(cfg)
+    second, _ = load_complete_retained_transaction_history(cfg)
+    assert first == second and len(first) == 4
+    assert len({trade["trade_id"] for trade in first}) == 4
+    assert historical_trade_id(old) == historical_trade_id(dict(old, observed_at_utc="2026-08-30T00:00:00Z"))
+    assert all(trade["trade_id"].startswith("historical-trade:") for trade in first)
+    assert all(trade["trade_id_origin"] == "historical_fallback_v1" for trade in first)
+    assert "trade_id" not in old
+
+
+def test_history_retains_first_observation_and_purchase_only_compatibility(tmp_path: Path) -> None:
+    old = sample_trade()
+    later = dict(old, observed_at_utc="2026-08-31T11:00:00Z", comment="retained later parse")
+    write_jsonl(tmp_path / "transactions.jsonl", [old, later])
+    fallback = dict(old, trade_id="trade:pre-ledger", branch="")
+    write_jsonl(tmp_path / "purchases.jsonl", [fallback])
+    history, _ = load_tracker_data(tmp_path, branch="legislative")
+    primary = next(row for row in history if row["trade_id"] == old["trade_id"])
+    assert primary["observed_at_utc"] == old["observed_at_utc"]
+    assert primary["comment"] == later["comment"]
+    assert len(history) == 2 and all(row["branch"] == "legislative" for row in history)
+
+
+def test_legacy_fallback_uses_available_report_provenance() -> None:
+    old = sample_trade()
+    old.pop("trade_id")
+    old.pop("report_id")
+    other_report = dict(old, source_url="https://example.test/other-retained-filing.pdf")
+    assert historical_trade_id(old) != historical_trade_id(other_report)
+    assert historical_trade_id(dict(old, filing_key="house|old-one")) != historical_trade_id(
+        dict(old, filing_key="house|old-two")
+    )
+
+
+def test_zero_candidates_still_publishes_entire_historical_population(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = replace(config_for(tmp_path), suppress_alerts=False, reanalyze_existing=True,
+                  pushover_api_token="test-only-token", pushover_user_key="test-only-user")
+    monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "true")
+    history = [dict(sample_trade(), trade_id=f"trade:bootstrap-{index}",
+                    filer=f"Historical Filer {index}", historical_bootstrap=True,
+                    source="house" if index < 2 else "oge",
+                    branch="legislative" if index < 2 else "executive") for index in range(4)]
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", history[:2])
+    write_jsonl(cfg.executive_dir / "transactions.jsonl", history[2:])
+
+    def forbidden(*_args: object, **_kwargs: object) -> object:
+        pytest.fail("A zero-candidate historical maintenance run must not use AI/SEC/alerts")
+
+    for name in ("openai_analyze", "load_sec_ticker_map", "market_context", "notify_candidate"):
+        monkeypatch.setattr(f"scripts.ai_filing_analyst.{name}", forbidden)
+    monkeypatch.setattr("scripts.ai_filing_analyst.requests.post", forbidden)
+    first = run_analyst(cfg)
+    assert first.success and first.completed_count == first.attempted_count == first.alerted_count == 0
+    assert first.historical_transaction_count == first.historical_bootstrap_transaction_count == 4
+    profiles = json.loads((cfg.ai_dir / "investor-edge-profiles.json").read_text())["profiles"]
+    leaderboard = json.loads((cfg.ai_dir / "investor-edge-leaderboard.json").read_text())
+    assert len(profiles) == len(leaderboard["investors"]) == 4
+    assert leaderboard["branch_transaction_counts"] == {"legislative": 2, "executive": 2}
+    assert leaderboard["building_profile_count"] == 4
+    assert not (cfg.ai_dir / "analyses.jsonl").exists()
+    saved_state = json.loads((cfg.ai_dir / "state.json").read_text())
+    assert saved_state["completed_analysis_ids"] == saved_state["candidate_alert_deliveries"] == {}
+    second = run_analyst(cfg)
+    assert second.success and second.completed_count == second.alerted_count == 0
+    assert len(json.loads((cfg.ai_dir / "investor-edge-leaderboard.json").read_text())["investors"]) == 4
+
+
+def test_historical_bootstrap_cannot_queue_candidate_alerts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts.ai_filing_analyst import _queue_candidate_alert, notify_candidate
+    cfg = replace(config_for(tmp_path), suppress_alerts=False,
+                  pushover_api_token="test-only-token", pushover_user_key="test-only-user")
+    state = AIState()
+    historical = {"historical_bootstrap": True, "trade_id": "trade:old", "classification": "high_priority"}
+    monkeypatch.setattr("scripts.ai_filing_analyst.requests.post", lambda *_a, **_k: pytest.fail("No old-history alerts"))
+    assert _queue_candidate_alert(cfg, historical, state) is None
+    assert notify_candidate(cfg, historical, state=state) is False
+    assert state.candidate_alert_deliveries == {}
+
+
+@pytest.mark.parametrize("failure", ["refresh", "save"])
+@pytest.mark.parametrize("phase", ["initial", "final"])
+def test_global_maintenance_failure_cannot_be_a_successful_state_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str, phase: str
+) -> None:
+    from scripts.ai_filing_analyst import InvestorEdgeRuntime
+
+    class BrokenRuntime:
+        enabled = True
+        refresh_count = 0
+        save_count = 0
+
+        def refresh_leaderboard(self, *_args: object, **_kwargs: object) -> list:
+            self.refresh_count += 1
+            if failure == "refresh" and self.refresh_count == (1 if phase == "initial" else 2):
+                raise RuntimeError("global history refresh failed")
+            return []
+
+        def save(self, *_args: object) -> None:
+            self.save_count += 1
+            if failure == "save" and self.save_count == (1 if phase == "initial" else 2):
+                raise OSError("durable history write failed")
+
+    cfg = replace(config_for(tmp_path), suppress_alerts=False)
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", [
+        dict(sample_trade(), historical_bootstrap=phase == "final")
+    ])
+    cfg.ai_dir.mkdir(parents=True)
+    saved_success = "2026-08-20T00:00:00Z"
+    save_state(cfg.ai_dir / "state.json", AIState(last_success_utc=saved_success))
+    monkeypatch.setattr(InvestorEdgeRuntime, "create", lambda **_kwargs: BrokenRuntime())
+    for name in ("_retry_pending_candidate_alerts", "notify_candidate", "requests.post"):
+        monkeypatch.setattr(f"scripts.ai_filing_analyst.{name}",
+                            lambda *_a, **_k: pytest.fail("No alerts in a failed maintenance run"))
+    if phase == "initial":
+        for name in ("openai_analyze", "load_sec_ticker_map", "market_context", "update_paper_positions"):
+            monkeypatch.setattr(f"scripts.ai_filing_analyst.{name}",
+                                lambda *_a, **_k: pytest.fail("Stop work after initial maintenance failure"))
+    result = run_analyst(cfg)
+    assert not result.success
+    assert result.attempted_count == result.alerted_count == 0
+    assert result.investor_edge_maintenance_status == "failed"
+    assert any("must not be promoted" in error for error in result.errors)
+    assert json.loads((cfg.ai_dir / "state.json").read_text())["last_success_utc"] == saved_success
+    run = json.loads((cfg.ai_dir / "runs.jsonl").read_text().splitlines()[-1])
+    assert run["investor_edge_maintenance_status"] == "failed" and not run["success"]
+
+
+def test_zero_unanalyzed_candidates_refreshes_existing_normal_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.ai_filing_analyst import json_hash
+    cfg = config_for(tmp_path)
+    monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "true")
+    history = [dict(sample_trade(), trade_id=f"trade:already-analyzed-{index}",
+                    filer=f"Retained Filer {index}") for index in range(4)]
+    write_jsonl(cfg.legislative_dir / "transactions.jsonl", history)
+    cfg.ai_dir.mkdir(parents=True)
+    rules_hash = json_hash(load_rules(cfg.rules_path))
+    save_state(cfg.ai_dir / "state.json", AIState(completed_analysis_ids={
+        analysis_id_for_trade(trade, model=cfg.model, rules_hash=rules_hash): "2026-08-28T00:00:00Z"
+        for trade in history
+    }))
+    for name in ("openai_analyze", "load_sec_ticker_map", "market_context"):
+        monkeypatch.setattr(f"scripts.ai_filing_analyst.{name}", lambda *_a, **_k: pytest.fail("No candidate work expected"))
+    result = run_analyst(cfg)
+    assert result.success and result.investor_edge_maintenance_status == "complete"
+    assert result.skipped_existing_count == 4 and result.attempted_count == 0
+    assert result.historical_bootstrap_transaction_count == 0
+    leaderboard = json.loads((cfg.ai_dir / "investor-edge-leaderboard.json").read_text())
+    assert leaderboard["published_profile_count"] == 4
 
 
 def test_deterministic_score_and_entry_plan_are_bounded() -> None:
@@ -537,8 +739,23 @@ def test_ai_batch_stops_after_first_quota_failure(
     )
 
 
-def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("fail_final_publication", [False, True])
+def test_full_run_is_incremental_and_opens_paper_position(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_final_publication: bool
+) -> None:
     cfg = replace(config_for(tmp_path), suppress_alerts=False)
+    if fail_final_publication:
+        from scripts.ai_filing_analyst import maintain_investor_edge
+        cfg = replace(cfg, pushover_api_token="test-token", pushover_user_key="test-user")
+
+        def fail_final_maintenance(*args: object, **kwargs: object) -> bool | None:
+            if kwargs.get("allow_backfill") is False:
+                return False
+            return maintain_investor_edge(*args, **kwargs)
+
+        monkeypatch.setattr("scripts.ai_filing_analyst.maintain_investor_edge", fail_final_maintenance)
+        monkeypatch.setattr("scripts.ai_filing_analyst.requests.post",
+                            lambda *_a, **_k: pytest.fail("No candidate send before final publication"))
     monkeypatch.setenv("INVESTOR_EDGE_ENABLED", "true")
     write_jsonl(cfg.legislative_dir / "transactions.jsonl", [sample_trade()])
     write_jsonl(cfg.legislative_dir / "filings.jsonl", [sample_filing()])
@@ -587,6 +804,14 @@ def test_full_run_is_incremental_and_opens_paper_position(tmp_path: Path, monkey
             self.responses = FakeResponses()
 
     first = run_analyst(cfg, client_factory=FakeClient)
+    if fail_final_publication:
+        assert not first.success and first.investor_edge_maintenance_status == "failed"
+        assert first.completed_count == 1 and first.alerted_count == 0
+        state = json.loads((cfg.ai_dir / "state.json").read_text())
+        assert state["last_success_utc"] is None
+        assert len(state["candidate_alert_deliveries"]) == 1
+        assert all(not row["delivered_channels"] for row in state["candidate_alert_deliveries"].values())
+        return
     assert first.success is True
     assert first.completed_count == 1
     assert first.high_priority_count == 1
