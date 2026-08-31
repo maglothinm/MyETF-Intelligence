@@ -350,4 +350,9 @@ does not resolve the separate obsolete queue or physical-device acceptance gates
 ZIP hashes and inventories before and after publication, and verify the deployed
 artifact/build and live content. Keep issues #4 and #6 open for outstanding device
 acceptance. No collector, AI, simulation or external-alert dispatch is authorized
-by this UI publication decision. Publication remains pending until verified.
+by this UI publication decision. PR #10 merged as `9d9e7be`; PR/main CI and
+Pages run `33385044313` / attempt 1 succeeded. Post-deployment audit verified all
+21 live files against artifact `9755242103`, exact consumed inputs, unchanged
+protected inventories and simulator history. Physical-device acceptance remains
+open. The final documentation-only evidence was prepared in an isolated worktree
+because another task switched the shared checkout.

@@ -3,129 +3,103 @@
 Updated: **2026-08-31 UTC**
 Work record: **issue #4 — dashboard UX; issue #6 — shared contextual help**
 
-## Current task and delivered state
+## Current task — published and verified
 
-Publish the tested parser-exception, Review Source and Workspace-help UX through
-the existing canonical PR/CI and read-only Pages workflow. The owner explicitly
-requested “Publish” after local implementation and device limitations were
-reported. No further publication approval is needed for this payload.
+The owner's “Publish” request is complete. PR
+[#10](https://github.com/maglothinm/MyETF-Intelligence/pull/10) merged tested head
+`ca0152044bec58032acc3c7604398e844b2ba12f` as
+`9d9e7bef326a0e24a5f846ea1310dec24a647019` on canonical `main`.
+Repository ID **1349678672**, current name **maglothinm/MyETF-Intelligence**.
+The tested and merged trees match. Existing Pages published the merge successfully;
+this final documentation-only successor records its evidence.
 
-Canonical repository ID **1349678672**, current name
-**maglothinm/MyETF-Intelligence**, default `main`. Branch
-`codex/dashboard-review-ux` contains tested implementation
-`8f5aa724628b5480c8b6280904d57d96253e596c`, originally based on `3902968`.
-It now integrates upstream documentation commit
-`ac6342ac85e5a395f1b8bab251b8f608c47249e0`. The Senate incident record and
-published recovery evidence are preserved unchanged; no runtime code changed
-during this integration. **PR/CI, merge and deployment are pending.**
+[Live dashboard](https://maglothinm.github.io/MyETF-Intelligence/) ·
+[Manual Parser Exceptions](https://maglothinm.github.io/MyETF-Intelligence/#records/reviews?category=manual_exception).
 
-Local `main` at `9e5de909d7f939c0088914511cca72852e95508e` is preserved.
-Preserve untracked `.codex/`, held PR #3 and unrelated work. Never implement or
-dispatch in legacy `maglothinm/MyETF`.
+Delivered: consistent Overview/review classification and full exception drill-down,
+exact retained-filing selection with honest unmatched-review details, source/branch
+filter metadata and OGE formatting, shared Signals/Records/Operations help, and
+refresh consistency. No workflow, collector, analyst scoring, state schema, alert,
+simulator or hosting configuration changed. No review/retry writer was added.
 
-## Implementation
+Changed implementation files: `scripts/dashboard_insights.py`,
+`scripts/build_trade_dashboard.py`,
+`scripts/dashboard_assets/{app.js,common.js,index.html,styles.css}` and
+`tests/{test_dashboard_insights.py,test_trade_dashboard.py,dashboard_dom.test.cjs}`.
+Documentation: `docs/{PROJECT_STATE.md,DECISIONS.md,HANDOFF.md}`.
 
-Root cause: Overview called the Python review classifier, while the lazy Review
-Queue exported raw rows and had no category filter. Its card linked only to the
-unfiltered queue. Generic title formatting also rendered `oge` as `Oge` and source
-options omitted the retained branch dimension.
+## Verification and continuity
 
-The card now opens `#records/reviews?category=manual_exception`, resets stale
-search/source/date filters and brings the exception result into view. The full
-review JSON/CSV and Overview use the same public projection/classifier, with
-synthetic ancestry excluded from production counts and labeled in the full queue.
-The latest-eight preview never limits the full list. Explicit category controls,
-a removable active indicator and a positive zero state reuse existing controls.
+- Full local integration rerun: **295 tests passed**. **34 DOM scenarios** and
+  **32 native notification scenarios** passed. Syntax, Python compilation, static
+  dashboard generation, unchanged source-input hashes and diff checks passed.
+- PR CI [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936)
+  / attempt 1 / job `99465044563`: success. Main CI
+  [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349)
+  / attempt 1 / job `99465680760`: success. Both exact logs show **213 selected
+  tests passed** and Linux `verify.sh`: **VERIFICATION PASSED**.
+- Pages [33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313)
+  / attempt 1 succeeded; build `99465681041`, deploy `99465807219`.
+  Artifact **9755242103**, ZIP SHA-256
+  `ca3b63daecb7c4e6ce5e92e162cbb363e753c07d8983fddcc1306ca7ac7e4014`.
+- At **11:04:50 UTC**, all **21** fixed live URLs returned HTTP 200 and matched
+  the uploaded artifact. Published build SHA equals merge `9d9e7be`. Counts:
+  **5,079 filings / 60 transactions / 1,496 reviews / 11 analyses**.
+- Live in-app browser: card → **1** parser exception → exact RICHARD BLUMENTHAL
+  filing → back; focus/visibility, source choices, help attributes and no document
+  overflow passed at 1280×720. Local rendered checks also passed at 1440×1000 and
+  390×844, including all five mouse-hover bubbles.
 
-Clickable reviews show retained filer, record ID, reason, source/branch, filing
-date, observation time/age and review category. Exact matched filing keys select
-and highlight the original filing and its details in the existing table. Missing
-or contradictory matches select the original review; no ID/status/time is invented.
-The dashboard remains read-only: no second retry or resolution action was added.
-
-Source choices include All Sources, OGE, Executive, Legislative, House, Senate and
-other published taxonomy. Branch filters match retained branch fields, not client
-source-name guesses. OGE capitalization is presentation-only. Signals, Records
-and Operations share the existing PT.HELP, tooltip bubble, hover delay, keyboard
-focus and two-tap touch preview used by Investor Edge and $10K Agent.
-
-Refresh stages tables opened during its awaits and rejects mismatched review
-counts before advancing the model or local notification baseline. Deep links,
-selected detail IDs and focus remain safe for hostile text and unmatched records.
-
-Changed files: `scripts/dashboard_insights.py`, `scripts/build_trade_dashboard.py`,
-`scripts/dashboard_assets/{app.js,common.js,index.html,styles.css}`,
-`tests/{test_dashboard_insights.py,test_trade_dashboard.py,dashboard_dom.test.cjs}`,
-and `docs/{PROJECT_STATE.md,DECISIONS.md,HANDOFF.md}`. No workflows, production-state
-schemas, collectors, scoring, alerts, simulators or hosting configuration changed.
-
-## Verification
-
-- Full active Python suite: **295 passed**. Includes existing simulation, tracker,
-  signal/Edge, notification, dashboard generation and nested release checks.
-- **34 DOM scenarios passed**, including card/filter/detail routing, reload/back,
-  stale filters, 53 exceptions/pagination, zero state, synthetic exclusion, exact
-  taxonomy, hostile/orphan records, refresh interleaving, unique focus IDs, all five
-  workspace tooltips and existing axe checks. Final focused rerun passed after the
-  mobile focus/layout change. Axe excludes layout and color-contrast checks.
-- **32 native Node notification scenarios passed**. Python compilation, JS syntax
-  and diff checks passed. There is no configured separate dashboard lint/build
-  framework; the existing Python static generator built successfully.
-- Generated verified-copy preview reconciles **5,079 filings / 60 transactions /
-  1,496 reviews / 11 analyses**, with exactly **1** manual parser exception and an
-  exact filing match. All input file hashes/sizes remain unchanged after generation.
-- In-app rendered checks at **1440×1000** and **390×844**: card to one exception to
-  matched filing, selected-record focus, filter reset, expected source counts,
-  visible mobile exception and full-width status control, no horizontal page
-  overflow, and all five mouse-hover bubbles with `aria-describedby`. Screenshots
-  and hover evidence are in `.remediation/dashboard-review-ux/browser/`.
-- Keyboard focus/touch are verified in deterministic DOM tests. Native Enter/Tab
-  browser-control calls did not establish activation, so real keyboard/touch,
-  physical iPhone/Safari, audio and physical ultrawide acceptance remain unverified.
-- Windows has no available Bash: local `verify.sh` is not claimed. Remote Linux
-  CI and Pages verification are pending for this approved publication.
-
-## Production baseline evidence — read-only audit at 10:53 UTC
-
-| Protected input | Artifact | Successful run / attempt | Producer job |
+| Protected input | Artifact | Successful run / attempt | Job |
 |---|---:|---|---:|
 | Legislative | `9749549239` | `33369634244` / 1 | `99417536057` |
 | Executive | `9746602231` | `33360633323` / 1 | `99391153447` |
 | AI | `9749567326` | `33369677492` / 1 | `99417669143` |
 
-Canonical run URLs are
-https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369634244,
-https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33360633323 and
-https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369677492.
-Workflow/job identity, exact attempt windows, ancestor commits, all-run producer
-high-water marks, expiry, ZIP hashes, inventories and record continuity passed.
-These were verified before copying fixture inputs; copies are not production
-restore authority. No protected artifact or simulation history was written.
+Fresh GitHub authority, exact workflow/job/attempt windows, ancestry, high-water
+marks, expiration, downloaded ZIP digests/full inventories and continuity passed
+before and after deployment. Actual publisher logs prove it consumed the exact
+three inputs above; they are unchanged. Only `github-pages` was uploaded.
+`simulation-state` **9734790733**, run **33320677882 / 1**, job **99281977011**,
+is unchanged with two replay rows and preserved predecessor bytes.
 
-Existing Pages **33369728437 / attempt 1**, artifact **9749580990**, succeeded:
-https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369728437.
-At 10:56 UTC all **21** live URLs matched that artifact at build **3902968**. This proves the
-existing deployment only. Fresh audit receipts, copied-input integrity and preview
-files are in ignored `.remediation/dashboard-review-ux/`; fresh publication
-evidence is in `.remediation/dashboard-review-publish/`.
+Pre-release rollback artifact **9749580990**, Pages **33369728437 / 1**, exported
+ZIP hash `330d1e4e343d827d917eb3902ba289eed59f00554147a82c38469b86a05df427`.
+Use a reviewed source revert with current valid input artifacts if rollback is
+needed; never restore old production state. Ignored audit exports are in
+`.remediation/dashboard-review-publish/`, especially `release-evidence.json`,
+`deployment-verification.json` and both exact CI receipts. Detailed run links and
+remaining history are in `docs/PROJECT_STATE.md`.
 
-## Remaining limitations and next safe action
+## Preserved work and remaining limits
 
-Push the approved branch, open the canonical PR referencing issues #4 and #6,
-require successful CI on its exact head, then merge through existing Pages.
-Verify actual publisher input attempts, protected ZIPs/inventories, simulation
-history, published build SHA and live artifact bytes before declaring deployment.
-Commit the resulting release evidence. Do not dispatch any production writer,
-alert service or simulation, and never use an old checkpoint as restore authority.
+Upstream approved Senate recovery evidence at `ac6342a` and
+`docs/incidents/senate-efd-2026-08-30.md` are preserved unchanged. Local `main`
+at `9e5de909` and untracked `.codex/` remain untouched. Another task switched
+the shared checkout during final verification; this evidence was prepared in
+isolated branch/worktree `codex/dashboard-review-release-evidence`, avoiding its
+files and branch. Never implement, deploy or dispatch in legacy `maglothinm/MyETF`.
 
-Separate recovery context: upstream published the owner-approved issue #8 / PR #9
-evidence; see [the incident record](incidents/senate-efd-2026-08-30.md). The two
-obsolete queues resisted supported cancellation/deletion. The authorized GitHub
-Support draft remains unsent because no eligible Actions route was available.
-Backend clearance or confirmation that neither can execute is still required
-before the separately requested manual Legislative run. Do not relax that gate.
+Keyboard focus/touch behavior passed DOM fixtures; native keyboard activation,
+physical iPhone/Safari/touch, real audio and physical ultrawide acceptance remain
+unverified. Axe fixture checks exclude layout and contrast. Keep issues #4 and #6
+open for this acceptance, not because publication is pending.
 
-No credentials were tested or changed. Obsolete queued runs `33219808359` and
-`33221027676`, held PR #3, same-ID rename/privacy, legacy settings, physical-device
-acceptance and Gmail delivery proof remain separate open work. They must not be
-conflated with local dashboard implementation or relaxed to dispatch a writer.
+Only obsolete queued runs **33219808359** and **33221027676** remained active at
+the final audit. Their supported cancellation/deletion failed in the separate
+recovery task. The owner-approved GitHub Support draft is still unsent because no
+eligible Actions support route was available. Backend clearance or confirmation
+that neither can execute remains required before the separate requested manual
+Legislative run. See the preserved incident record; do not relax this gate.
+
+No collector, AI, simulator, live alert or fake heartbeat was dispatched by this
+UI release. No credentials/settings were changed or independently tested.
+Held PR #3, same-ID rename/privacy, legacy settings and Gmail delivery proof remain
+separate open work.
+
+## Next safe action
+
+Perform the remaining physical-device/keyboard/touch acceptance on the live
+dashboard. Publication needs no further approval or dispatch. Keep the obsolete
+writer cleanup and cutover work separate; requery current GitHub provenance
+before any later production operation.
