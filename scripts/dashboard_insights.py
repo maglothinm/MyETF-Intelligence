@@ -14,7 +14,7 @@ import subprocess
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.parse import parse_qsl, urlsplit
 
 
@@ -196,6 +196,100 @@ def review_category(row: Mapping[str, Any], filing: Mapping[str, Any] | None = N
     if re.search(r"(?:pars(?:e|er|ing)|manual|paper (?:filing|report)|ocr|malformed|unsupported (?:format|document))", reason):
         return "manual_exception"
     return "other"
+
+
+def _synthetic_predicate(payload: Mapping[str, Any]) -> Callable[[Mapping[str, Any]], bool]:
+    """Share synthetic ancestry between the overview and complete review export."""
+    filings = _rows(payload.get("filings"))
+    test_filings = {_filing_identity(row) for row in filings if is_synthetic(row) and all(_filing_identity(row))}
+    test_keys = {row["filing_key"] for row in filings if is_synthetic(row) and isinstance(row.get("filing_key"), str) and row["filing_key"]}
+
+    def linked_test(row: Mapping[str, Any]) -> bool:
+        key = row.get("filing_key")
+        return (is_synthetic(row) or _filing_identity(row) in test_filings
+                or (isinstance(key, str) and key in test_keys))
+
+    test_trades = {row["trade_id"] for row in _rows(payload.get("transactions"))
+                   if linked_test(row) and isinstance(row.get("trade_id"), str) and row["trade_id"]}
+
+    def matches(row: Mapping[str, Any]) -> bool:
+        trade_id = row.get("trade_id")
+        return linked_test(row) or (isinstance(trade_id, str) and trade_id in test_trades)
+
+    return matches
+
+
+def review_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Add presentation metadata to every retained review, without changing state.
+
+    Explicit filing keys take precedence; otherwise only a complete, unique
+    source/report identity can join a filing. No key, status or timestamp is
+    constructed. Existing review metadata takes precedence over filing values.
+    The complete list is also the source of the overview's review counts.
+    """
+    by_key: dict[str, list[Mapping[str, Any]]] = {}
+    by_identity: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for filing in _rows(payload.get("filings")):
+        key = filing.get("filing_key")
+        if isinstance(key, str) and key:
+            by_key.setdefault(key, []).append(filing)
+        identity = _filing_identity(filing)
+        if all(identity):
+            by_identity.setdefault(identity, []).append(filing)
+
+    is_test = _synthetic_predicate(payload)
+    result = []
+    for row in _rows(payload.get("reviews")):
+        key = row.get("filing_key")
+        candidates = (by_key.get(key, []) if isinstance(key, str) and key
+                      else by_identity.get(_filing_identity(row), []))
+        filing = candidates[0] if len(candidates) == 1 else {}
+        # A contradictory explicit key is not permission to attach a different
+        # source record, even if the key itself exists in the filing inventory.
+        if any(row.get(field) not in (None, "") and str(row[field]) != str(filing.get(field) or "")
+               for field in ("source", "report_id") if filing):
+            filing = {}
+        enriched = dict(row)
+        for field in ("filing_key", "source", "branch", "report_id", "filer", "title", "agency",
+                      "filed_date", "source_url", "access_mode", "review_reason", "document_format",
+                      "chamber", "first_seen_utc", "updated_at_utc"):
+            if enriched.get(field) in (None, "") and filing.get(field) not in (None, ""):
+                enriched[field] = filing[field]
+        if enriched.get("reason") in (None, "") and enriched.get("review_reason") not in (None, ""):
+            enriched["reason"] = enriched["review_reason"]
+        if enriched.get("filing_status") in (None, "") and filing.get("status") not in (None, ""):
+            enriched["filing_status"] = filing["status"]
+        enriched["filing_available"] = bool(filing)
+        enriched["category"] = review_category(row, filing)
+        enriched["is_synthetic_test"] = is_test(row)
+        result.append(enriched)
+    return result
+
+
+def source_filters(payload: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Publish filter dimensions from retained branch/source taxonomy, not aliases."""
+    sources = {"house", "senate", "oge"}
+    branches = {"executive", "legislative"}
+    for name in ("filings", "transactions", "reviews", "analyses", "portfolio", "runs", "ai_runs"):
+        for row in _rows(payload.get(name)):
+            for field, values in (("source", sources), ("branch", branches)):
+                if field == "branch" and name in {"runs", "ai_runs"}:
+                    # Worker health (for example AI) is not a disclosure branch.
+                    continue
+                value = row.get(field)
+                if isinstance(value, str) and value.strip():
+                    values.add(value)
+    for source in _mapping(_mapping(payload.get("summary")).get("sources")):
+        if isinstance(source, str) and source.strip():
+            sources.add(source)
+
+    def label(value: str) -> str:
+        return {"oge": "OGE", "ai": "AI"}.get(value.casefold(), _text(value).replace("_", " ").title())
+
+    return ([{"value": "branch:" + branch, "label": label(branch), "field": "branch"}
+             for branch in sorted(branches)]
+            + [{"value": source, "label": label(source), "field": "source"}
+               for source in sorted(sources)])
 
 
 def _flat_record(row: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
@@ -390,11 +484,8 @@ def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
     filings, transactions, reviews, analyses, runs, ai_runs, portfolio = (
         _rows(payload.get(key)) for key in ("filings", "transactions", "reviews", "analyses", "runs", "ai_runs", "portfolio")
     )
-    by_filing = {_filing_identity(row): row for row in filings}
-    test_filings = {_filing_identity(row) for row in filings if is_synthetic(row) and all(_filing_identity(row))}
-    synthetic_transactions = [row for row in transactions if is_synthetic(row) or _filing_identity(row) in test_filings]
-    test_trades = {row.get("trade_id") for row in synthetic_transactions if row.get("trade_id")}
-    is_test = lambda row: is_synthetic(row) or _filing_identity(row) in test_filings or (row.get("trade_id") in test_trades if row.get("trade_id") else False)
+    reviews = review_rows(payload)
+    is_test = _synthetic_predicate(payload)
     production = {}
     synthetic = {}
     for name, rows in (("filings", filings), ("transactions", transactions), ("reviews", reviews), ("analyses", analyses)):
@@ -404,7 +495,7 @@ def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
     signals = [_signal(row) for row in analyses if row.get("classification") in QUALIFYING]
     signals.sort(key=lambda row: (QUALIFYING[row["classification"]], -(row["final_score"] if row["final_score"] is not None else -1), -(_instant(row["analyzed_at_utc"]).timestamp() if row["analyzed_at_utc"] else 0), row["analysis_id"]))
     status = Counter(str(row.get("status") or "unknown").casefold() for row in filings)
-    categories = [_review(row, review_category(row, by_filing.get(_filing_identity(row)))) for row in reviews]
+    categories = [_review(row, row["category"]) for row in reviews]
     review_counts = Counter(row["category"] for row in categories)
     categories.sort(key=lambda row: (row["category"] == "manual_exception", row["observed_at_utc"] or "", row["review_id"]), reverse=True)
     purchases = sum(str(row.get("transaction_type") or "").casefold() in {"purchase", "buy"} for row in transactions)
@@ -429,6 +520,7 @@ def build_insights(payload: Mapping[str, Any]) -> dict[str, Any]:
     result = {
         "version": VERSION, "build_sha": _build_sha(), "generated_utc": generated, "data_through_utc": data_through,
         "repository_url": safe_url(summary.get("repository_url")),
+        "source_filters": source_filters(payload),
         "coverage": {"cataloged_only": status["cataloged"] + status["cataloged_only"], "processed": status["processed"],
                      "review_required": status["review_required"], "other_filings": sum(count for name, count in status.items() if name not in {"cataloged", "cataloged_only", "processed", "review_required"}),
                      "filings": len(filings), "transactions": len(transactions), "analyses": len(analyses), "qualifying_signals": len(signals),

@@ -10,7 +10,9 @@ from scripts.dashboard_insights import (
     optional_number,
     public_payload,
     review_category,
+    review_rows,
     safe_url,
+    source_filters,
 )
 
 
@@ -74,6 +76,176 @@ def test_coverage_composition_and_review_categories_are_distinct_exact_populatio
 ])
 def test_real_review_reasons(row, filing, category):
     assert review_category(row, filing) == category
+
+
+def test_complete_review_projection_inherits_metadata_and_preserves_retained_fields():
+    source = payload(
+        filings=[{"filing_key": "senate|senate:2026:exact-id", "source": "senate", "branch": "legislative",
+                  "report_id": "senate:2026:exact-id", "status": "review_required", "filer": "Retained official",
+                  "filed_date": "2026-08-29", "first_seen_utc": "2026-08-30T10:00:00Z",
+                  "updated_at_utc": "2026-08-30T10:05:00Z", "access_mode": "direct",
+                  "review_reason": "PDF parser requires manual review", "source_url": "https://example.test/official"}],
+        reviews=[{"review_id": "review|senate:2026:exact-id", "source": "senate", "report_id": "senate:2026:exact-id",
+                  "status": "pending", "review_status": "awaiting_operator", "observed_at_utc": "2026-08-30T10:01:00Z",
+                  "title": "Original title", "extra_ledger_field": {"values": ["preserve"]}}],
+    )
+    before = copy.deepcopy(source)
+    row = review_rows(source)[0]
+    assert row["review_id"] == "review|senate:2026:exact-id"
+    assert row["filing_key"] == "senate|senate:2026:exact-id"
+    assert row["filing_available"] is True
+    assert row["category"] == "manual_exception"
+    assert row["filing_status"] == "review_required"
+    assert row["status"] == "pending"
+    assert row["review_status"] == "awaiting_operator"
+    assert row["branch"] == "legislative"
+    assert row["filer"] == "Retained official"
+    assert row["title"] == "Original title"
+    assert row["filed_date"] == "2026-08-29"
+    assert row["observed_at_utc"] == "2026-08-30T10:01:00Z"
+    assert row["first_seen_utc"] == "2026-08-30T10:00:00Z"
+    assert row["updated_at_utc"] == "2026-08-30T10:05:00Z"
+    assert row["reason"] == row["review_reason"] == "PDF parser requires manual review"
+    assert row["source_url"] == "https://example.test/official"
+    assert row["access_mode"] == "direct"
+    assert row["is_synthetic_test"] is False
+    assert row["extra_ledger_field"] == {"values": ["preserve"]}
+    assert row is not source["reviews"][0]
+    assert source == before
+    assert review_rows({**source, "reviews": [row]}) == [row]
+
+
+def test_review_projection_uses_exact_unique_identity_without_guessing_ids_or_timestamps():
+    source = payload(
+        filings=[
+            {"filing_key": "different|encoding", "source": "senate", "report_id": "same-id", "review_reason": "manual parser error"},
+            {"filing_key": "house|same-id", "source": "house", "report_id": "same-id", "access_mode": "request"},
+            {"filing_key": "senate|same-id-near", "source": "senate", "report_id": "same-id-near", "review_reason": "manual parser error"},
+            {"filing_key": "anonymous", "review_reason": "manual parser error"},
+        ],
+        reviews=[
+            {"review_id": "exact", "source": "senate", "report_id": "same-id"},
+            {"review_id": "key-only", "filing_key": "different|encoding"},
+            {"review_id": "house", "source": "house", "report_id": "same-id"},
+            {"review_id": "missing", "source": "senate", "report_id": "same"},
+            {"review_id": "no-source", "report_id": "same-id"},
+            {"review_id": "anonymous"},
+            {"review_id": "contradiction", "filing_key": "different|encoding", "source": "house", "report_id": "same-id"},
+            {"review_id": "unknown-key", "filing_key": "unretained-key", "source": "senate", "report_id": "same-id"},
+        ],
+    )
+    rows = {row["review_id"]: row for row in review_rows(source)}
+    assert rows["exact"]["filing_key"] == rows["key-only"]["filing_key"] == "different|encoding"
+    assert rows["exact"]["category"] == rows["key-only"]["category"] == "manual_exception"
+    assert rows["exact"]["filing_available"] is rows["key-only"]["filing_available"] is True
+    assert rows["key-only"]["source"] == "senate"
+    assert rows["key-only"]["report_id"] == "same-id"
+    assert rows["house"]["category"] == "access_required"
+    for name in ("missing", "no-source", "anonymous"):
+        assert rows[name]["category"] == "other"
+        assert rows[name]["filing_available"] is False
+        assert "filing_key" not in rows[name]
+    for name in ("contradiction", "unknown-key"):
+        assert rows[name]["category"] == "other"
+        assert rows[name]["filing_available"] is False
+        assert "reason" not in rows[name]
+    assert rows["contradiction"]["filing_key"] == "different|encoding"
+    assert rows["unknown-key"]["filing_key"] == "unretained-key"
+    for row in rows.values():
+        assert "filing_status" not in row
+        assert "observed_at_utc" not in row
+        assert "filed_date" not in row
+
+
+def test_ambiguous_review_filing_identity_requires_an_explicit_exact_key():
+    source = payload(
+        filings=[{"filing_key": "one", "source": "senate", "report_id": "same", "review_reason": "manual parser error"},
+                 {"filing_key": "two", "source": "senate", "report_id": "same", "access_mode": "request"}],
+        reviews=[{"review_id": "ambiguous", "source": "senate", "report_id": "same"},
+                 {"review_id": "explicit", "filing_key": "one", "source": "senate", "report_id": "same"}],
+    )
+    ambiguous, explicit = review_rows(source)
+    assert ambiguous["category"] == "other"
+    assert ambiguous["filing_available"] is False
+    assert "filing_key" not in ambiguous
+    assert explicit["category"] == "manual_exception"
+    assert explicit["filing_key"] == "one"
+    assert explicit["filing_available"] is True
+
+
+def test_review_projection_preserves_access_precedence_from_filing_and_own_review_reason():
+    source = payload(
+        filings=[{"filing_key": "oge:one", "source": "oge", "report_id": "one", "access_mode": "request",
+                  "review_reason": "No direct PDF is available"}],
+        reviews=[{"review_id": "request", "source": "oge", "report_id": "one", "reason": "Manual review requested"},
+                 {"review_id": "own", "review_reason": "Unable to parse document"}],
+    )
+    request, own = review_rows(source)
+    assert request["category"] == "access_required"
+    assert request["reason"] == "Manual review requested"
+    assert request["review_reason"] == "No direct PDF is available"
+    assert own["category"] == "manual_exception"
+    assert own["reason"] == "Unable to parse document"
+
+
+@pytest.mark.parametrize("marker", [
+    {"is_synthetic_test": True}, {"is_synthetic_test": "true"}, {"is_temporary": True},
+    {"test_metadata": {"scenario": "acceptance"}}, {"filing_key": "TEST:fixture"},
+])
+def test_review_projection_inherits_synthetic_flags_and_overview_uses_same_exclusion(marker):
+    filing = {"filing_key": "retained-test", "source": "senate", "report_id": "same",
+              "review_reason": "Manual parser exception", **marker}
+    source = payload(filings=[filing], reviews=[{"review_id": "linked", "source": "senate", "report_id": "same"},
+                                              {"review_id": "keyed", "filing_key": filing["filing_key"]}])
+    before = copy.deepcopy(source)
+    rows = review_rows(source)
+    model = build_insights(source)
+    assert all(row["is_synthetic_test"] is True for row in rows)
+    assert all(row["category"] == "manual_exception" for row in rows)
+    assert model["reviews"]["manual_exception"] == model["reviews"]["total"] == 0
+    assert model["reviews"]["latest"] == []
+    assert model["synthetic"]["reviews"] == 2
+    assert model["coverage"]["filings"] == 0
+    assert source == before
+
+
+def test_review_projection_reuses_trade_ancestry_and_false_flags_remain_production():
+    source = payload(
+        filings=[{"filing_key": "test", "source": "house", "report_id": "test", "is_synthetic_test": True}],
+        transactions=[{"trade_id": "inherited-test", "source": "house", "report_id": "test"}],
+        reviews=[{"review_id": "trade", "trade_id": "inherited-test", "reason": "Manual parser exception"},
+                 {"review_id": "real", "is_synthetic_test": "false", "reason": "Manual parser exception"}],
+    )
+    rows = review_rows(source)
+    assert [row["is_synthetic_test"] for row in rows] == [True, False]
+    model = build_insights(source)
+    assert model["synthetic"]["reviews"] == model["reviews"]["manual_exception"] == 1
+
+
+def test_source_filters_include_supported_and_discovered_taxonomy_without_branch_inference():
+    source = payload(
+        filings=[{"source": "senate", "branch": "legislative"}, {"source": "oge", "branch": "executive"}],
+        reviews=[{"source": "house", "branch": "legislative"}, {"source": "new_source", "branch": "judicial"}],
+        transactions=[{"source": "transaction_source"}], analyses=[{"source": "analysis_source"}],
+        portfolio=[{"source": "portfolio_source"}], runs=[{"source": "run_source"}], ai_runs=[{"branch": "ai"}],
+        summary={"sources": {"catalog_source": {"source": "catalog_source"}}},
+    )
+    before = copy.deepcopy(source)
+    choices = source_filters(source)
+    by_value = {row["value"]: row for row in choices}
+    assert by_value["branch:executive"] == {"value": "branch:executive", "label": "Executive", "field": "branch"}
+    assert by_value["branch:legislative"] == {"value": "branch:legislative", "label": "Legislative", "field": "branch"}
+    assert by_value["branch:judicial"]["field"] == "branch"
+    assert "branch:ai" not in by_value
+    assert by_value["oge"] == {"value": "oge", "label": "OGE", "field": "source"}
+    assert by_value["house"]["label"] == "House"
+    assert by_value["senate"]["label"] == "Senate"
+    assert by_value["new_source"]["field"] == "source"
+    assert {"transaction_source", "analysis_source", "portfolio_source", "run_source", "catalog_source"} <= by_value.keys()
+    assert "executive" not in by_value and "legislative" not in by_value
+    assert build_insights(source)["source_filters"] == choices
+    assert source == before
+    assert {row["value"] for row in source_filters(payload())} == {"branch:executive", "branch:legislative", "oge", "house", "senate"}
 
 
 def test_synthetic_records_propagate_by_filing_and_trade_without_contaminating_production():

@@ -25,12 +25,15 @@ window.PT = (() => {
     signalExpiration: "Timestamp after which this retained research signal should no longer be treated as current. Missing expiration data remains unavailable.",
     runSimulation: "Opens an isolated TEST workflow that exercises the PolitiTrack / Investor Edge pipeline without changing production state. It sends no live alerts and cannot publish to production Pages.",
     agentWorkspace: "Research lab for PolitiTrack’s simulated $10,000 historical replay and separately retained paper-position evidence. The replay is isolated from production and does not represent real money.",
+    signalsWorkspace: "Review qualifying trading signals and browse every research score and classification.",
+    recordsWorkspace: "Browse, filter and review disclosure source records, including manual parser exceptions.",
+    operationsWorkspace: "Monitor retained pipeline run evidence, source coverage and system health.",
     historicalReplay: "Opens an isolated $10,000 historical replay using retained PolitiTrack evidence. It does not place real trades, alter production state, or create persistent portfolio history.",
     latestReplay: "This is one independent historical replay, not a continuing investment account. Starting value, replay value and change apply only to this run.",
     actions: "Research and test tools. Opens controls for Run Simulation, the $10K historical replay, Monitor Mode and repository access.",
     actionableSignals: "Analyses currently classified High Priority or Watchlist. Other AI-ranked records remain available under Signals but are not promoted to this board.",
     localChanges: "Changes detected by this browser after it successfully established a local baseline. This is not a server-side account history.",
-    parserExceptions: "Records requiring manual review or additional parsing/access work. These are tracked separately from successfully parsed transactions.",
+    parserExceptions: "Records requiring manual parser review. Open the filtered review queue to inspect each exception; access/request inventory is tracked separately.",
     systemEvidence: "Status derived from retained Legislative, Executive and AI run evidence. It is not an independent live probe of every upstream service.",
     notificationCenter: "Browser-local PolitiTrack activity history. Acknowledgement, snooze and mute affect this browser only; Gmail, Pushover and Healthchecks are unchanged.",
     sound: "In-page sound is local to this browser and requires a user gesture. It works while the dashboard is open; external background alert channels are separate.",
@@ -43,7 +46,7 @@ window.PT = (() => {
   const number = v => numeric(v) === null ? "Unavailable" : numeric(v).toLocaleString();
   const money = v => numeric(v) === null ? "Unavailable" : numeric(v).toLocaleString([], {style:"currency",currency:"USD",maximumFractionDigits:2});
   const percent = v => numeric(v) === null ? "Unavailable" : `${numeric(v).toFixed(2)}%`;
-  const title = v => String(v ?? "Unavailable").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+  const title = v => String(v ?? "Unavailable").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase()).replace(/\boge\b/gi, "OGE");
   const date = v => {
     if (typeof v !== "string" || !v.trim()) return "Unavailable";
     const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? `${v}T12:00:00` : v);

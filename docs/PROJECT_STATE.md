@@ -1,12 +1,62 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Senate resilience merged; PR/main CI and local verification passed.
-Production recovery awaits the existing writer-safety gate. Contextual help
-remains published; device acceptance, PR #3 and cutover remain open.**
+Status: **Dashboard review UX implemented and tested locally on
+`codex/dashboard-review-ux`; not published. Existing production/Pages baseline
+verified read-only. Device acceptance, held PR #3 and cutover remain open.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
+
+## Dashboard review UX — local, 2026-08-31
+
+Work record: issue #4, with workspace help related to issue #6. This branch starts
+at canonical remote `main` commit `3902968d5d70cd00030248ae4a6bcea18aa2e6ea`.
+The earlier unpublished recovery documentation remains preserved on local `main`
+at `9e5de909d7f939c0088914511cca72852e95508e`; it is not included in this branch.
+
+The dashboard card now deep-links to
+`#records/reviews?category=manual_exception`. The full public review projection
+and Overview share the existing Python classifier, including synthetic-record
+exclusion. Exact matched filing keys support selection in the existing table;
+unmatched reviews retain their own detail. Explicit Source filters use retained
+branch/source fields; OGE, House, Senate, Executive and Legislative are available.
+Signals, Records and Operations reuse the existing shared tooltip behavior.
+No workflow, collector, scoring, state schema, alert, simulation or hosting path
+changed. This remains read-only presentation, with no dashboard retry/resolution.
+
+Local validation: **295 active Python tests passed**, including the nested release
+checks; **34 DOM scenarios** and **32 notification scenarios** passed. Final
+focused DOM rerun passed after mobile focus/layout adjustments. JavaScript syntax,
+Python compilation and diff checks pass. Windows has no Bash runtime: local
+`verify.sh` execution is not claimed. No new PR/main CI, Pages run or publication
+has been requested or performed by this task. In-app rendered desktop/mobile
+checks passed at 1440×1000 and 390×844 for exception navigation, source filtering,
+focus/visibility and all five mouse-hover bubbles. Keyboard/touch behavior passed
+DOM fixtures; native keyboard automation, physical touch/Safari/audio and physical
+ultrawide acceptance remain unverified. See the active handoff for exact limits.
+
+Fresh baseline audit at **10:27 UTC** independently verified GitHub authority,
+exact successful producer attempts/jobs, ancestor commits, producer high-water
+marks, expiry, ZIP digests, inventories and retained-state continuity:
+
+| Protected input | Artifact | Run / attempt | Producer job |
+|---|---:|---|---:|
+| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` |
+| Executive | `9746602231` | `33360633323` / 1 | `99391153447` |
+| AI | `9749567326` | `33369677492` / 1 | `99417669143` |
+
+Existing Pages run `33369728437` / 1 succeeded, artifact `9749580990`; all 21
+checked live URLs matched its bytes, build `3902968`. This verifies the existing
+release only. Local generation from isolated, hash-verified copies reconciles
+5,079 filings, 60 transactions, 1,496 reviews and 11 analyses; exactly one manual
+exception has an exact retained filing match. Inputs are unchanged, not restored
+for production. Evidence is in ignored `.remediation/dashboard-review-ux/`.
+The two obsolete queued runs remain; this task did not dispatch any writer.
+
+Older sections below are historical checkpoints. The newer successful scheduled
+run and artifact evidence above supersedes their pending baseline statements;
+manual-dispatch, settings and external-delivery gates remain separate.
 
 ## Senate resilience implementation — merged
 
@@ -32,7 +82,7 @@ claimed. Healthchecks recovery remains unverified.
 
 | Role | Repository | Repository ID | Recorded head | Status |
 |---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Tooltip deployment `1aa8739` plus documentation-only evidence successor | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
+| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Production / Pages `3902968`; local UI successor unpublished | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
 | Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
 | Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
 
