@@ -10,7 +10,94 @@ independent Senate fix has completed a successful scheduled Legislative/AI chain
 and Pages publication. Main now publishes its independent full state/content
 acceptance; PR #3 still requires fresh integrated-commit acceptance.**
 
-## Upstream icon release checkpoint — 2026-08-31 17:23 UTC
+## Upstream freshness integration checkpoint — 2026-08-31 18:28 UTC
+
+Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
+Main advanced to **70415df6be5fcb47dd50680730860db16e45e480**, PR #22's
+documentation successor of freshness PR #20 (**b9380f2**) and clock PR #21
+(**5932a49950384fb9cb2bdab93c4093ea596789a1**). Exact **6384c76..70415df6**
+contains 11 commits and 39 files, including five workflows; this is not merely
+a presentation change. Issue #19 remains open for separate infrastructure
+acceptance. Preserve D-033–D-035, the scheduler guides and public release receipt.
+
+Reconciliation must retain Executive's new `13,43` half-hour cron and Legislative's
+unchanged `7,22,37,52`, both in `America/New_York`; canonical-ID/default-branch
+job gates, allowlisted `trigger_source` inputs and additive retained run metadata;
+and all three unchanged fixed noncancelling writer concurrency groups. AI still
+has no independent schedule. Preserve the updated Executive expectation in
+`verify.sh` and its manifest checksum alongside the release's other safety checks.
+
+New `collect_workflow_evidence.py` guards every writable producer restore against
+potentially side-effecting unretained attempts, including reruns of older run IDs.
+**Keep this guard when PR #3 replaces the inline restore code.** Missing/ambiguous
+attempt/step evidence blocks replay; demonstrably unstarted/skipped steps can
+recover normally. This supplements artifact authority/high-water validation and
+does not solve atomic external delivery or authorize an older-state fallback.
+The existing PR #3 historical-receipt inventory incompatibility is still open.
+
+Preserve read-only Actions observations in the publisher, health publication
+after unsuccessful collector/AI completions, explicit missing-evidence admission
+checks, and source timestamps separate from generation/AI refresh. Observations
+are not production-state authority. Keep the shared freshness policy and browser
+elapsed clock: failure > stale > unknown > success; Legislative 15/>30 minutes,
+Executive 30/>60, collector-triggered AI >75. Same-publication refresh, delayed
+publication or a bad device clock must not reset age or make stale evidence green.
+Retain dashboard/Monitor/Operations regressions and all new Python/Worker tests.
+
+The separately prepared external collector scheduler is inert and distinct from
+the held dashboard/simulation-dispatch Worker. Preserve its two-workflow allowlist,
+same-origin/identity checks, no automatic POST retry, no public trigger endpoint,
+`SCHEDULER_ENABLED="false"` and empty cron list. Do not provision it through this
+follow-up or infer clearance from its presence on main. Issue #19 still requires
+obsolete-writer clearance, legitimate account/scoped-secret setup and several real
+collector/AI/Pages cycles; GitHub cron removal needs a separate recorded decision.
+No simulation workflow, protected artifact name/directory, AGENTS.md or held
+feature implementation changed in this upstream delta.
+
+At **18:28:08 UTC**, all **192 runs / 198 global artifacts** were paginated.
+The nine new runs are CI/Pages, including an initial verifier-expectation CI
+failure followed by successful corrected CI; there is no new production failure.
+Protected state remains Legislative **9764350004 / 33408974583 / 1** (job
+**99543508327**), Executive **9760298853 / 33398375467 / 1** (job **99508337018**),
+and AI **9764387095 / 33409079174 / 1** (job **99543844689**). All are unexpired,
+match exact successful workflow/attempt/job windows, and producer **ecc031d** is
+an ancestor of current main **70415df6**. No later producer/high-water gap or
+permitted active writer/publisher was found. Simulation remains **9734790733 /
+33320677882 / 1**, job **99281977011**, with unchanged unexpired metadata.
+This is fresh metadata, not a new ZIP/schema/ledger audit or release allowlisting.
+
+Exact-main CI **33422829206 / 1**, job **99589141645**, succeeded on **70415df6**
+with zero artifacts. Latest Pages **33421979811 / 1** succeeded on **5932a499**,
+build **99586312069**, deploy **99586627493**, sole artifact **9769279578**,
+created **17:54:08 UTC** within its successful build window, unexpired until
+September 1 **17:54:07 UTC**. Old release-branch CI still does not validate
+PR #3's integration with this main; no release implementation was tested here.
+
+At **18:24:53 UTC**, the existing support comment remained unchanged, with zero
+replies, three discussion comments/two older replies fully paginated and no newer
+message. Both obsolete runs remain exact-identity queued attempt 1, null conclusion,
+zero jobs/artifacts and the only active runs. PR #3 remains open/draft/unmerged/conflicting at
+**8132640ae742e9b6b1c99f20d06514ea3b893158** before this documentation update;
+there is no exact-head CI. The public marker returned HTTP 200, source
+**5932a49950384fb9cb2bdab93c4093ea596789a1**, generation `2026-08-31T17:54:03Z`
+and the canonical repository URL. Its public model separately confirms all three
+workers stale and source data through `2026-08-31T15:32:55Z`. These are marker/model
+reads, not fresh whole-site or browser/clock acceptance.
+
+Main's public freshness receipt reports 633 local tests without skips, 550 Python /
+6 filing DOM / 11 Worker CI cases and Linux verification, 65 dashboard DOM plus
+42 native cases, and 250 served files matching final Pages. Its exact protected
+input/hash/inventory/predecessor audit is recorded at **17:57:09 UTC**, with the
+same three protected artifacts and two-row simulator. These are upstream recorded
+results, not tests/downloads/content checks repeated by this heartbeat, nor PR #3
+integration, historical simulator-lineage, real cadence or external activation
+acceptance. Existing compatibility, containment and held-feature gates remain.
+Only two release-status documents change here; no merge, dispatch, protected
+upload, support post, cancellation retry, deletion, activation or settings change
+was performed. Keep the existing hourly follow-up active and preserve concurrent
+shared-checkout work and ignored held-feature drafts.
+
+## Previous upstream icon checkpoint — 2026-08-31 17:23 UTC
 
 Canonical ID **1349678672** remains public `maglothinm/MyETF-Intelligence`.
 Main is now **6384c76aa102290aa15e246f81ae2f8e23146de6**, documentation successor
