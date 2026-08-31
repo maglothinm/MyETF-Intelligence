@@ -175,6 +175,209 @@ test('Overview loads only compact insights; sections fetch their ledgers lazily'
   assert.deepEqual(env.errors, []);
 });
 
+function healthRun(id, finished_utc, extra = {}) {
+  return {id, run_key: id, branch: 'legislative', finished_utc,
+    status: 'success', success: true, error_count: 0, errors: [], new_record_count: 0,
+    run_url: 'https://example.test/runs/' + id, ...extra};
+}
+
+function setHealthHistory(data, runs) {
+  data['dashboard-insights'].health.branches.find(row => row.branch === 'legislative').timeline = runs;
+}
+
+function historyLinks(env, container = 'operations-health') {
+  return [...env.byId(container).querySelector('.timeline').querySelectorAll('a')];
+}
+
+function historyIds(env, container) {
+  return historyLinks(env, container).map(link => new URL(link.href).pathname.split('/').at(-1));
+}
+
+for (const [inputOrder, indexes] of [
+  ['ascending', [0, 1, 2, 3]],
+  ['descending', [3, 2, 1, 0]],
+  ['mixed', [1, 3, 0, 2]],
+]) {
+  test(`Operations history presents ${inputOrder} API runs newest first in DOM order`, async t => {
+    const runs = ['06:00', '06:15', '06:30', '06:45'].map((time, index) =>
+      healthRun('chronology-' + index, `2026-08-30T${time}:00Z`));
+    const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, indexes.map(index => runs[index]))});
+    t.after(env.close);
+    assert.equal(env.byId('operations').hidden, false);
+    assert.deepEqual(historyIds(env), ['chronology-3', 'chronology-2', 'chronology-1', 'chronology-0']);
+    assert.deepEqual(historyIds(env, 'health-chart'), historyIds(env), 'The shared Overview strip must agree with Operations');
+    assert.equal(env.byId('operations-health').querySelector('.timeline').scrollLeft, 0, 'Initial strip starts at its newest DOM item');
+    assert.deepEqual(env.errors, []);
+  });
+}
+
+test('Operations history compares datetime instants across offsets and uses execution finish before start', async t => {
+  const runs = [
+    healthRun('offset-oldest', '2026-08-30T08:15:00+02:00', {started_utc: '2026-08-30T06:10:00Z'}),
+    healthRun('offset-newest', '2026-08-30T02:45:00-04:00', {started_utc: '2026-08-30T05:00:00Z'}),
+    healthRun('offset-middle', '2026-08-30T06:30:00Z', {started_utc: '2026-08-30T06:20:00Z'}),
+  ];
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
+  assert.deepEqual(historyIds(env), ['offset-newest', 'offset-middle', 'offset-oldest']);
+  assert.deepEqual(env.errors, []);
+});
+
+test('Operations history uses a valid start fallback and puts unknown timestamps last', async t => {
+  const runs = [
+    healthRun('unknown-a', 'invalid'),
+    healthRun('finished', '2026-08-30T06:45:00Z'),
+    healthRun('invalid-finish', 'invalid', {started_utc: '2026-08-30T07:00:00Z'}),
+    healthRun('unknown-z', null),
+    healthRun('start-only', null, {started_utc: '2026-08-30T06:50:00Z'}),
+  ];
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
+  assert.deepEqual(historyIds(env), ['invalid-finish', 'start-only', 'finished', 'unknown-z', 'unknown-a']);
+  assert.ok(historyLinks(env)[0].getAttribute('aria-label').includes(env.window.PT.date(runs[2].started_utc)));
+  assert.ok(historyLinks(env)[1].title.includes(env.window.PT.date(runs[4].started_utc)));
+  assert.ok(historyLinks(env)[3].getAttribute('aria-label').includes('Unavailable'));
+  assert.deepEqual(env.errors, []);
+});
+
+test('Operations history breaks equal-instant ties by stable run identity across reordered refreshes', async t => {
+  const runs = [
+    healthRun('tie-a', '2026-08-30T06:45:00Z'),
+    healthRun('tie-c', '2026-08-30T02:45:00-04:00'),
+    healthRun('tie-b', '2026-08-30T06:45:00.000Z'),
+  ];
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
+  const expected = ['tie-c', 'tie-b', 'tie-a'];
+  assert.deepEqual(historyIds(env), expected);
+  setHealthHistory(env.data, [runs[2], runs[0], runs[1]]);
+  await env.refresh();
+  assert.deepEqual(historyIds(env), expected);
+  setHealthHistory(env.data, [runs[1], runs[2], runs[0]]);
+  await env.refresh();
+  assert.deepEqual(historyIds(env), expected);
+  assert.deepEqual(env.errors, []);
+});
+
+test('Operations history uses a deterministic URL fallback when equal-timestamp records lack IDs', async t => {
+  const runs = ['url-a', 'url-c', 'url-b'].map(id => healthRun(id, '2026-08-30T06:45:00Z', {id: null, run_key: null}));
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
+  assert.deepEqual(historyIds(env), ['url-c', 'url-b', 'url-a']);
+  setHealthHistory(env.data, [runs[2], runs[0], runs[1]]);
+  await env.refresh();
+  assert.deepEqual(historyIds(env), ['url-c', 'url-b', 'url-a']);
+  assert.deepEqual(env.errors, []);
+});
+
+for (const count of [0, 1]) {
+  test(`Operations history handles ${count ? 'a single run' : 'no runs'} without an alternate viewport or empty link`, async t => {
+    const runs = count ? [healthRun('only-run', '2026-08-30T06:45:00Z')] : [];
+    const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
+    assert.deepEqual(historyIds(env), count ? ['only-run'] : []);
+    const strip = env.byId('operations-health').querySelector('.timeline');
+    assert.equal(strip.scrollLeft, 0);
+    if (!count) assert.equal(strip.textContent, 'No retained evidence');
+    assert.deepEqual(env.errors, []);
+  });
+}
+
+test('shared health rendering never reorders or edits the retained input collection', async t => {
+  const env = await dashboard(); t.after(env.close);
+  const model = copy(env.data['dashboard-insights']);
+  const runs = [healthRun('preserved-old', '2026-08-30T06:00:00Z'), healthRun('preserved-new', '2026-08-30T06:45:00Z')];
+  model.health.branches[0].timeline = runs;
+  const before = JSON.stringify(model);
+  runs.forEach(Object.freeze); Object.freeze(runs);
+  for (const detailed of [true, false, true]) {
+    const host = env.doc.createElement('div'); host.innerHTML = env.window.PT.healthCards(model, detailed);
+    assert.deepEqual([...host.querySelector('.timeline').querySelectorAll('a')].map(link => link.href), [runs[1].run_url, runs[0].run_url]);
+  }
+  assert.equal(JSON.stringify(model), before);
+  assert.deepEqual(env.errors, []);
+});
+
+test('Operations history keeps each run link, result and accessible time together with native activation', async t => {
+  const runs = [
+    healthRun('old-success', '2026-08-30T06:00:00Z', {new_record_count: 12}),
+    healthRun('latest-failure', '2026-08-30T06:45:00Z', {status: 'failure', success: false, error_count: 3}),
+    healthRun('middle-unknown', '2026-08-30T06:30:00Z', {status: 'unknown'}),
+  ];
+  const env = await dashboard({hash: '#operations', coarse: true, change(data) {
+    setHealthHistory(data, runs);
+    Object.assign(data['dashboard-insights'].health.branches[0], {status: 'failure', run_url: runs[1].run_url, last_run_utc: runs[1].finished_utc});
+  }}); t.after(env.close);
+  const ordered = [runs[1], runs[2], runs[0]], links = historyLinks(env);
+  for (const [index, link] of links.entries()) {
+    const run = ordered[index];
+    assert.equal(link.href, run.run_url);
+    assert.equal(link.className, run.status);
+    assert.equal(link.getAttribute('aria-label'), `${env.window.PT.statusText(run.status)} ${env.window.PT.date(run.finished_utc)}; ${run.error_count} errors; ${run.new_record_count} new records`);
+    assert.equal(link.title, `${env.window.PT.statusText(run.status)} · ${env.window.PT.date(run.finished_utc)}`);
+    assert.equal(link.tabIndex, 0, 'Native sequential focus follows the newest-to-oldest DOM order');
+    link.focus(); assert.equal(env.doc.activeElement, link);
+    for (const key of ['Tab', 'ArrowRight', 'ArrowLeft', 'Enter']) {
+      const event = new env.window.KeyboardEvent('keydown', {key, bubbles: true, cancelable: true});
+      link.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, false, `${key} remains available to native link/scroll behavior`);
+    }
+    for (const pointerType of ['mouse', 'touch']) assert.equal(activationWasBlocked(env, link, pointerType), false, pointerType + ' opens this exact run immediately');
+    let activated;
+    env.doc.addEventListener('click', event => {
+      activated = {href: event.target.closest('a').href, target: event.target.closest('a').target, blocked: event.defaultPrevented};
+      event.preventDefault(); // JSDOM cannot open the browser's external run tab.
+    }, {once: true});
+    link.click();
+    assert.deepEqual(activated, {href: run.run_url, target: '_blank', blocked: false});
+  }
+  const latestLink = [...env.byId('operations-health').firstElementChild.querySelectorAll('a')].find(link => link.textContent.startsWith('Latest run'));
+  assert.equal(latestLink.href, runs[1].run_url, 'The branch current-run action still refers to its own current record');
+  assert.equal(env.window.location.hash, '#operations');
+  assert.deepEqual(env.errors, []);
+});
+
+test('Operations refresh replaces a scrolled history with its newest run first, including newly received runs', async t => {
+  const runs = [healthRun('refresh-old', '2026-08-30T06:00:00Z'), healthRun('refresh-current', '2026-08-30T06:45:00Z')];
+  const env = await dashboard({hash: '#operations', change: data => setHealthHistory(data, runs)}); t.after(env.close);
+  const oldStrip = env.byId('operations-health').querySelector('.timeline');
+  oldStrip.scrollLeft = 180;
+  const newRun = healthRun('refresh-new', '2026-08-30T07:00:00Z');
+  setHealthHistory(env.data, [runs[1], runs[0], newRun]);
+  await env.refresh();
+  const newStrip = env.byId('operations-health').querySelector('.timeline');
+  assert.notEqual(newStrip, oldStrip);
+  assert.equal(newStrip.scrollLeft, 0, 'A rebuilt strip starts at its newest item, not the prior historical offset');
+  assert.deepEqual(historyIds(env), ['refresh-new', 'refresh-current', 'refresh-old']);
+  assert.deepEqual(historyIds(env, 'health-chart'), historyIds(env));
+  const reloaded = await dashboard({hash: '#operations', change: data => setHealthHistory(data, [newRun, ...runs])}); t.after(reloaded.close);
+  assert.deepEqual(historyIds(reloaded), historyIds(env));
+  assert.equal(reloaded.byId('operations-health').querySelector('.timeline').scrollLeft, 0);
+  assert.deepEqual(env.errors, []);
+  assert.deepEqual(reloaded.errors, []);
+});
+
+test('Operations run-table next and previous controls keep their matching run links after history ordering', async t => {
+  const runs = Array.from({length: 60}, (_, index) => healthRun('paged-' + String(index).padStart(2, '0'),
+    `2026-08-30T06:${String(index).padStart(2, '0')}:00Z`));
+  const env = await dashboard({hash: '#operations', change(data) {
+    setHealthHistory(data, [runs[0], runs[59], runs[30]]); data.runs = runs; data['ai-runs'] = [];
+  }}); t.after(env.close);
+  await waitFor(() => env.byId('runs-body').children.length === 50, 'run table first page');
+  const rowHref = index => env.byId('runs-body').children[index].querySelector('a').href;
+  assert.deepEqual(historyIds(env), ['paged-59', 'paged-30', 'paged-00']);
+  assert.equal(rowHref(0), runs[59].run_url);
+  assert.equal(rowHref(49), runs[10].run_url);
+  assert.equal(env.byId('runs-previous').disabled, true);
+  env.byId('runs-more').click();
+  assert.equal(env.byId('runs-body').children.length, 10);
+  assert.equal(rowHref(0), runs[9].run_url);
+  assert.equal(rowHref(9), runs[0].run_url);
+  assert.equal(env.byId('runs-more').disabled, true);
+  assert.equal(env.byId('runs-previous').disabled, false);
+  env.byId('runs-previous').click();
+  assert.equal(rowHref(0), runs[59].run_url);
+  assert.equal(env.byId('runs-previous').disabled, true);
+  assert.equal(env.byId('runs-more').disabled, false);
+  assert.deepEqual(historyIds(env), ['paged-59', 'paged-30', 'paged-00']);
+  assert.deepEqual(env.errors, []);
+});
+
 test('record pagination, debounced search, explicit date basis and sortable columns work', async t => {
   const env = await dashboard(); t.after(env.close);
   await env.navigate('#records', () => env.byId('filings-body').children.length === 50);
