@@ -1,6 +1,6 @@
 # PolitiTrack active handoff
 
-Updated: **2026-08-31 10:46 UTC**
+Updated: **2026-08-31 11:48 UTC**
 Status: **hourly follow-up active; PR #3 held for obsolete-run containment and main reconciliation**
 Work record: [issue #1](https://github.com/maglothinm/MyETF-Intelligence/issues/1), open.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3), unmerged.
@@ -16,16 +16,16 @@ held. AGENTS.md and its state-safety rules are unchanged; see D-017/D-018.
 
 Canonical ID **1349678672** remains public **maglothinm/MyETF-Intelligence**.
 Remote: `https://github.com/maglothinm/MyETF-Intelligence.git`.
-Live default main: **ac6342ac85e5a395f1b8bab251b8f608c47249e0**,
-documentation-only successor of runtime **3902968**.
+Live default main: **f2df59740b095417e3883fd81ac0a16c1d16fdad**,
+documentation-only successor of deployed UI **9d9e7be** (PR #10).
 Release branch: **codex/production-remediation**, published head before this
-documentation update **1a0ee5b9f77842ff12158229327dcbfc36dc316a**.
+documentation update **b7ecb3899cd96e4de213aa20fa3e4c77620df01b**.
 Implementation: **020351a86861020d1a0f579b8ccdd7f218be3994**;
 CI setup fix: **4cb6d5677daa60fff507d86502e156b70200a8ff**.
 
 Use the release worktree `.remediation/production-remediation-monitor`.
-The shared checkout is now `codex/dashboard-review-ux` at **3902968**, with
-concurrent uncommitted dashboard, test and documentation changes and `.codex/`.
+The shared checkout is now `codex/persistent-dashboard-shell` at **9d9e7be**,
+with existing untracked `.codex/` and `.worktrees/` and concurrent work.
 Do not switch it, overwrite its files or disturb this work. Preserve ignored
 held-feature drafts.
 No merge, manual dispatch, notification, protected upload, Pages deployment or
@@ -71,10 +71,21 @@ Its validated Senate sessions and complete-source discovery gate must survive
 PR #3 reconciliation, including Legislative upload validation, classified
 terminal health reporting, CI additions and tests. Preserve all earlier deployed
 UI/help work, view-model/assets, public-output sanitation and tests. Retain main
-decisions D-019 through D-022 alongside this branch's D-015 through D-018.
+decisions D-019 through D-024 alongside this branch's D-015 through D-018.
 Do not resolve conflicts by selecting one complete side.
 
-New documentation-only main **ac6342a** publishes owner-approved Senate recovery
+PR #10 is now merged as **9d9e7bef326a0e24a5f846ea1310dec24a647019**, with
+documentation successor **f2df597**. Preserve its shared public review projection,
+parser-exception drill-down/exact record selection, source/branch filters,
+workspace help, refresh consistency and generator/Python/DOM coverage. Relevant
+files are `scripts/dashboard_insights.py`, `scripts/build_trade_dashboard.py`,
+`scripts/dashboard_assets/`, `tests/test_dashboard_insights.py`,
+`tests/test_trade_dashboard.py` and `tests/dashboard_dom.test.cjs`. The public
+diff changes no workflow, collector, scoring, state schema, alert or simulation.
+Main records independent content/input acceptance at **11:04:50 UTC**; this
+heartbeat has not repeated that full content audit or validated PR #3 integration.
+
+Earlier documentation-only main **ac6342a** publishes owner-approved Senate recovery
 evidence in its operational docs and `docs/incidents/senate-efd-2026-08-30.md`.
 It reports independent full ZIP/inventory/predecessor/ID continuity and all
 21 live Pages files matching the deployed artifact, rechecked at **10:24 UTC**.
@@ -98,7 +109,7 @@ and PR #3 integrated-commit acceptance remain unverified by this heartbeat.
 
 ## Latest protected metadata and deployment
 
-At **10:46:28 UTC**, all **155 runs / 190 global artifacts** were paginated.
+At **11:48:21 UTC**, all **160 runs / 190 global artifacts** were paginated.
 No later successful producer lacks protected state; no permitted producer or
 publisher is active. Only the two obsolete queued runs remain active.
 
@@ -109,10 +120,11 @@ publisher is active. Only the two obsolete queued runs remain active.
 | AI | `9749567326` | `33369677492` / 1 | `99417669143` | `3902968` |
 
 All are unexpired and match canonical main, expected workflow/job identities and
-exact successful attempt windows. **This heartbeat checked metadata and the
-public build marker, not ZIP digests, full inventory/schema/ledger continuity,
-restore or release allowlist eligibility.** Integrate current main before validating consuming-commit
-ancestry. Never select older allowed artifacts to bypass these gates.
+exact successful attempt windows; producer **3902968** is an ancestor of current
+main. **This heartbeat checked metadata and the public build marker, not ZIP
+digests, full inventory/schema/ledger continuity, restore or release allowlist
+eligibility.** Integrate current main before validating consuming-commit ancestry.
+Never select older allowed artifacts to bypass these gates.
 
 Exact migration allowlist remains unchanged: the eight previously verified
 entries are historical checkpoints, not fixed restore targets. Earlier full
@@ -121,16 +133,23 @@ verification evidence remains in PROJECT_STATE.md and
 Simulation remains `9734790733`, run `33320677882` / attempt 1, job
 `99281977011`; no simulation was run here.
 
-Latest [Pages 33369728437](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369728437)
-succeeded, attempt 1, build `99417832272`, deploy `99417945412`, sole artifact
-`9749580990`. Public `/data/dashboard-insights.json` returned HTTP 200 with
-build **3902968d5d70cd00030248ae4a6bcea18aa2e6ea**, generation
-`2026-08-31T07:45:12Z` and the canonical repository URL.
+Latest [Pages 33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313)
+succeeded, attempt 1, build `99465681041`, deploy `99465807219`, sole artifact
+`9755242103`, unexpired and created within its exact build window.
+Public `/data/dashboard-insights.json` returned HTTP 200 with
+build **9d9e7bef326a0e24a5f846ea1310dec24a647019**, generation
+`2026-08-31T11:02:05Z` and the canonical repository URL.
 This is live build-marker verification, not full artifact/content equality or
 browser/device acceptance.
 
 ## Checks and remaining acceptance
 
+- PR #10 CI [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936)
+  / 1, job `99465044563`, and main CI
+  [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349)
+  / 1, job `99465680760`, independently confirmed successful with zero artifacts.
+  Main reports 213 selected tests and Linux verify.sh passed; this heartbeat did
+  not reread test logs. No exact-head run appeared for docs-only main `f2df597`.
 - Senate-fix PR CI [33346339195](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346339195)
   succeeded, attempt 1, job `99351095293`; main CI
   [33346456045](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346456045)
@@ -138,8 +157,8 @@ browser/device acceptance.
   Main's public record reports 212 selected tests and Linux verify.sh passed.
 - Last release-branch CI [33320353688](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33320353688)
   succeeded, attempt 1, job `99281111335`, old head `884a344`: full 244 tests
-  and verify.sh, zero artifacts. No CI exists for documentation head `1a0ee5b`
-  or integration with new main. No Actions run appeared for docs-only main `ac6342a`.
+  and verify.sh, zero artifacts. No CI exists for documentation head `b7ecb38`
+  or integration with new main.
 - This heartbeat changes only documentation. No new implementation test run,
   full artifact download, simulation or browser/device check is claimed.
 - Same-ID rename/privacy and legacy ID **1033519491** Actions/Pages shutdown and
@@ -155,8 +174,8 @@ browser/device acceptance.
 1. Continue checking the existing GitHub report and exact obsolete runs without
    duplicate posts or unchanged cancellation retries.
 2. After containment, reconcile PR #3 with current main while preserving all
-   deployed UI/help and Senate fixes. Refresh newest exact-attempt producer
-   high-water checks, export/hash/schema/ledger continuity, consuming ancestry and
+   deployed UI/help, PR #10 review navigation and Senate fixes. Refresh newest
+   exact-attempt producer high-water checks, export/hash/schema/ledger continuity, consuming ancestry and
    exact pre-manifest allowlisting. Drain permitted older producers before merge.
 3. Pass the integrated tests, full Linux verify.sh and exact-head CI. Merge only
    after these gates: merging can itself trigger Pages.

@@ -10,7 +10,53 @@ independent Senate fix has completed a successful scheduled Legislative/AI chain
 and Pages publication. Main now publishes its independent full state/content
 acceptance; PR #3 still requires fresh integrated-commit acceptance.**
 
-## Hourly release checkpoint — 2026-08-31 10:46 UTC
+## New main release checkpoint — 2026-08-31 11:48 UTC
+
+Canonical ID **1349678672** remains `maglothinm/MyETF-Intelligence`. Live main
+advanced to **f2df59740b095417e3883fd81ac0a16c1d16fdad**, documentation successor
+of PR #10 merge **9d9e7bef326a0e24a5f846ea1310dec24a647019**. This independently
+authorized UI release adds shared public review classification, parser-exception
+drill-down and exact record selection, source/branch filters, workspace help and
+refresh consistency. Preserve its generator, public projection, dashboard assets,
+Python/DOM tests and decisions D-023/D-024 alongside the earlier UI/Senate work
+when reconciling PR #3. The public diff changes no workflow, collector, scoring,
+state schema, alert or simulation implementation.
+
+Main records passing PR/main CI and read-only Pages publication, plus independent
+protected-input and 21-file live-content acceptance at **11:04:50 UTC**. These
+are that release's evidence, not PR #3 integration acceptance or a repeated full
+content audit by this heartbeat. The public build marker now returns HTTP 200,
+SHA **9d9e7be**, generated `2026-08-31T11:02:05Z`, with the canonical repository
+URL. Physical-device acceptance remains open in main's published record.
+
+At **11:48:21 UTC**, all **160 runs / 190 global artifacts** were paginated.
+The three protected artifacts in the 10:46 table below are unchanged, unexpired,
+and map to the same successful attempt-1 jobs on **3902968**, an ancestor of
+current main. No later producer gap or permitted active writer/publisher was
+found. Simulation remains `9734790733` / `33320677882` / 1. This was metadata
+validation, not fresh ZIP/inventory/ledger or release-allowlist acceptance.
+
+Independent run metadata confirms successful PR CI `33384840936` / 1, job
+`99465044563`, and main CI `33385044349` / 1, job `99465680760`, each with zero
+artifacts. Pages `33385044313` / 1 succeeded on **9d9e7be**, build `99465681041`,
+deploy `99465807219`, sole artifact `9755242103` created within its exact build
+window and unexpired. No exact-head run appeared for documentation main
+**f2df597**. Old or independent CI is not PR #3 integration proof.
+
+PR #3 stays draft/open/unmerged at **b7ecb3899cd96e4de213aa20fa3e4c77620df01b**
+before this documentation update, with `mergeable=false` / `mergeable_state=dirty`
+and no exact-head CI. Support remains unchanged with zero replies and no newer
+comments/replies; complete pagination was checked. No support post or unchanged
+cancellation retry was made, and the containment requirement remains in force.
+Both obsolete runs remain exact-identity queued attempt 1, null conclusion,
+zero jobs/artifacts, and are the only active runs. No containment is established.
+
+The shared checkout is now `codex/persistent-dashboard-shell` at **9d9e7be**,
+with existing untracked `.codex/` and `.worktrees/`. Leave it and all concurrent
+work untouched. This checkpoint only updates the separate release worktree's
+documentation; no implementation, production dispatch, merge or settings change.
+
+## Previous hourly release checkpoint — 2026-08-31 10:46 UTC
 
 Canonical repository ID **1349678672** remains public
 `maglothinm/MyETF-Intelligence`. Main advanced to documentation-only commit
