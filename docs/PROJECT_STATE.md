@@ -1,23 +1,39 @@
 # PolitiTrack project state
 
 Last updated: **2026-08-31 UTC**
-Status: **Investor Edge release authorized and pushed in PR #15; integrating the
-concurrent Operations ordering release from PR #14. Final integrated CI, merge
-and Pages verification are pending. Existing production-state and cutover gates
-remain unchanged.**
+Status: **Investor Edge bootstrap released through PR #15 at `676701a` and
+verified live through the existing Pages workflow. The concurrent Operations
+ordering release is preserved. Actual historical population and market backlog
+progress await normal writer runs; existing state and cutover gates remain.**
 
 This file is a point-in-time operational snapshot, not a substitute for checking
 live GitHub state. See `AGENTS.md` for the mandatory verification procedure.
 
-## Investor Edge release — in progress 2026-08-31
+## Investor Edge release — published and verified 2026-08-31
 
-The owner requested “Release the commit”. Implementation `b4a9049` is pushed in
-[PR #15](https://github.com/maglothinm/MyETF-Intelligence/pull/15).
-Its initial [CI run](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33390265467)
-passed 263 tests and Linux `verify.sh`. Concurrent PR #14 merged to main at
-`7a1108fb2e32c39f6af943395c1bb9b9a550d26f`; this integration preserves both
-features and their tests. The integrated local suite passed **347 tests**, without
-skips, including optional DOM checks. Integrated CI, merge and deployment remain pending.
+The owner requested “Release the commit”. [PR #15](https://github.com/maglothinm/MyETF-Intelligence/pull/15)
+merged tested head `c27e884a4981db4a84982bbf665962ec2e081daa` as
+`676701ac1521458aefd72e2329d4e87c8781e41f` on canonical `main`; their trees
+match. This includes implementation `b4a9049` and preserves concurrent PR #14
+(`7a1108f`) and both regression suites. The integrated local suite passed
+**347 tests**, without skips, including optional DOM checks.
+
+Integrated [PR CI 33391078330](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391078330)
+and [main CI 33391179298](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391179298)
+both succeeded on attempt 1: **264 tests passed** and Linux `verify.sh`
+reported **VERIFICATION PASSED**. Automatic [Pages 33391179240](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391179240)
+also succeeded on attempt 1. All **30** checked public URLs matched the exact
+deployment artifact. The [live Investor Edge view](https://maglothinm.github.io/MyETF-Intelligence/#investor-edge)
+and standalone page rendered without console warnings/errors or document-width
+overflow in the in-app browser. Physical-device acceptance remains separate.
+
+Fresh read-only verification confirmed protected inputs and isolated simulator
+history unchanged. No production writer, simulation or alert was manually
+dispatched. The live publication still uses retained pre-bootstrap data; this
+release does not claim completed production population or market observations.
+Detailed release receipts remain in the ignored local evidence directory.
+This documentation-only successor records the verified release result.
+
 The records below retain the earlier local-acceptance checkpoints; they are not
 claims that the bootstrap has already advanced production data.
 
