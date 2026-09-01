@@ -1193,6 +1193,7 @@ test('manual parser acknowledgement clears local attention, persists, and remain
   const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
   await waitFor(() => env.byId('reviews-body').children.length === 1, 'active parser exception');
   assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), true);
+  assert.match(env.byId('situation-brief').textContent, /1 manual parsing exception/);
   env.byId('reviews-body').querySelector('.record-link').click();
   await waitFor(() => env.byId('selected-filings-title'), 'retained filing detail');
   const acknowledge = env.doc.querySelector('[data-review-ack]');
@@ -1200,6 +1201,7 @@ test('manual parser acknowledgement clears local attention, persists, and remain
   acknowledge.click();
   await waitFor(() => env.byId('attention-exceptions').textContent === '0', 'acknowledged attention count');
   assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), false);
+  assert.doesNotMatch(env.byId('situation-brief').textContent, /manual parsing exception/);
   assert.match(env.byId('filings-body').textContent, /Acknowledged on this browser/);
   assert.equal(env.doc.activeElement.textContent, 'Restore to active review');
   const stored = env.window.localStorage.getItem('polititrack.manual-review-acknowledgements.v1');
@@ -1223,6 +1225,7 @@ test('manual parser acknowledgement clears local attention, persists, and remain
   reload.doc.querySelector('[data-review-ack]').click();
   await waitFor(() => reload.byId('attention-exceptions').textContent === '1', 'restored active count');
   assert.equal(reload.byId('attention-exceptions').classList.contains('attention-active'), true);
+  assert.match(reload.byId('situation-brief').textContent, /1 manual parsing exception/);
   assert.equal(reload.doc.activeElement.textContent, 'Acknowledge manual review');
   assert.deepEqual(env.errors, []); assert.deepEqual(reload.errors, []);
 });
