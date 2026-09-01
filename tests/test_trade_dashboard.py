@@ -343,6 +343,7 @@ def test_published_review_inventory_matches_overview_without_preview_truncation(
     production = [row for row in rows if not row["is_synthetic_test"]]
     exceptions = [row for row in production if row["category"] == "manual_exception"]
     assert len(exceptions) == model["reviews"]["manual_exception"] == 12
+    assert model["reviews"]["manual_exception_ids"] == sorted(row["review_id"] for row in exceptions)
     assert len(production) == model["reviews"]["total"] == 14
     assert len(model["reviews"]["latest"]) == 8
     assert model["reviews"]["access_required"] == model["reviews"]["other"] == 1

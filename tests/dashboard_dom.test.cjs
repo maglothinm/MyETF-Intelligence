@@ -89,7 +89,7 @@ function fixtures() {
   const model = {...copy(builtModel), generated_utc: '2026-08-30T12:00:00Z', data_through_utc: '2026-08-30T11:00:00Z', signals: [], signals_truncated: false,
     coverage: {cataloged_only: 22, processed: 43, review_required: 0, other_filings: 0, filings: 65, transactions: 1, analyses: 0, qualifying_signals: 0, note: 'Separate retained populations. Cataloged does not mean parsed.'},
     composition: {population: 1, purchases: 1, sales: 0, other: 0, note: 'Parsed post-upgrade fixture ledger.'},
-    reviews: {access_required: 0, manual_exception: 0, other: 0, total: 0, latest: []},
+    reviews: {access_required: 0, manual_exception: 0, manual_exception_ids: [], other: 0, total: 0, latest: []},
     simulation: {available: false, status: 'unavailable'}, paper: {open_positions: 0}, latest_filings: filings.slice(0, 5),
     synthetic: {filings: 0, transactions: 0, analyses: 0},
     health: {status: 'success', as_of_utc: '2026-08-30T12:00:00Z', required_branches: ['legislative', 'executive', 'ai'], policy: {
@@ -1126,7 +1126,7 @@ function reviewFixture(data, count = 1) {
     {...review, review_id: 'house', source: 'house', branch: 'legislative', filer: 'House Review Official', category: 'other'},
     {...review, review_id: 'custom', source: 'ethics-office', branch: 'executive', filer: 'Custom Source Official', category: 'other'},
     {...review, review_id: 'TEST:synthetic', filer: 'TEST ONLY', is_synthetic_test: true});
-  Object.assign(data['dashboard-insights'].reviews, {manual_exception: count, access_required: 1, other: 2, total: count + 3, latest: data['pending-reviews'].slice(0, 8)});
+  Object.assign(data['dashboard-insights'].reviews, {manual_exception: count, manual_exception_ids: data['pending-reviews'].slice(0, count).map(row => row.review_id).sort(), access_required: 1, other: 2, total: count + 3, latest: data['pending-reviews'].slice(0, 8)});
   data['dashboard-insights'].source_filters.push({value: 'ethics-office', label: 'Ethics Office', field: 'source'});
 }
 
@@ -1187,6 +1187,41 @@ test('parser links survive reload and history; chip and clear filters restore no
   assert.equal(env.window.location.hash, '#records/reviews');
 });
 
+test('manual parser acknowledgement clears local attention, persists, and remains reversible', async t => {
+  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  await waitFor(() => env.byId('reviews-body').children.length === 1, 'active parser exception');
+  env.byId('reviews-body').querySelector('.record-link').click();
+  await waitFor(() => env.byId('selected-filings-title'), 'retained filing detail');
+  const acknowledge = env.doc.querySelector('[data-review-ack]');
+  assert.equal(acknowledge.textContent, 'Acknowledge manual review');
+  acknowledge.click();
+  await waitFor(() => env.byId('attention-exceptions').textContent === '0', 'acknowledged attention count');
+  assert.match(env.byId('filings-body').textContent, /Acknowledged on this browser/);
+  assert.equal(env.doc.activeElement.textContent, 'Restore to active review');
+  const stored = env.window.localStorage.getItem('polititrack.manual-review-acknowledgements.v1');
+  assert.match(stored, /review:paper/);
+
+  await env.navigate('#records/reviews?category=manual_exception', () => env.byId('reviews-count-label').textContent.includes('No unacknowledged'));
+  assert.equal(env.doc.querySelector('#panel-reviews .table-wrap').hidden, true);
+  assert.match(env.byId('review-categories').textContent, /0 active/);
+  assert.match(env.byId('review-categories').textContent, /1 acknowledged on this browser/);
+  env.byId('toggle-acknowledged-reviews').click();
+  assert.equal(env.byId('reviews-body').children.length, 1);
+  assert.match(env.byId('reviews-body').textContent, /Acknowledged here/);
+
+  const reload = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', beforeScript(window) {
+    window.localStorage.setItem('polititrack.manual-review-acknowledgements.v1', stored);
+  }}); t.after(reload.close);
+  await waitFor(() => reload.byId('attention-exceptions').textContent === '0', 'persisted acknowledgement');
+  reload.byId('toggle-acknowledged-reviews').click();
+  reload.byId('reviews-body').querySelector('.record-link').click();
+  await waitFor(() => reload.doc.querySelector('[data-review-ack]'), 'restore control');
+  reload.doc.querySelector('[data-review-ack]').click();
+  await waitFor(() => reload.byId('attention-exceptions').textContent === '1', 'restored active count');
+  assert.equal(reload.doc.activeElement.textContent, 'Acknowledge manual review');
+  assert.deepEqual(env.errors, []); assert.deepEqual(reload.errors, []);
+});
+
 test('complete parser collection is paginated beyond the compact eight-row overview', async t => {
   const env = await dashboard({change: data => reviewFixture(data, 53), hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
   await waitFor(() => env.byId('reviews-body').children.length === 50, 'full exceptions');
@@ -1202,7 +1237,7 @@ test('no parser exceptions has a positive empty state without an empty table', a
   const env = await dashboard({hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
   await waitFor(() => env.requests.includes('pending-reviews'), 'empty review ledger');
   assert.equal(env.byId('attention-exceptions').textContent, '0');
-  assert.equal(env.byId('reviews-count-label').textContent, 'No records currently require manual parser review.');
+  assert.equal(env.byId('reviews-count-label').textContent, 'No unacknowledged records currently require manual parser review.');
   assert.equal(env.doc.querySelector('#panel-reviews .table-wrap').hidden, true);
   assert.equal(env.doc.querySelector('#panel-reviews .pagination').hidden, true);
 });
@@ -1230,6 +1265,7 @@ test('orphan and hostile review records remain inspectable without inventing fil
     reviewFixture(data); const row = data['pending-reviews'][0];
     delete row.filing_key; row.filing_available = false; row.filer = hostile; row.reason = hostile;
     row.review_id = 'review:/?&=%'; row.source_url = 'javascript:window.hostileExecuted=2';
+    data['dashboard-insights'].reviews.manual_exception_ids = [row.review_id];
   }, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
   await waitFor(() => env.byId('reviews-body').querySelector('.record-link'), 'orphan review');
   env.byId('reviews-body').querySelector('.record-link').click();
@@ -1246,6 +1282,7 @@ test('review refresh advances card and list together, and rejects a partial publ
   await waitFor(() => env.byId('reviews-body').children.length === 1, 'initial exception');
   const before = env.window.localStorage.getItem(KEY);
   env.data['dashboard-insights'].reviews.manual_exception = 2;
+  env.data['dashboard-insights'].reviews.manual_exception_ids = [env.data['pending-reviews'][0].review_id, 'second'].sort();
   env.data['dashboard-insights'].reviews.total = 5;
   await env.refresh();
   assert.equal(env.byId('error-banner').hidden, false);
@@ -1265,7 +1302,7 @@ test('opening reviews during an in-flight refresh commits the card and newly loa
   const env = await dashboard({change: reviewFixture}); t.after(env.close);
   await env.navigate('#records/filings', () => env.byId('filings-body').children.length === 50);
   env.data['dashboard-insights'].generated_utc = '2026-08-31T12:00:00Z';
-  Object.assign(env.data['dashboard-insights'].reviews, {manual_exception: 2, total: 5});
+  Object.assign(env.data['dashboard-insights'].reviews, {manual_exception: 2, manual_exception_ids: [env.data['pending-reviews'][0].review_id, 'arrived-during-refresh'].sort(), total: 5});
 
   // Hold an already-open table while the user opens Reviews for the first time.
   // That lazy load legitimately sees the old model; the refresh must restage it.
@@ -1303,7 +1340,7 @@ test('switching from a filing detail to an orphan review focuses the visible sel
     reviewFixture(data);
     data['pending-reviews'].push({...data['pending-reviews'][0], review_id: 'orphan-after-filing',
       filing_key: 'missing-filing', filing_available: false, filer: 'Orphan Review Official'});
-    Object.assign(data['dashboard-insights'].reviews, {manual_exception: 2, total: 5});
+    Object.assign(data['dashboard-insights'].reviews, {manual_exception: 2, manual_exception_ids: [data['pending-reviews'][0].review_id, 'orphan-after-filing'].sort(), total: 5});
   }}); t.after(env.close);
   await env.navigate('#records/reviews?category=manual_exception', () => env.byId('reviews-body').children.length === 2);
   const filingLink = [...env.byId('reviews-body').querySelectorAll('.record-link')].find(link => link.textContent.includes('Paper Filing Official'));

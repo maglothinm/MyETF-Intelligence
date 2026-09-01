@@ -694,3 +694,26 @@ and AI were current; source data through remained the Legislative collector
 completion rather than the later dashboard build. Desktop, portrait, Wallboard,
 newest-first history and stale help were verified. External activation remains
 gated and GitHub cron remains enabled.
+
+## D-2026-09-01-037 — Keep manual-review acknowledgements local and reversible
+
+**Decision:** Acknowledging a Manual Parser Exception changes only the current
+browser's review presentation. It removes that retained review from active
+attention and the default exception queue, persists the acknowledgement locally,
+and provides an explicit restore action. It does not resolve, delete, retry, edit,
+or otherwise mutate the production review record.
+
+**Reason:** The static dashboard has no authenticated user or server-side review
+authority. A browser-local acknowledgement supports the owner's completed manual
+review without confusing a presentation preference with parser remediation or
+protected-state continuity.
+
+**Consequence:** The compact dashboard model publishes the exact current
+production manual-exception identity set so stale local acknowledgements can be
+discarded and overview counts remain coherent with the lazy-loaded review ledger.
+The dashboard validates that identity set against the retained ledger before
+displaying it. Acknowledgements are device/browser specific, reversible, and
+remain available in a deliberately disclosed acknowledged inventory. They are
+not shared across devices or evidence that the underlying parser issue was fixed.
+This changes no collector, parser, schedule, workflow, alert, credential,
+protected artifact, production state, or deployment authority.
