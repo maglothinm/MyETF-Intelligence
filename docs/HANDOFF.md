@@ -3,14 +3,13 @@
 Updated: **2026-09-01 UTC**
 Work: [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19).
 
-## Current task — redaction-boundary freshness fix under local review
+## Current task — freshness release verified; external activation gated
 
 Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
 default **main**. PR #20 and its clock follow-up PR #21 are merged.
-Final deployed source **5932a49950384fb9cb2bdab93c4093ea596789a1** has a tree identical
-to tested source `2a13b6c6d2d3d51cf7a4ec5ac05a45e2451ad46c`. Work is isolated
-in the clean clone branch `codex/fix-freshness-redaction`, based on current main
-`70415df6be5fcb47dd50680730860db16e45e480`. Original unrelated work remains preserved.
+The redaction-boundary follow-up PR #23 is also merged and deployed as
+**2c1be6040e2e6d8cda18991dbb2db38fe56a011a** from tested source
+`5aa8cef3127beba9c5a8fef002d1228710fb0b26`. Original unrelated work remains preserved.
 Never implement or dispatch from legacy `maglothinm/MyETF`.
 
 Post-release review reproduced a remaining production path defect: the publisher
@@ -19,13 +18,12 @@ sanitized retained rows before evaluating health, and could erase the sole
 nonproduction success could then refresh health and source currency. The local
 fix preserves only a coarse exclusion boolean in JSON and CSV and covers all three
 workers through actual site builds. The shared open status help also updates as health ages.
-Local validation passed all **644 Python cases** (the full run and the five
-optional Node-backed cases in their enabled subset), **67 generated DOM** cases,
-**36 native Operations** cases, Worker dispatch tests, syntax, workflow YAML and
-diff checks. Two independent reviews identified split exclusion rules and missing
-CSV markers; both findings and the follow-up exception-scope edge case are fixed
-and covered. The local branch commit is not yet pushed, reviewed by canonical CI,
-merged or deployed. Nothing was dispatched.
+Local validation passed **639 Python tests with 5 optional skips**, **67 generated
+DOM** cases, **36 native Operations** cases, **11 Worker** cases, syntax, workflow
+YAML and diff checks. Two independent reviews identified split exclusion rules,
+missing CSV markers and an exception-scope edge case; all are fixed and covered.
+PR CI **33498107710**, main CI **33498254970** and Pages **33498255010** succeeded.
+Artifact **9796632425** is tied to the merge SHA. Nothing was manually dispatched.
 
 ## Completed work and proof
 
@@ -54,22 +52,25 @@ Ignored proof is under this worktree's `.remediation/preflight`, `postflight`,
 
 ## Final verified result and next safe action
 
-Clock follow-up deployed from PR #21, source `5932a49950384fb9cb2bdab93c4093ea596789a1`.
-PR CI **33421833418 / 1** and main CI **33421979782 / 1**
-succeeded. Final Pages **33421979811 / 1**, artifact **9769279578**, succeeded;
-all 250 live files match. Fresh exact-attempt provenance/high-water/hashes and
-continuity passed at **2026-08-31T17:57:09Z**. Protected/simulator inputs remain
-unchanged. The live header is correctly overdue; source time remains 15:32:55 UTC.
-Full regression again passed **633 tests, no skips**; clock coverage passed
-**65 DOM + 42 native cases** and independent review. No known code blocker remains.
+Final freshness implementation is deployed from PR #23, source
+`2c1be6040e2e6d8cda18991dbb2db38fe56a011a`. PR/main CI and Pages succeeded;
+the live build identifies that exact SHA. At **2026-09-01T10:37:02Z** the header
+correctly reported **Executive polling overdue** while Legislative and AI were
+current. Source data through **10:33:47Z** remains separate from dashboard
+generation. Executive showed a successful last check at **06:48:12Z**, age
+**228.833m**, overdue **198.833m**, and six estimated missed intervals. Operations
+exposed cadence, attempt/success, next expected, trigger and newest-first history.
+Desktop, 390px portrait and Wallboard checks passed with no visible green overall
+status. Final regression passed **639 tests, 5 optional skips** and independent
+review found no remaining issue.
 
 Repository/UI rollout is verified. Next safe action is to resolve the GitHub
 clearance gate and provision the external scheduler, then observe several actual
 cycles before claiming cadence or choosing cron redundancy. No production writer
 was manually dispatched. Issue #19 remains open for infrastructure acceptance.
-Final proof: `.remediation/final-postflight` and
-`.remediation/scheduler-release-check/33421979811-1`; committed release receipt
-contains exact jobs, hashes, input counts and remaining limitations.
+Real GitHub scheduled starts remain far outside target: Legislative gaps are
+**113–468.48m** and Executive gaps are **146.1–534.62m**. Keep GitHub cron as the
+fallback until external dispatch has several verified cycles.
 
 ## Infrastructure blockers
 
