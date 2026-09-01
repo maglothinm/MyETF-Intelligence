@@ -59,6 +59,7 @@ resource "google_sql_database_instance" "runtime" {
 
   settings {
     tier              = var.database_tier
+    edition           = "ENTERPRISE"
     availability_type = "ZONAL"
     disk_type         = "PD_SSD"
     disk_autoresize   = true
