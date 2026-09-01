@@ -68,6 +68,19 @@ def _flag(value: Any) -> bool:
     return value is True or isinstance(value, str) and value.strip().casefold() == "true"
 
 
+def nonproduction_evidence(row: Mapping[str, Any]) -> bool:
+    """Recognize explicit exclusions before private metadata is redacted."""
+    if any(_flag(row.get(key)) for key in ("is_nonproduction", "is_synthetic_test", "is_temporary", "is_simulation", "simulation", "is_test", "test")):
+        return True
+    if row.get("test_metadata") or row.get("simulation_id"):
+        return True
+    if any(str(row.get(key) or "").strip().casefold() in _NONPRODUCTION
+           for key in ("event_name", "trigger_source", "mode", "execution_mode", "environment", "source")):
+        return True
+    return any(re.search(r"(?:^|[|:])(?:TEST|SIMULATION)(?:[-_:]|$)", str(row.get(key) or ""), re.I)
+               for key in ("run_key", "filing_key", "report_id", "trade_id", "analysis_id"))
+
+
 def production_run(row: Mapping[str, Any], branch: str) -> bool:
     """Reject explicit nonproduction identity, while retaining legacy history.
 
@@ -75,17 +88,7 @@ def production_run(row: Mapping[str, Any], branch: str) -> bool:
     Older histories lack workflow/event metadata; absence is not invented identity.
     Any conflicting identity or TEST marker, when present, disqualifies the row.
     """
-    if branch not in WORKFLOWS or row.get("branch") not in (None, "", branch):
-        return False
-    if any(_flag(row.get(key)) for key in ("is_synthetic_test", "is_temporary", "is_simulation", "simulation", "is_test", "test")):
-        return False
-    if row.get("test_metadata") or row.get("simulation_id"):
-        return False
-    if any(str(row.get(key) or "").strip().casefold() in _NONPRODUCTION
-           for key in ("event_name", "trigger_source", "mode", "execution_mode", "environment", "source")):
-        return False
-    if any(re.search(r"(?:^|[|:])(?:TEST|SIMULATION)(?:[-_:]|$)", str(row.get(key) or ""), re.I)
-           for key in ("run_key", "filing_key", "report_id", "trade_id", "analysis_id")):
+    if branch not in WORKFLOWS or row.get("branch") not in (None, "", branch) or nonproduction_evidence(row):
         return False
     filename, display_name = WORKFLOWS[branch]
     for key in ("workflow_file", "workflow_path", "path"):

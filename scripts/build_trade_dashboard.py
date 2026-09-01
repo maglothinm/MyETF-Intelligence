@@ -50,6 +50,7 @@ FILING_FIELDS = (
     "sale_count",
     "exchange_count",
     "review_reason",
+    "is_nonproduction",
     "is_synthetic_test",
     "is_temporary",
     "test_metadata",
@@ -79,6 +80,7 @@ TRANSACTION_FIELDS = (
     "raw_row",
     "equity_like",
     "parse_confidence",
+    "is_nonproduction",
     "is_synthetic_test",
     "is_temporary",
     "test_metadata",
@@ -106,6 +108,7 @@ REVIEW_FIELDS = (
     "review_reason",
     "first_seen_utc",
     "updated_at_utc",
+    "is_nonproduction",
     "is_synthetic_test",
 )
 
@@ -127,6 +130,7 @@ RUN_FIELDS = (
     "event_name",
     "trigger_source",
     "run_attempt",
+    "is_nonproduction",
 )
 
 ANALYSIS_FIELDS = (
@@ -184,6 +188,7 @@ ANALYSIS_FIELDS = (
     "investor_edge",
     "score_method_version",
     "paper_only",
+    "is_nonproduction",
     "is_synthetic_test",
     "is_temporary",
     "test_metadata",
@@ -216,6 +221,7 @@ PORTFOLIO_FIELDS = (
     "return_percent",
     "last_updated_utc",
     "paper_only",
+    "is_nonproduction",
 )
 
 AI_RUN_FIELDS = (
@@ -242,6 +248,7 @@ AI_RUN_FIELDS = (
     "event_name",
     "trigger_source",
     "run_attempt",
+    "is_nonproduction",
 )
 
 

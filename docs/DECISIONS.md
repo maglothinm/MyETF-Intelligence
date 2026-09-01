@@ -663,3 +663,23 @@ final Pages `33421979811` / 1, artifact `9769279578`, both final CI runs,
 633 local tests and exact protected-state/live-content verification passed.
 External activation remains gated; GitHub cron stays enabled. See the
 [final release receipt](validation/scheduler-freshness-2026-08-31.md).
+
+## D-2026-09-01-036 — Preserve nonproduction identity across public redaction
+
+**Decision:** The public dashboard projection retains a coarse boolean exclusion
+for every record with explicit test or simulation evidence. The projection never
+retains the private environment value or test metadata that caused the exclusion.
+
+**Reason:** The publisher sanitizes retained input before building health. Direct
+model tests rejected `environment=simulation` and private-only `test_metadata`,
+but the sanitizer removed those values before the production build called the
+health model. A recent excluded row could consequently refresh collector health
+and source currency after redaction.
+
+**Consequence:** One shared predicate defines the existing nonproduction rules.
+The sanitized JSON and CSV copies remain safe and idempotent while the coarse
+marker prevents production admission, source ancestry and Operations history from
+consuming test or simulation evidence. Open contextual help also rehydrates when elapsed-time
+aging changes status, so its visible explanation cannot retain earlier green
+wording. This changes no collector, schedule, state artifact, trigger, alert,
+simulation writer, external scheduler activation or production credential.

@@ -1,18 +1,31 @@
 # PolitiTrack active handoff
 
-Updated: **2026-08-31 UTC**
+Updated: **2026-09-01 UTC**
 Work: [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19).
 
-## Current task — external scheduler activation remains gated
+## Current task — redaction-boundary freshness fix under local review
 
 Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
 default **main**. PR #20 and its clock follow-up PR #21 are merged.
 Final deployed source **5932a49950384fb9cb2bdab93c4093ea596789a1** has a tree identical
 to tested source `2a13b6c6d2d3d51cf7a4ec5ac05a45e2451ad46c`. Work is isolated
-in `.worktrees/scheduler-freshness`: implementation branch
-`codex/freshness-clock-audit`, final receipt branch `codex/scheduler-release-receipt`.
-Original checkout `9d9e7be`, local main and unrelated work remain preserved.
+in the clean clone branch `codex/fix-freshness-redaction`, based on current main
+`70415df6be5fcb47dd50680730860db16e45e480`. Original unrelated work remains preserved.
 Never implement or dispatch from legacy `maglothinm/MyETF`.
+
+Post-release review reproduced a remaining production path defect: the publisher
+sanitized retained rows before evaluating health, and could erase the sole
+`environment=simulation` or private-only `test_metadata` exclusion. A recent
+nonproduction success could then refresh health and source currency. The local
+fix preserves only a coarse exclusion boolean in JSON and CSV and covers all three
+workers through actual site builds. The shared open status help also updates as health ages.
+Local validation passed all **644 Python cases** (the full run and the five
+optional Node-backed cases in their enabled subset), **67 generated DOM** cases,
+**36 native Operations** cases, Worker dispatch tests, syntax, workflow YAML and
+diff checks. Two independent reviews identified split exclusion rules and missing
+CSV markers; both findings and the follow-up exception-scope edge case are fixed
+and covered. The local branch commit is not yet pushed, reviewed by canonical CI,
+merged or deployed. Nothing was dispatched.
 
 ## Completed work and proof
 

@@ -1,13 +1,27 @@
 # PolitiTrack project state
 
-Last updated: **2026-08-31 UTC**
+Last updated: **2026-09-01 UTC**
 Status: **Scheduler freshness deployed from PR #20; live overdue health, state
 continuity and all served files verified. The device-clock follow-up is deployed
-and verified from PR #21. External scheduling remains inactive.**
+and verified from PR #21. A post-release redaction-boundary fix is under local
+review; it is not deployed. External scheduling remains inactive.**
 
 This snapshot does not replace live GitHub evidence. Follow `AGENTS.md`.
 
 ## Scheduler freshness — deployed and verified; external activation remains gated
+
+Post-release review on branch `codex/fix-freshness-redaction` found that the
+public sanitizer could remove the sole test/simulation marker before the actual
+site build evaluated health. Direct model behavior was correct, but a recently
+excluded row could become production evidence after redaction. The bounded fix
+retains a coarse nonproduction boolean in JSON and CSV, keeps private markers
+removed, and adds actual `build_site` regressions for Legislative, Executive and AI.
+Shared contextual help now updates its open explanation when monitoring ages.
+Local validation covers all **644 Python cases** (the full pass plus the
+five optional Node-backed cases run in their enabled subset), **67 generated DOM**
+cases and **36 native Operations** cases. The reviewed implementation is committed
+on the local branch, but is not yet pushed, reviewed in canonical CI, merged or
+deployed; it does not change protected state or scheduler authority.
 
 Final deployed source is **5932a49950384fb9cb2bdab93c4093ea596789a1**, PR #21. Final Pages
 **33421979811 / 1**, artifact **9769279578**, and both final CI runs succeeded.

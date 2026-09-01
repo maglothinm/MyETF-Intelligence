@@ -19,10 +19,10 @@ from urllib.parse import parse_qsl, urlsplit
 
 try:
     from .collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
-                                      overall_status, production_run, trigger_source)
+                                      nonproduction_evidence, overall_status, production_run, trigger_source)
 except ImportError:  # pragma: no cover - direct-script execution
     from collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
-                                     overall_status, production_run, trigger_source)
+                                     nonproduction_evidence, overall_status, production_run, trigger_source)
 
 
 VERSION = 1
@@ -142,7 +142,7 @@ def public_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     must escape it. We do not serialize arbitrary objects, NaN or credentials.
     Existing benign simulation notification status fields are kept for consumers.
     """
-    def clean(value: Any) -> Any:
+    def clean(value: Any, path: tuple[str, ...] = ()) -> Any:
         if isinstance(value, Mapping):
             result = {}
             for key, item in value.items():
@@ -154,10 +154,16 @@ def public_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
                     result[key] = {provider: _scrub_text(status) for provider, status in item.items()
                                    if provider in {"pushover", "email", "gmail"} and isinstance(status, str)}
                 else:
-                    result[key] = clean(item)
+                    result[key] = clean(item, path + (key,))
+            # Normalize every explicit exclusion to one coarse public field.
+            # Private environment/test metadata remains removed, while JSON and
+            # CSV consumers retain the same production boundary as the builder.
+            isolated_replay = path == ("simulation",)
+            if nonproduction_evidence(value) and not isolated_replay:
+                result["is_nonproduction"] = True
             return result
         if isinstance(value, (list, tuple)):
-            return [clean(item) for item in value]
+            return [clean(item, path + ("[]",)) for item in value]
         if isinstance(value, str):
             return _scrub_text(value)
         if value is None or isinstance(value, bool) or isinstance(value, int):
@@ -174,17 +180,7 @@ def _flag(value: Any) -> bool:
 
 
 def is_synthetic(row: Mapping[str, Any]) -> bool:
-    if any(_flag(row.get(key)) for key in ("is_synthetic_test", "is_temporary", "is_simulation", "simulation", "is_test", "test")):
-        return True
-    if _mapping(row.get("test_metadata")) or row.get("simulation_id"):
-        return True
-    if any(str(row.get(key) or "").casefold() in {"test", "synthetic", "simulation", "manual_test"}
-           for key in ("mode", "execution_mode", "trigger_source", "event_name")):
-        return True
-    return any(
-        bool(re.search(r"(?:^|[|:])TEST(?:[-_:]|$)", str(row.get(key) or ""), re.I))
-        for key in ("filing_key", "report_id", "trade_id", "analysis_id")
-    )
+    return nonproduction_evidence(row)
 
 
 def _filing_identity(row: Mapping[str, Any]) -> tuple[str, str]:
