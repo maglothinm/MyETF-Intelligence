@@ -5,7 +5,30 @@ Status: **Scheduler freshness deployed from PR #20; live overdue health, state
 continuity and all served files verified. The device-clock follow-up is deployed
 and verified from PR #21. The redaction-boundary follow-up is deployed and
 verified from PR #23. Browser-local manual-review acknowledgement is deployed and
-verified from PR #25. External scheduling remains inactive.**
+verified from PR #25. Neutral zero-state attention colors are deployed and
+verified from PR #27. External scheduling remains inactive.**
+
+## Attention-counter colors — deployed and production-verified
+
+[PR #27](https://github.com/maglothinm/MyETF-Intelligence/pull/27) merged the
+exact CI-tested head `f477c7938ce973cae898b221451577242a8cf248` as
+`1be235768c5c5885f83f62e4e2e61eec989cb16b`. PR CI **33503192366 / 1**,
+main CI **33503300913 / 1**, and Pages **33503300907 / 1** succeeded. Pages
+artifact **9798587857** has digest
+`sha256:419777922d8f47c3b091ebe76fcd0b12419f8116c0bc40437097fef5f1d280fa`.
+
+The live Overview now renders a zero Actionable Signals count in neutral white
+and reserves teal for positive counts. Manual Parser Exceptions stays amber while
+an active exception remains, turns neutral white when browser-local
+acknowledgement reduces the active count to zero, and returns to amber when the
+review is restored. The live retained review was restored to active state after
+verification, and no browser errors were reported.
+
+The publisher restored the same read-only inputs: Legislative artifact
+**9796523510** from **33497945694 / 1**; Executive **9789261867** from
+**33479032715 / 1**; AI **9796566785** from **33498060503 / 1**; and simulator
+**9734790733** from **33320677882 / 1**. No collector, parser record, signal,
+schedule, alert, credential, protected artifact, or production state changed.
 
 This snapshot does not replace live GitHub evidence. Follow `AGENTS.md`.
 
