@@ -12,9 +12,10 @@ remediation gate. External scheduling remains inactive.**
 
 Canonical repository ID **1349678672**, live name
 **maglothinm/MyETF-Intelligence**, default **main**. The local integration
-worktree is on **codex/production-remediation** at
-`06e8caa54b01e2945a6536ed526740d24dafb31d`, matching
-`origin/codex/production-remediation`. Reconciliation commit
+worktree is on **codex/production-remediation**. Its validated executable head is
+`06e8caa54b01e2945a6536ed526740d24dafb31d`; documentation-only successors on
+the same pushed branch record that checkpoint without changing its executable
+tree. Reconciliation commit
 `757d5276c09712bdb08a485a01f1bcbefc328b3c` incorporates current main
 `e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`; follow-up commit
 `06e8caa54b01e2945a6536ed526740d24dafb31d` keeps CI runtime temporary state
@@ -28,7 +29,7 @@ The owner-authorized isolated branch update is complete: both commits above are
 committed and pushed, and
 [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open and
 unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
-/ attempt 1 succeeded on final branch head `06e8caa...`: **799 Python tests
+/ attempt 1 succeeded on validated executable head `06e8caa...`: **799 Python tests
 passed**, the exact CI Node tests passed **17 / 17**, all **60 shell checks**
 passed, and the repository verifier reported **VERIFICATION PASSED** after its
 manifest, credential-scan, YAML/Python/JSON, and generated-JS checks. This branch

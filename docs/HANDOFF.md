@@ -13,9 +13,10 @@ no backend containment verified.
 ## Current task — hold validated draft PR #3 while clearing promotion gates
 
 The integration worktree is `.remediation/production-remediation` on
-`codex/production-remediation` at
-`06e8caa54b01e2945a6536ed526740d24dafb31d`, matching
-`origin/codex/production-remediation`. Reconciliation commit
+`codex/production-remediation`. Its validated executable head is
+`06e8caa54b01e2945a6536ed526740d24dafb31d`; documentation-only successors on
+the same pushed branch record that checkpoint without changing its executable
+tree. Reconciliation commit
 `757d5276c09712bdb08a485a01f1bcbefc328b3c` incorporates current main
 `e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`; follow-up commit
 `06e8caa54b01e2945a6536ed526740d24dafb31d` keeps CI runtime temporary state
@@ -29,7 +30,7 @@ escalation and follow-up as public receipts.
 The owner-authorized isolated update is complete: both commits above are pushed,
 and [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open
 and unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
-/ attempt 1 succeeded on final branch head `06e8caa...`: **799 Python tests
+/ attempt 1 succeeded on validated executable head `06e8caa...`: **799 Python tests
 passed**, the exact CI Node tests passed **17 / 17**, all **60 shell checks**
 passed, and the repository verifier reported **VERIFICATION PASSED** after its
 manifest, credential-scan, YAML/Python/JSON, and generated-JS checks. The branch
