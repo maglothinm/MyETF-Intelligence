@@ -1,11 +1,58 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: owner-requested acknowledgement-consistent Situation Brief. Scheduler
-[issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
-separate infrastructure task.
+Work: bounded read-only score receipts and data-quality drilldown in
+[issue #32](https://github.com/maglothinm/MyETF-Intelligence/issues/32) and
+[draft PR #33](https://github.com/maglothinm/MyETF-Intelligence/pull/33).
+State-safety draft PR #3 and scheduler
+[issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remain
+separate gated workstreams.
 
-## Current task — Situation Brief acknowledgement consistency deployed and verified
+## Current task — hold CI-validated score-receipt draft for review
+
+Canonical repository ID **1349678672**, live repository
+**maglothinm/MyETF-Intelligence**, default **main**. Do not recreate or continue
+from a legacy repository. The isolated worktree is
+`.remediation/score-receipts-data-quality` on
+`codex/score-receipts-data-quality`. Executable commit
+`cc0799697fc9c0e35cc445da7db0082191b4c2f7` is pushed and passed
+[PR CI 33518799144 / attempt 1](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33518799144).
+Draft PR #33 remains open, unmerged and undeployed. The documentation successor
+must pass a fresh final-head PR run before the branch is considered ready for
+human review.
+
+The feature is a read-only projection of the retained AI-analysis ledger. Signal
+cards and the AI table can route by exact analysis ID to a full-width receipt with
+independent retained score stages, components, hard caps, versions, data and
+processing statuses, factors and safe evidence. Unavailable and malformed fields
+stay unavailable; no value is recomputed, no receipt is graded, provider errors
+are not exposed, unsafe URLs are not linked, and compact Wallboard cards do not
+gain receipt controls.
+
+Local proof is **561 Python**, **71 generated-dashboard DOM**, **6 filing DOM**
+and **11 scheduler-dispatch** passing tests, plus JavaScript syntax,
+`git diff --check`, protected-file structural comparison, serious/critical axe
+coverage and rendered desktop/390px acceptance with no overflow or browser
+warnings/errors. Canonical CI owns the Linux-only repository verification and
+passed it on the executable commit.
+
+No scoring, Investor Edge, projection, generator, collector, parser, state,
+workflow, alert, credential, schedule, protected artifact, repository setting,
+merge, deployment or producer dispatch was changed or performed. No Relationship
+Intelligence research, flag, graph, claim, agent, schema, fixture or code was
+started.
+
+Parallel remediation remains draft-only: PR #3's executable head
+`06e8caa54b01e2945a6536ed526740d24dafb31d` passed CI `33512895241 / 1`, but
+obsolete queued runs `33219808359` and `33221027676`, post-deployment
+Legislative success, Executive Healthchecks proof and Investor Edge market data
+still gate its promotion. PR #33 neither depends on nor waives those gates.
+
+**Next safe action:** confirm final-head PR #33 CI, then leave it draft for human
+review. Keep PR #3 unmerged while its production gates are resolved. Do not begin
+Relationship Intelligence until its separate gate is explicitly satisfied.
+
+## Completed task — Situation Brief acknowledgement consistency deployed and verified
 
 [PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30) tested
 `9055d43ae56dd192b31b56c29a3ca14bd1422e96` in CI **33504447890 / 1** and
