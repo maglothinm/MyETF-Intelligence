@@ -92,7 +92,7 @@ resource "google_sql_database" "runtime" {
   instance = google_sql_database_instance.runtime.name
 }
 
-ephemeral "random_password" "database" {
+resource "random_password" "database" {
   length  = 48
   special = false
 }
@@ -100,8 +100,8 @@ ephemeral "random_password" "database" {
 resource "google_sql_user" "runtime" {
   name                = "polititrack_runtime"
   instance            = google_sql_database_instance.runtime.name
-  password_wo         = ephemeral.random_password.database.result
-  password_wo_version = 1
+  password_wo         = random_password.database.result
+  password_wo_version = 2
 }
 
 resource "google_secret_manager_secret" "database_password" {
@@ -114,8 +114,8 @@ resource "google_secret_manager_secret" "database_password" {
 
 resource "google_secret_manager_secret_version" "database_password" {
   secret                 = google_secret_manager_secret.database_password.id
-  secret_data_wo         = ephemeral.random_password.database.result
-  secret_data_wo_version = 1
+  secret_data_wo         = random_password.database.result
+  secret_data_wo_version = 2
   deletion_policy        = "PREVENT"
 }
 
@@ -126,7 +126,7 @@ resource "google_secret_manager_secret_iam_member" "database_password" {
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 
-ephemeral "random_password" "vault_signing_key" {
+resource "random_password" "vault_signing_key" {
   length  = 64
   special = false
 }
@@ -141,8 +141,8 @@ resource "google_secret_manager_secret" "vault_signing_key" {
 
 resource "google_secret_manager_secret_version" "vault_signing_key" {
   secret                 = google_secret_manager_secret.vault_signing_key.id
-  secret_data_wo         = ephemeral.random_password.vault_signing_key.result
-  secret_data_wo_version = 1
+  secret_data_wo         = random_password.vault_signing_key.result
+  secret_data_wo_version = 2
   deletion_policy        = "PREVENT"
 }
 
