@@ -65,7 +65,22 @@ Invoke-Checked $gcloud @(
     'sqladmin.googleapis.com',
     'secretmanager.googleapis.com',
     'storage.googleapis.com',
+    'cloudresourcemanager.googleapis.com',
+    'iam.googleapis.com',
     '--project', $ProjectId,
+    '--quiet'
+)
+
+$projectNumber = (& $gcloud projects describe $ProjectId --format='value(projectNumber)').Trim()
+if ($LASTEXITCODE -ne 0 -or $projectNumber -notmatch '^\d+$') {
+    throw 'The Google Cloud project number could not be resolved.'
+}
+$buildWorker = "$projectNumber-compute@developer.gserviceaccount.com"
+Invoke-Checked $gcloud @(
+    'projects', 'add-iam-policy-binding', $ProjectId,
+    '--member', "serviceAccount:$buildWorker",
+    '--role', 'roles/cloudbuild.builds.builder',
+    '--condition', 'None',
     '--quiet'
 )
 
