@@ -5,15 +5,15 @@ Work: owner-requested Manual Parser Exception acknowledgement UI. Scheduler
 [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
 separate infrastructure task.
 
-## Current task — local manual-review acknowledgement implemented; not deployed
+## Current task — manual-review acknowledgement deployed and verified
 
 Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
 default **main**. Work is committed on branch
-`codex/manual-review-acknowledgement` as
-**7c515fe9b830370da4ff2bb7a190bccd2b6482a0**, based on clean canonical main
-**bf08eb9624d0ce4555c7b8405ffd26bf5da81a34**. The branch is published for
-canonical review but has not yet passed CI, merged, dispatched, or deployed.
-Original unrelated work remains preserved.
+`codex/manual-review-acknowledgement`; PR #25 merged its tested head
+**b77d5f422043c304704c9ab521811bc457a6b737** as
+**95deb6263d616cfd32b14a1a8d7c1c50fc67eade**. PR CI **33501903449 / 1**,
+main CI **33502068627 / 1**, and Pages **33502068474 / 1** succeeded. Original
+unrelated work remains preserved.
 Never implement or dispatch from legacy `maglothinm/MyETF`.
 
 The static dashboard now lets the owner acknowledge a retained Manual Parser
@@ -25,18 +25,28 @@ delete, retry, or modify the production record. Current review IDs are included 
 the compact dashboard model and validated against the lazy-loaded ledger so stale
 local acknowledgements are pruned without weakening publication consistency.
 
-Focused validation passed **83 Python tests with 1 intentional skip** and the
+Focused local validation passed **83 Python tests with 1 intentional skip** and the
 generated-dashboard wrapper covering **68 DOM scenarios**. Coverage includes
 static publication, review/model identity consistency, persistence across reload,
 restoration, matched and orphan record detail, hostile-input safety, keyboard
 focus, and serious/critical accessibility checks. JavaScript syntax, Python
-compilation and `git diff --check` also passed. No collector, parser retry,
-workflow, schedule, alert, credential, protected artifact, production state, or
-live dashboard was touched. The durable boundary is recorded in D-2026-09-01-037.
+compilation and `git diff --check` also passed. Canonical CI repeated the full
+integration and safety suite successfully.
 
-**Next safe action:** open the authorized canonical pull request, wait for CI,
-merge only the tested head, then verify main CI, the Pages artifact and live
-acknowledgement behavior before describing it as deployed.
+Pages artifact **9798105632** has digest
+`sha256:7626f8caa4c2f1cd246c97b78e8d81ccc8b76327572dfeea31b14106500e2e9b`.
+The live page, script and model return HTTP 200 and identify the merge SHA. Live
+interaction acknowledged the single retained paper-filing exception, verified its
+restore control and explicit production-read-only boundary, restored it to active
+review, and produced no browser errors. Publisher inputs remained Legislative
+**9796523510 / 33497945694 / 1**, Executive **9789261867 / 33479032715 / 1**,
+AI **9796566785 / 33498060503 / 1**, and simulator
+**9734790733 / 33320677882 / 1**. No producer or alert was dispatched and no
+protected state changed. The durable boundary is recorded in D-2026-09-01-037.
+
+**Next safe action:** no further acknowledgement rollout action is required.
+Continue to treat scheduler issue #19 and external activation as separate gated
+infrastructure work.
 
 ## Completed work and proof
 
