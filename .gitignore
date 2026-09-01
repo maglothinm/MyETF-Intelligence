@@ -38,6 +38,7 @@ executive-latest-transactions.csv
 legislative-latest-filings.csv
 executive-latest-filings.csv
 
-# Local remediation checkpoint exports and verification scratch (never source/state authority)
+# Local remediation/release evidence, copied fixtures, and temporary test output
+# is never protected production-state authority.
 .remediation/
 .test-tmp*/

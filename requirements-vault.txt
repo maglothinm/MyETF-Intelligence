@@ -1,0 +1,10 @@
+# Optional persistent Filing Vault API; matches the existing Flask/SQLAlchemy stack.
+Flask>=3.0.2,<4
+Flask-SQLAlchemy>=3.1.1,<4
+SQLAlchemy>=2.0.29,<3
+itsdangerous>=2.1.2,<3
+psycopg2-binary>=2.9.9,<3
+requests>=2.31.0,<3
+urllib3>=2.2,<3
+beautifulsoup4>=4.12.3,<5
+gunicorn>=22,<24; sys_platform != 'win32'

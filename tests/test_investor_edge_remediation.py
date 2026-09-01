@@ -173,6 +173,26 @@ def test_below_minimum_has_no_modifier_even_for_extreme_outperformance(tmp_path)
     for field in ("edge_score", "modifier", "sample_count", "effective_sample_count", "followable_alpha", "status"):
         assert again[field] == result[field]
 
+    weighted_history = [
+        {**trade(f"weighted-{i}", date(2024, 1, 15) + timedelta(days=40 * i)), "parse_confidence": "medium"}
+        for i in range(3)
+    ]
+    weighted_runtime = InvestorEdgeRuntime(
+        config,
+        tmp_path / "effective-minimum",
+        OfflineProvider(),
+        {},
+    )
+    weighted = weighted_runtime.profile_for_trade(
+        candidate,
+        [*weighted_history, candidate],
+    )
+    assert weighted["sample_count"] == 3
+    assert weighted["effective_sample_count"] < 3
+    assert weighted["status"] == "insufficient_data"
+    assert weighted["minimum_sample_met"] is False
+    assert weighted["modifier"] == 0
+
 
 def test_source_identity_survives_trade_serialization_without_changing_trade_id():
     kwargs = dict(branch="legislative", source="house", owner="Self", asset="Example", ticker="AAA", asset_type="Stock", transaction_type="Purchase", transaction_date="2025-01-01", notification_date="", amount="$1,001 - $15,000", raw_row="purchase", confidence="high")

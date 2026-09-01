@@ -2,20 +2,31 @@ name: Executive purchase tracker
 
 on:
   schedule:
-    # The OGE collection is slower and browser-rendered; poll hourly off the top of the hour.
-    - cron: "13 * * * *"
+    # Twice hourly, staggered from Legislative and the busy :00/:30 boundaries.
+    - cron: "13,43 * * * *"
       timezone: "America/New_York"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
+  # All trigger sources serialize through this one protected-state writer.
   group: executive-purchase-tracker
   cancel-in-progress: false
 
 env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
   STATE_FILE: ".trade-tracker/executive/state.json"
   LEDGER_FILE: ".trade-tracker/executive/purchases.jsonl"
   TRANSACTIONS_FILE: ".trade-tracker/executive/transactions.jsonl"
@@ -37,7 +48,7 @@ env:
 
 jobs:
   track:
-    if: ${{ github.repository_id == '1349678672' && github.ref == 'refs/heads/main' }}
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -56,7 +67,6 @@ jobs:
             curl --fail --silent --show-error --max-time 20 --retry 3 \
               "${healthchecks_base}/start" >/dev/null
           fi
-
       - name: Check out repository
         uses: actions/checkout@v6
 
@@ -86,10 +96,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          consumer_sha="$(git rev-parse HEAD)"
+          receipt="${{ runner.temp }}/executive-state-receipt.json"
           python scripts/protected_state.py restore \
             --pipeline executive --destination .trade-tracker/executive \
-            --receipt "${{ runner.temp }}/executive-state-receipt.json" \
-            --consumer-sha "$(git rev-parse HEAD)"
+            --receipt "$receipt" --consumer-sha "$consumer_sha"
+          GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
+            --guard-branch executive \
+            --producer-run "$(jq -r '.selected.producer.run_id' "$receipt")" \
+            --producer-attempt "$(jq -r '.selected.producer.run_attempt' "$receipt")"
 
       - name: Run offline tests
         shell: bash
@@ -97,8 +113,10 @@ jobs:
           export GITHUB_STEP_SUMMARY=/tmp/polititrack-offline-test-summary
           python -m pytest -q \
             tests/test_protected_state.py \
+            tests/test_workflow_contract.py \
             tests/test_monitor_disclosures.py \
             tests/test_government_trade_tracker.py \
+            tests/test_historical_transaction_bootstrap.py \
             tests/test_oge_disclosures.py \
             tests/test_trade_dashboard.py
 
@@ -130,7 +148,7 @@ jobs:
             --consumer-sha "$(git rev-parse HEAD)"
 
       - name: Upload durable tracker state
-        if: ${{ steps.state_seal.outcome == 'success' }}
+        if: ${{ steps.state_seal.outcome == 'success' && hashFiles('.trade-tracker/executive/state.json') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: executive-tracker-state
@@ -141,6 +159,7 @@ jobs:
 
       - name: Upload run outputs and diagnostics
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: executive-purchase-output-${{ github.run_id }}

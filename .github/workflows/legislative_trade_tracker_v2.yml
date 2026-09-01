@@ -6,16 +6,27 @@ on:
     - cron: "7,22,37,52 * * * *"
       timezone: "America/New_York"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
+  # All trigger sources serialize through this one protected-state writer.
   group: legislative-purchase-tracker-v2
   cancel-in-progress: false
 
 env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
   STATE_FILE: ".trade-tracker/legislative/state.json"
   LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
   TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
@@ -37,7 +48,7 @@ env:
 
 jobs:
   track:
-    if: ${{ github.repository_id == '1349678672' && github.ref == 'refs/heads/main' }}
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -56,9 +67,28 @@ jobs:
             curl --fail --silent --show-error --max-time 20 --retry 3 \
               "${healthchecks_base}/start" >/dev/null
           fi
-
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Record runner region
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from urllib.request import Request, ProxyHandler, build_opener
+          context = {key: os.environ.get(key, "unknown") for key in
+                     ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_OS", "RUNNER_ARCH", "RUNNER_ENVIRONMENT")}
+          try:
+              request = Request("http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01&format=text",
+                                headers={"Metadata": "true"})
+              with build_opener(ProxyHandler({})).open(request, timeout=2) as response:
+                  region = response.read(80).decode("ascii").strip()
+              context["azure_region"] = region if region.isalnum() else "unavailable"
+          except Exception:
+              context["azure_region"] = "unavailable"
+          print("Runner context: " + json.dumps(context, sort_keys=True))
+          PY
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -82,10 +112,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          consumer_sha="$(git rev-parse HEAD)"
+          receipt="${{ runner.temp }}/legislative-state-receipt.json"
           python scripts/protected_state.py restore \
             --pipeline legislative --destination .trade-tracker/legislative \
-            --receipt "${{ runner.temp }}/legislative-state-receipt.json" \
-            --consumer-sha "$(git rev-parse HEAD)"
+            --receipt "$receipt" --consumer-sha "$consumer_sha"
+          GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
+            --guard-branch legislative \
+            --producer-run "$(jq -r '.selected.producer.run_id' "$receipt")" \
+            --producer-attempt "$(jq -r '.selected.producer.run_attempt' "$receipt")"
 
       - name: Run offline tests
         shell: bash
@@ -93,8 +129,12 @@ jobs:
           export GITHUB_STEP_SUMMARY=/tmp/polititrack-offline-test-summary
           python -m pytest -q \
             tests/test_protected_state.py \
+            tests/test_workflow_contract.py \
             tests/test_monitor_disclosures.py \
+            tests/test_senate_client.py \
+            tests/test_legislative_healthcheck.py \
             tests/test_government_trade_tracker.py \
+            tests/test_historical_transaction_bootstrap.py \
             tests/test_oge_disclosures.py \
             tests/test_trade_dashboard.py
 
@@ -108,9 +148,14 @@ jobs:
           PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
         run: python scripts/government_trade_tracker.py --branch legislative --source all
 
+      - name: Validate complete Legislative result
+        id: discovery_validation
+        shell: bash
+        run: python scripts/legislative_healthcheck.py --validate-only
+
       - name: Validate continuity and seal protected Legislative state
         id: state_seal
-        if: ${{ steps.tracker.outcome == 'success' }}
+        if: ${{ success() && steps.tracker.outcome == 'success' && steps.discovery_validation.outcome == 'success' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -121,7 +166,7 @@ jobs:
             --consumer-sha "$(git rev-parse HEAD)"
 
       - name: Upload durable tracker state
-        if: ${{ steps.state_seal.outcome == 'success' }}
+        if: ${{ success() && steps.tracker.outcome == 'success' && steps.discovery_validation.outcome == 'success' && steps.state_seal.outcome == 'success' && hashFiles('.trade-tracker/legislative/state.json') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: legislative-tracker-state
@@ -132,9 +177,10 @@ jobs:
 
       - name: Upload run outputs
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: legislative-purchase-output-${{ github.run_id }}
+          name: legislative-purchase-output-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             legislative-result.json
             legislative-latest-purchases.csv
@@ -143,46 +189,29 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Signal tracker success
-        if: ${{ always() && !failure() && steps.tracker.outcome == 'success' }}
+      - name: Signal tracker terminal result
+        if: ${{ always() }}
         continue-on-error: true
         shell: bash
         env:
           HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
+          JOB_STATUS: ${{ job.status }}
+          TRACKER_OUTCOME: ${{ steps.tracker.outcome }}
         run: |
-          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+          if [[ -f scripts/legislative_healthcheck.py ]]; then
+            python3 scripts/legislative_healthcheck.py
+          elif [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            # Checkout failed: retain the one classified terminal failure ping.
             healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
             healthchecks_base="${healthchecks_base%/start}"
             healthchecks_base="${healthchecks_base%/fail}"
             healthchecks_base="${healthchecks_base%/}"
-            curl --fail --silent --show-error --max-time 20 --retry 3 \
-              "$healthchecks_base" >/dev/null
-          fi
-
-      - name: Signal tracker failure
-        if: ${{ always() && failure() }}
-        continue-on-error: true
-        shell: bash
-        env:
-          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
-        run: |
-          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
-            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
-            healthchecks_base="${healthchecks_base%/start}"
-            healthchecks_base="${healthchecks_base%/fail}"
-            healthchecks_base="${healthchecks_base%/}"
-            if [[ -f legislative-result.json ]]; then
-              curl --fail --silent --show-error --max-time 20 --retry 3 \
-                --data-binary @legislative-result.json \
-                "${healthchecks_base}/fail" >/dev/null || true
-            else
-              curl --fail --silent --show-error --max-time 20 --retry 3 \
-                --data "Workflow failed before legislative-result.json was created" \
-                "${healthchecks_base}/fail" >/dev/null || true
-            fi
+            curl --fail --silent --max-time 20 \
+              --data "legislative_workflow_failed" "${healthchecks_base}/fail" >/dev/null
           fi
 
       - name: Send Pushover failure notification
+        # No source/filing notifications before both discovery phases succeed.
         if: ${{ always() && failure() }}
         continue-on-error: true
         shell: bash
@@ -190,6 +219,9 @@ jobs:
           PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
           PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
         run: |
+          if ! python3 scripts/legislative_healthcheck.py --discovery-only; then
+            exit 0
+          fi
           if [[ -n "$PUSHOVER_API_TOKEN" && -n "$PUSHOVER_USER_KEY" ]]; then
             run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             curl --fail --silent --show-error --max-time 20 --retry 3 \

@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 REPOSITORY_ID = 1349678672
 DEFAULT_BRANCH = "main"
@@ -62,11 +62,26 @@ PIPELINES = {
     "executive": Pipeline("executive", "executive-tracker-state", "executive_trade_tracker.yml", "Executive purchase tracker", "track"),
     "ai": Pipeline("ai", "ai-analysis-state", "ai_filing_analyst.yml", "AI filing analyst and paper portfolio", "analyze"),
 }
-TRACKER_FILES = {"state.json", "filings.jsonl", "transactions.jsonl", "purchases.jsonl", "pending-review.jsonl", "runs.jsonl"}
+TRACKER_FILES = {
+    "state.json", "filings.jsonl", "transactions.jsonl", "purchases.jsonl",
+    "pending-review.jsonl", "runs.jsonl", "historical-backfill.jsonl",
+    "historical-source-documents.json",
+}
 AI_FILES = {"state.json", "analyses.jsonl", "runs.jsonl", "paper-portfolio.jsonl", "investor-edge-profiles.json", "investor-edge-observations.json", "investor-edge-leaderboard.json", "investor-edge-observations-archive.json"}
 CACHE_DIRECTORIES = {"documents", "market-cache", "sec-cache", "investor-edge-market"}
 RETIRED_PRODUCER_PATHS = {"legislative": {".github/workflows/legislative_trade_tracker.yml"}, "executive": set(), "ai": set()}
 SIMULATION = Pipeline("simulation", "simulation-state", "filing_simulation.yml", "Run $10K portfolio simulator", "simulate")
+MAX_SOURCE_DOCUMENT_BYTES = 100 * 1024 * 1024
+HISTORICAL_STATUSES = {
+    "retryable_error", "complete", "review_required", "invalid_public_date",
+    "invalid_cached_document", "cached_report_rejected",
+}
+HISTORICAL_REASONS = {
+    "paper_or_access_requires_review", "paper_or_unparseable_document",
+    "official_access_unavailable", "official_report_validation_failed",
+    "transaction_parser_rejected_document", "official_document_request_failed",
+    "invalid_cached_document", "document_processing_failed",
+}
 
 
 def require(condition: Any, message: str) -> None:
@@ -195,6 +210,34 @@ def validate_record(record: Any, filename: str, pipeline: str, line: int) -> Non
     elif filename == "pending-review.jsonl":
         object_fields(record, {k: str for k in ("review_id", "observed_at_utc", "branch", "source", "report_id", "filer", "filed_date", "source_url", "reason")}, label)
         require(record["review_id"] and record["report_id"] and record["branch"] == pipeline, f"{label}: invalid review identity")
+    elif filename == "historical-backfill.jsonl":
+        required = {
+            "filing_key": str, "source": str, "report_id": str,
+            "attempted_at_utc": str, "historical_bootstrap": bool,
+            "input_fingerprint": str, "status": str, "transaction_count": int,
+        }
+        object_fields(record, required, label)
+        allowed_fields = set(required) | {"transactions_appended", "reason"}
+        require(set(record) <= allowed_fields, f"{label}: unexpected historical receipt field")
+        expected_sources = {"house", "senate"} if pipeline == "legislative" else {"oge"}
+        require(record["source"] in expected_sources, f"{label}: wrong historical source for pipeline")
+        require(
+            record["filing_key"].startswith(record["source"] + "|") and record["report_id"],
+            f"{label}: invalid historical filing identity",
+        )
+        require(record["historical_bootstrap"] is True, f"{label}: missing historical marker")
+        require(bool(SHA256.fullmatch(record["input_fingerprint"])), f"{label}: invalid input fingerprint")
+        require(record["status"] in HISTORICAL_STATUSES, f"{label}: invalid historical status")
+        require(record["transaction_count"] >= 0, f"{label}: negative transaction count")
+        timestamp(record["attempted_at_utc"], f"{label}.attempted_at_utc")
+        if "reason" in record:
+            require(record["reason"] in HISTORICAL_REASONS, f"{label}: invalid historical reason")
+        if record["status"] == "complete":
+            appended = record.get("transactions_appended")
+            require(type(appended) is int and 0 <= appended <= record["transaction_count"], f"{label}: invalid appended transaction count")
+            require("reason" not in record, f"{label}: completed receipt cannot contain a failure reason")
+        else:
+            require("transactions_appended" not in record, f"{label}: unsuccessful receipt cannot append transactions")
     elif filename == "runs.jsonl":
         object_fields(record, {"run_key": str, "started_utc": str, "finished_utc": str, "success": bool, "errors": list, "run_url": str}, label)
         require(record["run_key"], f"{label}: missing run identity")
@@ -239,6 +282,76 @@ def validate_edge(payload: Any, filename: str) -> None:
             object_fields(value, {"trade_id": str, "method_hash": str, "picker_outcomes": dict, "followable_outcomes": dict}, f"{filename}/{key}")
 
 
+def validate_historical_source_documents(root: Path, pipeline: str) -> set[str]:
+    """Return the exact hash-bound source-document paths admitted by the manifest."""
+    manifest_path = root / "historical-source-documents.json"
+    if not manifest_path.exists():
+        return set()
+    require(pipeline in {"legislative", "executive"}, "Historical source documents are tracker-only")
+    manifest = read_json(manifest_path)
+    object_fields(manifest, {"documents": list}, "historical-source-documents.json")
+    require(set(manifest) == {"documents"}, "Historical source-document manifest has unexpected fields")
+    admitted: set[str] = set()
+    filing_keys: set[str] = set()
+    for number, entry in enumerate(manifest["documents"], 1):
+        label = f"historical-source-documents.json/documents/{number}"
+        object_fields(
+            entry,
+            {"filing_key": str, "source_url": str, "path": str, "sha256": str, "format": str},
+            label,
+        )
+        require(
+            set(entry) == {"filing_key", "source_url", "path", "sha256", "format"},
+            f"{label}: unexpected field",
+        )
+        filing_key = entry["filing_key"]
+        source = filing_key.split("|", 1)[0]
+        expected_sources = {"house", "senate"} if pipeline == "legislative" else {"oge"}
+        require(source in expected_sources and "|" in filing_key, f"{label}: wrong filing identity for pipeline")
+        require(filing_key not in filing_keys, f"{label}: duplicate filing identity")
+        filing_keys.add(filing_key)
+
+        raw_path = entry["path"]
+        relative = PurePosixPath(raw_path)
+        require(
+            raw_path == relative.as_posix() and "\\" not in raw_path and not relative.is_absolute()
+            and bool(relative.parts) and all(part not in {"", ".", ".."} for part in relative.parts),
+            f"{label}: unsafe source-document path",
+        )
+        require(raw_path not in TRACKER_FILES | {MANIFEST_NAME}, f"{label}: source document collides with protected metadata")
+        require(raw_path not in admitted, f"{label}: duplicate source-document path")
+        admitted.add(raw_path)
+
+        parsed = urlparse(entry["source_url"])
+        suffix = {"house": "house.gov", "senate": "senate.gov", "oge": "oge.gov"}[source]
+        host = (parsed.hostname or "").lower()
+        require(
+            parsed.scheme == "https" and not parsed.username and not parsed.password
+            and (host == suffix or host.endswith("." + suffix)),
+            f"{label}: source URL is not an official HTTPS origin",
+        )
+        expected_hash = entry["sha256"].lower()
+        require(entry["sha256"] == expected_hash and bool(SHA256.fullmatch(expected_hash)), f"{label}: invalid SHA-256")
+        document_format = entry["format"].lower()
+        require(entry["format"] == document_format and document_format in {"pdf", "html"}, f"{label}: unsupported document format")
+        require(document_format != "html" or source == "senate", f"{label}: only Senate HTML originals are supported")
+        suffixes = {"pdf": {".pdf"}, "html": {".html", ".htm"}}[document_format]
+        require(relative.suffix.lower() in suffixes, f"{label}: source-document extension/format mismatch")
+
+        document_path = root.joinpath(*relative.parts)
+        require(document_path.is_file() and not document_path.is_symlink(), f"{label}: source document is missing or not a regular file")
+        size = document_path.stat().st_size
+        require(0 < size <= MAX_SOURCE_DOCUMENT_BYTES, f"{label}: source document exceeds the allowed size or is empty")
+        data = document_path.read_bytes()
+        require(digest(data) == expected_hash, f"{label}: source-document hash mismatch")
+        require(
+            (document_format == "pdf" and data.startswith(b"%PDF"))
+            or (document_format == "html" and b"<" in data[:100]),
+            f"{label}: source-document bytes do not match the declared format",
+        )
+    return admitted
+
+
 def snapshot_directory(root: Path, pipeline: str) -> dict[str, Any]:
     """Inventory every byte and validate the schema of every retained data file."""
     require(pipeline in PIPELINES, "Unknown protected pipeline")
@@ -246,7 +359,8 @@ def snapshot_directory(root: Path, pipeline: str) -> dict[str, Any]:
     inventory: dict[str, Any] = {}
     payloads: dict[str, Any] = {}
     ledgers: dict[str, list[dict[str, Any]]] = {}
-    allowed = (AI_FILES if pipeline == "ai" else TRACKER_FILES) | {"notification-outbox.jsonl"}
+    historical_documents = validate_historical_source_documents(root, pipeline)
+    allowed = (AI_FILES if pipeline == "ai" else TRACKER_FILES) | {"notification-outbox.jsonl"} | historical_documents
     for path in sorted(root.rglob("*")):
         require(not path.is_symlink(), f"State may not contain symlinks: {path.name}")
         if path.is_dir():
@@ -260,7 +374,11 @@ def snapshot_directory(root: Path, pipeline: str) -> dict[str, Any]:
         require(relative in allowed or cache, f"Unrecognized protected state file: {relative}")
         data = path.read_bytes()
         info: dict[str, Any] = {"sha256": digest(data), "size": len(data)}
-        if relative.endswith(".jsonl"):
+        if relative in historical_documents:
+            # The manifest validator already bound identity, origin, format and
+            # these exact bytes. Raw originals are never interpreted as state.
+            pass
+        elif relative.endswith(".jsonl"):
             require(not data or data.endswith(b"\n"), f"{relative}: unterminated JSONL tail")
             rows = []
             for number, line in enumerate(data.splitlines(), 1):
@@ -320,6 +438,16 @@ def assert_continuity(before: Mapping[str, Any], after: Mapping[str, Any], root:
                 prefix = handle.read(info["size"])
             require(len(prefix) == info["size"] and digest(prefix) == info["sha256"], f"Ledger predecessor prefix changed: {name}")
             require(after["files"][name]["rows"] >= info["rows"], f"Ledger record count regressed: {name}")
+    old_document_manifest = before["payloads"].get("historical-source-documents.json")
+    if old_document_manifest is not None:
+        new_document_manifest = after["payloads"].get("historical-source-documents.json")
+        require(new_document_manifest is not None, "Historical source-document manifest disappeared")
+        old_entries = {row["filing_key"]: row for row in old_document_manifest["documents"]}
+        new_entries = {row["filing_key"]: row for row in new_document_manifest["documents"]}
+        for filing_key, entry in old_entries.items():
+            require(new_entries.get(filing_key) == entry, f"Historical source-document binding changed: {filing_key}")
+            relative = entry["path"]
+            require(after["files"][relative] == before["files"][relative], f"Historical source-document bytes changed: {relative}")
     old_state = before["payloads"]["state.json"]
     new_state = after["payloads"]["state.json"]
     maps = ("completed_analysis_ids", "positions", "candidate_alert_deliveries") if pipeline == "ai" else ("seen_trades", "seen_reviews")

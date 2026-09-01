@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from bs4 import BeautifulSoup
 
 from scripts.ai_filing_analyst import (
     AnalystError,
@@ -26,10 +27,65 @@ from scripts.build_trade_dashboard import (
     build_site,
 )
 from scripts.create_manual_test_filing import generate_manual_test
+from scripts.investor_edge import build_dashboard_addon
 from scripts.run_investor_edge_simulation import simulate_analysis_record
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("pending, expected", [(7, "Historical backfill in progress"), (0, "Historical backfill current")])
+def test_dashboard_exports_bootstrap_telemetry_and_all_building_profiles(tmp_path: Path, pending: int, expected: str) -> None:
+    ai_dir = tmp_path / "ai"
+    ai_dir.mkdir()
+    profiles = [{"investor_key": f"test-{index}|self", "filer": f"TEST Filer {index}", "owner": "Self",
+                 "sample_count": 0, "minimum_sample_met": False, "edge_score": 50,
+                 "status": "insufficient_data", "confidence_label": "Low", "backfill_pending_trade_count": 2}
+                for index in range(4)]
+    metadata = {"historical_transaction_count": 20, "eligible_purchase_count": 8,
+                "unique_investor_identity_count": 4, "published_profile_count": 4,
+                "completed_profile_count": 0, "building_profile_count": 4,
+                "backfill_processed_this_run": 1, "backfill_pending_observation_count": pending,
+                "backfill_limit_per_run": 30, "network_requests_this_run": 2,
+                "branch_transaction_counts": {"legislative": 15, "executive": 5},
+                "excluded_reason_counts": {"not_purchase": 12}}
+    (ai_dir / "investor-edge-leaderboard.json").write_text(
+        json.dumps({"investors": profiles, **metadata, "api_key": "never-export", "private_details": "not-public"}), encoding="utf-8")
+    output = tmp_path / "dashboard"
+    build_dashboard_addon(ai_dir, output)
+    exported = json.loads((output / "data/investor-edge.json").read_text(encoding="utf-8"))
+    assert {key: exported[key] for key in metadata} == metadata
+    assert exported["investors"] == profiles
+    assert "api_key" not in exported and "private_details" not in exported
+    soup = BeautifulSoup((output / "investor-edge.html").read_text(encoding="utf-8"), "html.parser")
+    assert soup.select_one("#edge-bootstrap-status").get_text() == expected
+    assert len(soup.select("tr.investor-row")) == 4
+    for row in soup.select("tr.investor-row"):
+        cells = row.select("td")
+        assert cells[3].get_text(strip=True) == "—"
+        assert "Building history — insufficient completed observations (n = 0)" in cells[5].get_text()
+        assert "Historical observations pending: 2" in cells[5].get_text()
+        assert all(cell.get_text(strip=True) == "—" for cell in cells[6:11])
+
+
+@pytest.mark.parametrize("pending", [None, True, -1, "0", 1.5])
+def test_dashboard_legacy_or_invalid_history_telemetry_is_unavailable(tmp_path: Path, pending: object) -> None:
+    ai_dir = tmp_path / "ai"
+    ai_dir.mkdir()
+    data = {"investors": [{"filer": "TEST legacy", "owner": "Spouse", "sample_count": 0}]}
+    if pending is not None:
+        data["backfill_pending_observation_count"] = pending
+    (ai_dir / "investor-edge-leaderboard.json").write_text(json.dumps(data), encoding="utf-8")
+    output = tmp_path / "dashboard"
+    build_dashboard_addon(ai_dir, output)
+    exported = json.loads((output / "data/investor-edge.json").read_text(encoding="utf-8"))
+    assert exported["backfill_pending_observation_count"] is None
+    assert exported["historical_transaction_count"] is None
+    assert exported["branch_transaction_counts"] == {"legislative": None, "executive": None}
+    page = (output / "investor-edge.html").read_text(encoding="utf-8")
+    assert "Historical backfill status unavailable" in page
+    assert "Historical backfill current" not in page
+    assert "TEST legacy" in page
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -610,7 +666,7 @@ def test_dashboard_flattens_edge_fields_and_renders_candidate_surfaces(
     wallboard = (output / "wallboard.js").read_text(encoding="utf-8")
     for label in ("Sector edge", "Observations", "Modifier", "Run Simulation"):
         assert label in app
-    for label in ("candidateEdge", "sector", "final"):
+    for label in ("signalCard", "Sector edge", "final_score"):
         assert label in wallboard
 
 

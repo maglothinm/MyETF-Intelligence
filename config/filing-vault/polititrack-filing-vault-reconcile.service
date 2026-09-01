@@ -1,0 +1,18 @@
+[Unit]
+Description=PolitiTrack Filing Vault daily retention and source reconciliation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=polititrack
+Group=polititrack
+WorkingDirectory=/srv/polititrack/app
+EnvironmentFile=/etc/polititrack/filing-vault.env
+ExecStart=/srv/polititrack/venv/bin/python -m backend.filing_vault reconcile
+TimeoutStartSec=6h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077

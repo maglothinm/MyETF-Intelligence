@@ -4,6 +4,27 @@
 
 This component detects newly published financial-disclosure filings from official U.S. government sources, preserves a complete filing inventory and normalized transaction records, sends prompt alerts, and publishes a searchable static review dashboard. It remains independent of the repository's older Flask/PostgreSQL/dbt/React stack so collection and reporting do not depend on that incomplete deployment.
 
+## Scheduling and freshness
+
+The canonical Legislative workflow polls at `7,22,37,52 * * * *` (15 minutes).
+Executive / OGE polls at `13,43 * * * *` (30 minutes). These staggered schedules
+remain GitHub fallback triggers; their presence does not prove timely execution.
+Both workflows retain manual dispatch and accept a safe `trigger_source` input
+for an independent authenticated scheduler using the same collector logic.
+
+Dashboard freshness is separate from the last run conclusion: Legislative becomes
+stale after 30 minutes without successful completion, Executive after 60 minutes.
+The collector-triggered AI allowance is 75 minutes; stale inputs still prevent
+overall success. Failure outranks stale, then unknown, then success. Operations
+shows timing and trigger evidence; no missing run records are invented.
+
+The [external scheduler guide](docs/EXTERNAL_SCHEDULER.md) describes Cloudflare
+Cron dispatch, server-only credentials, activation/rollback and duplicate-run
+safety. Worker code is not proof of active scheduling. GitHub cron stays enabled
+until several external cycles and state continuity have been verified. Existing
+production-recovery gates remain in force. The [freshness record](docs/SCHEDULER_FRESHNESS.md)
+documents the actual data path, measured gaps and deployment status.
+
 ## Coverage
 
 ### Legislative branch
@@ -224,6 +245,45 @@ These schedules control detection latency after publication, not trade-to-disclo
 GitHub may delay or drop scheduled runs during high load. Public-repository schedules may also be disabled after prolonged repository inactivity. The optional heartbeat endpoints are the independent check that a scheduler is still alive.
 
 ## Failure model
+
+### Senate access and complete-source discovery
+
+The Senate eFD client uses a dedicated session and the truthful PolitiTrack
+project user agent. It validates the agreement form, hidden CSRF token and CSRF
+cookie before accepting terms, requires the expected redirect/session cookie,
+then validates the Find Reports page and report-search JSON. The masked hidden
+form token and cookie token serve different roles and must not be conflated.
+
+Access recovery is local to Senate: at most three fresh bootstrap attempts for
+transport failures, timeouts, HTTP 403/408/425/429 and 5xx, with exponential
+backoff, jitter and Retry-After capped at 120 seconds. A terms/CSRF-expired
+search or report request permits one full session restart and replay. There is
+no browser impersonation, proxy, CAPTCHA bypass or unofficial-source fallback.
+An invalid HTML/JSON response is a source failure, never an empty filing list.
+
+Both required Legislative catalogs must validate before filing processing,
+notifications, baseline/seen-ID updates or any authoritative state writes.
+Failed discovery leaves all protected files unchanged and writes only diagnostic
+outputs: `success: false`, `overall_status: degraded`, House/Senate
+`source_statuses`, and counts only for available sources. It exits nonzero.
+The protected-state upload additionally requires a complete-source validation.
+
+Diagnostics include stage/attempt, status/timing, safe URLs and headers, a
+sanitized body fingerprint/excerpt, GitHub run/attempt and runner region when
+available. They exclude cookies, session/CSRF values and full response bodies.
+Healthchecks receives exactly one terminal ping after retries, with a fixed
+classification only; a House-only run cannot send success. Source-discovery
+failure does not send filing or Pushover notifications. Missing heartbeat
+configuration and delivery failures are reported without exposing its URL.
+
+For a landing-page 403, inspect the request stage and runner region before
+assuming a terms configuration problem. Check for later successful runs and
+active/queued writers, then use one fresh current-main workflow dispatch only
+when safe. Never rerun an old failed ID, initialize state or discard a baseline.
+Verify the restored artifact's exact producer attempt, successor state and
+dashboard publication. Repeated GitHub-hosted rejection while official access
+works elsewhere requires a separate owner decision for a secured US self-hosted
+or approved fixed-egress runner; do not silently change egress or source.
 
 The tracker exits nonzero when:
 

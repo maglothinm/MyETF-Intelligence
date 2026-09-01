@@ -44,6 +44,26 @@ this submitted public escalation. No private ticket or containment is establishe
 Do not duplicate either report or repeat unchanged requests; continue the existing
 hourly status checks. This follow-up retains its no-deletion and held-feature scope.
 
+## Subsequent checkpoint — 2026-09-01 12:43:51 UTC
+
+After the owner supplied fresh authenticated repository-admin authority, the
+exact two runs were retried without changing any other run or artifact. That
+retry completed before the follow-up comment was created at the timestamp below.
+Ordinary cancel and force-cancel returned **HTTP 409 for each run**. Delete
+returned **HTTP 403 for each run**. Immediate authenticated readback still showed
+both records `queued`, attempt 1, with zero jobs and zero artifacts. No request ID
+is recorded for this checkpoint because none was independently retained.
+
+A single follow-up was added to the existing Community discussion rather than
+opening or duplicating a report:
+[2026-09-01 follow-up](https://github.com/community/community/discussions/205874#discussioncomment-18233772).
+Comment ID: `DC_kwDOEfmk4M4BFjms`; created **2026-09-01 12:43:51 UTC**.
+This is a public escalation receipt, not a private ticket, terminal cancellation,
+or authoritative non-execution confirmation. It does not clear either run and
+does not authorize main promotion. The owner separately authorized committing and
+pushing the isolated PR #3 branch for CI/review while production promotion stays
+gated.
+
 ## Original submitted message
 
 I am reporting another reproducible instance of the queued/not-yet-queued

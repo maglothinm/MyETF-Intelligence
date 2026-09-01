@@ -55,6 +55,20 @@ def fixture_state(root: Path, pipeline: str = "legislative") -> Path:
     return root
 
 
+def historical_document(root: Path, *, number: int = 1, data: bytes = b"%PDF-historical-original") -> dict:
+    relative = f"historical-source-documents/house-{number}.pdf"
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return {
+        "filing_key": f"house|house:2025:{number}",
+        "source_url": f"https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/{number}.pdf",
+        "path": relative,
+        "sha256": ps.digest(data),
+        "format": "pdf",
+    }
+
+
 def archive_directory(root: Path) -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as zipped:
@@ -144,6 +158,30 @@ def test_verified_premanifest_migration_preserves_every_byte(scenario):
     assert ps.snapshot_directory(scenario["tmp"] / "restored", "legislative") == scenario["snapshot"]
 
 
+def test_checked_in_migration_allowlist_includes_exact_current_gate_authorities():
+    allowlist = ps.read_json(ps.DEFAULT_ALLOWLIST)
+    expected = {
+        "9796523510": ("legislative", 33497945694, 99824346263, "70415df6be5fcb47dd50680730860db16e45e480", "576692478062813160e81c841b05efa9533f0b2772246e24655cca88f42117f1"),
+        "9800645180": ("executive", 33508399072, 99857885817, "e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515", "c7f7707fa55d205ad01dcb998c6294bb0ca1c343ffe46073948d2534f64f1e73"),
+        "9800692592": ("ai", 33508648817, 99858691850, "e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515", "8822b6b54e946bc562cbecbf790312da9034749089bcdc26f17e5f4ae430e7af"),
+    }
+    for artifact_id, (pipeline, run_id, job_id, head_sha, zip_hash) in expected.items():
+        entry = allowlist["artifacts"][artifact_id]
+        assert (entry["pipeline"], entry["run_id"], entry["job_id"], entry["head_sha"], entry["zip_sha256"]) == (
+            pipeline, run_id, job_id, head_sha, zip_hash,
+        )
+        producer = {
+            field: entry[field] for field in (
+                "run_id", "run_attempt", "head_sha", "workflow_path",
+                "workflow_name", "job_name", "job_id",
+            )
+        }
+        selected = {"artifact_id": int(artifact_id), "created_at": entry["created_at"], "producer": producer}
+        snapshot = {"files": entry["files"], "absent_files": entry["absent_files"]}
+        ps.validate_migration(allowlist, selected, snapshot, zip_hash, pipeline)
+    assert allowlist["artifacts"]["9796523510"]["files"]["historical-backfill.jsonl"]["rows"] == 100
+
+
 @pytest.mark.parametrize("field", ["seen_trades", "seen_reviews", "seen_filings", "last_counts", "last_success_utc"])
 def test_missing_state_fields_never_default_to_empty(tmp_path, field):
     root = fixture_state(tmp_path / "state")
@@ -168,6 +206,83 @@ def test_malformed_or_ambiguous_jsonl_blocks(tmp_path, data):
     (root / "runs.jsonl").write_bytes(data)
     with pytest.raises(ps.StateSafetyError):
         ps.snapshot_directory(root, "legislative")
+
+
+def test_historical_receipts_and_hash_bound_originals_are_narrowly_inventoried(tmp_path):
+    root = fixture_state(tmp_path / "state")
+    entry = historical_document(root)
+    write_json(root / "historical-source-documents.json", {"documents": [entry]})
+    receipt = {
+        "filing_key": entry["filing_key"], "source": "house", "report_id": "house:2025:1",
+        "attempted_at_utc": FINISH, "historical_bootstrap": True,
+        "input_fingerprint": "c" * 64, "status": "complete",
+        "transaction_count": 2, "transactions_appended": 1,
+    }
+    write_rows(root / "historical-backfill.jsonl", [receipt])
+    snapshot = ps.snapshot_directory(root, "legislative")
+    assert snapshot["counts"]["historical-backfill.jsonl"] == 1
+    assert snapshot["files"][entry["path"]]["sha256"] == entry["sha256"]
+
+
+@pytest.mark.parametrize("mutation", ["extra", "fingerprint", "source", "status", "appended", "reason"])
+def test_invalid_historical_receipts_fail_closed(tmp_path, mutation):
+    root = fixture_state(tmp_path / "state")
+    row = {
+        "filing_key": "house|house:2025:1", "source": "house", "report_id": "house:2025:1",
+        "attempted_at_utc": FINISH, "historical_bootstrap": True,
+        "input_fingerprint": "c" * 64, "status": "retryable_error", "transaction_count": 0,
+    }
+    if mutation == "extra":
+        row["raw_document"] = "must never persist"
+    elif mutation == "fingerprint":
+        row["input_fingerprint"] = "not-a-hash"
+    elif mutation == "source":
+        row["source"] = "oge"
+    elif mutation == "status":
+        row["status"] = "unknown"
+    elif mutation == "appended":
+        row["transactions_appended"] = 1
+    else:
+        row["reason"] = "private source body"
+    write_rows(root / "historical-backfill.jsonl", [row])
+    with pytest.raises(ps.StateSafetyError):
+        ps.snapshot_directory(root, "legislative")
+
+
+@pytest.mark.parametrize("mutation", ["hash", "path", "origin", "format", "extra_entry_field", "unreferenced"])
+def test_invalid_historical_source_document_sets_fail_closed(tmp_path, mutation):
+    root = fixture_state(tmp_path / "state")
+    entry = historical_document(root)
+    if mutation == "hash":
+        entry["sha256"] = "0" * 64
+    elif mutation == "path":
+        entry["path"] = "../house-1.pdf"
+    elif mutation == "origin":
+        entry["source_url"] = "https://example.test/house-1.pdf"
+    elif mutation == "format":
+        entry["format"] = "html"
+    elif mutation == "extra_entry_field":
+        entry["private_note"] = "not durable state"
+    else:
+        (root / "unreferenced.pdf").write_bytes(b"%PDF-unbound")
+    write_json(root / "historical-source-documents.json", {"documents": [entry]})
+    with pytest.raises(ps.StateSafetyError):
+        ps.snapshot_directory(root, "legislative")
+
+
+def test_historical_source_bindings_and_bytes_are_immutable_across_successors(tmp_path):
+    root = fixture_state(tmp_path / "state")
+    entry = historical_document(root)
+    write_json(root / "historical-source-documents.json", {"documents": [entry]})
+    before = ps.snapshot_directory(root, "legislative")
+
+    replacement = b"%PDF-replaced-original"
+    (root / entry["path"]).write_bytes(replacement)
+    entry["sha256"] = ps.digest(replacement)
+    write_json(root / "historical-source-documents.json", {"documents": [entry]})
+    after = ps.snapshot_directory(root, "legislative")
+    with pytest.raises(ps.StateSafetyError, match="source-document"):
+        ps.assert_continuity(before, after, root, "legislative")
 
 
 @pytest.mark.parametrize("field", ["positions", "completed_analysis_ids", "candidate_alert_deliveries"])

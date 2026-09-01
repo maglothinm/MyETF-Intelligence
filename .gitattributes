@@ -3,3 +3,6 @@
 MANIFEST.sha256 text eol=lf
 RECOVERY_REPORT.md text eol=lf
 repo-files/RETIRED.md text eol=lf
+
+# Preserve upstream renderer bytes and their integrity manifest on every platform.
+scripts/dashboard_assets/vendor/pdfjs/** -text

@@ -347,7 +347,16 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
 
     page = (output / "investor-edge.html").read_text(encoding="utf-8")
     soup = BeautifulSoup(page, "html.parser")
-    headers = [item.get_text(" ", strip=True) for item in soup.select("#edge-table > thead th")]
+    # Contextual-help controls supplement each column label. Their visible '?' is
+    # checked separately below, without changing the underlying table contract.
+    headers = [
+        " ".join(
+            text.strip()
+            for text in item.find_all(string=True)
+            if text.strip() and text.find_parent("button") is None
+        )
+        for item in soup.select("#edge-table > thead th")
+    ]
     assert headers == [
         "Investor identity / key",
         "Filer",
@@ -363,6 +372,19 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
         "Avg disclosure lag",
         "Strongest sector",
     ]
+    for key, count in {
+        "investorEdge": 1,
+        "edgeConfidence": 1,
+        "followableAlpha": 4,
+        "followableHitRate": 1,
+        "sectorEdge": 1,
+    }.items():
+        controls = soup.select(
+            f'#edge-table > thead button.help[data-tooltip-key="{key}"]'
+        )
+        assert len(controls) == count, key
+        assert all(control.get("aria-label", "").startswith("Explain ") for control in controls)
+        assert all(control.get("type") == "button" for control in controls)
     main = soup.select_one("tr.investor-row[data-edge-group='investor-0']")
     detail = soup.select_one("tr.detail-row[data-edge-group='investor-0']")
     assert main is not None and detail is not None
@@ -376,7 +398,7 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
     assert cells[3].get_text(" ", strip=True) == "71.5 +5 modifier"
     assert "heat-pos-3" in (cells[3].get("class") or [])
     assert cells[4].get_text(" ", strip=True) == "60.0% Medium"
-    assert cells[5].get_text(" ", strip=True) == "2"
+    assert cells[5].get_text(" ", strip=True).startswith("2 Building history")
     assert [cells[index].get_text(" ", strip=True) for index in range(6, 10)] == [
         "+2.25%",
         "-1.50%",
@@ -396,17 +418,31 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
     assert disclosure.find("summary") is not None
     cards = detail.select("article.trade-card")
     assert len(cards) == 2
-    first_card_text = cards[0].get_text(" ", strip=True)
+    first_card_text = " ".join(
+        text.strip()
+        for text in cards[0].find_all(string=True)
+        if text.strip() and text.find_parent("button") is None
+    )
     assert "Actual public disclosure 2025-01-10" in first_card_text
     assert "Transaction entry $100" in first_card_text
     assert "Disclosure entry $105" in first_card_text
+    for key in ("transactionOutcomes", "disclosureOutcomes"):
+        control = cards[0].select_one(f'dt button.help[data-tooltip-key="{key}"]')
+        assert control is not None
+        assert control.get("aria-label", "").startswith("Explain ")
     assert "Benchmark XLK" in first_card_text
     assert "Counts toward Edge Yes" in first_card_text
     assert "Exclusions None recorded" in first_card_text
-    safe_link = cards[0].find("a", string="Official filing")
+    safe_link = cards[0].find("a", string="Official Source")
     assert safe_link is not None
     assert safe_link["href"] == "https://example.test/filing?id=1&view=public"
     assert safe_link["rel"] == ["noopener", "noreferrer"]
+    from urllib.parse import parse_qs, urlsplit
+    vault_link = cards[0].find("a", string="View Filing")
+    assert vault_link is not None
+    target = urlsplit(vault_link["href"])
+    assert target.path == "filing-vault.html"
+    assert parse_qs(target.query) == {"url": [safe_link["href"]]}
 
     outcome_rows = cards[0].select("table.outcome-table tbody tr")
     assert len(outcome_rows) == 8
@@ -474,7 +510,7 @@ def test_dashboard_addon_uses_em_dash_for_unavailable_neutral_metrics(
     cells = main.find_all("td", recursive=False)
     assert cells[3].get_text(" ", strip=True) == "—"
     assert cells[4].get_text(" ", strip=True) == "—"
-    assert cells[5].get_text(" ", strip=True) == "0"
+    assert cells[5].get_text(" ", strip=True).startswith("0 Building history")
     assert all(cells[index].get_text(" ", strip=True) == "—" for index in range(6, 10))
     assert cells[10].get_text(" ", strip=True) == "—"
     assert cells[11].get_text(" ", strip=True) == "—"
@@ -490,3 +526,46 @@ def test_native_dashboard_build_always_publishes_investor_edge_page(tmp_path: Pa
     assert (out / "investor-edge.js").exists()
     assert (out / "data" / "investor-edge.json").exists()
     assert 'href="investor-edge.html"' in (out / "index.html").read_text(encoding="utf-8")
+
+
+def test_dashboard_addon_reuses_shared_contextual_help_without_hiding_risk(
+    tmp_path: Path,
+) -> None:
+    ai_dir = tmp_path / "ai"
+    ai_dir.mkdir()
+    (ai_dir / "investor-edge-leaderboard.json").write_text(
+        json.dumps({"investors": [{"investor_key": "help-fixture|self", "filer": "Help Fixture",
+                                  "owner": "Self", "sample_count": 0}]}),
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    build_dashboard_addon(ai_dir, output)
+    soup = BeautifulSoup(
+        (output / "investor-edge.html").read_text(encoding="utf-8"), "html.parser"
+    )
+    assert len(soup.select('#tooltip[role="tooltip"]')) == 1
+    for key in (
+        "investorEdge",
+        "edgeConfidence",
+        "followableAlpha",
+        "followableHitRate",
+        "sectorEdge",
+    ):
+        targets = soup.select(f'[data-tooltip-key="{key}"]')
+        assert targets, f"Missing Investor Edge help: {key}"
+        assert all(target.has_attr("data-tooltip") for target in targets)
+        assert all(target.get("aria-label", "").startswith("Explain ") for target in targets)
+    visible = soup.get_text(" ", strip=True)
+    assert "Methodology & Risk" in visible
+    history_notice = soup.select_one(".history-building")
+    assert history_notice is not None
+    assert "Building history" in history_notice.get_text()
+    assert "insufficient" in history_notice.get_text().lower()
+    assert "shrinks small samples toward 50" in soup.select_one(".methodology").get_text()
+    script = (output / "investor-edge.js").read_text(encoding="utf-8")
+    shared = (
+        Path(__file__).resolve().parents[1] / "scripts/dashboard_assets/common.js"
+    ).read_text(encoding="utf-8")
+    assert script.startswith(shared), "Standalone help uses the root presentation module"
+    assert script.count("function setupDialogsAndTooltips(") == 1
+    assert "PT.setupDialogsAndTooltips();" in script
