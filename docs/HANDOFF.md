@@ -1,8 +1,8 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: owner-authorized state-safety PR #3 reconciliation against current main;
-isolated branch commit/push is authorized while main promotion remains gated.
+Work: owner-authorized state-safety PR #3 reconciliation against current main is
+committed, pushed, and PR-validated; main promotion remains gated.
 Repository: canonical ID **1349678672**,
 **maglothinm/MyETF-Intelligence**, default **main**.
 Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3),
@@ -10,28 +10,32 @@ open and unmerged.
 Support: [public Community Actions escalation and follow-up](SUPPORT_ESCALATION.md);
 no backend containment verified.
 
-## Current task — commit/push the isolated PR #3 reconciliation; do not promote
+## Current task — hold validated draft PR #3 while clearing promotion gates
 
-The integration worktree is
-`.remediation/production-remediation` on
-`codex/production-remediation`, reconciled against current main
-`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`.
+The integration worktree is `.remediation/production-remediation` on
+`codex/production-remediation` at
+`06e8caa54b01e2945a6536ed526740d24dafb31d`, matching
+`origin/codex/production-remediation`. Reconciliation commit
+`757d5276c09712bdb08a485a01f1bcbefc328b3c` incorporates current main
+`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`; follow-up commit
+`06e8caa54b01e2945a6536ed526740d24dafb31d` keeps CI runtime temporary state
+outside the checkout.
 Current main wins for operational truth. The documentation reconciliation keeps
 main's deployed dashboard, scheduler, Vault, release and continuity evidence,
 restores the missing append-only decisions D-2026-08-30-015 through
 D-2026-08-30-018 before D-2026-08-30-019, and retains the submitted Community
 escalation and follow-up as public receipts.
 
-The owner has explicitly authorized an isolated branch commit and push to update
-draft PR #3 and obtain current PR CI/review while the production blockers remain.
-That authorization does not extend to main merge, deployment, producer dispatch,
-external scheduler activation, rebaseline, alerts, credentials, or repository
-settings. The reconciled tree is validated and authorized for commit/push: **799
-Python tests passed**; the exact CI Node tests passed **17 / 17**; and
-`scripts/verify_repository.py` passed its manifest, credential-scan,
-YAML/Python/JSON, and generated-JS checks. Bash is unavailable in the
-local validation environment, so `verify.sh` remains required in CI. No branch
-commit SHA, push, PR check, merge, or deployment result is claimed here.
+The owner-authorized isolated update is complete: both commits above are pushed,
+and [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open
+and unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
+/ attempt 1 succeeded on final branch head `06e8caa...`: **799 Python tests
+passed**, the exact CI Node tests passed **17 / 17**, all **60 shell checks**
+passed, and the repository verifier reported **VERIFICATION PASSED** after its
+manifest, credential-scan, YAML/Python/JSON, and generated-JS checks. The branch
+commit, push, and successful PR validation do not extend to or claim main merge,
+deployment, producer dispatch, external scheduler activation, rebaseline,
+alerts, credentials, or repository settings.
 
 ### Fresh production evidence
 
@@ -68,15 +72,13 @@ Finnhub HTTP 403 market-data errors. Executive Healthchecks start and success
 calls failed with curl exit 3 because the configured URL was malformed; the
 workflow's continue-on-error status is not delivery proof.
 
-**Permitted next boundary:** the validated reconciliation may be committed and
-pushed only to `codex/production-remediation` and must receive fresh PR
-CI/review. Do not merge. Separately obtain terminal GitHub clearance, repair and
-prove Executive Healthchecks, observe a successful post-deployment Legislative
-cycle, and resolve Investor Edge market data. Then requery current main,
-nonterminal runs, and exact protected-artifact high-water/ancestry before normal
-reviewed promotion. Never initialize, rebaseline, dispatch a workaround writer,
-or use an older artifact to
-bypass the gate.
+**Permitted next boundary:** keep draft PR #3 open and unmerged. Separately obtain
+terminal GitHub clearance, repair and prove Executive Healthchecks, observe a
+successful post-deployment Legislative cycle, and resolve Investor Edge market
+data. Then requery current main, nonterminal runs, and exact protected-artifact
+high-water/ancestry before normal reviewed promotion. Never initialize,
+rebaseline, dispatch a workaround writer, or use an older artifact to bypass the
+gate.
 
 ## Completed task — Situation Brief acknowledgement consistency deployed and verified
 

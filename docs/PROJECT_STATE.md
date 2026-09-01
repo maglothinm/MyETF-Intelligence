@@ -1,35 +1,40 @@
 # PolitiTrack project state
 
 Last updated: **2026-09-01 UTC**
-Status: **State-safety PR #3 reconciliation is validated and owner-authorized for
-commit/push on its isolated branch. Main promotion remains gated. A real
-post-deployment Executive schedule, downstream AI run and Pages publication have
-succeeded; Legislative freshness, obsolete queued runs, market-data completion
-and Executive Healthchecks still block the full remediation gate. External
-scheduling remains inactive.**
+Status: **State-safety PR #3 reconciliation is committed and pushed on its
+isolated branch, and PR CI run 33512895241 / attempt 1 succeeded. Main promotion
+remains gated. A real post-deployment Executive schedule, downstream AI run and
+Pages publication have succeeded; Legislative freshness, obsolete queued runs,
+market-data completion and Executive Healthchecks still block the full
+remediation gate. External scheduling remains inactive.**
 
-## State-safety PR #3 reconciliation — branch update authorized; promotion blocked
+## State-safety PR #3 reconciliation — branch pushed and PR-validated; promotion blocked
 
 Canonical repository ID **1349678672**, live name
 **maglothinm/MyETF-Intelligence**, default **main**. The local integration
-worktree is on **codex/production-remediation**, reconciled against current main
-`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`.
+worktree is on **codex/production-remediation** at
+`06e8caa54b01e2945a6536ed526740d24dafb31d`, matching
+`origin/codex/production-remediation`. Reconciliation commit
+`757d5276c09712bdb08a485a01f1bcbefc328b3c` incorporates current main
+`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`; follow-up commit
+`06e8caa54b01e2945a6536ed526740d24dafb31d` keeps CI runtime temporary state
+outside the checkout.
 Current main remains the authority for operational UI, scheduler, Filing Vault,
 release and deployment truth. The reconciliation retains the state-safety branch's
 artifact-only continuity work and durable decisions D-2026-08-30-015 through
 D-2026-08-30-018 without replacing main's later decisions or release record.
 
-The owner has explicitly authorized committing and pushing this isolated
-reconciliation to update draft PR #3 and obtain current PR CI/review. That
-authorization is limited to `codex/production-remediation`; it does not authorize
-merge to main, deployment, a production writer dispatch, external scheduler
-activation, rebaseline, alert delivery, credential changes, or repository-setting
-changes. The reconciled tree is validated and authorized for commit/push: **799
-Python tests passed**; the exact CI Node tests passed **17 / 17**; and
-`scripts/verify_repository.py` passed its manifest, credential-scan,
-YAML/Python/JSON, and generated-JS checks. Bash is unavailable in the
-local validation environment, so `verify.sh` remains required in CI. This record
-does not claim a branch commit SHA, push, PR check, merge, or deployment result.
+The owner-authorized isolated branch update is complete: both commits above are
+committed and pushed, and
+[draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open and
+unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
+/ attempt 1 succeeded on final branch head `06e8caa...`: **799 Python tests
+passed**, the exact CI Node tests passed **17 / 17**, all **60 shell checks**
+passed, and the repository verifier reported **VERIFICATION PASSED** after its
+manifest, credential-scan, YAML/Python/JSON, and generated-JS checks. This branch
+publication and PR validation do not authorize or claim merge to main,
+deployment, a production writer dispatch, external scheduler activation,
+rebaseline, alert delivery, credential changes, or repository-setting changes.
 
 ### Verified scheduled production chain after deployment
 
@@ -83,16 +88,15 @@ public receipts, not backend containment. Fresh owner-authenticated retries agai
 returned HTTP 409 for cancel and force-cancel and HTTP 403 for deletion for each
 run; the exact re-read remained queued with zero jobs/artifacts.
 
-**Permitted next boundary:** the validated reconciliation may be committed and
-pushed only to the isolated branch and must receive current PR CI/review; it may
-not be merged. Independently, obtain terminal cancellation or authoritative
-non-execution confirmation for both obsolete runs, repair and prove Executive
-Healthchecks, observe a successful post-deployment Legislative cycle, and resolve
-the Investor Edge market-data blocker. Requery live Actions and exact
-protected-artifact lineage before any main promotion. Only then use the normal
-reviewed merge/deployment path. Do not
-treat a branch commit, branch push, PR check, or the Executive-only scheduled
-chain as a merge, deployment approval, or complete production acceptance.
+**Permitted next boundary:** keep draft PR #3 open and unmerged while obtaining
+terminal cancellation or authoritative non-execution confirmation for both
+obsolete runs, repairing and proving Executive Healthchecks, observing a
+successful post-deployment Legislative cycle, and resolving the Investor Edge
+market-data blocker. Requery live Actions and exact protected-artifact lineage
+before any main promotion. Only then use the normal reviewed merge/deployment
+path. Do not treat the branch commits, branch push, successful PR check, or the
+Executive-only scheduled chain as a merge, deployment approval, or complete
+production acceptance.
 
 ## Situation Brief acknowledgement consistency — deployed and production-verified
 

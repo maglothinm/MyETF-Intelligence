@@ -920,3 +920,28 @@ normal exact-attempt artifact high-water, CI, review and deployment gates pass.
 The successful Executive `33508399072` -> AI `33508648817` -> Pages `33508763336`
 chain satisfies only the singular scheduled-cycle prerequisite; it does not
 waive any remaining gate.
+
+## D-2026-09-01-041 — Record pushed reconciliation and successful PR validation
+
+**Decision:** D-2026-09-01-040 remains the production-promotion boundary, but its
+pre-publication factual checkpoint is superseded. Reconciliation commit
+`757d5276c09712bdb08a485a01f1bcbefc328b3c` and CI-runtime follow-up
+`06e8caa54b01e2945a6536ed526740d24dafb31d` are committed and pushed on
+`codex/production-remediation`. Draft PR
+[#3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open and
+unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
+/ attempt 1 succeeded on `06e8caa...` with **799 Python tests**, **17 / 17** exact
+Node tests, **60 shell checks**, and **VERIFICATION PASSED**.
+
+**Reason:** D-040 was recorded before the authorized branch publication and
+explicitly claimed no commit, push, or PR result. Those review-stage events now
+have exact Git and Actions evidence and must be distinguished from production
+promotion.
+
+**Consequence:** The branch and CI evidence permit continued review of draft PR
+#3 only. They do not authorize or establish merge, deployment, a production
+writer dispatch, external scheduler activation, alert delivery, credential or
+repository-setting changes, rebaseline, or complete production acceptance. The
+obsolete queued runs, post-deployment Legislative success, Executive
+Healthchecks proof, Investor Edge market-data completion, and normal fresh
+lineage/review/deployment gates in D-040 remain required before promotion.
