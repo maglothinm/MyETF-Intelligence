@@ -773,3 +773,7 @@ inventory and review queue now update together on acknowledge, reload and restor
 The wallboard and any context without browser acknowledgements retain the
 production total. This changes no parser record, collector, schedule, alert,
 credential, protected artifact, production state, or deployment authority.
+
+The application supplies the active count through both the formatter model and
+the additive argument so a previously cached shared formatter cannot reintroduce
+the retained total after new application code loads.

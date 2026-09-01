@@ -64,11 +64,12 @@
     const acknowledged=ids.filter(id=>reviewAcknowledgements[id]).length;
     return {total:ids.length,acknowledged,active:Math.max(0,ids.length-acknowledged)};
   }
+  const activeReviewBrief=(model,changes,active)=>brief({...model,reviews:{...model.reviews,manual_exception:active}},changes,active);
   function renderReviewAttention(model=state.model){
     if(!model)return;const stats=manualReviewStats(model);
     const counter=el("attention-exceptions");counter.textContent=number(stats.active);counter.classList.toggle("attention-active",stats.active>0);
     el("attention-review-note").textContent=`${number(stats.acknowledged)} acknowledged here · ${number(model.reviews.access_required)} access/request required`;
-    el("situation-brief").textContent=brief(model,state.changes,stats.active);
+    el("situation-brief").textContent=activeReviewBrief(model,state.changes,stats.active);
   }
   function renderExceptionInventory(model=state.model){
     if(!model)return;const bad=model.health.branches.filter(b=>b.status!=="success");
@@ -243,7 +244,7 @@
     el("updated-at").textContent=`Source data through ${date(m.data_through_utc)}`;
     el("attention-health").textContent=({success:"Current",failure:"Failure",stale:"Overdue",unknown:"Unknown"})[status]||"Unknown";
     el("attention-health").className=`health-metric ${status}`;
-    el("situation-brief").textContent=brief(m,changes,manualReviewStats(m).active);
+    el("situation-brief").textContent=activeReviewBrief(m,changes,manualReviewStats(m).active);
     updateHealthCards("health-chart",m,false,preserveHistory);updateHealthCards("operations-health",m,true,preserveHistory);
     renderExceptionInventory(m);
     el("build-details").textContent=`Dashboard generated ${date(m.generated_utc)} · build ${m.build_sha||"unavailable"} · Source data through ${date(m.data_through_utc)}. Publication does not establish collector success.`;

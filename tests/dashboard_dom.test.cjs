@@ -152,7 +152,9 @@ async function dashboard(options = {}) {
   // Audio is intentionally unavailable; the page must never initialize it on load.
   window.AudioContext = function () { errors.push('Audio initialized without gesture'); throw new Error('Unexpected audio'); };
   if (options.beforeScript) options.beforeScript(window);
-  window.eval(fs.readFileSync(path.join(build, wallboard ? 'wallboard.js' : 'app.js'), 'utf8'));
+  let appSource = fs.readFileSync(path.join(build, wallboard ? 'wallboard.js' : 'app.js'), 'utf8');
+  if (options.appSourceTransform) appSource = options.appSourceTransform(appSource);
+  window.eval(appSource);
   const doc = window.document, byId = id => doc.getElementById(id);
   await waitFor(() => wallboard ? requests.length && byId('overall-state').textContent !== '◌ Unknown' : !byId('refresh-button').disabled, 'initial dashboard render');
   async function navigate(hash, predicate) {
@@ -1132,6 +1134,11 @@ function reviewFixture(data, count = 1) {
   data['dashboard-insights'].source_filters.push({value: 'ethics-office', label: 'Ethics Office', field: 'source'});
 }
 
+function withCachedBriefFormatter(source) {
+  const marker = '/* The Overview downloads only the additive insights model. Full ledgers are lazy. */';
+  return source.replace(marker, 'PT.brief=((current)=>(model,changes)=>current(model,changes))(PT.brief);\n' + marker);
+}
+
 function choose(env, id, value) {
   const control = env.byId(id); control.value = value;
   control.dispatchEvent(new env.window.Event('change', {bubbles: true}));
@@ -1190,7 +1197,7 @@ test('parser links survive reload and history; chip and clear filters restore no
 });
 
 test('manual parser acknowledgement clears local attention, persists, and remains reversible', async t => {
-  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
+  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', appSourceTransform: withCachedBriefFormatter}); t.after(env.close);
   await waitFor(() => env.byId('reviews-body').children.length === 1, 'active parser exception');
   assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), true);
   assert.match(env.byId('situation-brief').textContent, /1 manual parsing exception/);
@@ -1215,7 +1222,7 @@ test('manual parser acknowledgement clears local attention, persists, and remain
   assert.equal(env.byId('reviews-body').children.length, 1);
   assert.match(env.byId('reviews-body').textContent, /Acknowledged here/);
 
-  const reload = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', beforeScript(window) {
+  const reload = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', appSourceTransform: withCachedBriefFormatter, beforeScript(window) {
     window.localStorage.setItem('polititrack.manual-review-acknowledgements.v1', stored);
   }}); t.after(reload.close);
   await waitFor(() => reload.byId('attention-exceptions').textContent === '0', 'persisted acknowledgement');
