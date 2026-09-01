@@ -669,7 +669,18 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
                      "note": "Separate retained populations, not a conversion funnel. Cataloged does not mean transactions parsed; review rows and filing statuses are separate inventories."},
         "composition": {"population": len(transactions), "purchases": purchases, "sales": sales, "other": len(transactions) - purchases - sales,
                         "note": "Parsed post-upgrade transaction ledger; not complete historical government-trading volume. Counts do not imply dollar exposure."},
-        "reviews": {"access_required": review_counts["access_required"], "manual_exception": review_counts["manual_exception"], "other": review_counts["other"], "total": len(reviews), "latest": categories[:8]},
+        "reviews": {
+            "access_required": review_counts["access_required"],
+            "manual_exception": review_counts["manual_exception"],
+            "manual_exception_ids": sorted(
+                str(row["review_id"])
+                for row in categories
+                if row["category"] == "manual_exception" and row.get("review_id")
+            ),
+            "other": review_counts["other"],
+            "total": len(reviews),
+            "latest": categories[:8],
+        },
         "signals": signals[:48], "signals_truncated": len(signals) > 48,
         "health": health, "latest_filings": [_filing(row) for row in sorted(filings, key=lambda row: str(row.get("updated_at_utc") or row.get("first_seen_utc") or ""), reverse=True)[:8]],
         "simulation": simulation, "synthetic": synthetic,

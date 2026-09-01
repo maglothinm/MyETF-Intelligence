@@ -33,7 +33,7 @@ window.PT = (() => {
     actions: "Research and test tools. Opens controls for Run Simulation, the $10K historical replay, Monitor Mode and repository access.",
     actionableSignals: "Analyses currently classified High Priority or Watchlist. Other AI-ranked records remain available under Signals but are not promoted to this board.",
     localChanges: "Changes detected by this browser after it successfully established a local baseline. This is not a server-side account history.",
-    parserExceptions: "Records requiring manual parser review. Open the filtered review queue to inspect each exception; access/request inventory is tracked separately.",
+    parserExceptions: "Unacknowledged records requiring manual parser review. Acknowledgement is reversible, belongs to this browser and does not alter retained production evidence; access/request inventory is tracked separately.",
     systemEvidence: "Status uses retained production run evidence and freshness targets. Failure takes precedence over stale, then unknown, then current. It is not an independent live probe of every upstream service.",
     monitoringCurrent: "All required PolitiTrack collectors and the AI analyst have completed successfully within their freshness windows.",
     monitoringStale: "The most recent retained collector run may have succeeded, but it is older than PolitiTrack’s freshness window. This can indicate a delayed or missed scheduled execution.",
@@ -193,6 +193,7 @@ window.PT = (() => {
   function validateModel(m) {
     if(!m || m.version!==1 || !m.notifications || !Array.isArray(m.signals) || !Array.isArray(m.health?.branches) || !Array.isArray(m.latest_filings) || !Array.isArray(m.reviews?.latest) || !m.simulation || !m.paper || !m.synthetic)throw new Error("Unsupported or incomplete dashboard view model");
     for(const [section,keys] of [["coverage",["filings","transactions","analyses","cataloged_only","processed","review_required","qualifying_signals"]],["reviews",["manual_exception","access_required","other","total"]],["composition",["population","purchases","sales","other"]]])for(const key of keys)if(numeric(m[section]?.[key])===null || m[section][key]<0)throw new Error("Malformed published counts");
+    if(!Array.isArray(m.reviews.manual_exception_ids)||m.reviews.manual_exception_ids.length!==m.reviews.manual_exception||new Set(m.reviews.manual_exception_ids).size!==m.reviews.manual_exception_ids.length||m.reviews.manual_exception_ids.some(id=>typeof id!=="string"||!id||id.length>500))throw new Error("Malformed manual review identity inventory");
     if(m.health.branches.length!==3 || m.health.branches.some(b=>!b||!Array.isArray(b.errors)||!Array.isArray(b.timeline)))throw new Error("Malformed run evidence");
     return m;
   }

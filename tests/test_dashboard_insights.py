@@ -83,6 +83,7 @@ def test_coverage_composition_and_review_categories_are_distinct_exact_populatio
     }
     assert {key: model["composition"][key] for key in ("population", "purchases", "sales", "other")} == {"population": 5, "purchases": 1, "sales": 2, "other": 2}
     assert {key: model["reviews"][key] for key in ("access_required", "manual_exception", "other", "total")} == {"access_required": 1, "manual_exception": 1, "other": 1, "total": 3}
+    assert model["reviews"]["manual_exception_ids"] == ["r2"]
     assert model["reviews"]["latest"][0]["category"] == "manual_exception"
     assert "not a conversion funnel" in model["coverage"]["note"]
     assert "post-upgrade" in model["composition"]["note"]
@@ -226,6 +227,7 @@ def test_review_projection_inherits_synthetic_flags_and_overview_uses_same_exclu
     assert all(row["is_synthetic_test"] is True for row in rows)
     assert all(row["category"] == "manual_exception" for row in rows)
     assert model["reviews"]["manual_exception"] == model["reviews"]["total"] == 0
+    assert model["reviews"]["manual_exception_ids"] == []
     assert model["reviews"]["latest"] == []
     assert model["synthetic"]["reviews"] == 2
     assert model["coverage"]["filings"] == 0
