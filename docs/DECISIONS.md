@@ -717,3 +717,12 @@ remain available in a deliberately disclosed acknowledged inventory. They are
 not shared across devices or evidence that the underlying parser issue was fixed.
 This changes no collector, parser, schedule, workflow, alert, credential,
 protected artifact, production state, or deployment authority.
+
+**Release verification:** [PR #25](https://github.com/maglothinm/MyETF-Intelligence/pull/25)
+tested `b77d5f422043c304704c9ab521811bc457a6b737` in CI **33501903449 / 1** and
+merged as `95deb6263d616cfd32b14a1a8d7c1c50fc67eade`. Main CI
+**33502068627 / 1** and Pages **33502068474 / 1** succeeded; Pages artifact
+**9798105632** is tied to the merge SHA. Live interaction verified acknowledge,
+restore, persistent presentation, the retained read-only boundary and zero browser
+errors, then returned the current review to active state. Protected publisher
+inputs and their producing attempts remained unchanged.

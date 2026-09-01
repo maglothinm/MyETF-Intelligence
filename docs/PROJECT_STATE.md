@@ -4,9 +4,35 @@ Last updated: **2026-09-01 UTC**
 Status: **Scheduler freshness deployed from PR #20; live overdue health, state
 continuity and all served files verified. The device-clock follow-up is deployed
 and verified from PR #21. The redaction-boundary follow-up is deployed and
-verified from PR #23. External scheduling remains inactive.**
+verified from PR #23. Browser-local manual-review acknowledgement is deployed and
+verified from PR #25. External scheduling remains inactive.**
 
 This snapshot does not replace live GitHub evidence. Follow `AGENTS.md`.
+
+## Manual Parser Exception acknowledgement — deployed and production-verified
+
+[PR #25](https://github.com/maglothinm/MyETF-Intelligence/pull/25) merged the
+unchanged tested head `b77d5f422043c304704c9ab521811bc457a6b737` as
+`95deb6263d616cfd32b14a1a8d7c1c50fc67eade`. PR CI
+**33501903449 / 1**, main CI **33502068627 / 1**, and Pages
+**33502068474 / 1** succeeded. Pages artifact **9798105632** has digest
+`sha256:7626f8caa4c2f1cd246c97b78e8d81ccc8b76327572dfeea31b14106500e2e9b`.
+
+The live site serves HTTP 200 for the page, application script, and insights
+model. The live model identifies the merge SHA and contains one manual exception
+with one matching current identity. A production browser check opened the retained
+Richard Blumenthal paper-filing review, acknowledged it, verified the restore
+control and explicit read-only boundary, then restored it to active review. The
+original active state returned and the browser reported no errors. The action was
+browser-local only; no production review record changed.
+
+The publisher restored the same provenance-valid protected inputs read-only:
+Legislative artifact **9796523510** from run **33497945694 / 1**; Executive
+**9789261867** from **33479032715 / 1**; AI **9796566785** from
+**33498060503 / 1**; and optional simulator **9734790733** from
+**33320677882 / 1**. Build validation and the repository safety contract passed.
+No collector, parser retry, workflow dispatch, schedule, alert, credential,
+protected artifact, or production state was mutated for this rollout.
 
 ## Scheduler freshness — deployed and production-verified; external activation remains gated
 
