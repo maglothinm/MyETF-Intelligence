@@ -1,29 +1,42 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19).
+Work: owner-requested Manual Parser Exception acknowledgement UI. Scheduler
+[issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
+separate infrastructure task.
 
-## Current task — freshness release verified; external activation gated
+## Current task — local manual-review acknowledgement implemented; not deployed
 
 Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
-default **main**. PR #20 and its clock follow-up PR #21 are merged.
-The redaction-boundary follow-up PR #23 is also merged and deployed as
-**2c1be6040e2e6d8cda18991dbb2db38fe56a011a** from tested source
-`5aa8cef3127beba9c5a8fef002d1228710fb0b26`. Original unrelated work remains preserved.
+default **main**. Work is committed on branch
+`codex/manual-review-acknowledgement` as
+**7c515fe9b830370da4ff2bb7a190bccd2b6482a0**, based on clean canonical main
+**bf08eb9624d0ce4555c7b8405ffd26bf5da81a34**. The branch is published for
+canonical review but has not yet passed CI, merged, dispatched, or deployed.
+Original unrelated work remains preserved.
 Never implement or dispatch from legacy `maglothinm/MyETF`.
 
-Post-release review reproduced a remaining production path defect: the publisher
-sanitized retained rows before evaluating health, and could erase the sole
-`environment=simulation` or private-only `test_metadata` exclusion. A recent
-nonproduction success could then refresh health and source currency. The local
-fix preserves only a coarse exclusion boolean in JSON and CSV and covers all three
-workers through actual site builds. The shared open status help also updates as health ages.
-Local validation passed **639 Python tests with 5 optional skips**, **67 generated
-DOM** cases, **36 native Operations** cases, **11 Worker** cases, syntax, workflow
-YAML and diff checks. Two independent reviews identified split exclusion rules,
-missing CSV markers and an exception-scope edge case; all are fixed and covered.
-PR CI **33498107710**, main CI **33498254970** and Pages **33498255010** succeeded.
-Artifact **9796632425** is tied to the merge SHA. Nothing was manually dispatched.
+The static dashboard now lets the owner acknowledge a retained Manual Parser
+Exception after manual review. The action is browser-local, timestamped,
+persistent on that browser, and reversible. Acknowledged records leave the active
+attention count and default exception queue but remain visible through **Show
+acknowledged**. The detail view states that acknowledgement does not resolve,
+delete, retry, or modify the production record. Current review IDs are included in
+the compact dashboard model and validated against the lazy-loaded ledger so stale
+local acknowledgements are pruned without weakening publication consistency.
+
+Focused validation passed **83 Python tests with 1 intentional skip** and the
+generated-dashboard wrapper covering **68 DOM scenarios**. Coverage includes
+static publication, review/model identity consistency, persistence across reload,
+restoration, matched and orphan record detail, hostile-input safety, keyboard
+focus, and serious/critical accessibility checks. JavaScript syntax, Python
+compilation and `git diff --check` also passed. No collector, parser retry,
+workflow, schedule, alert, credential, protected artifact, production state, or
+live dashboard was touched. The durable boundary is recorded in D-2026-09-01-037.
+
+**Next safe action:** open the authorized canonical pull request, wait for CI,
+merge only the tested head, then verify main CI, the Pages artifact and live
+acknowledgement behavior before describing it as deployed.
 
 ## Completed work and proof
 
