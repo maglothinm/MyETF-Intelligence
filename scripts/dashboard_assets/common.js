@@ -197,10 +197,10 @@ window.PT = (() => {
     if(m.health.branches.length!==3 || m.health.branches.some(b=>!b||!Array.isArray(b.errors)||!Array.isArray(b.timeline)))throw new Error("Malformed run evidence");
     return m;
   }
-  function brief(model,changes={}) {
+  function brief(model,changes={},manualExceptionCount=model.reviews.manual_exception) {
     const bits=[changes.signals?`${number(changes.signals)} new qualifying signals`:model.coverage.qualifying_signals?`${number(model.coverage.qualifying_signals)} qualifying signals for review`:"No qualifying signals"];
     if(changes.transactions)bits.push(`${number(changes.transactions)} newly parsed transactions`);
-    if(model.reviews.manual_exception)bits.push(`${number(model.reviews.manual_exception)} manual parsing exception${model.reviews.manual_exception===1?"":"s"}`);
+    if(manualExceptionCount)bits.push(`${number(manualExceptionCount)} manual parsing exception${manualExceptionCount===1?"":"s"}`);
     const bad=model.health.branches.filter(b=>b.status!=="success");
     bits.push(bad.length?bad.map(b=>`${b.branch==="ai"?"AI":title(b.branch)} ${b.status==="failure"?"run failure":b.status==="stale"?"polling overdue":"evidence unknown"}`).join("; "):"monitoring current");
     if(changes.simulations)bits.push("latest historical replay result observed");

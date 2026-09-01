@@ -755,3 +755,21 @@ an amber active Manual Parser Exception, a neutral zero after acknowledgement,
 and amber again after restore. The retained review was returned to active state,
 with no browser errors. Protected publisher inputs and attempts remained
 unchanged.
+
+## D-2026-09-01-039 — Use active review counts in local attention summaries
+
+**Decision:** Dashboard attention summaries that react to browser-local manual
+review acknowledgement use the unacknowledged active count. The retained total
+remains available in review inventory and record detail, where its production
+meaning is explicit.
+
+**Reason:** Showing a retained manual-exception total in the Situation Brief after
+the sole exception was acknowledged contradicted the active counter and queue.
+Acknowledgement does not delete the record, but it does remove it from current
+browser attention.
+
+**Consequence:** The Situation Brief, Manual Parser Exceptions card, exception
+inventory and review queue now update together on acknowledge, reload and restore.
+The wallboard and any context without browser acknowledgements retain the
+production total. This changes no parser record, collector, schedule, alert,
+credential, protected artifact, production state, or deployment authority.
