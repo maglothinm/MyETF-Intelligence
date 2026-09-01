@@ -20,6 +20,12 @@ variable "runtime_secrets" {
   default     = {}
 }
 
+variable "runtime_environment" {
+  description = "Non-secret environment values applied to Runtime v2 producer jobs."
+  type        = map(string)
+  default     = {}
+}
+
 variable "database_name" {
   description = "Cloud SQL database used for immutable runtime state and Filing Vault metadata."
   type        = string

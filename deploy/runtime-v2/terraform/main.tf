@@ -187,6 +187,13 @@ resource "google_storage_bucket_iam_member" "vault_runtime" {
   member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+resource "google_storage_bucket_iam_member" "vault_runtime_metadata" {
+  count  = var.vault_enabled ? 1 : 0
+  bucket = google_storage_bucket.vault[0].name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.runtime.email}"
+}
+
 resource "google_storage_bucket" "migration" {
   name                        = "${var.project_id}-polititrack-migration"
   location                    = var.region
@@ -278,6 +285,13 @@ resource "google_cloud_run_v2_job" "producer" {
             }
           }
         }
+        dynamic "env" {
+          for_each = var.runtime_environment
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
       }
     }
   }
@@ -347,18 +361,6 @@ resource "google_cloud_run_v2_job" "admin" {
           content {
             name  = "VAULT_GCS_BUCKET"
             value = env.value
-          }
-        }
-        dynamic "env" {
-          for_each = var.runtime_secrets
-          content {
-            name = env.key
-            value_source {
-              secret_key_ref {
-                secret  = env.value
-                version = "latest"
-              }
-            }
           }
         }
       }
@@ -491,18 +493,6 @@ resource "google_cloud_run_v2_job" "vault_lifecycle" {
         env {
           name  = "VAULT_GCS_BUCKET"
           value = google_storage_bucket.vault[0].name
-        }
-        dynamic "env" {
-          for_each = var.runtime_secrets
-          content {
-            name = env.key
-            value_source {
-              secret_key_ref {
-                secret  = env.value
-                version = "latest"
-              }
-            }
-          }
         }
       }
     }
@@ -670,18 +660,6 @@ resource "google_cloud_run_v2_service" "web" {
       env {
         name  = "VAULT_AGENCY_HOSTS"
         value = var.vault_agency_hosts
-      }
-      dynamic "env" {
-        for_each = var.runtime_secrets
-        content {
-          name = env.key
-          value_source {
-            secret_key_ref {
-              secret  = env.value
-              version = "latest"
-            }
-          }
-        }
       }
     }
   }

@@ -5,6 +5,7 @@ param(
     [string]$ProjectId,
     [string]$Region = 'us-central1',
     [string]$RuntimeSecretsFile = '',
+    [string]$RuntimeEnvironmentFile = '',
     [string]$MigrationDirectory = '',
     [switch]$DisableVault,
     [switch]$EnableSchedules,
@@ -132,6 +133,20 @@ if ($RuntimeSecretsFile) {
 }
 $runtimeSecretsJson = $runtimeSecrets | ConvertTo-Json -Compress
 
+$runtimeEnvironment = @{}
+if ($RuntimeEnvironmentFile) {
+    $runtimeEnvironment = Get-Content (Resolve-Path $RuntimeEnvironmentFile) -Raw | ConvertFrom-Json -AsHashtable
+    foreach ($entry in $runtimeEnvironment.GetEnumerator()) {
+        if ($entry.Key -notmatch '^[A-Z][A-Z0-9_]+$' -or $entry.Value -isnot [string]) {
+            throw 'Runtime environment mapping must contain non-secret string values keyed by environment name.'
+        }
+        if ($runtimeSecrets.ContainsKey($entry.Key)) {
+            throw "Runtime environment and secret mappings both define $($entry.Key)."
+        }
+    }
+}
+$runtimeEnvironmentJson = $runtimeEnvironment | ConvertTo-Json -Compress
+
 $terraformData = Join-Path $env:LOCALAPPDATA 'PolitiTrack\terraform-runtime-v2'
 $env:TF_DATA_DIR = $terraformData
 Invoke-Checked $terraform @(
@@ -146,6 +161,7 @@ $baseVariables = @(
     "-var=image=$image",
     "-var=vault_enabled=$($vaultEnabled.ToString().ToLowerInvariant())",
     "-var=runtime_secrets=$runtimeSecretsJson",
+    "-var=runtime_environment=$runtimeEnvironmentJson",
     '-var=schedules_enabled=false'
 )
 
