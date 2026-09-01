@@ -1,11 +1,34 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: owner-requested Manual Parser Exception acknowledgement UI. Scheduler
+Work: owner-requested neutral zero-state attention colors. Scheduler
 [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
 separate infrastructure task.
 
-## Current task — manual-review acknowledgement deployed and verified
+## Current task — neutral attention-counter zeroes deployed and verified
+
+[PR #27](https://github.com/maglothinm/MyETF-Intelligence/pull/27) tested
+`f477c7938ce973cae898b221451577242a8cf248` in CI **33503192366 / 1** and
+merged it as `1be235768c5c5885f83f62e4e2e61eec989cb16b`. Main CI
+**33503300913 / 1** and Pages **33503300907 / 1** succeeded. Pages artifact
+**9798587857** has digest
+`sha256:419777922d8f47c3b091ebe76fcd0b12419f8116c0bc40437097fef5f1d280fa`.
+
+Actionable Signals now uses neutral white at zero and teal only for a positive
+count. Manual Parser Exceptions uses neutral white at zero active and amber only
+while an active exception remains. The generated-dashboard regression covers
+zero, positive, acknowledge and restore transitions. Live computed styles matched
+all four states; the retained review was restored active and the browser reported
+no errors.
+
+Publisher inputs remained Legislative **9796523510 / 33497945694 / 1**,
+Executive **9789261867 / 33479032715 / 1**, AI
+**9796566785 / 33498060503 / 1**, and simulator
+**9734790733 / 33320677882 / 1**. No producer, alert, signal, review record,
+protected state, credential or schedule changed. Decision D-2026-09-01-038 records
+the durable semantic rule. No further rollout action is required.
+
+## Completed task — manual-review acknowledgement deployed and verified
 
 Canonical ID **1349678672**, live repository **maglothinm/MyETF-Intelligence**,
 default **main**. Work is committed on branch

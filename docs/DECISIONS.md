@@ -743,3 +743,15 @@ browser-local acknowledgements change. This is presentation-only and changes no
 signal qualification, parser record, acknowledgement persistence, collector,
 schedule, alert, credential, protected artifact, production state, or deployment
 authority.
+
+**Release verification:** [PR #27](https://github.com/maglothinm/MyETF-Intelligence/pull/27)
+tested `f477c7938ce973cae898b221451577242a8cf248` in CI **33503192366 / 1** and
+merged as `1be235768c5c5885f83f62e4e2e61eec989cb16b`. Main CI
+**33503300913 / 1** and Pages **33503300907 / 1** succeeded; Pages artifact
+**9798587857** has digest
+`sha256:419777922d8f47c3b091ebe76fcd0b12419f8116c0bc40437097fef5f1d280fa`.
+Live computed-style verification confirmed a neutral Actionable Signals zero,
+an amber active Manual Parser Exception, a neutral zero after acknowledgement,
+and amber again after restore. The retained review was returned to active state,
+with no browser errors. Protected publisher inputs and attempts remained
+unchanged.
