@@ -210,14 +210,14 @@ window.PT = (() => {
     event?.sourceCapabilities?.firesTouchEvents || !!window.matchMedia?.("(pointer: coarse)").matches;
   function setupDialogsAndTooltips() {
     let opener=null,anchor=null,pinned=false,openTimer=null,closeTimer=null,frame=null;
-    let pending=null,pointer=null,input="keyboard",suppressFocus=false;
+    let pending=null,pointer=null,input="keyboard",suppressFocus=false,touchHint=false,contentKey=null;
     const tooltip=el("tooltip"), selector="[data-tooltip], [data-tooltip-key]";
     const target=node=>node?.closest?.(selector);
     const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
     const cancelOpen=()=>{clearTimeout(openTimer);openTimer=null;pending=null;};
     const cancelClose=()=>{clearTimeout(closeTimer);closeTimer=null;};
     const hydrate=node=>{
-      if(node?.dataset.tooltipKey && Object.hasOwn(PT.HELP||{},node.dataset.tooltipKey))node.dataset.tooltip=PT.HELP[node.dataset.tooltipKey];
+      if(node?.dataset.tooltipKey && Object.hasOwn(PT.HELP||{},node.dataset.tooltipKey) && node.dataset.tooltip!==PT.HELP[node.dataset.tooltipKey])node.dataset.tooltip=PT.HELP[node.dataset.tooltipKey];
       return node?.dataset.tooltip||"";
     };
     document.querySelectorAll("[data-tooltip-key]").forEach(hydrate);
@@ -237,11 +237,25 @@ window.PT = (() => {
         if(ids.length)anchor.setAttribute("aria-describedby",ids.join(" "));else anchor.removeAttribute("aria-describedby");
       }
       if(tooltip){if(topLayer&&tooltip.matches(":popover-open"))tooltip.hidePopover();tooltip.hidden=true;document.body.appendChild(tooltip);}
-      anchor=null;pinned=false;
+      anchor=null;pinned=false;touchHint=false;contentKey=null;
+    }
+    function renderTipContent(){
+      const body=hydrate(anchor);if(!body){hideTip();return false;}
+      const parts=[["title",anchor.dataset.tooltipTitle],["body",body],["note",anchor.dataset.tooltipNote],["note",touchHint?"Tap again to open. Tap elsewhere to dismiss.":""]];
+      const key=JSON.stringify(parts);if(key===contentKey)return true;
+      const content=document.createElement("div");content.className="tooltip-content";
+      for(const [kind,value] of parts){
+        if(!value)continue;
+        const part=document.createElement(kind==="title"?"strong":"span");part.className=`tooltip-${kind}`;part.textContent=value;content.appendChild(part);
+      }
+      tooltip.replaceChildren(content);contentKey=key;return true;
     }
     function positionTip(){
       if(!anchor||!tooltip)return;
       if(!anchor.isConnected||anchor.closest("[hidden]")||anchor.closest("dialog:not([open])")){hideTip();return;}
+      // Status can age while its explanation is open. Keep the existing bubble
+      // and focus, but replace obsolete current/overdue wording before measuring.
+      if(!renderTipContent())return;
       const viewport=window.visualViewport;
       const x=viewport?.offsetLeft||0,y=viewport?.offsetTop||0;
       const width=viewport?.width||innerWidth,height=viewport?.height||innerHeight;
@@ -266,21 +280,16 @@ window.PT = (() => {
     function queuePosition(){if(anchor&&frame===null)frame=requestAnimationFrame(()=>{frame=null;positionTip();});}
     function showTip(node,pin=false,touchPreview=false){
       if(!tooltip||!node||!hydrate(node))return;
-      hideTip();anchor=node;pinned=pin;
+      hideTip();anchor=node;pinned=pin;touchHint=touchPreview;
       (node.closest("dialog")||document.body).appendChild(tooltip);
-      const content=document.createElement("div");content.className="tooltip-content";
-      for(const [kind,value] of [["title",node.dataset.tooltipTitle],["body",node.dataset.tooltip],["note",node.dataset.tooltipNote],["note",touchPreview?"Tap again to open. Tap elsewhere to dismiss.":""]]){
-        if(!value)continue;
-        const part=document.createElement(kind==="title"?"strong":"span");part.className=`tooltip-${kind}`;part.textContent=value;content.appendChild(part);
-      }
-      tooltip.replaceChildren(content);tooltip.hidden=false;
+      if(!renderTipContent())return;tooltip.hidden=false;
       // Reset off-screen coordinates before measuring wrapped text.
       tooltip.style.left="12px";tooltip.style.top="12px";
       if(topLayer)tooltip.showPopover();
       const ids=new Set((node.getAttribute("aria-describedby")||"").split(/\s+/).filter(Boolean));ids.add("tooltip");node.setAttribute("aria-describedby",[...ids].join(" "));
       positionTip();if(!anchor)return;
       resizeObserver?.observe(node);resizeObserver?.observe(document.body);
-      mutationObserver?.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["hidden","class","style","open"]});
+      mutationObserver?.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["hidden","class","style","open","data-tooltip-key","data-tooltip","data-tooltip-title","data-tooltip-note"]});
     }
     function scheduleClose(){cancelOpen();cancelClose();if(!pinned&&!anchor?.contains(document.activeElement))closeTimer=setTimeout(hideTip,100);}
     function openDialog(id,trigger){const dialog=el(id);if(!dialog)return;hideTip();opener=trigger||document.activeElement;dialog.showModal();dialog.querySelector("[data-close-dialog]")?.focus();}

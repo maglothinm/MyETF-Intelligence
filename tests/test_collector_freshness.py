@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import copy
+import csv
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from scripts.collector_freshness import FRESHNESS_POLICY, overall_status
-from scripts.dashboard_insights import build_insights, source_data_through
+from scripts.collector_freshness import FRESHNESS_POLICY, nonproduction_evidence, overall_status
+from scripts.dashboard_insights import build_insights, public_payload, source_data_through
 
 
 AS_OF = datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
@@ -339,3 +341,105 @@ def test_impossible_or_malformed_start_cannot_refresh_production_success(started
     row = branches(model)["legislative"]
     assert row["status"] == "unknown"
     assert row["last_success_utc"] == model["data_through_utc"] == stamp(10)
+
+
+@pytest.mark.parametrize("branch", ["legislative", "executive", "ai"])
+@pytest.mark.parametrize("marker", [
+    {"environment": "simulation"},
+    {"test_metadata": {"environment": "testing", "secret": "private-test-configuration"}},
+])
+def test_actual_site_redaction_cannot_promote_nonproduction_run_to_current(branch, marker, tmp_path):
+    from scripts.build_trade_dashboard import build_site
+
+    age = FRESHNESS_POLICY[branch]["stale_after_minutes"] + 10
+    source = payload(filings=[], transactions=[], reviews=[], analyses=[], portfolio=[],
+                     runs=[run("legislative", age if branch == "legislative" else 10),
+                           run("executive", age if branch == "executive" else 10)],
+                     ai_runs=[run("ai", age if branch == "ai" else 10)])
+    excluded = run(branch, 1, **marker)
+    if branch == "ai":
+        # Existing AI run history intentionally omits a branch field.
+        excluded.pop("branch")
+    source["ai_runs" if branch == "ai" else "runs"].append(excluded)
+    before = copy.deepcopy(source)
+    expected_source_time = source_data_through(source, as_of=AS_OF)
+
+    output = tmp_path / "public-site"
+    build_site(source, output)
+    model = json.loads((output / "data/dashboard-insights.json").read_text(encoding="utf-8"))
+    row = branches(model)[branch]
+    assert model["health"]["status"] == row["status"] == "stale"
+    assert row["last_success_utc"] == stamp(age)
+    assert len(row["timeline"]) == 1
+    assert model["data_through_utc"] == expected_source_time == stamp(10)
+    exported = json.loads((output / "data" / ("ai-runs.json" if branch == "ai" else "runs.json")).read_text(encoding="utf-8"))
+    assert nonproduction_evidence(exported[-1]) is True
+    assert "environment" not in exported[-1]
+    assert "private-test-configuration" not in json.dumps(exported)
+    assert source == before
+    assert public_payload(public_payload(source)) == public_payload(source)
+
+
+@pytest.mark.parametrize("marker", [
+    {"test_metadata": {"secret": "private-fixture-marker"}},
+    {"filing_key": "SIMULATION:fixture"},
+    {"mode": "local"},
+])
+def test_redaction_keeps_all_nonproduction_source_ancestry_out_of_source_currency(marker):
+    source = payload(
+        filings=[{"filing_key": "real", "updated_at_utc": stamp(70)},
+                 {"filing_key": "fixture", "source": "house", "report_id": "one",
+                  "updated_at_utc": stamp(2), **marker}],
+        transactions=[{"filing_key": marker.get("filing_key", "fixture"), "trade_id": "fixture-trade",
+                       "observed_at_utc": stamp(1)}],
+        reviews=[{"source": "house", "report_id": "one", "observed_at_utc": stamp()}],
+        analyses=[{"trade_id": "fixture-trade", "analysis_id": "fixture-analysis",
+                   "classification": "high_priority", "analyzed_at_utc": stamp()}],
+    )
+    before = copy.deepcopy(source)
+    clean = public_payload(source)
+    model = build_insights(clean, as_of=AS_OF)
+    assert source_data_through(source, as_of=AS_OF) == model["data_through_utc"] == stamp(70)
+    assert model["coverage"]["filings"] == 1
+    assert model["coverage"]["transactions"] == model["coverage"]["analyses"] == model["reviews"]["total"] == 0
+    assert nonproduction_evidence(clean["filings"][1]) is True
+    assert "private-fixture-marker" not in json.dumps(clean)
+    assert source == before
+
+
+def test_direct_nonproduction_markers_are_shared_across_all_source_populations():
+    source = payload(
+        filings=[{"filing_key": "real", "updated_at_utc": stamp(70)},
+                 {"filing_key": "local-filing", "updated_at_utc": stamp(2), "mode": "local"}],
+        transactions=[{"trade_id": "local-trade", "observed_at_utc": stamp(1), "environment": "testing"}],
+        reviews=[{"review_id": "local-review", "observed_at_utc": stamp(), "source": "publication"}],
+        analyses=[{"analysis_id": "local-analysis", "classification": "high_priority",
+                   "analyzed_at_utc": stamp(), "event_name": "manual_test"}],
+    )
+    model = build_insights(public_payload(source), as_of=AS_OF)
+    assert model["coverage"]["filings"] == 1
+    assert model["coverage"]["transactions"] == model["coverage"]["analyses"] == 0
+    assert model["reviews"]["total"] == 0
+    assert model["data_through_utc"] == stamp(70)
+
+
+def test_public_csvs_preserve_coarse_nonproduction_identity(tmp_path):
+    from scripts.build_trade_dashboard import build_site
+
+    marker = {"environment": "simulation"}
+    source = payload(
+        filings=[{"filing_key": "fixture", **marker}],
+        transactions=[{"trade_id": "fixture", **marker}],
+        reviews=[{"review_id": "fixture", **marker}],
+        runs=[run(simulation_id="fixture-simulation", objective={"goal": "test"})],
+        analyses=[{"analysis_id": "fixture", **marker}],
+        portfolio=[{"position_id": "fixture", **marker}],
+        ai_runs=[run("ai", **marker)],
+    )
+    output = tmp_path / "public-site"
+    build_site(source, output)
+    for name in ("filings", "transactions", "pending-reviews", "runs", "ai-analyses", "paper-portfolio", "ai-runs"):
+        with (output / "data" / f"{name}.csv").open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        assert rows and rows[0]["is_nonproduction"] == "True", name
+        assert "environment" not in rows[0]

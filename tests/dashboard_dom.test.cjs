@@ -160,8 +160,8 @@ async function dashboard(options = {}) {
     await waitFor(predicate || (() => true), 'navigation ' + hash);
     await tick(15);
   }
-  async function refresh() {
-    if(wallboard){await intervals.find(timer => timer.delay > 1000).callback();await tick(5);return;}
+  async function refresh({automatic = wallboard} = {}) {
+    if(automatic){await intervals.find(timer => timer.delay > 1000).callback();await tick(5);return;}
     byId('refresh-button').click();
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
@@ -256,6 +256,29 @@ test('freshness ages while the page remains open without publication and preserv
   assert.equal(env.byId('operations-health').querySelector('.timeline').scrollLeft, 32);
   assert.equal(env.window.localStorage.getItem(KEY), baseline, 'Clock aging creates no invented notification/run evidence');
   assert.match(env.byId('overview-signals').textContent, /overdue, missing or failing/);
+  assert.deepEqual(env.errors, []);
+});
+
+for (const page of ['dashboard', 'wallboard']) test(`${page} keeps open status help consistent as monitoring ages and recovers`, async t => {
+  const env = await dashboard({page, change: data => setBranchAge(data, 'legislative', 29)}); t.after(env.close);
+  const status = env.byId('overall-state'), tip = env.byId('tooltip');
+  status.focus();
+  assert.match(tip.textContent, /completed successfully within their freshness windows/);
+  env.advanceTime(2 * 60000);
+  assert.match(status.textContent, /Legislative polling overdue/);
+  await waitFor(() => tip.textContent.includes('older than PolitiTrack’s freshness window'), 'open help reflects overdue monitoring');
+  assert.equal(tip.hidden, false);
+  assert.equal(env.doc.activeElement, status, 'Changing health does not move keyboard focus');
+  assert.doesNotMatch(tip.textContent, /completed successfully within their freshness windows/);
+  assert.match(tip.textContent, /Last successful check 31m ago/);
+  assert.equal(status.getAttribute('aria-describedby'), 'tooltip');
+
+  setBranchAge(env.data, 'legislative', 0);
+  await env.refresh({automatic: true});
+  assert.equal(status.textContent, '✓ Monitoring current');
+  await waitFor(() => tip.textContent.includes('completed successfully within their freshness windows'), 'open help reflects recovered monitoring');
+  assert.doesNotMatch(tip.textContent, /older than PolitiTrack’s freshness window|Last successful check 31m ago/);
+  assert.equal(env.doc.activeElement, status);
   assert.deepEqual(env.errors, []);
 });
 
