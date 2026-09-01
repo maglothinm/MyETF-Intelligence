@@ -777,3 +777,18 @@ credential, protected artifact, production state, or deployment authority.
 The application supplies the active count through both the formatter model and
 the additive argument so a previously cached shared formatter cannot reintroduce
 the retained total after new application code loads.
+
+**Release verification:** [PR #29](https://github.com/maglothinm/MyETF-Intelligence/pull/29)
+established the active-count behavior, but live acceptance found the browser still
+running its cached earlier bundle. [PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30)
+added a regression for the cached formatter contract, tested
+`9055d43ae56dd192b31b56c29a3ca14bd1422e96` in CI **33504447890 / 1**, and
+merged as `a2e23caaa268b04db063a360c132a57b12a3d1bb`. Main CI
+**33504566663 / 1** and Pages **33504566685 / 1** succeeded; Pages artifact
+**9799081517** has digest
+`sha256:d9907e5e7ec1069ac791773286339874c4f4db508b05c106d45d236f3bd5a877`.
+After a hard refresh loaded that exact bundle, live acceptance showed zero active
+exceptions, no manual-exception phrase in the Situation Brief, the retained
+review's restore control, and zero browser errors. The acknowledgement was left
+in place on the verification browser. Protected publisher inputs and attempts
+remained unchanged.

@@ -6,7 +6,35 @@ continuity and all served files verified. The device-clock follow-up is deployed
 and verified from PR #21. The redaction-boundary follow-up is deployed and
 verified from PR #23. Browser-local manual-review acknowledgement is deployed and
 verified from PR #25. Neutral zero-state attention colors are deployed and
-verified from PR #27. External scheduling remains inactive.**
+verified from PR #27. Acknowledgement-consistent Situation Brief wording is
+deployed and verified from PR #30. External scheduling remains inactive.**
+
+## Situation Brief acknowledgement consistency — deployed and production-verified
+
+[PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30) tested
+`9055d43ae56dd192b31b56c29a3ca14bd1422e96` in PR CI **33504447890 / 1**
+and merged it as `a2e23caaa268b04db063a360c132a57b12a3d1bb`. Main CI
+**33504566663 / 1** and Pages **33504566685 / 1** succeeded. Pages artifact
+**9799081517** has digest
+`sha256:d9907e5e7ec1069ac791773286339874c4f4db508b05c106d45d236f3bd5a877`.
+
+The Situation Brief now uses the same browser-local active manual-review count as
+the attention card, exception inventory and queue. When the sole retained review
+is acknowledged, its active count is zero and the Brief omits the manual parsing
+exception phrase. The production record remains retained and reversible through
+**Show acknowledged** and **Restore to active review**.
+
+Live acceptance found an older cached application bundle after the first
+publication, so the final regression deliberately exercises the earlier formatter
+contract. A hard refresh loaded the exact final bundle and verified zero active,
+no exception phrase, the retained restore control and zero browser errors. The
+acknowledgement remained in place on the verification browser.
+
+The publisher restored the same read-only inputs: Legislative **9796523510** from
+**33497945694 / 1**; Executive **9789261867** from **33479032715 / 1**; AI
+**9796566785** from **33498060503 / 1**; and simulator **9734790733** from
+**33320677882 / 1**. No collector, review record, schedule, alert, credential,
+protected artifact, or production state changed.
 
 ## Attention-counter colors — deployed and production-verified
 
