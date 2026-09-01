@@ -116,7 +116,11 @@ resource "google_secret_manager_secret_version" "database_password" {
   secret                 = google_secret_manager_secret.database_password.id
   secret_data_wo         = random_password.database.result
   secret_data_wo_version = 2
-  deletion_policy        = "PREVENT"
+  deletion_policy        = "DELETE"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_secret_manager_secret_iam_member" "database_password" {
@@ -143,7 +147,11 @@ resource "google_secret_manager_secret_version" "vault_signing_key" {
   secret                 = google_secret_manager_secret.vault_signing_key.id
   secret_data_wo         = random_password.vault_signing_key.result
   secret_data_wo_version = 2
-  deletion_policy        = "PREVENT"
+  deletion_policy        = "DELETE"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_secret_manager_secret_iam_member" "vault_signing_key" {
