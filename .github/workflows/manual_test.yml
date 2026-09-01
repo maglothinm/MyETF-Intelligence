@@ -4,23 +4,26 @@ on:
   workflow_dispatch:
     inputs:
       as_of:
-        description: "Synthetic filing date (YYYY-MM-DD); leave blank to use today's UTC date"
+        description: "Synthetic filing date (YYYY-MM-DD); blank uses today's UTC date"
         required: false
         default: ""
         type: string
+
 permissions:
   actions: read
   contents: read
 
+# One isolated writer; no mail job or extra durable-state namespace.
 concurrency:
-  group: run-simulation-${{ github.ref }}
+  group: polititrack-run-simulation
   cancel-in-progress: false
 
 jobs:
   simulate:
     name: Run isolated Investor Edge simulation
+    if: ${{ github.repository_id == '1349678672' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       AI_ANALYSIS_ENABLED: "false"
       AI_SUPPRESS_ALERTS: "true"
@@ -37,363 +40,113 @@ jobs:
       ALPHAVANTAGE_API_KEY: ""
       ALPHAVANTAGE_ENTITLEMENT: ""
       SEC_USER_AGENT: ""
-
     steps:
-      - name: Check out repository
+      - name: Check out reviewed default-branch code
         uses: actions/checkout@v6
-
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-
       - name: Install analyst and dashboard dependencies
-        shell: bash
         run: python -m pip install --requirement requirements-ai.txt
 
-      - name: Prepare run-specific temporary paths
+      - name: Prepare run-specific isolated paths
         shell: bash
         run: |
           set -euo pipefail
-          root="${RUNNER_TEMP}/polititrack-simulation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          simulation_root="${RUNNER_TEMP}/polititrack-simulation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$simulation_root"
           {
-            echo "MANUAL_TEST_INPUT_DIR=${root}/input"
-            echo "MANUAL_TEST_TRACKER_DIR=${root}/tracker"
-            echo "MANUAL_TEST_AI_DIR=${root}/ai"
-            echo "MANUAL_TEST_SITE_DIR=${root}/site"
-            echo "MANUAL_TEST_SUMMARY=${root}/manual-test-summary.json"
-            echo "MANUAL_TEST_SIMULATION_RESULT=${root}/simulation-result.json"
+            echo "MANUAL_TEST_INPUT_DIR=${simulation_root}/input"
+            echo "MANUAL_TEST_TRACKER_DIR=${simulation_root}/tracker"
+            echo "MANUAL_TEST_AI_DIR=${simulation_root}/ai"
+            echo "MANUAL_TEST_SITE_DIR=${simulation_root}/site"
+            echo "MANUAL_TEST_SUMMARY=${simulation_root}/manual-test-summary.json"
+            echo "MANUAL_TEST_SIMULATION_RESULT=${simulation_root}/simulation-result.json"
+            echo "MANUAL_TEST_INPUT_HASHES=${simulation_root}/input-hashes.json"
           } >> "$GITHUB_ENV"
 
-      - name: Restore latest durable artifacts into isolated inputs
-        shell: bash
+      - name: Restore fully validated production inputs read-only
         env:
           GH_TOKEN: ${{ github.token }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$MANUAL_TEST_INPUT_DIR"
-          consumer_sha="$(git rev-parse HEAD)"
-          live_default_sha="$(
-            gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${DEFAULT_BRANCH}" \
-              --jq '.object.sha'
-          )"
-          if [[ "$consumer_sha" != "$live_default_sha" ]]; then
-            echo "This simulation checked out ${consumer_sha}, but ${DEFAULT_BRANCH} is now ${live_default_sha}; refusing stale-code execution." >&2
-            exit 1
-          fi
-
-          restore_state_artifact() {
-            local branch="$1"
-            local artifact_name="$2"
-            local workflow_file="$3"
-            local workflow_name="$4"
-            local authoritative_job="$5"
-            local artifact_id=""
-            local producer_run_id=""
-            local producer_run_attempt=""
-            local producer_workflow_id=""
-
-            while IFS=$'\t' read -r candidate_artifact_id candidate_run_id candidate_created_at; do
-              [[ -n "$candidate_artifact_id" && -n "$candidate_run_id" ]] || continue
-              run_payload="$(
-                gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}"
-              )"
-              current_run_attempt="$(jq -r '.run_attempt // 1' <<< "$run_payload")"
-              if [[ ! "$current_run_attempt" =~ ^[1-9][0-9]*$ ]]; then
-                continue
-              fi
-              matched_attempt=""
-              attempt_payload=""
-              for (( attempt_number = 1; attempt_number <= current_run_attempt; attempt_number += 1 )); do
-                candidate_attempt_payload="$(
-                  gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${attempt_number}"
-                )"
-                attempt_started_at="$(jq -r '.run_started_at // ""' <<< "$candidate_attempt_payload")"
-                next_attempt_started_at=""
-                if (( attempt_number < current_run_attempt )); then
-                  next_attempt_started_at="$(
-                    gh api \
-                      -H "Accept: application/vnd.github+json" \
-                      "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/$((attempt_number + 1))" \
-                      --jq '.run_started_at // ""'
-                  )"
-                fi
-                if [[ \
-                  -n "$attempt_started_at" && \
-                  ( "$candidate_created_at" == "$attempt_started_at" || "$candidate_created_at" > "$attempt_started_at" ) && \
-                  ( -z "$next_attempt_started_at" || "$candidate_created_at" < "$next_attempt_started_at" ) \
-                ]]; then
-                  matched_attempt="$attempt_number"
-                  attempt_payload="$candidate_attempt_payload"
-                  break
-                fi
-              done
-              [[ -n "$matched_attempt" && -n "$attempt_payload" ]] || continue
-              run_name="$(jq -r '.name // ""' <<< "$attempt_payload")"
-              run_path="$(jq -r '.path // ""' <<< "$attempt_payload")"
-              run_path="${run_path%%@*}"
-              run_branch="$(jq -r '.head_branch // ""' <<< "$attempt_payload")"
-              run_conclusion="$(jq -r '.conclusion // ""' <<< "$attempt_payload")"
-              run_started_at="$(jq -r '.run_started_at // ""' <<< "$attempt_payload")"
-              run_repository_id="$(jq -r '.repository.id // ""' <<< "$attempt_payload")"
-              run_head_sha="$(jq -r '.head_sha // ""' <<< "$attempt_payload")"
-              if [[ \
-                "$run_name" == "$workflow_name" && \
-                "$run_path" == ".github/workflows/${workflow_file}" && \
-                "$run_branch" == "$DEFAULT_BRANCH" && \
-                "$run_conclusion" == "success" && \
-                "$run_repository_id" == "$GITHUB_REPOSITORY_ID" && \
-                -n "$run_head_sha" && \
-                -n "$run_started_at" \
-              ]]; then
-                successful_producer_jobs="$(
-                  gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${matched_attempt}/jobs" \
-                    --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
-                )"
-                compare_status="$(
-                  gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    "/repos/${GITHUB_REPOSITORY}/compare/${run_head_sha}...${consumer_sha}" \
-                    --jq '.status'
-                )"
-                if (( successful_producer_jobs > 0 )) && \
-                  [[ "$compare_status" == "ahead" || "$compare_status" == "identical" ]]; then
-                  artifact_id="$candidate_artifact_id"
-                  producer_run_id="$candidate_run_id"
-                  producer_run_attempt="$matched_attempt"
-                  producer_workflow_id="$(jq -r '.workflow_id // ""' <<< "$attempt_payload")"
-                  break
-                fi
-              fi
-            done < <(
-              gh api \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${artifact_name}&per_page=100" \
-                --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse[] | [.id, .workflow_run.id, .created_at] | @tsv'
-            )
-
-            if [[ -z "$artifact_id" ]]; then
-              echo "No provenance-valid ${artifact_name} artifact is available; refusing to simulate without protected ${branch} state." >&2
-              exit 1
-            fi
-            if [[ -z "$producer_run_attempt" || -z "$producer_workflow_id" ]]; then
-              echo "Selected ${artifact_name} has incomplete workflow provenance." >&2
-              exit 1
-            fi
-
-            local high_water_violations=""
-            local producer_attempt_count
-            producer_attempt_count="$(
-              gh api \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GITHUB_REPOSITORY}/actions/runs/${producer_run_id}" \
-                --jq '.run_attempt // 1'
-            )"
-            if [[ ! "$producer_attempt_count" =~ ^[1-9][0-9]*$ ]]; then
-              echo "Selected ${artifact_name} has invalid run-attempt provenance." >&2
-              exit 1
-            fi
-            for (( attempt_number = producer_run_attempt + 1; attempt_number <= producer_attempt_count; attempt_number += 1 )); do
-              successful_state_jobs="$(
-                gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${producer_run_id}/attempts/${attempt_number}/jobs" \
-                  --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
-              )"
-              if (( successful_state_jobs > 0 )); then
-                high_water_violations+="${high_water_violations:+$'\n'}${producer_run_id}:attempt-${attempt_number}"
-              fi
-            done
-
-            local rerun_page=1
-            while :; do
-              local rerun_payload page_count oldest_run_id
-              rerun_payload="$(
-                gh api --method GET \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${GITHUB_REPOSITORY}/actions/workflows/${producer_workflow_id}/runs" \
-                  -f per_page=100 \
-                  -f page="$rerun_page"
-              )"
-              page_count="$(jq '.workflow_runs | length' <<< "$rerun_payload")"
-              while IFS=$'\t' read -r rerun_candidate_id rerun_attempt_count; do
-                [[ -n "$rerun_candidate_id" ]] || continue
-                [[ "$rerun_attempt_count" =~ ^[1-9][0-9]*$ ]] || rerun_attempt_count=1
-                for (( attempt_number = 1; attempt_number <= rerun_attempt_count; attempt_number += 1 )); do
-                  successful_state_jobs="$(
-                    gh api \
-                      -H "Accept: application/vnd.github+json" \
-                      "/repos/${GITHUB_REPOSITORY}/actions/runs/${rerun_candidate_id}/attempts/${attempt_number}/jobs" \
-                      --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
-                  )"
-                  if (( successful_state_jobs > 0 )); then
-                    high_water_violations+="${high_water_violations:+$'\n'}${rerun_candidate_id}:attempt-${attempt_number}"
-                    break
-                  fi
-                done
-              done < <(
-                jq -r --argjson predecessor "$producer_run_id" --arg branch "$DEFAULT_BRANCH" \
-                  '.workflow_runs[] | select(.id > $predecessor and .head_branch == $branch) | [.id, (.run_attempt // 1)] | @tsv' \
-                  <<< "$rerun_payload"
-              )
-              if [[ -n "$high_water_violations" ]]; then
-                break
-              fi
-              if (( page_count == 0 || page_count < 100 )); then
-                break
-              fi
-              oldest_run_id="$(jq '[.workflow_runs[].id] | min' <<< "$rerun_payload")"
-              if (( oldest_run_id <= producer_run_id )); then
-                break
-              fi
-              ((rerun_page += 1))
-            done
-            if [[ -n "$high_water_violations" ]]; then
-              echo "${workflow_name} high-water violation at ${high_water_violations//$'\n'/, }; refusing to consume missing, ineligible, or rerun protected state." >&2
-              exit 1
-            fi
-
-            local download_dir
-            download_dir="$(mktemp -d)"
-            gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
-              > "${download_dir}/state.zip"
-            mkdir -p "${download_dir}/unpacked"
-            unzip -q "${download_dir}/state.zip" -d "${download_dir}/unpacked"
-
-            local state_file
-            state_file="$(find "${download_dir}/unpacked" -type f -name state.json -print -quit)"
-            if [[ -z "$state_file" ]]; then
-              echo "Artifact ${artifact_id} (${artifact_name}) contains no state.json." >&2
-              exit 1
-            fi
-
-            mkdir -p "$MANUAL_TEST_INPUT_DIR/${branch}"
-            cp -R "$(dirname "$state_file")/." "$MANUAL_TEST_INPUT_DIR/${branch}/"
-            echo "Restored ${branch} input from artifact ${artifact_id}, successful run ${producer_run_id}, attempt ${producer_run_attempt}."
-          }
-
-          restore_state_artifact \
-            legislative \
-            legislative-tracker-state \
-            legislative_trade_tracker_v2.yml \
-            "Legislative purchase tracker v2" \
-            track
-          restore_state_artifact \
-            executive \
-            executive-tracker-state \
-            executive_trade_tracker.yml \
-            "Executive purchase tracker" \
-            track
-          restore_state_artifact \
-            ai \
-            ai-analysis-state \
-            ai_filing_analyst.yml \
-            "AI filing analyst and paper portfolio" \
-            analyze
-
-          for branch in legislative executive ai; do
-            if [[ ! -s "$MANUAL_TEST_INPUT_DIR/${branch}/state.json" ]]; then
-              echo "Run Simulation requires a valid ${branch} durable state artifact." >&2
-              exit 1
-            fi
+          for pipeline in legislative executive ai; do
+            python scripts/protected_state.py restore --pipeline "$pipeline" \
+              --destination "$MANUAL_TEST_INPUT_DIR/$pipeline" \
+              --receipt "${RUNNER_TEMP}/simulation-${pipeline}-receipt.json" --read-only
           done
-
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.run_filing_simulation import directory_sha256
+          root = Path(os.environ["MANUAL_TEST_INPUT_DIR"])
+          hashes = {name: directory_sha256(root / name) for name in ("legislative", "executive", "ai")}
+          Path(os.environ["MANUAL_TEST_INPUT_HASHES"]).write_text(json.dumps(hashes), encoding="utf-8")
+          PY
           mkdir -p "$MANUAL_TEST_AI_DIR"
-          if [[ -d "$MANUAL_TEST_INPUT_DIR/ai" ]]; then
-            cp -R "$MANUAL_TEST_INPUT_DIR/ai/." "$MANUAL_TEST_AI_DIR/"
-          fi
+          cp -R "$MANUAL_TEST_INPUT_DIR/ai/." "$MANUAL_TEST_AI_DIR/"
           chmod -R u+w "$MANUAL_TEST_AI_DIR"
-          chmod -R a-w "$MANUAL_TEST_INPUT_DIR"
 
-      - name: Create temporary synthetic filing
-        shell: bash
+      - name: Create randomized assumed-new TEST filing in isolated copies
         env:
           AS_OF_INPUT: ${{ inputs.as_of }}
+        shell: bash
         run: |
           set -euo pipefail
-          args=(
-            --output-dir "$MANUAL_TEST_TRACKER_DIR"
-            --require-investor-edge-history
-          )
-
-          if [[ -s "$MANUAL_TEST_INPUT_DIR/legislative/state.json" ]]; then
-            args+=(--legislative-dir "$MANUAL_TEST_INPUT_DIR/legislative")
-          fi
-          if [[ -s "$MANUAL_TEST_INPUT_DIR/executive/state.json" ]]; then
-            args+=(--executive-dir "$MANUAL_TEST_INPUT_DIR/executive")
-          fi
+          args=(--output-dir "$MANUAL_TEST_TRACKER_DIR" --require-investor-edge-history
+            --legislative-dir "$MANUAL_TEST_INPUT_DIR/legislative"
+            --executive-dir "$MANUAL_TEST_INPUT_DIR/executive")
           if [[ -n "$AS_OF_INPUT" ]]; then
             args+=(--as-of "$AS_OF_INPUT")
           fi
+          python scripts/create_manual_test_filing.py "${args[@]}" > "$MANUAL_TEST_SUMMARY"
 
-          python scripts/create_manual_test_filing.py "${args[@]}" | tee "$MANUAL_TEST_SUMMARY"
-
-      - name: Run production-path scoring simulation
+      - name: Run deterministic production scoring and Investor Edge path
         shell: bash
         run: |
           set -euo pipefail
           python scripts/run_investor_edge_simulation.py \
             --legislative-dir "$MANUAL_TEST_TRACKER_DIR/legislative" \
             --executive-dir "$MANUAL_TEST_TRACKER_DIR/executive" \
-            --ai-dir "$MANUAL_TEST_AI_DIR" \
-            --result-file "$MANUAL_TEST_SIMULATION_RESULT"
+            --ai-dir "$MANUAL_TEST_AI_DIR" --result-file "$MANUAL_TEST_SIMULATION_RESULT"
 
-      - name: Build separate simulation site
+      - name: Build separate downloadable TEST dashboard
         shell: bash
         run: |
           set -euo pipefail
           python scripts/build_trade_dashboard.py \
             --legislative-dir "$MANUAL_TEST_TRACKER_DIR/legislative" \
             --executive-dir "$MANUAL_TEST_TRACKER_DIR/executive" \
-            --ai-dir "$MANUAL_TEST_AI_DIR" \
-            --output-dir "$MANUAL_TEST_SITE_DIR"
+            --ai-dir "$MANUAL_TEST_AI_DIR" --output-dir "$MANUAL_TEST_SITE_DIR"
           cp "$MANUAL_TEST_SUMMARY" "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json"
           cp "$MANUAL_TEST_SIMULATION_RESULT" "$MANUAL_TEST_SITE_DIR/data/simulation-result.json"
-
-      - name: Validate generated dashboard
-        shell: bash
-        run: |
-          set -euo pipefail
           test -s "$MANUAL_TEST_SITE_DIR/index.html"
-          test -s "$MANUAL_TEST_SITE_DIR/wallboard.html"
           test -s "$MANUAL_TEST_SITE_DIR/investor-edge.html"
-          test -s "$MANUAL_TEST_SITE_DIR/data/summary.json"
-          test -s "$MANUAL_TEST_SITE_DIR/data/investor-edge.json"
-          test -s "$MANUAL_TEST_SITE_DIR/data/filings.csv"
-          test -s "$MANUAL_TEST_SITE_DIR/data/transactions.csv"
-          test -s "$MANUAL_TEST_SITE_DIR/data/ai-analyses.csv"
-          test -s "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json"
-          test -s "$MANUAL_TEST_SITE_DIR/data/simulation-result.json"
-          python -m json.tool "$MANUAL_TEST_SITE_DIR/data/summary.json" >/dev/null
-          python -m json.tool "$MANUAL_TEST_SITE_DIR/data/manual-test-summary.json" >/dev/null
-          python -m json.tool "$MANUAL_TEST_SITE_DIR/data/simulation-result.json" >/dev/null
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          result = json.loads(Path(os.environ["MANUAL_TEST_SIMULATION_RESULT"]).read_text())
-          if not result.get("verification", {}).get("passed"):
-              raise SystemExit("Investor Edge simulation verification did not pass")
-          if not result.get("alert_preview"):
-              raise SystemExit("Investor Edge simulation did not produce an alert preview")
-          PY
           node --check "$MANUAL_TEST_SITE_DIR/app.js"
           node --check "$MANUAL_TEST_SITE_DIR/wallboard.js"
           node --check "$MANUAL_TEST_SITE_DIR/investor-edge.js"
 
-      - name: Upload temporary simulation dashboard
+      - name: Verify protected inputs are unchanged before publishing TEST artifact
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.run_filing_simulation import directory_sha256
+          root = Path(os.environ["MANUAL_TEST_INPUT_DIR"])
+          before = json.loads(Path(os.environ["MANUAL_TEST_INPUT_HASHES"]).read_text(encoding="utf-8"))
+          after = {name: directory_sha256(root / name) for name in ("legislative", "executive", "ai")}
+          if before != after:
+              raise SystemExit("Protected simulation inputs changed; artifact publication refused")
+          proof = {"test": True, "production_inputs_unchanged": True, "before": before, "after": after}
+          (Path(os.environ["MANUAL_TEST_SITE_DIR"]) / "data/input-integrity.json").write_text(json.dumps(proof), encoding="utf-8")
+          PY
+
+      - name: Upload only the one-day TEST dashboard
         uses: actions/upload-artifact@v7
         with:
           name: simulation-dashboard-${{ github.run_id }}-${{ github.run_attempt }}

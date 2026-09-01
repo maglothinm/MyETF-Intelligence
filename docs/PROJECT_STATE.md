@@ -1,13 +1,103 @@
 # PolitiTrack project state
 
 Last updated: **2026-09-01 UTC**
-Status: **Scheduler freshness deployed from PR #20; live overdue health, state
-continuity and all served files verified. The device-clock follow-up is deployed
-and verified from PR #21. The redaction-boundary follow-up is deployed and
-verified from PR #23. Browser-local manual-review acknowledgement is deployed and
-verified from PR #25. Neutral zero-state attention colors are deployed and
-verified from PR #27. Acknowledgement-consistent Situation Brief wording is
-deployed and verified from PR #30. External scheduling remains inactive.**
+Status: **State-safety PR #3 reconciliation is committed and pushed on its
+isolated branch, and PR CI run 33512895241 / attempt 1 succeeded. Main promotion
+remains gated. A real post-deployment Executive schedule, downstream AI run and
+Pages publication have succeeded; Legislative freshness, obsolete queued runs,
+market-data completion and Executive Healthchecks still block the full
+remediation gate. External scheduling remains inactive.**
+
+## State-safety PR #3 reconciliation — branch pushed and PR-validated; promotion blocked
+
+Canonical repository ID **1349678672**, live name
+**maglothinm/MyETF-Intelligence**, default **main**. The local integration
+worktree is on **codex/production-remediation**. Its validated executable head is
+`06e8caa54b01e2945a6536ed526740d24dafb31d`; documentation-only successors on
+the same pushed branch record that checkpoint without changing its executable
+tree. Reconciliation commit
+`757d5276c09712bdb08a485a01f1bcbefc328b3c` incorporates current main
+`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`; follow-up commit
+`06e8caa54b01e2945a6536ed526740d24dafb31d` keeps CI runtime temporary state
+outside the checkout.
+Current main remains the authority for operational UI, scheduler, Filing Vault,
+release and deployment truth. The reconciliation retains the state-safety branch's
+artifact-only continuity work and durable decisions D-2026-08-30-015 through
+D-2026-08-30-018 without replacing main's later decisions or release record.
+
+The owner-authorized isolated branch update is complete: both commits above are
+committed and pushed, and
+[draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open and
+unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
+/ attempt 1 succeeded on validated executable head `06e8caa...`: **799 Python tests
+passed**, the exact CI Node tests passed **17 / 17**, all **60 shell checks**
+passed, and the repository verifier reported **VERIFICATION PASSED** after its
+manifest, credential-scan, YAML/Python/JSON, and generated-JS checks. This branch
+publication and PR validation do not authorize or claim merge to main,
+deployment, a production writer dispatch, external scheduler activation,
+rebaseline, alert delivery, credential changes, or repository-setting changes.
+
+### Verified scheduled production chain after deployment
+
+The singular prerequisite that at least one real scheduled production cycle
+complete after deployment is now satisfied. After executable deployment
+`a2e23caaa268b04db063a360c132a57b12a3d1bb` in Pages run
+[33504566685](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33504566685),
+scheduled Executive run
+[33508399072](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33508399072)
+/ attempt 1 succeeded on default-branch SHA
+`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`. Job `99857885817`
+restored Executive artifact `9789261867` from run `33479032715` / attempt 1,
+preserved its ledgers and appended one run, then produced protected artifact
+`9800645180` with digest
+`sha256:c7f7707fa55d205ad01dcb998c6294bb0ca1c343ffe46073948d2534f64f1e73`.
+
+Downstream AI run
+[33508648817](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33508648817)
+/ attempt 1 and job `99858691850` succeeded. It restored Legislative
+`9796523510` from `33497945694` / 1, the new Executive `9800645180`, and prior
+AI `9796566785` from `33498060503` / 1, then produced protected AI artifact
+`9800692592` with digest
+`sha256:8822b6b54e946bc562cbecbf790312da9034749089bcdc26f17e5f4ae430e7af`.
+Pages run
+[33508763336](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33508763336)
+/ attempt 1 restored those exact protected inputs, passed build job
+`99859087811` and deploy job `99859315424`, and published `e6d7ba5...` from
+artifact `9800727059` with digest
+`sha256:76619c6420395102bcbf2efa63b4d1af479e66d6dd56c0ef6844cf5909517f79`.
+The successful chain advanced protected run history without initialization,
+fallback, rebaseline, or lost ledger records.
+
+This scheduled-cycle pass does **not** satisfy the complete remediation gate.
+There is no Legislative producer or Legislative protected artifact after the
+deployment; its newest success remains `33497945694` at **10:33:47 UTC**, so the
+12:38:48 UTC live health model correctly reports Legislative stale. Investor Edge
+generated at 12:37:56 UTC with **32 building / 0 completed** profiles, **250**
+pending observations and **10** processed in that run; Finnhub HTTP 403 failures
+left all 32 profiles with market-data errors. The Executive run's optional
+Healthchecks start and success calls both failed with curl exit 3 because the
+configured URL was malformed. Their `continue-on-error` workflow conclusions
+are not external-delivery proof.
+
+Obsolete runs
+[33219808359](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33219808359)
+and
+[33221027676](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33221027676)
+remain queued attempt 1 with zero jobs/artifacts and still gate promotion. The
+[official Community Actions escalation and follow-up](SUPPORT_ESCALATION.md) are
+public receipts, not backend containment. Fresh owner-authenticated retries again
+returned HTTP 409 for cancel and force-cancel and HTTP 403 for deletion for each
+run; the exact re-read remained queued with zero jobs/artifacts.
+
+**Permitted next boundary:** keep draft PR #3 open and unmerged while obtaining
+terminal cancellation or authoritative non-execution confirmation for both
+obsolete runs, repairing and proving Executive Healthchecks, observing a
+successful post-deployment Legislative cycle, and resolving the Investor Edge
+market-data blocker. Requery live Actions and exact protected-artifact lineage
+before any main promotion. Only then use the normal reviewed merge/deployment
+path. Do not treat the branch commits, branch push, successful PR check, or the
+Executive-only scheduled chain as a merge, deployment approval, or complete
+production acceptance.
 
 ## Situation Brief acknowledgement consistency — deployed and production-verified
 

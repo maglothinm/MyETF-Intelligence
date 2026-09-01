@@ -221,6 +221,103 @@ removing workflow files is not a substitute for disabling Actions/Pages and
 setting the archive flag. The cutover remains open until those settings and the
 two stale queued runs are verified.
 
+## D-2026-08-30-015 — Pause conflicting remediation proposals before promotion
+
+**Decision:** Preserve the uncommitted `codex/production-remediation` worktree and
+pause implementation pending explicit owner resolution of the newly supplied
+contract versus the earlier approved remediation directive. Do not silently
+amend `AGENTS.md`, merge, dispatch, or deploy the conflicting draft.
+
+**Reason:** The draft adds same-repository fast-forward Git namespaces for an
+isolated persistent paper agent, simulation results/receipts, and an AI delivery
+recovery journal; a dedicated simulation notification job references Gmail
+secrets. The restated contract forbids simulation alert credentials, restricts
+simulation durable outputs, and makes provenance-valid artifacts the sole
+production-state authority. Local tests cannot resolve that authorization or
+design conflict.
+
+**Consequence:** These are local proposals, not adopted operational designs.
+Retain all existing production continuity constraints and protected checkpoints.
+Ask whether to authorize explicit, narrowly documented exceptions or revise the
+draft to remain within the unchanged contract. The persistent paper experiment
+remains separate from historical replay and no $20,000 return is promised.
+
+## D-2026-08-30-016 — Continue the unchanged-contract revision; hold added authorities
+
+**Decision:** The owner's "Hold on those features. Continue the revision"
+supersedes the pause in D-015 without authorizing contract exceptions. Keep
+`AGENTS.md` unchanged. Remove simulation Gmail, extra durable-result state,
+persistent Git-backed paper-agent execution, Git-backed AI recovery integration,
+and the dependent Worker from active code/workflows. Preserve their local drafts
+outside the commit under ignored `.remediation/held-feature-drafts/`.
+
+**Consequence:** Finish artifact-only state integrity and Investor Edge corrections.
+Both simulation workflows retain only their existing permitted outputs and receive
+no real alert/provider credentials. Production alert durability, direct dashboard
+dispatch, and persistent paper-agent operation remain explicitly unresolved.
+
+Shared restore/seal helpers replace duplicated inline restore implementations.
+Exact pre-manifest hash allowlisting bridges verified checkpoints without a
+rebaseline. Completed IDs are never silently pruned; Edge archives are immutable,
+pending horizons can mature, and identity upgrades retain prior profile aliases.
+
+CI now runs the entire active `tests/` suite and mandatory Linux `verify.sh`.
+Historical `backend/tests` imports a retired absent `api` package and is preserved
+but outside active CI collection. Windows checks explicitly report unavailable
+Bash. Shell/recovery text uses canonical LF via `.gitattributes`; protected
+production checkpoint verification remains byte-exact with no normalization.
+
+No new external state authority, paid/provider call, live notification, protected
+writer, production dispatch, default-branch merge, rename, or legacy cutover is
+authorized by this reduced-scope revision.
+
+## D-2026-08-30-017 — Authorize GitHub escalation and the existing production rollout
+
+**Decision:** The owner explicitly instructed: "Ask GitHub on my behalf" and
+granted autonomy to get the current revision into production. This supersedes
+D-016's lack of promotion/operations authority, but not its deferred-feature
+scope or the repository contract. The agent may contact GitHub about the exact
+stuck runs and perform the existing revision's merge and production acceptance
+after containment and refreshed state-continuity gates pass.
+
+**Consequence:** Contact was made through the existing official Community Actions
+discussion, authenticated as the owner, with public metadata and sanitized
+request IDs only. The receipt is in `SUPPORT_ESCALATION.md`. It is not a private
+ticket, an assurance of a staff response, or evidence that the queue is safe.
+Do not delete run records or artifacts, rebaseline state, change token policies
+as a substitute for containment, or treat a deleted workflow as cancelled work.
+
+Containment and checkpoint refresh precede merge because the merge itself can
+trigger Pages. Older producers must be drained and automatic collector-to-AI
+successors accounted for before manual acceptance dispatches. Same-ID rename and
+legacy retirement remain subject to their existing acceptance gates. No paid
+service purchase or held-feature implementation is authorized by this decision.
+
+The host rejected creation of a persistent hourly rollout follow-up because the
+owner had not explicitly requested recurring scheduled execution. No automation
+was created and no workaround was used. Explicit recurring approval has been
+requested separately; current-turn work and the successful GitHub contact stand.
+
+## D-2026-08-30-018 — Approve hourly checks and gated automatic continuation
+
+**Decision:** The owner explicitly answered "Yes" to: "May I schedule hourly
+checks and automatically resume the approved rollout once those obsolete runs
+are proven unable to execute?" This supplies the recurring authority absent in
+D-017. The task follow-up **polititrack-production-unblock** was created and its
+saved configuration verified ACTIVE, hourly, attached to the current task.
+
+**Consequence:** Check the existing support escalation and the exact obsolete
+runs without duplicate reports or repetitive unchanged cancellation requests.
+Once containment is proven, continue the existing approved rollout only after
+fresh artifact lineage/continuity checks, older-producer drainage and green CI.
+All contract safeguards and held-feature scope remain unchanged. This is a Codex
+task follow-up, not an additional scheduled production-state writer.
+
+Pause the follow-up after verified completion or an owner stop request. Do not
+create duplicate automations, buy services, or treat scheduling as proof that
+GitHub resolved the stuck queue. The computer and app must remain running for
+local scheduled work. Record meaningful changes rather than hourly doc churn.
+
 ## D-2026-08-30-019 — Release the dashboard as a read-only presentation layer
 
 **Decision:** Issue #4 delivers the commercial dashboard on a dedicated branch
@@ -792,3 +889,59 @@ exceptions, no manual-exception phrase in the Situation Brief, the retained
 review's restore control, and zero browser errors. The acknowledgement was left
 in place on the verification browser. Protected publisher inputs and attempts
 remained unchanged.
+
+## D-2026-09-01-040 — Separate isolated branch publication from production promotion
+
+**Decision:** The owner-authorized PR #3 reconciliation may be committed and
+pushed only to `codex/production-remediation` while the remediation production
+gates remain open. The branch push may update draft PR #3 and run its normal PR
+validation. It does not authorize merging to main, deploying, dispatching a
+production writer, activating external scheduling, changing credentials or
+repository settings, sending alerts, or rebaselining protected state.
+
+**Reason:** A review-branch update and a production promotion have different
+effects. Withholding the isolated branch update does not contain the two obsolete
+server-side runs, while publishing it does not make that tree the default branch
+or production authority. Conflating the two would either prevent useful
+CI/review or incorrectly treat a branch push as permission to cross unresolved
+continuity and infrastructure gates.
+
+**Consequence:** Documentation and reporting must label the exact state as local,
+committed, pushed, PR-validated, merged, deployed, or production-verified. The
+reconciled tree passed 799 Python tests, the exact 17 CI Node tests, and
+`scripts/verify_repository.py`; Bash was unavailable locally, so `verify.sh`
+remains CI-required. This decision claims no current commit/push state or
+reconciliation commit SHA. Main promotion remains blocked until the obsolete
+queued runs are terminally cancelled or authoritatively contained, a
+post-deployment Legislative cycle succeeds, Executive Healthchecks is correctly
+configured and proved, Investor Edge's Finnhub HTTP 403 market-data blocker is
+resolved, and the
+normal exact-attempt artifact high-water, CI, review and deployment gates pass.
+The successful Executive `33508399072` -> AI `33508648817` -> Pages `33508763336`
+chain satisfies only the singular scheduled-cycle prerequisite; it does not
+waive any remaining gate.
+
+## D-2026-09-01-041 — Record pushed reconciliation and successful PR validation
+
+**Decision:** D-2026-09-01-040 remains the production-promotion boundary, but its
+pre-publication factual checkpoint is superseded. Reconciliation commit
+`757d5276c09712bdb08a485a01f1bcbefc328b3c` and CI-runtime follow-up
+`06e8caa54b01e2945a6536ed526740d24dafb31d` are committed and pushed on
+`codex/production-remediation`. Draft PR
+[#3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open and
+unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
+/ attempt 1 succeeded on `06e8caa...` with **799 Python tests**, **17 / 17** exact
+Node tests, **60 shell checks**, and **VERIFICATION PASSED**.
+
+**Reason:** D-040 was recorded before the authorized branch publication and
+explicitly claimed no commit, push, or PR result. Those review-stage events now
+have exact Git and Actions evidence and must be distinguished from production
+promotion.
+
+**Consequence:** The branch and CI evidence permit continued review of draft PR
+#3 only. They do not authorize or establish merge, deployment, a production
+writer dispatch, external scheduler activation, alert delivery, credential or
+repository-setting changes, rebaseline, or complete production acceptance. The
+obsolete queued runs, post-deployment Legislative success, Executive
+Healthchecks proof, Investor Edge market-data completion, and normal fresh
+lineage/review/deployment gates in D-040 remain required before promotion.

@@ -1,11 +1,87 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: owner-requested acknowledgement-consistent Situation Brief. Scheduler
-[issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
-separate infrastructure task.
+Work: owner-authorized state-safety PR #3 reconciliation against current main is
+committed, pushed, and PR-validated; main promotion remains gated.
+Repository: canonical ID **1349678672**,
+**maglothinm/MyETF-Intelligence**, default **main**.
+Review: [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3),
+open and unmerged.
+Support: [public Community Actions escalation and follow-up](SUPPORT_ESCALATION.md);
+no backend containment verified.
 
-## Current task — Situation Brief acknowledgement consistency deployed and verified
+## Current task — hold validated draft PR #3 while clearing promotion gates
+
+The integration worktree is `.remediation/production-remediation` on
+`codex/production-remediation`. Its validated executable head is
+`06e8caa54b01e2945a6536ed526740d24dafb31d`; documentation-only successors on
+the same pushed branch record that checkpoint without changing its executable
+tree. Reconciliation commit
+`757d5276c09712bdb08a485a01f1bcbefc328b3c` incorporates current main
+`e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515`; follow-up commit
+`06e8caa54b01e2945a6536ed526740d24dafb31d` keeps CI runtime temporary state
+outside the checkout.
+Current main wins for operational truth. The documentation reconciliation keeps
+main's deployed dashboard, scheduler, Vault, release and continuity evidence,
+restores the missing append-only decisions D-2026-08-30-015 through
+D-2026-08-30-018 before D-2026-08-30-019, and retains the submitted Community
+escalation and follow-up as public receipts.
+
+The owner-authorized isolated update is complete: both commits above are pushed,
+and [draft PR #3](https://github.com/maglothinm/MyETF-Intelligence/pull/3) is open
+and unmerged. [PR CI run 33512895241](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33512895241)
+/ attempt 1 succeeded on validated executable head `06e8caa...`: **799 Python tests
+passed**, the exact CI Node tests passed **17 / 17**, all **60 shell checks**
+passed, and the repository verifier reported **VERIFICATION PASSED** after its
+manifest, credential-scan, YAML/Python/JSON, and generated-JS checks. The branch
+commit, push, and successful PR validation do not extend to or claim main merge,
+deployment, producer dispatch, external scheduler activation, rebaseline,
+alerts, credentials, or repository settings.
+
+### Fresh production evidence
+
+The real scheduled Executive-to-AI-to-Pages chain closes only the brief's
+singular post-deployment scheduled-cycle prerequisite:
+
+| Stage | Run / attempt | Job(s) | Result and protected lineage |
+|---|---|---|---|
+| Executive schedule | [33508399072](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33508399072) / 1 | `99857885817` | Success on main `e6d7ba5...`; restored `9789261867` from `33479032715` / 1 and produced `executive-tracker-state` `9800645180` |
+| AI workflow_run | [33508648817](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33508648817) / 1 | `99858691850` | Success; restored Legislative `9796523510`, Executive `9800645180`, prior AI `9796566785`; produced `ai-analysis-state` `9800692592` |
+| Pages workflow_run | [33508763336](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33508763336) / 1 | `99859087811`, `99859315424` | Build/deploy success; restored the exact three inputs and published main `e6d7ba5...` from Pages artifact `9800727059` |
+
+Executive continuity preserved 4,109 filing rows, 1,495 pending-review rows and
+4,105 seen OGE IDs while run history advanced 27 to 28. AI preserved 12 analyses,
+12 completed-analysis IDs and zero positions while run history advanced 45 to
+46. No initialization, state fallback, rebaseline, alert replay, or protected
+ledger loss occurred.
+
+The exact promotion blockers are obsolete queued runs
+[33219808359](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33219808359)
+and
+[33221027676](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33221027676).
+Both remain attempt 1 with zero jobs/artifacts; the deleted workflow does not prove
+that its historical state-writing code cannot execute. Fresh owner-authenticated
+cancel and force-cancel requests returned HTTP 409 for each; deletion returned
+HTTP 403 for each; re-read remained queued / attempt 1 / zero jobs / zero
+artifacts. The follow-up comment is submitted on the existing public escalation,
+but it is not containment.
+
+No post-deployment Legislative producer has completed; its latest protected
+success remains `33497945694` at 10:33:47 UTC and the live health model is stale.
+Investor Edge remains **32 building / 0 completed**, with all profiles carrying
+Finnhub HTTP 403 market-data errors. Executive Healthchecks start and success
+calls failed with curl exit 3 because the configured URL was malformed; the
+workflow's continue-on-error status is not delivery proof.
+
+**Permitted next boundary:** keep draft PR #3 open and unmerged. Separately obtain
+terminal GitHub clearance, repair and prove Executive Healthchecks, observe a
+successful post-deployment Legislative cycle, and resolve Investor Edge market
+data. Then requery current main, nonterminal runs, and exact protected-artifact
+high-water/ancestry before normal reviewed promotion. Never initialize,
+rebaseline, dispatch a workaround writer, or use an older artifact to bypass the
+gate.
+
+## Completed task — Situation Brief acknowledgement consistency deployed and verified
 
 [PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30) tested
 `9055d43ae56dd192b31b56c29a3ca14bd1422e96` in CI **33504447890 / 1** and

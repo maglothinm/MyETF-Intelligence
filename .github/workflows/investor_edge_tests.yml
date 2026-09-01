@@ -1,124 +1,11 @@
 name: Investor Edge tests
 
 on:
-  pull_request:
-    paths:
-      - "scripts/collector_freshness.py"
-      - "scripts/collect_workflow_evidence.py"
-      - "scripts/run_trigger.py"
-      - "scripts/dashboard_insights.py"
-      - "scheduler/**"
-      - "tests/test_collector_freshness.py"
-      - "tests/test_scheduler_evidence.py"
-      - "tests/scheduler_dispatch.test.mjs"
-      - ".github/workflows/executive_trade_tracker.yml"
-      - "scripts/investor_edge.py"
-      - "scripts/ai_filing_analyst.py"
-      - "scripts/build_trade_dashboard.py"
-      - "scripts/filing_resources.py"
-      - "scripts/dashboard_assets/**"
-      - "backend/filing_vault/**"
-      - "backend/api/__init__.py"
-      - "scripts/create_manual_test_filing.py"
-      - "scripts/run_investor_edge_simulation.py"
-      - "scripts/government_trade_tracker.py"
-      - "scripts/historical_transaction_bootstrap.py"
-      - "scripts/monitor_disclosures.py"
-      - "scripts/legislative_healthcheck.py"
-      - "tests/test_monitor_disclosures.py"
-      - "tests/test_government_trade_tracker.py"
-      - "tests/test_historical_transaction_bootstrap.py"
-      - "tests/test_senate_client.py"
-      - "tests/test_legislative_healthcheck.py"
-      - ".github/workflows/legislative_trade_tracker_v2.yml"
-      - "config/investor_edge.yml"
-      - "config/signal_rules.yml"
-      - "schemas/ai_filing_analysis.schema.json"
-      - "tests/test_investor_edge.py"
-      - "tests/test_investor_edge_core.py"
-      - "tests/test_investor_edge_surfaces.py"
-      - "tests/test_ai_filing_analyst.py"
-      - "tests/test_trade_dashboard.py"
-      - "tests/test_filing_vault*.py"
-      - "tests/filing_vault_dom.test.cjs"
-      - "tests/filing_pdf_dom.test.cjs"
-      - "tests/filing_resolution_dom.test.cjs"
-      - "tests/test_create_manual_test_filing.py"
-      - "requirements-ai.txt"
-      - "requirements-tracker.txt"
-      - "requirements-vault.txt"
-      - ".env.filing-vault.example"
-      - "config/filing-vault/**"
-      - ".env.tracker.example"
-      - "README.md"
-      - "README_AI_FILING_ANALYST.md"
-      - "README_INVESTOR_EDGE.md"
-      - "README_REPORTING_DASHBOARD.md"
-      - "README_WALLBOARD_PRIVATE_REPO.md"
-      - ".github/workflows/ai_filing_analyst.yml"
-      - ".github/workflows/manual_test.yml"
-      - ".github/workflows/publish_trade_dashboard.yml"
-      - ".github/workflows/investor_edge_tests.yml"
+  # Keep the sole required CI context available for every pull request.
+  pull_request: {}
   push:
     branches:
       - main
-    paths:
-      - "scripts/collector_freshness.py"
-      - "scripts/collect_workflow_evidence.py"
-      - "scripts/run_trigger.py"
-      - "scripts/dashboard_insights.py"
-      - "scheduler/**"
-      - "tests/test_collector_freshness.py"
-      - "tests/test_scheduler_evidence.py"
-      - "tests/scheduler_dispatch.test.mjs"
-      - ".github/workflows/executive_trade_tracker.yml"
-      - "scripts/investor_edge.py"
-      - "scripts/ai_filing_analyst.py"
-      - "scripts/build_trade_dashboard.py"
-      - "scripts/filing_resources.py"
-      - "scripts/dashboard_assets/**"
-      - "backend/filing_vault/**"
-      - "backend/api/__init__.py"
-      - "scripts/create_manual_test_filing.py"
-      - "scripts/run_investor_edge_simulation.py"
-      - "scripts/government_trade_tracker.py"
-      - "scripts/historical_transaction_bootstrap.py"
-      - "scripts/monitor_disclosures.py"
-      - "scripts/legislative_healthcheck.py"
-      - "tests/test_monitor_disclosures.py"
-      - "tests/test_government_trade_tracker.py"
-      - "tests/test_historical_transaction_bootstrap.py"
-      - "tests/test_senate_client.py"
-      - "tests/test_legislative_healthcheck.py"
-      - ".github/workflows/legislative_trade_tracker_v2.yml"
-      - "config/investor_edge.yml"
-      - "config/signal_rules.yml"
-      - "schemas/ai_filing_analysis.schema.json"
-      - "tests/test_investor_edge.py"
-      - "tests/test_investor_edge_core.py"
-      - "tests/test_investor_edge_surfaces.py"
-      - "tests/test_ai_filing_analyst.py"
-      - "tests/test_trade_dashboard.py"
-      - "tests/test_filing_vault*.py"
-      - "tests/filing_vault_dom.test.cjs"
-      - "tests/filing_pdf_dom.test.cjs"
-      - "tests/filing_resolution_dom.test.cjs"
-      - "tests/test_create_manual_test_filing.py"
-      - "requirements-ai.txt"
-      - "requirements-tracker.txt"
-      - "requirements-vault.txt"
-      - ".env.filing-vault.example"
-      - "config/filing-vault/**"
-      - ".env.tracker.example"
-      - "README.md"
-      - "README_AI_FILING_ANALYST.md"
-      - "README_INVESTOR_EDGE.md"
-      - "README_REPORTING_DASHBOARD.md"
-      - "README_WALLBOARD_PRIVATE_REPO.md"
-      - ".github/workflows/ai_filing_analyst.yml"
-      - ".github/workflows/manual_test.yml"
-      - ".github/workflows/publish_trade_dashboard.yml"
-      - ".github/workflows/investor_edge_tests.yml"
   workflow_dispatch:
 
 permissions:
@@ -153,24 +40,7 @@ jobs:
           POLITITRACK_TEST_NODE: node
           POLITITRACK_TEST_NODE_MODULES: ${{ github.workspace }}/.remediation/ui-test-tools/node_modules
         run: |
-          python -m pytest -q \
-            tests/test_collector_freshness.py \
-            tests/test_scheduler_evidence.py \
-            tests/test_monitor_disclosures.py \
-            tests/test_government_trade_tracker.py \
-            tests/test_historical_transaction_bootstrap.py \
-            tests/test_senate_client.py \
-            tests/test_legislative_healthcheck.py \
-            tests/test_oge_disclosures.py \
-            tests/test_investor_edge.py \
-            tests/test_investor_edge_core.py \
-            tests/test_investor_edge_surfaces.py \
-            tests/test_ai_filing_analyst.py \
-            tests/test_trade_dashboard.py \
-            tests/test_filing_vault.py \
-            tests/test_filing_vault_providers.py \
-            tests/test_filing_vault_ui.py \
-            tests/test_create_manual_test_filing.py
+          python -m pytest -q --basetemp="${RUNNER_TEMP}/polititrack-pytest"
           node --test tests/filing_resolution_dom.test.cjs
           node --test tests/scheduler_dispatch.test.mjs
       - name: Verify repository safety contract

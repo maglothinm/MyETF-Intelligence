@@ -159,43 +159,8 @@ class AIState:
     last_portfolio_refresh_utc: str | None = None
 
     def prune(self) -> None:
-        if len(self.completed_analysis_ids) > 250_000:
-            ordered = sorted(
-                self.completed_analysis_ids.items(), key=lambda item: item[1], reverse=True
-            )
-            self.completed_analysis_ids = dict(ordered[:250_000])
-        completed_deliveries: list[tuple[str, dict[str, Any]]] = []
-        pending_deliveries: dict[str, dict[str, Any]] = {}
-        for delivery_id, delivery in self.candidate_alert_deliveries.items():
-            requested = {
-                str(channel) for channel in (delivery.get("requested_channels") or [])
-            }
-            delivered_value = delivery.get("delivered_channels") or {}
-            delivered = (
-                {str(channel) for channel, timestamp in delivered_value.items() if timestamp}
-                if isinstance(delivered_value, Mapping)
-                else set()
-            )
-            if requested and requested <= delivered:
-                completed_deliveries.append((delivery_id, delivery))
-            else:
-                pending_deliveries[delivery_id] = delivery
-        if len(completed_deliveries) > MAX_COMPLETED_CANDIDATE_ALERT_DELIVERIES:
-            completed_deliveries.sort(
-                key=lambda item: str(
-                    item[1].get("last_attempt_utc")
-                    or item[1].get("created_at_utc")
-                    or ""
-                ),
-                reverse=True,
-            )
-            completed_deliveries = completed_deliveries[
-                :MAX_COMPLETED_CANDIDATE_ALERT_DELIVERIES
-            ]
-            self.candidate_alert_deliveries = {
-                **pending_deliveries,
-                **dict(completed_deliveries),
-            }
+        """Preserve completed analysis IDs and alert receipts; never silently prune."""
+        return None
 
 
 @dataclass(frozen=True)
@@ -2119,7 +2084,12 @@ def apply_investor_edge_fail_open(
                 profile, "sample_count", "observation_count", "completed_observation_count"
             )
         )
-        status = "scored" if observations and observations > 0 else "neutral"
+        status = str(profile.get("status") or (
+            "scored" if observations and observations >= 3 else "insufficient_data"
+        ))
+        if profile.get("minimum_sample_met") is False or status == "insufficient_data":
+            profile["modifier"] = 0
+            status = "insufficient_data"
         profile["status"] = status
         updated = apply_profile_to_analysis(base, profile, rules)
         updated["final_score"] = _optional_int(updated.get("score"))
@@ -2624,6 +2594,9 @@ def build_analysis_record(
         "report_id": str(trade.get("report_id") or ""),
         "filing_key": str(filing.get("filing_key") or ""),
         "filer": str(trade.get("filer") or ""),
+        "filer_id": str(trade.get("filer_id") or filing.get("filer_id") or ""),
+        "filer_id_source": str(trade.get("filer_id_source") or filing.get("filer_id_source") or ""),
+        "filer_aliases": list(trade.get("filer_aliases") or filing.get("filer_aliases") or []),
         "title": str(trade.get("title") or filing.get("title") or ""),
         "agency": str(trade.get("agency") or filing.get("agency") or ""),
         "chamber": str(trade.get("chamber") or filing.get("chamber") or ""),

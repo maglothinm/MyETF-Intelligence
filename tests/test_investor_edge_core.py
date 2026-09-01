@@ -8,11 +8,14 @@ import pytest
 
 from scripts.investor_edge import (
     LEADERBOARD_FILE,
+    OBSERVATION_ARCHIVE_FILE,
     OBSERVATION_FILE,
+    PRICE_BASIS,
     PROFILE_FILE,
     InvestorEdgeRuntime,
     MarketHistoryProvider,
     _rows_cover,
+    adjusted_price_history,
     apply_profile_to_analysis,
     history_trade_eligibility,
     investor_identity,
@@ -86,6 +89,8 @@ def purchase(
 
 
 class DeterministicProvider:
+    price_basis = PRICE_BASIS
+    provider_name = "deterministic_fixture"
     def __init__(self, stock_rows: list[dict[str, object]], benchmark_rows: list[dict[str, object]]):
         self.stock_rows = stock_rows
         self.benchmark_rows = benchmark_rows
@@ -390,7 +395,7 @@ def test_applying_modifier_is_idempotent_and_preserves_hard_caps() -> None:
     assert once["final_score"] == 75
 
 
-def test_market_cache_merges_sources_and_uses_stale_data_on_provider_failure(tmp_path: Path) -> None:
+def test_unversioned_raw_caches_are_preserved_but_never_used(tmp_path: Path) -> None:
     ai_dir = tmp_path / "ai"
     edge_path = ai_dir / "investor-edge-market" / "AAA-daily.json"
     core_path = ai_dir / "market-cache" / "AAA-daily.json"
@@ -424,7 +429,7 @@ def test_market_cache_merges_sources_and_uses_stale_data_on_provider_failure(tmp
         required_through=date(2025, 2, 1),
     )
 
-    assert [item["date"] for item in result] == ["2025-01-01", "2025-01-02", "2025-01-03"]
+    assert result == []
     assert json.loads(edge_path.read_text(encoding="utf-8"))["rows"] == edge_rows
     assert provider.errors
 
@@ -578,13 +583,16 @@ def test_observation_retention_is_bounded_and_prefers_current_method_recent_rows
     runtime = InvestorEdgeRuntime(config, tmp_path, provider, {}, observations)
 
     assert set(runtime.observations) == {"current-2", "current-3", "current-4"}
-    assert runtime.observations_pruned_this_run == 3
+    assert runtime.observations_pruned_this_run == 0
+    assert runtime.observations_archived_this_run == 3
     runtime.save()
     payload = json.loads((tmp_path / OBSERVATION_FILE).read_text(encoding="utf-8"))
     assert set(payload["observations"]) == set(runtime.observations)
     assert payload["backfill"]["retention_limit"] == 3
     assert payload["backfill"]["stored_observation_count"] == 3
-    assert payload["backfill"]["pruned_this_run"] == 3
+    assert payload["backfill"]["pruned_this_run"] == 0
+    archive = json.loads((tmp_path / OBSERVATION_ARCHIVE_FILE).read_text(encoding="utf-8"))
+    assert {**archive["observations"], **payload["observations"]} == observations
 
 
 def test_per_horizon_observation_is_filled_later_without_duplicate_trade_state(tmp_path: Path) -> None:
@@ -677,7 +685,8 @@ def test_identity_upgrade_reuses_observation_and_migrates_last_good_profile(
     assert preserved["marker"] == "name-last-good"
     assert preserved["investor_key"] == stable_key
     assert stable_key in runtime.profiles
-    assert name_key not in runtime.profiles
+    assert runtime.profiles[name_key]["marker"] == "name-last-good"
+    assert runtime.profiles[name_key]["alias_of"] == stable_key
 
 
 def test_partial_refresh_does_not_replace_equal_sample_richer_last_good(tmp_path: Path) -> None:
@@ -1159,11 +1168,17 @@ def cached_population_provider(
         def get(self, *args: object, **kwargs: object) -> object:
             pytest.fail("An exhausted request budget must use only local market data")
 
-    daily_dir = directory / "market-cache"
+    daily_dir = directory / "investor-edge-market" / "adjusted-v1"
     daily_dir.mkdir(parents=True, exist_ok=True)
     fixtures = population_provider()
     for ticker, rows in (("AAA", fixtures.stock_rows), ("XLK", fixtures.benchmark_rows)):
-        (daily_dir / f"{ticker}-daily.json").write_text(json.dumps({"rows": rows}), encoding="utf-8")
+        history = adjusted_price_history(
+            rows,
+            ticker=ticker,
+            provider="alphavantage:TIME_SERIES_DAILY_ADJUSTED",
+        )
+        payload = {**history.metadata, "rows": list(history)}
+        (daily_dir / f"{ticker}-daily.json").write_text(json.dumps(payload), encoding="utf-8")
     if cached_sector:
         sector_dir = directory / "investor-edge-market"
         sector_dir.mkdir(parents=True, exist_ok=True)
@@ -1239,6 +1254,14 @@ def test_cache_only_extension_preserves_partial_observation_sector_and_identity(
     assert set(resumed.observations) == prior_keys
     observation = next(iter(resumed.observations.values()))
     assert observation["benchmark"] == "XLK"
-    assert observation["followable_outcomes"]["5"] == prior_short_outcome
+    refreshed_short = observation["followable_outcomes"]["5"]
+    assert refreshed_short["entry_date"] == prior_short_outcome["entry_date"]
+    assert refreshed_short["exit_date"] == prior_short_outcome["exit_date"]
+    assert refreshed_short["alpha_percent"] == prior_short_outcome["alpha_percent"]
+    assert refreshed_short["price_basis"] == PRICE_BASIS
+    assert {
+        source["provider"]
+        for source in refreshed_short["price_provenance"].values()
+    } == {"alphavantage:TIME_SERIES_DAILY_ADJUSTED"}
     assert observation["followable_outcomes"]["120"] is not None
     assert leaderboard[0]["backfill_pending_trade_count"] == 0

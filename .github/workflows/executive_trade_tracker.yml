@@ -67,7 +67,6 @@ jobs:
             curl --fail --silent --show-error --max-time 20 --retry 3 \
               "${healthchecks_base}/start" >/dev/null
           fi
-
       - name: Check out repository
         uses: actions/checkout@v6
 
@@ -96,218 +95,25 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          artifact_name="executive-tracker-state"
-          workflow_file="executive_trade_tracker.yml"
-          workflow_name="Executive purchase tracker"
-          authoritative_job="track"
-          destination=".trade-tracker/executive"
           consumer_sha="$(git rev-parse HEAD)"
-          live_default_sha="$(
-            gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${DEFAULT_BRANCH}" \
-              --jq '.object.sha'
-          )"
-          if [[ "$consumer_sha" != "$live_default_sha" ]]; then
-            echo "This queued tracker checked out ${consumer_sha}, but ${DEFAULT_BRANCH} is now ${live_default_sha}; refusing stale-code execution." >&2
-            exit 1
-          fi
-
-          artifact_id=""
-          producer_run_id=""
-          producer_attempt=""
-          producer_workflow_id=""
-          while IFS=$'\t' read -r candidate_artifact_id candidate_run_id candidate_created_at; do
-            [[ -n "$candidate_artifact_id" && -n "$candidate_run_id" && -n "$candidate_created_at" ]] || continue
-            run_payload="$(
-              gh api \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}"
-            )"
-            current_run_attempt="$(jq -r '.run_attempt // 1' <<< "$run_payload")"
-            [[ "$current_run_attempt" =~ ^[1-9][0-9]*$ ]] || continue
-
-            for ((candidate_attempt = current_run_attempt; candidate_attempt >= 1; candidate_attempt--)); do
-              attempt_payload="$run_payload"
-              if (( candidate_attempt != current_run_attempt )); then
-                attempt_payload="$(
-                  gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${candidate_attempt}"
-                )"
-              fi
-              run_started_at="$(jq -r '.run_started_at // ""' <<< "$attempt_payload")"
-              next_attempt_started_at=""
-              if (( candidate_attempt < current_run_attempt )); then
-                next_attempt_started_at="$(
-                  gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/$((candidate_attempt + 1))" \
-                    --jq '.run_started_at // ""'
-                )"
-              fi
-              if [[ \
-                -z "$run_started_at" || \
-                "$candidate_created_at" < "$run_started_at" || \
-                ( -n "$next_attempt_started_at" && ( "$candidate_created_at" > "$next_attempt_started_at" || "$candidate_created_at" == "$next_attempt_started_at" ) ) \
-              ]]; then
-                continue
-              fi
-
-              run_name="$(jq -r '.name // ""' <<< "$attempt_payload")"
-              run_path="$(jq -r '.path // ""' <<< "$attempt_payload")"
-              run_path="${run_path%%@*}"
-              run_branch="$(jq -r '.head_branch // ""' <<< "$attempt_payload")"
-              run_conclusion="$(jq -r '.conclusion // ""' <<< "$attempt_payload")"
-              run_repository_id="$(jq -r '.repository.id // ""' <<< "$attempt_payload")"
-              run_head_sha="$(jq -r '.head_sha // ""' <<< "$attempt_payload")"
-              workflow_id="$(jq -r '.workflow_id // ""' <<< "$attempt_payload")"
-              if [[ \
-                "$run_name" != "$workflow_name" || \
-                "$run_path" != ".github/workflows/${workflow_file}" || \
-                "$run_branch" != "$DEFAULT_BRANCH" || \
-                "$run_conclusion" != "success" || \
-                "$run_repository_id" != "$GITHUB_REPOSITORY_ID" || \
-                -z "$run_head_sha" || \
-                -z "$workflow_id" \
-              ]]; then
-                continue
-              fi
-              successful_state_jobs="$(
-                gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${candidate_attempt}/jobs?per_page=100" \
-                  --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
-              )"
-              (( successful_state_jobs > 0 )) || continue
-              compare_status="$(
-                gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${GITHUB_REPOSITORY}/compare/${run_head_sha}...${consumer_sha}" \
-                  --jq '.status'
-              )"
-              if [[ "$compare_status" == "ahead" || "$compare_status" == "identical" ]]; then
-                artifact_id="$candidate_artifact_id"
-                producer_run_id="$candidate_run_id"
-                producer_attempt="$candidate_attempt"
-                producer_workflow_id="$workflow_id"
-                break 2
-              fi
-            done
-          done < <(
-            gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${artifact_name}&per_page=100" \
-              --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse[] | [.id, .workflow_run.id, .created_at] | @tsv'
-          )
-          if [[ -z "$artifact_id" ]]; then
-            echo "No authoritative ${artifact_name} artifact is available; refusing to initialize protected state." >&2
-            exit 1
-          fi
-
-          later_writers=""
-          run_page=1
-          while :; do
-            runs_payload="$(
-              gh api --method GET \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GITHUB_REPOSITORY}/actions/workflows/${producer_workflow_id}/runs" \
-                -f branch="$DEFAULT_BRANCH" \
-                -f per_page=100 \
-                -f page="$run_page"
-            )"
-            page_count="$(jq '.workflow_runs | length' <<< "$runs_payload")"
-            while IFS= read -r later_run_id; do
-              [[ -n "$later_run_id" ]] || continue
-              later_run_payload="$(
-                gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${later_run_id}"
-              )"
-              later_run_name="$(jq -r '.name // ""' <<< "$later_run_payload")"
-              later_run_path="$(jq -r '.path // ""' <<< "$later_run_payload")"
-              later_run_path="${later_run_path%%@*}"
-              later_run_branch="$(jq -r '.head_branch // ""' <<< "$later_run_payload")"
-              later_repository_id="$(jq -r '.repository.id // ""' <<< "$later_run_payload")"
-              if [[ \
-                "$later_run_name" != "$workflow_name" || \
-                "$later_run_path" != ".github/workflows/${workflow_file}" || \
-                "$later_run_branch" != "$DEFAULT_BRANCH" || \
-                "$later_repository_id" != "$GITHUB_REPOSITORY_ID" \
-              ]]; then
-                continue
-              fi
-              later_attempt_count="$(jq -r '.run_attempt // 1' <<< "$later_run_payload")"
-              [[ "$later_attempt_count" =~ ^[1-9][0-9]*$ ]] || continue
-              first_later_attempt=1
-              if (( later_run_id == producer_run_id )); then
-                first_later_attempt=$((producer_attempt + 1))
-              fi
-              for ((later_attempt = first_later_attempt; later_attempt <= later_attempt_count; later_attempt++)); do
-                successful_state_jobs="$(
-                  gh api \
-                    -H "Accept: application/vnd.github+json" \
-                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${later_run_id}/attempts/${later_attempt}/jobs?per_page=100" \
-                    --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
-                )"
-                if (( successful_state_jobs > 0 )); then
-                  later_writers+="${later_writers:+$'\n'}${later_run_id}.${later_attempt}"
-                fi
-              done
-            done < <(
-              jq -r --argjson predecessor "$producer_run_id" \
-                '.workflow_runs[] | select(.id >= $predecessor) | .id' \
-                <<< "$runs_payload"
-            )
-            if (( page_count == 0 || page_count < 100 )); then
-              break
-            fi
-            oldest_run_id="$(jq '[.workflow_runs[].id] | min' <<< "$runs_payload")"
-            if (( oldest_run_id < producer_run_id )); then
-              break
-            fi
-            ((run_page += 1))
-          done
-          if [[ -n "$later_writers" ]]; then
-            later_writers="$(sort -V -u <<< "$later_writers")"
-            echo "${workflow_name} high-water violation at run attempt(s) ${later_writers//$'\n'/, }; refusing stale protected state." >&2
-            exit 1
-          fi
-
-          # Refuse replay when an unretained attempt may already have sent alerts.
+          receipt="${{ runner.temp }}/executive-state-receipt.json"
+          python scripts/protected_state.py restore \
+            --pipeline executive --destination .trade-tracker/executive \
+            --receipt "$receipt" --consumer-sha "$consumer_sha"
           GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
             --guard-branch executive \
-            --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
-
-          temp_dir="$(mktemp -d)"
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
-            > "$temp_dir/state.zip"
-          mkdir -p "$temp_dir/unpacked"
-          unzip -q "$temp_dir/state.zip" -d "$temp_dir/unpacked"
-          state_file="$(find "$temp_dir/unpacked" -type f -name state.json -print -quit)"
-          if [[ -z "$state_file" ]]; then
-            echo "Artifact ${artifact_id} (${artifact_name}) contains no state.json." >&2
-            exit 1
-          fi
-          if ! jq -e 'type == "object" and (.last_success_utc | type == "string" and length > 0)' "$state_file" >/dev/null; then
-            echo "Artifact ${artifact_id} (${artifact_name}) has no successful-state marker." >&2
-            exit 1
-          fi
-          rm -rf "$destination"
-          mkdir -p "$destination"
-          cp -R "$(dirname "$state_file")/." "$destination/"
-          echo "Restored authoritative Executive state from artifact ${artifact_id}, run ${producer_run_id}, attempt ${producer_attempt}."
+            --producer-run "$(jq -r '.selected.producer.run_id' "$receipt")" \
+            --producer-attempt "$(jq -r '.selected.producer.run_attempt' "$receipt")"
 
       - name: Run offline tests
         shell: bash
         run: |
           export GITHUB_STEP_SUMMARY=/tmp/polititrack-offline-test-summary
           python -m pytest -q \
+            tests/test_protected_state.py \
+            tests/test_workflow_contract.py \
             tests/test_monitor_disclosures.py \
             tests/test_government_trade_tracker.py \
             tests/test_historical_transaction_bootstrap.py \
@@ -329,8 +135,20 @@ jobs:
           PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
         run: python scripts/government_trade_tracker.py --branch executive --oge-listings-file oge-listings.json
 
+      - name: Validate continuity and seal protected Executive state
+        id: state_seal
+        if: ${{ steps.tracker.outcome == 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/protected_state.py seal \
+            --pipeline executive --directory .trade-tracker/executive \
+            --receipt "${{ runner.temp }}/executive-state-receipt.json" \
+            --consumer-sha "$(git rev-parse HEAD)"
+
       - name: Upload durable tracker state
-        if: ${{ steps.tracker.outcome == 'success' && hashFiles('.trade-tracker/executive/state.json') != '' }}
+        if: ${{ steps.state_seal.outcome == 'success' && hashFiles('.trade-tracker/executive/state.json') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: executive-tracker-state
@@ -341,6 +159,7 @@ jobs:
 
       - name: Upload run outputs and diagnostics
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: executive-purchase-output-${{ github.run_id }}

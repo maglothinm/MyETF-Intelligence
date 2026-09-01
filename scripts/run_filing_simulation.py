@@ -582,7 +582,14 @@ def _atomic_write_json(path: Path, value: Mapping[str, Any]) -> None:
 
 def _append_jsonl(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    needs_separator = False
+    if path.is_file() and path.stat().st_size:
+        with path.open("rb") as previous:
+            previous.seek(-1, os.SEEK_END)
+            needs_separator = previous.read(1) not in (b"\n", b"\r")
     with path.open("a", encoding="utf-8") as handle:
+        if needs_separator:
+            handle.write("\n")
         handle.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
@@ -709,6 +716,10 @@ def run_simulation(
             "alerts_sent": False,
             "production_inputs_mutated": False,
         },
+        # Finalize metadata before the one append. Rewriting JSONL later would
+        # change valid predecessor formatting and violate byte-prefix continuity.
+        "notification": {"pushover": "not_requested", "email": "not_requested"},
+        "notification_status": "Pushover: not_requested; email: not_requested",
     }
 
     hashes_after = {

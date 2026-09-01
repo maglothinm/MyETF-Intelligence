@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -35,9 +36,11 @@ try:  # Support package imports and direct workflow execution.
         LEADERBOARD_FILE,
         OBSERVATION_FILE,
         PROFILE_FILE,
+        PRICE_BASIS,
         InvestorEdgeRuntime,
         history_trade_eligibility,
         investor_key,
+        matching_investor_records,
         load_config as load_edge_config,
     )
 except ImportError:  # pragma: no cover - direct execution path
@@ -59,9 +62,11 @@ except ImportError:  # pragma: no cover - direct execution path
         LEADERBOARD_FILE,
         OBSERVATION_FILE,
         PROFILE_FILE,
+        PRICE_BASIS,
         InvestorEdgeRuntime,
         history_trade_eligibility,
         investor_key,
+        matching_investor_records,
         load_config as load_edge_config,
     )
 
@@ -72,6 +77,9 @@ class SimulationError(RuntimeError):
 
 class OfflineMarketHistoryProvider:
     """Deterministic provider adapter with the production runtime's interface."""
+
+    price_basis = PRICE_BASIS
+    provider_name = "deterministic_fixture"
 
     def __init__(self, *, as_of: date) -> None:
         self.as_of = as_of
@@ -356,8 +364,44 @@ def simulate_analysis_record(
     edge_config = load_edge_config(edge_config_path)
     edge_config["enabled"] = True
     edge_config["network_request_budget_per_run"] = 0
+    minimum = max(1, int(edge_config.get("minimum_completed_trades", 3)))
+    current_date = date.fromisoformat(str(trade["transaction_date"])[:10])
+    mature_weight = 0.0
+    for prior in matching_investor_records(trade, scoring_transactions):
+        assessment = history_trade_eligibility(prior)
+        prior_date = str(prior.get("transaction_date") or "")[:10]
+        public_date = str(prior.get("observed_at_utc") or prior.get("filed_date") or "")[:10]
+        if (assessment.get("eligible") and prior_date < current_date.isoformat()
+                and public_date and public_date <= (as_of - timedelta(days=190)).isoformat()):
+            mature_weight += float(assessment.get("quality_weight") or 0)
+    supplemental_history = []
+    if mature_weight < minimum:
+        # The acceptance fixture must exercise the real minimum-sample gate.
+        # Keep every invented record TEST-marked in the reported evidence;
+        # strip markers only in the in-memory deterministic scoring adapter.
+        prototype = {**synthetic_trade, "parse_confidence": "high", "transaction_intent": "discretionary"}
+        quality = float(history_trade_eligibility(scoring_view(prototype)).get("quality_weight") or 0)
+        if not quality:
+            raise SimulationError("Cannot construct an eligible isolated history fixture")
+        fixture_count = math.ceil(minimum / quality)
+        for index in range(fixture_count):
+            fixture_date = min(current_date, as_of) - timedelta(days=400 + index * 30)
+            public_date = fixture_date + timedelta(days=7)
+            fixture = {
+                **prototype,
+                "trade_id": f"TEST-{trade['trade_id']}-MINIMUM-HISTORY-{index + 1:03d}",
+                "transaction_date": fixture_date.isoformat(),
+                "filed_date": public_date.isoformat(),
+                "observed_at_utc": f"{public_date.isoformat()}T12:00:00Z",
+                "is_synthetic_test": True,
+                "is_temporary": True,
+                "test_metadata": {"investor_edge_fixture_role": "prior_history", "reason": "minimum_sample_acceptance"},
+            }
+            supplemental_history.append(fixture)
+            scoring_transactions.append(scoring_view(fixture))
+        synthetic_trade.setdefault("test_metadata", {})["supplemental_history_ids"] = [row["trade_id"] for row in supplemental_history]
     edge_config["backfill_analysis_limit_per_run"] = max(
-        1, int(edge_config.get("backfill_analysis_limit_per_run", 1))
+        minimum + len(supplemental_history), int(edge_config.get("backfill_analysis_limit_per_run", 1))
     )
     profiles_payload = _read_mapping(ai_dir / PROFILE_FILE)
     profiles = profiles_payload.get("profiles") or {}
@@ -421,7 +465,9 @@ def simulate_analysis_record(
         "edge_persisted": record.get("investor_edge_score") is not None,
         "confidence_persisted": record.get("investor_edge_confidence") is not None,
         "edge_status_persisted": str(record.get("investor_edge_status") or "")
-        in {"scored", "neutral"},
+        == "scored",
+        "minimum_sample_gate_passed": bool(profile.get("minimum_sample_met")),
+        "adjusted_price_basis_verified": profile.get("price_basis") == PRICE_BASIS,
         "base_score_persisted": record.get("base_score") is not None,
         "final_score_persisted": record.get("final_score") is not None,
         "modifier_persisted": record.get("investor_edge_modifier") is not None,
@@ -509,6 +555,7 @@ def simulate_analysis_record(
         "network_requests": provider.network_requests,
         "restored_profile_count": len(profiles),
         "restored_observation_count": len(observations),
+        "supplemental_history_fixtures": supplemental_history,
         "candidate_trade_id": str(trade.get("trade_id") or ""),
         "investor_key": expected_identity,
         "assertions": assertions,

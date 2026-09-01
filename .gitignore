@@ -38,6 +38,7 @@ executive-latest-transactions.csv
 legislative-latest-filings.csv
 executive-latest-filings.csv
 
-# Local read-only release evidence, copied fixtures, and temporary test output
+# Local remediation/release evidence, copied fixtures, and temporary test output
+# is never protected production-state authority.
 .remediation/
 .test-tmp*/

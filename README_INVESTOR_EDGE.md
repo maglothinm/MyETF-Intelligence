@@ -4,7 +4,9 @@ Investor Edge measures whether a government filer and disclosed owner have previ
 
 ## Identity and historical eligibility
 
-Performance is attributed to the normalized pair `filer + disclosed owner`. Self, Spouse, Joint, Dependent, Trust, Managed, and Other ownership categories do not automatically share a record. The durable profile includes the normalized identity, its confidence, the configuration version, and a method hash so a result can be traced to the rules that produced it.
+Performance is attributed to a source-provided Bioguide/filer ID plus disclosed owner when available. `Trade` preserves `filer_id`, `filer_id_source`, and explicit `filer_aliases` without changing existing trade IDs. Name-only sources use an explicitly lower-confidence normalized-name fallback; no person ID is inferred from a filing ID. Explicit aliases may bridge name-only history to one stable ID, but a collision between multiple stable IDs blocks the bridge. The existing House/Senate listing payloads do not themselves guarantee a Bioguide ID, so this is propagation of available identity, not a claim of complete live ID enrichment.
+
+Self, Spouse, Joint, Dependent, Trust, Managed, and Other ownership categories do not automatically share a record. The durable profile includes identity provenance and confidence, configuration version, and a method hash.
 
 Only earlier, eligible equity purchases for that identity may contribute to a candidate. Synthetic tests, non-purchases, unresolved securities, future disclosures, and records that fail eligibility checks are excluded. Medium-quality or incomplete identity records can receive reduced effective weight rather than being treated as equally reliable. Each trade result records its status, eligibility or exclusion reasons, quality weight, and the observations actually available as of the scoring cutoff.
 
@@ -55,6 +57,8 @@ Investor Edge compares the security with a sector ETF when a sufficiently confid
 
 For every completed horizon, the durable observation retains entry and exit dates and prices, stock return, benchmark return, and alpha. Missing horizons remain unavailable; they are not filled with zero or a neutral value. The default horizon weights are 15% at 5 sessions, 30% at 20, 35% at 60, and 20% at 120, normalized across the outcomes that are actually available. Per-horizon alpha is clipped to ±25 percentage points before aggregation so one outlier cannot dominate a profile.
 
+Both security and benchmark returns use the same `split_dividend_adjusted_total_return` basis from Alpha Vantage `TIME_SERIES_DAILY_ADJUSTED` / `5. adjusted close`. [Alpha Vantage documents the adjusted series](https://www.alphavantage.co/documentation/#dailyadj) and [explains its split/dividend treatment](https://www.alphavantage.co/stock-price-tracker-website-python-django/). Its adjusted daily endpoint requires provider entitlement; missing access leaves observations pending. Finnhub daily candles document split adjustment only, so they are not a total-return fallback. Fresh and cached outcomes must respect the cutoff for stock and benchmark entry/exit dates, and benchmark sessions must match the stock sessions exactly.
+
 ## Score, confidence, and caps
 
 The unshrunk 0–100 Edge score uses these default component weights:
@@ -71,13 +75,17 @@ Hit rates are recorded separately for picker and followable outcomes at every ho
 
 Small samples are deliberately pulled toward neutral Edge 50. Confidence incorporates effective sample weight, completed-horizon coverage, a prior of eight trades, the minimum completed-trade threshold, and identity confidence. Sector evidence has its own four-trade prior and mapping confidence. These choices keep a few weak or incomplete observations from appearing comparable to an established history.
 
-The shrunk Edge score maps to a whole-number PolitiTrack modifier hard-capped at `-12` to `+12`. The normal deterministic score is preserved as `base_score`; `final_score` applies the modifier and then the existing PolitiTrack hard caps. Investor Edge therefore cannot make an ambiguous, incomplete, untradeable, or otherwise capped signal qualify by itself. If Edge cannot run for a candidate, analysis continues fail-open with the base score and records a neutral, disabled, unavailable, or error status instead of inventing performance values.
+The shrunk Edge score maps to a whole-number PolitiTrack modifier hard-capped at `-12` to `+12`. At least three completed and three effective observations are required by default; below this configurable minimum the status is `insufficient_data` and the modifier is exactly zero. The normal capped deterministic score is preserved as `base_score`; `final_score = clamp(base_score + modifier, 0, existing caps)`. Thus a negative modifier reduces an already capped score (64 with a −12 modifier becomes 52), while a positive modifier cannot exceed the cap. `base_raw_score` and the adjusted raw diagnostic remain separately visible. Reapplication does not compound the modifier. If Edge cannot run, the core analysis retains its base score and an explicit disabled, unavailable, or error status.
 
 ## Bounded backfill and caches
 
-The engine reuses PolitiTrack's cached daily history before requesting anything new. Additional market history and sector mappings use the already-configured Alpha Vantage and Finnhub credentials and are bounded by the per-run network-request budget. The defaults are 40 network requests per run, 24 hours for daily-market cache freshness, and 168 hours for company-profile cache freshness. Provider errors are scrubbed before durable persistence so query-string credentials are not written to state.
+The engine reuses only validated adjusted history in `investor-edge-market/adjusted-v1/`. Each snapshot records schema version, ticker, price basis, provider, UTC fetch time, and a digest of its rows. Freshness uses the recorded fetch time, not a restored file's modification time. Raw/unversioned Edge and core market caches remain untouched but are ineligible. Snapshots are never spliced across adjustment revisions or providers. Last-good validated adjusted data remains usable during an outage for horizons it actually covers.
+
+Adjusted daily history uses existing Alpha Vantage credentials; sector mapping still uses Finnhub. Both are bounded by the shared default 40-request budget. Daily-cache freshness defaults to 24 hours and sector-cache freshness to 168 hours. Errors are scrubbed before persistence. There is no live provider request in offline acceptance tests.
 
 Historical outcomes are stored in `investor-edge-observations.json`. At most 30 missing observations are processed in one run by default; this is a trade-observation processing budget, not a 30-day window or a promise of 30 completed outcomes. Deferred work remains eligible on later successful runs even without new disclosures. Unavailable histories persist a bounded retry marker with exponential calendar-day backoff, so the same missing symbols cannot consume every run and starve later trades. Profiles consider at most the 40 most recent eligible historical purchases per identity, the leaderboard is bounded to 40 identities, and durable observations are pruned deterministically to 2,000 entries by default while prioritizing the current method and recent trades. Cached observations are keyed by the method and trade inputs, and each profile reports the current backfill limit, processed count, and pending count.
+
+The 2,000-entry limit applies only to the active observation working set. Overflow is copied into `investor-edge-observations-archive.json` **before** the active snapshot is replaced, so durable history is retained. An existing malformed archive blocks loading rather than being replaced. Old-method observations remain audit evidence but cannot score under the adjusted-price methodology, and existing analysis revisions are never rewritten to conceal a methodology change.
 
 Historical processing is deterministic and breadth-first: each identity gets a
 turn before the next round of observations. A durable last-investor cursor rotates
@@ -239,9 +247,11 @@ aborts candidate/market work; a final maintenance failure prevents candidate
 delivery. Retaining per-candidate fallback scores does not justify publishing an
 incomplete or stale global inventory as successful.
 
+Gmail requires both `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`; code and configuration are not proof of delivery. The proposed external recovery journal remains on hold: delivery continuity is governed by provenance-valid artifact state, and ambiguous delivery after a failed publication is not claimed resolved. The Run Simulation workflow supplies no real notification credentials and generates only a TEST-marked preview.
+
 ## Run Simulation
 
-Use **Actions → Run Simulation → Run workflow** for an isolated end-to-end acceptance check. The workflow restores the latest Legislative, Executive, and AI artifacts, clones them into run-specific temporary directories, chooses a historical filing with an eligible equity purchase, and creates a TEST-prefixed copy dated at the selected `as_of` date. It uses matching retained history when present; otherwise it adds one explicitly marked prior-history fixture only to the isolated tree. It then exercises the production analysis-record, deterministic scoring, and Investor Edge integration path with deterministic local evidence and market data.
+Use **Actions → Run Simulation → Run workflow** for an isolated end-to-end acceptance check. The workflow restores the latest Legislative, Executive, and AI artifacts, clones them into run-specific temporary directories, chooses a historical filing with an eligible equity purchase, and creates a TEST-prefixed copy dated at the selected `as_of` date. When retained mature history does not meet the minimum, the offline scoring adapter adds enough explicitly TEST-marked, fully matured fixtures to exercise the real minimum gate. Those supplemental records appear in the result evidence and are never written to production trackers. It exercises the production analysis-record, scoring, and Edge integration paths with deterministic local evidence and an explicitly adjusted-price fixture adapter.
 
 The simulation does not call OpenAI or a market-data service and supplies no API or notification credentials. It does not call the real notification function; instead, `data/simulation-result.json` contains the exact alert preview and machine-checkable assertions. The generated dashboard is exposed only through the uniquely named `simulation-dashboard-<run-id>-<attempt>` artifact and expires after one day. The cloned AI state remains in runner-temporary storage and is discarded; neither it nor the dashboard is uploaded as production state or deployed to Pages.
 
@@ -256,9 +266,10 @@ equity curve or benchmark comparison.
 
 The durable AI state contains:
 
-- `investor-edge-profiles.json` — latest profiles keyed by normalized investor identity;
+- `investor-edge-profiles.json` — profiles keyed by normalized identity; old keys remain as aliases after a stable-ID upgrade;
 - `investor-edge-leaderboard.json` — the bounded dashboard population and run metadata;
 - `investor-edge-observations.json` — reusable per-trade, per-horizon outcomes, retry progress and the persistent fairness cursor;
+- `investor-edge-observations-archive.json` — immutable inactive/old-method observations, including hash-keyed revisions where necessary; mandatory continuity data once created;
 - `investor-edge-market/` — cached daily history and company-sector mappings.
 
 Analyses created or market-refreshed while the runtime is available retain base and final scores, modifier, Edge status and any scrubbed error, flattened display fields, the nested profile, and the scoring-method version. Existing historical analysis revisions are not rewritten in place, preventing later data from changing an earlier paper decision.
