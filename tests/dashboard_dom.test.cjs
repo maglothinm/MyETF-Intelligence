@@ -104,6 +104,26 @@ function fixtures() {
     runs: runs.filter(row => row.branch !== 'ai'), 'ai-runs': runs.filter(row => row.branch === 'ai')};
 }
 
+function scoredAnalysis(overrides = {}) {
+  return {
+    analysis_id: 'analysis:receipt/&?=', trade_id: 'trade:receipt', analyzed_at_utc: '2026-08-29T14:30:00Z', analysis_status: 'complete',
+    branch: 'legislative', source: 'house', report_id: 'receipt-1', filer: 'Receipt Official', owner: 'Spouse', ticker: 'RCPT',
+    asset: 'Receipt Corporation', transaction_type: 'Purchase', transaction_date: '2026-08-20', filed_date: '2026-08-24',
+    observed_at_utc: '2026-08-25T10:00:00Z', source_url: 'https://example.test/filing/receipt-1', classification: 'high_priority',
+    score: 88.5, raw_score: 91.25, base_score: 86.25, base_raw_score: 89, final_score: 88.5, score_method_version: 'signal-v3',
+    rules_version: 1, prompt_version: '2026-08-28.2',
+    score_components: {filing_timeliness: 18, policy_relevance: 13.5, evidence_quality: 0},
+    hard_caps: [{reason: 'Retained evidence ceiling', maximum_score: 88.5}], parse_confidence: 'high', document_status: 'complete',
+    market: {data_status: 'complete', quote_status: 'retained', quote_timestamp_utc: '2026-08-29T20:00:00Z'},
+    ai: {confidence: 0.84, external_context_status: 'found', positive_factors: ['Direct household ownership'],
+      negative_factors: ['Disclosed value is a range'], contradictory_evidence: ['Issuer statement requires review'],
+      evidence_sources: [{title: 'Official filing duplicate', url: 'https://example.test/filing/receipt-1'},
+        {title: 'Committee evidence', url: 'https://example.test/evidence/committee'}]},
+    entry_plan: {entry_status: 'review_now'}, investor_edge_status: 'scored', investor_edge_modifier: 2.25,
+    ...overrides
+  };
+}
+
 async function waitFor(predicate, description, timeout = 3000) {
   const start = Date.now();
   while (!predicate()) {
@@ -696,6 +716,131 @@ test('hostile values are inert text in tables and signal cards', async t => {
   assert.deepEqual(env.errors, []);
 });
 
+test('score receipt deep links display retained values without recalculation or mutation', async t => {
+  const analysis = scoredAnalysis(), before = copy(analysis);
+  const receiptHash = '#signals?analysis=' + encodeURIComponent(analysis.analysis_id);
+  const env = await dashboard({hash: receiptHash, change(data) {
+    data['ai-analyses'] = [copy(analysis)];
+    data['dashboard-insights'].signals = [{analysis_id: analysis.analysis_id, classification: analysis.classification, ticker: analysis.ticker,
+      asset: analysis.asset, filer: analysis.filer, owner: analysis.owner, direction: 'bullish', final_score: analysis.final_score,
+      base_score: analysis.base_score, edge_modifier: analysis.investor_edge_modifier, edge_status: analysis.investor_edge_status,
+      edge_observation_count: 6, why: 'Retained receipt fixture', source_url: analysis.source_url, evidence: []}];
+    data['dashboard-insights'].coverage.qualifying_signals = 1;
+  }}); t.after(env.close);
+  await waitFor(() => env.byId('selected-ai-title'), 'direct score receipt route');
+  const receipt = env.doc.querySelector('.analysis-receipt');
+  assert.equal(receipt.closest('.table-wrap'), null, 'The receipt stays outside the horizontally scrolling wide table');
+  assert.equal(env.byId('ai-receipt').contains(receipt), true);
+  const facts = Object.fromEntries([...receipt.querySelectorAll('dl.receipt-facts > div')].map(node => [node.querySelector('dt').textContent, node.querySelector('dd').textContent]));
+  assert.equal(env.window.location.hash, receiptHash);
+  assert.equal(env.doc.activeElement, env.byId('selected-ai-title'));
+  assert.equal(facts['Analysis ID'], analysis.analysis_id);
+  assert.equal(facts['Final score'], '88.5');
+  assert.equal(facts['Raw score'], '91.25');
+  assert.equal(facts['Base score'], '86.25');
+  assert.equal(facts['Base raw score'], '89');
+  assert.equal(facts['Retained score field'], '88.5');
+  assert.equal(facts['Investor Edge modifier'], '2.25');
+  assert.equal(facts['AI confidence'], '0.84');
+  assert.equal(facts['Score method version'], 'signal-v3');
+  assert.equal(facts['Rules version'], '1');
+  assert.equal(facts['Prompt version'], '2026-08-28.2');
+  assert.equal(facts['Market data status'], 'complete');
+  assert.equal(facts['Parser confidence'], 'high');
+  assert.equal(facts['Investor Edge status'], 'scored');
+  assert.match(receipt.textContent, /Filing Timeliness\s*18/);
+  assert.match(receipt.textContent, /Policy Relevance\s*13\.5/);
+  assert.match(receipt.textContent, /Evidence Quality\s*0/);
+  assert.match(receipt.textContent, /Retained evidence ceiling\s*Maximum retained score: 88\.5/);
+  assert.match(receipt.textContent, /does not recalculate a score/);
+  const evidence = [...receipt.querySelectorAll('a')].find(node => node.textContent.includes('Committee evidence'));
+  assert.equal(evidence?.getAttribute('href'), 'https://example.test/evidence/committee');
+  assert.equal(evidence?.getAttribute('rel'), 'noopener noreferrer');
+  assert.equal(receipt.textContent.match(/Official filing duplicate/g), null, 'Duplicate evidence URL is not represented as extra evidence');
+  assert.deepEqual(analysis, before);
+  assert.deepEqual(env.data['ai-analyses'], [before]);
+
+  const close = receipt.querySelector('[data-clear-analysis]');
+  close.click();
+  await waitFor(() => !env.byId('selected-ai-title'), 'score receipt close');
+  assert.equal(env.window.location.hash, '#signals');
+  assert.equal(env.doc.activeElement?.dataset.analysisReceipt, analysis.analysis_id);
+  assert.equal(env.doc.activeElement?.getAttribute('aria-label'), 'View score receipt for RCPT');
+  const cardLink = env.byId('all-signals').querySelector('a[href^="#signals?analysis="]');
+  assert.equal(cardLink?.getAttribute('href'), receiptHash);
+  assert.equal(cardLink?.getAttribute('aria-label'), 'View score receipt for RCPT');
+  const compactCard = env.doc.createElement('div'); compactCard.innerHTML = env.window.PT.signalCard({analysis_id: analysis.analysis_id, ticker: analysis.ticker}, true);
+  assert.equal(compactCard.querySelector('a[href*="#signals?analysis="]'), null, 'Compact Wallboard cards never expose an inert dashboard route');
+  cardLink.click();
+  await waitFor(() => env.byId('selected-ai-title'), 'signal card score receipt route');
+  assert.equal(env.doc.activeElement, env.byId('selected-ai-title'));
+  await env.refresh();
+  assert.ok(env.byId('selected-ai-title'), 'A successful refresh keeps the explicitly selected receipt open');
+  assert.deepEqual(env.data['ai-analyses'], [before]);
+  assert.deepEqual(env.errors, []);
+});
+
+test('score receipt fails closed for missing, malformed, hostile and unsafe retained fields', async t => {
+  const hostile = '<img src=x onerror="window.receiptHostile=1"><script>window.receiptHostile=2</script>';
+  const missing = scoredAnalysis({analysis_id: 'analysis:hostile/&?=', ticker: hostile, filer: hostile, owner: hostile,
+    analyzed_at_utc: '2026-02-30T12:00:00Z',
+    score: null, raw_score: 'Infinity', base_score: undefined, base_raw_score: false, final_score: null,
+    investor_edge_modifier: 'not-a-number', score_components: {[hostile]: 'not-a-number', retained_zero: 0}, hard_caps: undefined,
+    source_url: 'javascript:window.receiptHostile=3', investor_edge_error: 'PRIVATE PROVIDER ERROR BODY',
+    ai: {confidence: 'NaN', external_context_status: hostile, positive_factors: [hostile], negative_factors: null,
+      contradictory_evidence: [], evidence_sources: [{title: hostile, url: 'javascript:window.receiptHostile=4'},
+        {title: 'Private healthcheck', url: 'https://hc-ping.com/private-token'}]}, market: {data_status: hostile, quote_timestamp_utc: '2026-13-01T00:00:00Z'}});
+  const emptyCaps = scoredAnalysis({analysis_id: 'analysis:empty-caps', hard_caps: []});
+  const malformedCap = scoredAnalysis({analysis_id: 'analysis:bad-cap', hard_caps: [{reason: hostile, maximum_score: 'Infinity'}]});
+  const env = await dashboard({hash: '#signals?analysis=' + encodeURIComponent(missing.analysis_id), change(data) {
+    data['ai-analyses'] = [copy(missing), copy(emptyCaps), copy(malformedCap)];
+  }}); t.after(env.close);
+  await waitFor(() => env.byId('selected-ai-title'), 'hostile receipt route');
+  let receipt = env.doc.querySelector('.analysis-receipt');
+  const facts = Object.fromEntries([...receipt.querySelectorAll('dl.receipt-facts > div')].map(node => [node.querySelector('dt').textContent, node.querySelector('dd').textContent]));
+  assert.equal(facts['Final score'], 'Unavailable');
+  assert.equal(facts['Raw score'], 'Unavailable');
+  assert.equal(facts['Base score'], 'Unavailable');
+  assert.equal(facts['Base raw score'], 'Unavailable');
+  assert.equal(facts['Investor Edge modifier'], 'Unavailable');
+  assert.equal(facts['AI confidence'], 'Unavailable');
+  assert.equal(facts['Analyzed'], 'Unavailable');
+  assert.equal(facts['Quote timestamp'], 'Unavailable');
+  assert.match(receipt.textContent, /Retained Zero\s*0/);
+  assert.match(receipt.textContent, /<img src=x/);
+  assert.match(receipt.textContent, /Retained hard caps\s*Unavailable/);
+  assert.ok(!receipt.textContent.includes('PRIVATE PROVIDER ERROR BODY'));
+  assert.ok(!receipt.textContent.includes('Infinity'));
+  assert.ok(!receipt.textContent.includes('NaN'));
+  assert.equal(receipt.querySelectorAll('img,script,[onerror],a[href^="javascript:"],a[href*="hc-ping.com"]').length, 0);
+  assert.equal(env.window.receiptHostile, undefined);
+
+  await env.navigate('#signals?analysis=' + encodeURIComponent(emptyCaps.analysis_id), () => env.byId('selected-ai-title')?.textContent.includes('RCPT'));
+  receipt = env.doc.querySelector('.analysis-receipt');
+  assert.match(receipt.textContent, /No hard caps retained for this analysis/);
+  assert.ok(!receipt.querySelector('section h4 + .receipt-unavailable'));
+
+  await env.navigate('#signals?analysis=' + encodeURIComponent(malformedCap.analysis_id), () => env.doc.querySelector('.analysis-receipt')?.textContent.includes(malformedCap.analysis_id));
+  receipt = env.doc.querySelector('.analysis-receipt');
+  assert.match(receipt.textContent, /Maximum retained score: Unavailable/);
+  assert.equal(receipt.querySelectorAll('img,script,[onerror]').length, 0);
+  assert.deepEqual(env.errors, []);
+});
+
+test('score receipt keeps an unavailable lazy analysis ledger explicit and retryable', async t => {
+  const analysis = scoredAnalysis();
+  const env = await dashboard({change(data) { data['ai-analyses'] = [analysis]; }}); t.after(env.close);
+  env.failures.add('ai-analyses');
+  await env.navigate('#signals?analysis=' + encodeURIComponent(analysis.analysis_id), () => env.byId('ai-count-label').textContent.includes('Unable to load records'));
+  assert.equal(env.byId('selected-ai-title'), null);
+  assert.match(env.byId('ai-count-label').textContent, /Unable to load records: data\/ai-analyses\.json returned HTTP 503/);
+  env.failures.delete('ai-analyses');
+  await env.navigate('#overview');
+  await env.navigate('#signals?analysis=' + encodeURIComponent(analysis.analysis_id), () => env.byId('selected-ai-title'));
+  assert.equal(env.doc.activeElement, env.byId('selected-ai-title'));
+  assert.deepEqual(env.errors, []);
+});
+
 test('empty evidence stays Unknown with deliberate no-signal and no-position states', async t => {
   const env = await dashboard({change(data) {
     const model = data['dashboard-insights']; model.health.status = 'unknown';
@@ -1113,6 +1258,9 @@ test('axe reports no serious/critical DOM accessibility violations (layout/color
   env.byId('notification-button').click(); await check('Notification dialog');
   env.byId('notifications-dialog').close();
   await env.navigate('#records', () => env.byId('filings-body').children.length === 50); await check('Records table');
+  const analysis = scoredAnalysis(); env.data['ai-analyses'] = [analysis];
+  await env.navigate('#signals?analysis=' + encodeURIComponent(analysis.analysis_id), () => env.byId('selected-ai-title'));
+  await check('Read-only score receipt');
   env.doc.querySelector('.sidebar-footer [data-dialog="risk-dialog"]').click(); await check('Methodology dialog');
 });
 

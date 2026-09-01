@@ -7,7 +7,7 @@
   measureHeader();
   if(typeof ResizeObserver==="function")new ResizeObserver(measureHeader).observe(header);
   else window.addEventListener("resize",measureHeader);
-  const {el,esc,helpButton,numeric,number,money,percent,title,date,age,safeUrl,link,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief}=PT;
+  const {el,esc,helpButton,numeric,number,money,percent,title,date,age,safeUrl,link,analysisHref,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief}=PT;
   const PAGE_SIZE = 50;
   const REVIEW_ACK_STORAGE_KEY = "polititrack.manual-review-acknowledgements.v1";
   const REVIEW_ACK_LIMIT = 500;
@@ -24,7 +24,7 @@
     filings:{title:"Filing inventory",file:"filings",date:"filed_date",dates:["filed_date","first_seen_utc"],filters:["source","status"],search:"Filer, agency, district, report…",columns:[["filed_date","Filed","date"],["source","Source"],["filer","Filer"],["title","Role"],["status","Coverage status"],["transaction_count","Parsed rows","number"],["source_url","Official filing","link"]]},
     transactions:{title:"Parsed transactions",file:"transactions",date:"transaction_date",dates:["transaction_date","filed_date","observed_at_utc"],filters:["source","transaction_type"],search:"Ticker, company, filer, owner…",columns:[["transaction_date","Transaction date","date"],["filed_date","Filing date","date"],["observed_at_utc","Observed","date"],["source","Source"],["filer","Filer"],["owner","Owner"],["transaction_type","Type"],["ticker","Ticker / asset"],["amount","Disclosed range"],["source_url","Filing","link"]]},
     reviews:{title:"Review queue",file:"pending-reviews",date:"filed_date",dates:["filed_date","observed_at_utc"],filters:["source","category"],search:"Filer, record ID, agency, reason…",columns:[["review_id","Source record","review"],["category","Review status"],["reason","Review reason"],["source","Source"],["branch","Branch"],["filed_date","Filed","date"],["observed_at_utc","Observed / age","age"],["source_url","Official page","link"]]},
-    ai:{title:"All AI analyses",file:"ai-analyses",date:"analyzed_at_utc",dates:["analyzed_at_utc","transaction_date","filed_date","observed_at_utc"],filters:["classification","source"],search:"Ticker, filer, owner, rationale…",columns:[["analyzed_at_utc","Analyzed","date"],["ticker","Ticker / asset"],["classification","Classification"],["final_score","Score","number"],["filer","Filer / owner"],["transaction_date","Transaction","date"],["filed_date","Filed","date"],["observed_at_utc","Observed","date"],["base_score","Base score","number"],["investor_edge_modifier","Modifier","number"],["investor_edge_observation_count","Observations","number"],["investor_edge_score","Investor Edge","number"],["investor_edge_confidence_label","Edge confidence"],["investor_edge_relevant_followable_alpha","Followable alpha","percent"],["investor_edge_sector_alpha","Sector edge","percent"],["ai.analysis_summary","Analysis"],["source_url","Evidence","evidence"]]},
+    ai:{title:"All AI analyses",file:"ai-analyses",date:"analyzed_at_utc",dates:["analyzed_at_utc","transaction_date","filed_date","observed_at_utc"],filters:["classification","source"],search:"Ticker, filer, owner, rationale…",columns:[["analyzed_at_utc","Analyzed","date"],["ticker","Ticker / asset"],["classification","Classification"],["final_score","Score","number"],["analysis_id","Score receipt","receipt"],["filer","Filer / owner"],["transaction_date","Transaction","date"],["filed_date","Filed","date"],["observed_at_utc","Observed","date"],["base_score","Base score","number"],["investor_edge_modifier","Modifier","number"],["investor_edge_observation_count","Observations","number"],["investor_edge_score","Investor Edge","number"],["investor_edge_confidence_label","Edge confidence"],["investor_edge_relevant_followable_alpha","Followable alpha","percent"],["investor_edge_sector_alpha","Sector edge","percent"],["ai.analysis_summary","Analysis"],["source_url","Evidence","evidence"]]},
     portfolio:{title:"Paper positions",file:"paper-portfolio",date:"opened_at_utc",dates:["opened_at_utc","last_updated_utc"],filters:["status"],search:"Ticker, filer, owner…",columns:[["opened_at_utc","Opened","date"],["ticker","Ticker"],["status","Status"],["filer","Filer / owner"],["entry_price","Entry","money"],["current_price","Current","money"],["quantity","Quantity","number"],["unrealized_pnl","Unrealized P&L","money"],["realized_pnl","Realized P&L","money"],["return_percent","Return","percent"],["source_url","Filing","link"]]},
     runs:{title:"Retained run history",file:"runs",date:"finished_utc",dates:["finished_utc","started_utc"],filters:["branch"],search:"Branch, errors, run…",columns:[["finished_utc","Finished","date"],["branch","Branch"],["success","Result","status"],["new_filing_counts","New filings","sum"],["completed_count","AI completed","number"],["errors","Errors","array"],["run_url","GitHub run","link"]]}
   };
@@ -34,6 +34,8 @@
     investor_edge_relevant_followable_alpha: "followableAlpha", investor_edge_sector_alpha: "sectorEdge"
   });
   function get(row,path){return path.split(".").reduce((v,k)=>v&&typeof v==="object"?v[k]:undefined,row);}
+  const selectionFields=Object.freeze({filings:"filing_key",reviews:"review_id",ai:"analysis_id"});
+  const selectionValue=(key,row)=>selectionFields[key]&&typeof row?.[selectionFields[key]]==="string"?row[selectionFields[key]]:"";
   function normalizeReviewAcknowledgements(value){
     if(!value||value.version!==1||!Array.isArray(value.acknowledged))return {};
     const normalized={};
@@ -93,7 +95,12 @@
     for(const field of definitions[key].filters)el(`${key}-${field==="transaction_type"?"type":field}`).value="";
     el(`${key}-date-from`).value="";el(`${key}-date-to`).value="";
   }
-  function syncRecordRoute(key){
+  function syncTableRoute(key){
+    if(key==="ai"&&state.section==="signals"){
+      const selected=state.tables.ai.selected;
+      history.replaceState(null,"",selected?analysisHref({analysis_id:selected},""):"#signals");
+      return;
+    }
     if(state.section!=="records"||state.record!==key)return;
     const params=new URLSearchParams();
     if(key==="reviews"&&state.tables[key].filters.category)params.set("category",state.tables[key].filters.category);
@@ -110,7 +117,7 @@
     const active=state.tables.reviews.filters.category,stats=manualReviewStats(model),showingAcknowledged=active==="manual_exception"&&state.showAcknowledgedReviews;
     el("review-categories").innerHTML=`<div class="review-summary"><a class="${active==="manual_exception"?"badge caution":"text-link"}" href="#records/reviews?category=manual_exception">Manual Parser Exceptions: ${number(stats.active)} active</a><span>${number(stats.acknowledged)} acknowledged on this browser · ${number(stats.total)} retained · Access / request required: ${number(model.reviews.access_required)} · Other: ${number(model.reviews.other)}</span>${active==="manual_exception"&&stats.acknowledged?`<button id="toggle-acknowledged-reviews" class="text-button">${showingAcknowledged?"Hide":"Show"} acknowledged (${number(stats.acknowledged)})</button>`:""}${active?`<button id="clear-review-category" class="text-button" aria-label="Remove ${esc(reviewLabels[active])} filter">${esc(reviewLabels[active])} ×</button>`:""}</div><p>${active==="manual_exception"?(showingAcknowledged?"Showing active and browser-acknowledged parser exceptions. Acknowledgement is reversible and does not alter retained evidence.":"Showing unacknowledged records requiring manual parser review. Select a record to inspect its retained filing."):"Select Manual Parser Exceptions to review parsing issues. Access requests are a separate inventory."}</p>`;
     el("toggle-acknowledged-reviews")?.addEventListener("click",()=>{state.showAcknowledgedReviews=!state.showAcknowledgedReviews;state.tables.reviews.page=0;renderTable("reviews");el("toggle-acknowledged-reviews")?.focus({preventScroll:true});});
-    el("clear-review-category")?.addEventListener("click",()=>{state.tables.reviews.filters.category="";state.tables.reviews.page=0;el("reviews-category").value="";syncRecordRoute("reviews");renderTable("reviews");el("reviews-category").focus();});
+    el("clear-review-category")?.addEventListener("click",()=>{state.tables.reviews.filters.category="";state.tables.reviews.page=0;el("reviews-category").value="";syncTableRoute("reviews");renderTable("reviews");el("reviews-category").focus();});
   }
   function validateReviews(rows,model){
     if(!model)return;
@@ -121,16 +128,17 @@
   }
   function initTables(){for(const [key,def] of Object.entries(definitions)){
     state.tables[key]={query:"",filters:{},page:0,sort:def.date,descending:true,dateBasis:def.date,from:"",to:"",selected:""};
-    el(`panel-${key}`).innerHTML=`<div class="panel-header"><h3>${def.title}</h3><a href="data/${def.file}.csv" download>Download CSV ↓</a>${key==="runs"?'<a href="data/ai-runs.csv" download>AI runs CSV ↓</a>':""}</div><div class="controls"><label>Search<input id="${key}-search" type="search" placeholder="${esc(def.search)}"></label>${def.filters.map(field=>`<label>${filterLabel(field)}<select id="${key}-${field=== "transaction_type"?"type":field}"><option value="">${esc(allLabel(field))}</option></select></label>`).join("")}</div><div class="date-controls"><label>Date basis<select id="${key}-date-basis">${def.dates.map(d=>`<option value="${d}">${dateLabel(d)}</option>`).join("")}</select></label><label>From<input id="${key}-date-from" type="date"></label><label>Through<input id="${key}-date-to" type="date"></label><button id="${key}-clear">Clear filters</button></div><p id="${key}-count-label" class="result-count" role="status">Open this section to load retained records.</p><div class="table-wrap" tabindex="0" role="region" aria-label="${def.title} table, scroll for additional columns"><table><caption>${def.title} · click a column heading to sort</caption><thead><tr>${def.columns.map(([field,label])=>`<th scope="col" data-sort-field="${field}"><button data-sort="${field}" data-table="${key}">${label} ↕</button>${columnHelp[field]?` ${helpButton(columnHelp[field],label)}`:""}</th>`).join("")}</tr></thead><tbody id="${key}-body"></tbody></table></div><div class="pagination"><button id="${key}-previous">← Previous</button><span id="${key}-page"></span><button id="${key}-more">Next →</button></div>`;
+    el(`panel-${key}`).innerHTML=`<div class="panel-header"><h3>${def.title}</h3><a href="data/${def.file}.csv" download>Download CSV ↓</a>${key==="runs"?'<a href="data/ai-runs.csv" download>AI runs CSV ↓</a>':""}</div><div class="controls"><label>Search<input id="${key}-search" type="search" placeholder="${esc(def.search)}"></label>${def.filters.map(field=>`<label>${filterLabel(field)}<select id="${key}-${field=== "transaction_type"?"type":field}"><option value="">${esc(allLabel(field))}</option></select></label>`).join("")}</div><div class="date-controls"><label>Date basis<select id="${key}-date-basis">${def.dates.map(d=>`<option value="${d}">${dateLabel(d)}</option>`).join("")}</select></label><label>From<input id="${key}-date-from" type="date"></label><label>Through<input id="${key}-date-to" type="date"></label><button id="${key}-clear">Clear filters</button></div><p id="${key}-count-label" class="result-count" role="status">Open this section to load retained records.</p><div class="table-wrap" tabindex="0" role="region" aria-label="${def.title} table, scroll for additional columns"><table><caption>${def.title} · click a column heading to sort</caption><thead><tr>${def.columns.map(([field,label])=>`<th scope="col" data-sort-field="${field}"><button data-sort="${field}" data-table="${key}">${label} ↕</button>${columnHelp[field]?` ${helpButton(columnHelp[field],label)}`:""}</th>`).join("")}</tr></thead><tbody id="${key}-body"></tbody></table></div>${key==="ai"?'<div id="ai-receipt"></div>':""}<div class="pagination"><button id="${key}-previous">← Previous</button><span id="${key}-page"></span><button id="${key}-more">Next →</button></div>`;
     el(`${key}-search`).addEventListener("input",()=>{clearTimeout(state.tables[key].searchTimer);state.tables[key].searchTimer=setTimeout(()=>{state.tables[key].query=el(`${key}-search`).value.toLowerCase();state.tables[key].page=0;renderTable(key);},180);});
-    for(const field of def.filters)el(`${key}-${field==="transaction_type"?"type":field}`).addEventListener("change",e=>{state.tables[key].filters[field]=e.target.value;state.tables[key].page=0;if(key==="reviews"&&field==="category")syncRecordRoute(key);renderTable(key);});
+    for(const field of def.filters)el(`${key}-${field==="transaction_type"?"type":field}`).addEventListener("change",e=>{state.tables[key].filters[field]=e.target.value;state.tables[key].page=0;if(key==="reviews"&&field==="category")syncTableRoute(key);renderTable(key);});
     for(const [suffix,prop] of [["date-basis","dateBasis"],["date-from","from"],["date-to","to"]])el(`${key}-${suffix}`).addEventListener("change",e=>{state.tables[key][prop]=e.target.value;state.tables[key].page=0;renderTable(key);});
     el(`${key}-previous`).onclick=()=>{state.tables[key].page=Math.max(0,state.tables[key].page-1);renderTable(key);};
     el(`${key}-more`).onclick=()=>{state.tables[key].page++;renderTable(key);};
-    el(`${key}-clear`).onclick=()=>{resetTable(key);syncRecordRoute(key);renderTable(key);};
+    el(`${key}-clear`).onclick=()=>{resetTable(key);syncTableRoute(key);renderTable(key);el(`${key}-search`).focus();};
   }
   document.addEventListener("click",e=>{const b=e.target.closest("[data-sort]");if(!b)return;const t=state.tables[b.dataset.table];t.descending=t.sort===b.dataset.sort?!t.descending:false;t.sort=b.dataset.sort;t.page=0;renderTable(b.dataset.table);});}
   function cell(row,field,type){let v=get(row,field);if(["investor_edge_relevant_followable_alpha","investor_edge_sector_alpha","investor_edge_score"].includes(field)&&(["insufficient_data","unavailable","disabled","error","neutral"].includes(row.investor_edge_status)||row.investor_edge?.minimum_sample_met===false))v=null;if(field==="final_score")v=v??row.score;
+    if(type==="receipt"){const href=analysisHref(row,""),label=typeof row.ticker==="string"&&row.ticker.trim()?row.ticker:row.analysis_id;return href?`<a class="analysis-receipt-link" data-analysis-receipt="${esc(row.analysis_id)}" href="${esc(href)}" aria-label="View score receipt for ${esc(label)}">View receipt →</a>`:'<span class="muted">Unavailable</span>';}
     if(type==="review")return `<a class="record-link" href="${esc(reviewHref(row))}"><strong>${esc(row.filer||"Unknown filer")}</strong><small>${esc(row.report_id||row.review_id||"Record ID unavailable")}</small><span>Inspect record →</span></a><small>${esc([row.title,row.agency].filter(Boolean).join(" · "))}</small>${row.is_synthetic_test===true?'<small class="caution">TEST / SIMULATED</small>':""}`;
     if(type==="age")return `${esc(date(v))}<small>${esc(age(v))}</small>`;
     if(field==="category"){const acknowledged=reviewAcknowledgedAt(row);return `<span class="badge ${v==="manual_exception"?"caution":""}">${esc(reviewLabels[v]||"Uncategorized")}</span>${acknowledged?`<small class="success">✓ Acknowledged here ${esc(date(acknowledged))}</small>`:""}`;}
@@ -145,13 +153,58 @@
     if(field==="status"||field==="classification")return `<span class="badge">${esc(title(v||"Unknown"))}</span>`;
     return esc(v===null||v===undefined||v===""?"Unavailable":typeof v==="object"?JSON.stringify(v):v);
   }
+  const retainedText=value=>typeof value==="string"&&value.trim()?value:"Unavailable";
+  const retainedScalar=value=>typeof value==="string"&&value.trim()?value:typeof value==="number"&&Number.isFinite(value)?String(value):"Unavailable";
+  function retainedDate(value){
+    if(typeof value!=="string")return "Unavailable";
+    const raw=value.trim(),match=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2}))?$/);
+    if(!match)return "Unavailable";
+    const [,yearText,monthText,dayText,hourText="0",minuteText="0",secondText="0",zone="Z"]=match;
+    const year=Number(yearText),month=Number(monthText),day=Number(dayText),hour=Number(hourText),minute=Number(minuteText),second=Number(secondText);
+    const zoneValid=zone==="Z"||(()=>{const [zoneHour,zoneMinute]=zone.slice(1).split(":").map(Number);return zoneHour<=23&&zoneMinute<=59;})();
+    if(month<1||month>12||day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate()||hour>23||minute>59||second>59||!zoneValid||!Number.isFinite(Date.parse(raw)))return "Unavailable";
+    return date(raw);
+  }
+  function receiptComponents(value){
+    if(!value||typeof value!=="object"||Array.isArray(value))return '<p class="receipt-unavailable">Unavailable</p>';
+    const entries=Object.entries(value);
+    if(!entries.length)return '<p class="receipt-empty">No score components retained.</p>';
+    return `<dl class="facts receipt-facts">${entries.map(([name,component])=>fact(title(name),number(component))).join("")}</dl>`;
+  }
+  function receiptHardCaps(value){
+    if(!Array.isArray(value))return '<p class="receipt-unavailable">Unavailable</p>';
+    if(!value.length)return '<p class="receipt-empty">No hard caps retained for this analysis.</p>';
+    return `<ul class="receipt-cap-list">${value.map(item=>{
+      const cap=item&&typeof item==="object"&&!Array.isArray(item)?item:{};
+      return `<li><strong>${esc(retainedText(cap.reason))}</strong><span>Maximum retained score: ${esc(number(cap.maximum_score))}</span></li>`;
+    }).join("")}</ul>`;
+  }
+  function receiptFactors(value){
+    if(!Array.isArray(value))return '<p class="receipt-unavailable">Unavailable</p>';
+    if(!value.length)return '<p class="receipt-empty">None retained.</p>';
+    return `<ul class="receipt-factor-list">${value.map(item=>`<li>${esc(retainedText(item))}</li>`).join("")}</ul>`;
+  }
+  function receiptEvidence(row){
+    const retained=row.ai?.evidence_sources,source=safeUrl(row.official_source_url||row.source_url),seen=new Set(source?[source]:[]),additional=[];
+    if(Array.isArray(retained))for(const item of retained){
+      if(!item||typeof item!=="object"||Array.isArray(item))continue;
+      const url=safeUrl(item.url);if(!url||seen.has(url))continue;seen.add(url);
+      additional.push(link(url,retainedText(item.title)==="Unavailable"?"Evidence":item.title));
+    }
+    const status=!Array.isArray(retained)?'<span class="muted">Additional evidence unavailable</span>':additional.length?additional.join(""):retained.length?'<span class="muted">Additional evidence unavailable</span>':'<span class="muted">No additional evidence links retained</span>';
+    return `<div class="receipt-links">${PT.filingActions(row)}${status}</div>`;
+  }
+  function analysisReceipt(row){
+    const ticker=retainedText(row.ticker),classification=retainedText(row.classification);
+    return `<article class="analysis-receipt" aria-labelledby="selected-ai-title"><header class="receipt-heading"><div><p class="eyebrow">READ-ONLY SCORE RECEIPT</p><h3 id="selected-ai-title" tabindex="-1">${esc(ticker)} · ${esc(classification)}</h3><p>${esc(retainedText(row.filer))} / ${esc(retainedText(row.owner))}</p></div><a href="#signals" data-clear-analysis>Close receipt ×</a></header><p class="receipt-boundary">This receipt is a read-only view of retained published fields. It does not recalculate a score, reconstruct a modifier, infer missing stages, grade data quality, or change production evidence.</p><section><h4>Retained identity and scoring stages</h4><dl class="facts receipt-facts">${fact("Analysis ID",retainedText(row.analysis_id))}${fact("Retained classification",classification)}${fact("Analyzed",retainedDate(row.analyzed_at_utc))}${fact("Score method version",retainedScalar(row.score_method_version))}${fact("Rules version",retainedScalar(row.rules_version))}${fact("Prompt version",retainedScalar(row.prompt_version))}${fact("Final score",number(row.final_score))}${fact("Raw score",number(row.raw_score))}${fact("Base score",number(row.base_score))}${fact("Base raw score",number(row.base_raw_score))}${fact("Retained score field",number(row.score))}${fact("Investor Edge modifier",number(row.investor_edge_modifier))}${fact("AI confidence",number(row.ai?.confidence))}</dl></section><section><h4>Retained score components</h4>${receiptComponents(row.score_components)}</section><section><h4>Retained hard caps</h4>${receiptHardCaps(row.hard_caps)}</section><section><h4>Data and processing statuses</h4><dl class="facts receipt-facts">${fact("Parser confidence",retainedText(row.parse_confidence))}${fact("Document status",retainedText(row.document_status))}${fact("Market data status",retainedText(row.market?.data_status))}${fact("Quote status",retainedText(row.market?.quote_status))}${fact("Quote timestamp",retainedDate(row.market?.quote_timestamp_utc))}${fact("AI analysis status",retainedText(row.analysis_status))}${fact("External context status",retainedText(row.ai?.external_context_status))}${fact("Entry status",retainedText(row.entry_plan?.entry_status))}${fact("Investor Edge status",retainedText(row.investor_edge_status))}</dl></section><section class="receipt-factor-grid"><div><h4>Positive factors</h4>${receiptFactors(row.ai?.positive_factors)}</div><div><h4>Negative factors</h4>${receiptFactors(row.ai?.negative_factors)}</div><div><h4>Contradictory evidence</h4>${receiptFactors(row.ai?.contradictory_evidence)}</div></section><section><h4>Retained evidence links</h4>${receiptEvidence(row)}</section><p class="chart-note">READ ONLY · Unavailable means the exact retained field is missing or malformed. An empty hard-cap list means the record explicitly retained no hard caps.</p></article>`;
+  }
   function recordDetails(row,key){
     const review=key==="reviews",retainedReviews=(review?[row]:(state.data.reviews||[]).filter(r=>r.filing_available===true&&r.filing_key===row.filing_key)).filter(r=>r.is_synthetic_test!==true),manualReviews=retainedReviews.filter(r=>r.category==="manual_exception"),acknowledged=manualReviews.map(reviewAcknowledgedAt).filter(Boolean);
     const acknowledgementControls=manualReviews.map(item=>{const at=reviewAcknowledgedAt(item);return `<button type="button" data-review-ack="${esc(item.review_id)}" data-acknowledged="${at?"true":"false"}">${at?"Restore to active review":"Acknowledge manual review"}</button>`;}).join("");
     return `<tr class="record-details"><td colspan="${definitions[key].columns.length}"><h3 tabindex="-1" id="selected-${key}-title">Selected source record · ${esc(row.filer||row.report_id||"Unknown filer")}</h3><dl class="facts">${fact("Filing / source ID",row.report_id)}${fact("Retained record ID",review?row.review_id:row.filing_key)}${fact("Source / branch",[title(row.source),title(row.branch)].join(" / "))}${fact("Coverage status",title(row.filing_status||row.status||"Unavailable"))}${fact("Document date",date(row.filed_date))}${fact("Observed by PolitiTrack",date(row.observed_at_utc||row.first_seen_utc))}${fact("Review status",review?reviewLabels[row.category]:retainedReviews.length?reviewLabels[retainedReviews[0].category]:title(row.status))}${manualReviews.length?fact("Local acknowledgement",acknowledged.length===manualReviews.length?`Acknowledged on this browser ${date(acknowledged[0])}`:"Needs acknowledgement"):""}</dl><p class="record-reason">${esc(retainedReviews.map(r=>r.reason).filter(Boolean).join(" · ")||row.review_reason||"No retained review reason.")}</p>${PT.filingActions(row)}${acknowledgementControls?`<div class="review-acknowledgement-actions">${acknowledgementControls}</div>`:""}<p class="chart-note">${review?"No matching filing is retained in this publication. This is the original review record. ":""}${manualReviews.length?`Acknowledgement belongs to this browser${reviewAcknowledgementStorageAvailable?" and persists on this device":" only until this page closes because storage is unavailable"}; it does not resolve, delete, or modify the production review record. `:""}Production evidence remains read-only. Parser retry actions are not available from this dashboard.</p><a href="#records/reviews?category=manual_exception">Back to active Manual Parser Exceptions →</a></td></tr>`;
   }
   function renderTable(key){const def=definitions[key],t=state.tables[key],data=state.data[key];if(!Array.isArray(data))return;
-    const rows=data.filter(r=>(!t.selected||String(r[key==="filings"?"filing_key":"review_id"])===t.selected)&&(!t.query||JSON.stringify(r).toLowerCase().includes(t.query))&&Object.entries(t.filters).every(([f,v])=>{
+    const rows=data.filter(r=>(!t.selected||selectionValue(key,r)===t.selected)&&(!t.query||JSON.stringify(r).toLowerCase().includes(t.query))&&Object.entries(t.filters).every(([f,v])=>{
       if(!v)return true;
       if(f==="category")return r.category===v&&r.is_synthetic_test!==true&&(v!=="manual_exception"||state.showAcknowledgedReviews||!reviewAcknowledgedAt(r));
       const sourceOption=f==="source"?state.model?.source_filters?.find(option=>option.value===v):null;
@@ -160,8 +213,9 @@
     rows.sort((a,b)=>{const av=get(a,t.sort),bv=get(b,t.sort),an=numeric(av),bn=numeric(bv);return (an!==null&&bn!==null?an-bn:String(av??"").localeCompare(String(bv??"")))*(t.descending?-1:1);});
     t.page=Math.min(t.page,Math.max(0,Math.ceil(rows.length/PAGE_SIZE)-1));const start=t.page*PAGE_SIZE,shown=rows.slice(start,start+PAGE_SIZE);
     const parserOnly=key==="reviews"&&t.filters.category==="manual_exception",reviewStats=manualReviewStats();
-    const empty=parserOnly?(reviewStats.active===0&&!state.showAcknowledgedReviews?"No unacknowledged records currently require manual parser review.":"No parser exceptions match these additional filters. Clear filters to see all review records."):t.selected?"This source record is not retained in the current publication. Clear filters to browse available records.":key==="portfolio"&&!data.length?"No open paper positions. No performance implied.":"No matching records.";
-    el(`${key}-body`).innerHTML=shown.length?shown.map(row=>`<tr ${key==="reviews"?`class="review-row ${reviewAcknowledgedAt(row)?"acknowledged":""}"`:""} ${t.selected?'data-selected-record="true"':""}>${def.columns.map(([field,label,type])=>`<td>${cell(row,field,type)}</td>`).join("")}</tr>${t.selected?recordDetails(row,key):""}`).join(""):`<tr><td colspan="${def.columns.length}" class="empty">${empty}</td></tr>`;
+    const empty=parserOnly?(reviewStats.active===0&&!state.showAcknowledgedReviews?"No unacknowledged records currently require manual parser review.":"No parser exceptions match these additional filters. Clear filters to see all review records."):t.selected?(key==="ai"?"This analysis ID is not retained in the current publication. Clear filters to browse available analyses.":"This source record is not retained in the current publication. Clear filters to browse available records."):key==="portfolio"&&!data.length?"No open paper positions. No performance implied.":"No matching records.";
+    el(`${key}-body`).innerHTML=shown.length?shown.map(row=>`<tr ${key==="reviews"?`class="review-row ${reviewAcknowledgedAt(row)?"acknowledged":""}"`:""} ${t.selected?'data-selected-record="true"':""}>${def.columns.map(([field,label,type])=>`<td>${cell(row,field,type)}</td>`).join("")}</tr>${t.selected&&key!=="ai"?recordDetails(row,key):""}`).join(""):`<tr><td colspan="${def.columns.length}" class="empty">${empty}</td></tr>`;
+    if(key==="ai")el("ai-receipt").innerHTML=t.selected&&shown.length===1?analysisReceipt(shown[0]):"";
     el(`panel-${key}`).querySelector(".table-wrap").hidden=parserOnly&&!rows.length&&reviewStats.active===0&&!state.showAcknowledgedReviews;
     if(parserOnly&&reviewStats.active===0&&!state.showAcknowledgedReviews)el(`${key}-count-label`).textContent=empty;
     else
@@ -189,6 +243,11 @@
       t.selected=selected||"";
       if(key==="reviews"){t.filters.category=Object.hasOwn(reviewLabels,category)?category:"";el("reviews-category").value=t.filters.category;reviewSummary();}
     }
+    if(section==="signals"){
+      const selected=params.get("analysis"),valid=typeof selected==="string"&&selected.trim()&&selected.length<=500?selected:"";
+      if(valid){resetTable("ai");}
+      state.tables.ai.selected=valid;
+    }
     document.querySelectorAll(".destination").forEach(n=>n.hidden=n.id!==section);document.querySelectorAll("[data-section]").forEach(a=>{if(a.dataset.section===section)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
     for(const key of ["filings","transactions","reviews"])el(`panel-${key}`).hidden=key!==state.record;
     document.querySelectorAll("[data-record]").forEach(a=>{if(a.dataset.record===state.record)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
@@ -196,7 +255,8 @@
     if(section==="investor-edge")await loadEdge();if(section==="records")await loadTable(state.record);if(section==="signals")await loadTable("ai");if(section==="agent")await loadTable("portfolio");if(section==="operations")await loadTable("runs");
     // Do not let a slow route move a newer page or steal an open dialog's focus.
     if(location.hash!==navigationHash||document.querySelector("dialog[open]"))return;
-    if(section==="records"&&state.tables[state.record].selected){const selected=el(`selected-${state.record}-title`);selected?.focus({preventScroll:true});selected?.scrollIntoView?.({block:"nearest"});}
+    if(section==="signals"&&state.tables.ai.selected){const selected=el("selected-ai-title")||el("ai-count-label");selected.setAttribute("tabindex","-1");selected.focus({preventScroll:true});selected.scrollIntoView?.({block:"nearest"});}
+    else if(section==="records"&&state.tables[state.record].selected){const selected=el(`selected-${state.record}-title`);selected?.focus({preventScroll:true});selected?.scrollIntoView?.({block:"nearest"});}
     else if(section==="records"&&state.record==="reviews"&&state.tables.reviews.filters.category==="manual_exception"){
       const links=el("reviews-body").querySelectorAll(".record-link"),target=links.length===1?links[0]:el("reviews-count-label");
       if(!links.length||links.length>1)target.setAttribute("tabindex","-1");
@@ -301,9 +361,11 @@
   initTables();window.addEventListener("hashchange",()=>navigate());el("refresh-button").onclick=loadData;
   document.addEventListener("click",e=>{
     if(e.defaultPrevented)return;
+    const clear=e.target.closest("[data-clear-analysis]");
+    if(clear){e.preventDefault();const id=state.tables.ai.selected;resetTable("ai");syncTableRoute("ai");renderTable("ai");const target=[...el("ai-body").querySelectorAll("[data-analysis-receipt]")].find(node=>node.dataset.analysisReceipt===id)||el("ai-search");target.focus({preventScroll:true});target.scrollIntoView?.({block:"nearest"});return;}
     const row=e.target.closest(".review-row");
     if(row&&!e.target.closest("a,button,input,select")&&!window.getSelection()?.toString())location.hash=row.querySelector(".record-link").getAttribute("href");
-    const same=e.target.closest('a[href^="#records/"]');if(same&&same.getAttribute("href")===location.hash)navigate();
+    const same=e.target.closest('a[href^="#records/"],a[href*="#signals?analysis="]');if(same){try{if(new URL(same.getAttribute("href"),location.href).hash===location.hash)navigate();}catch{}}
   });
   document.addEventListener("click",e=>{const a=e.target.closest("[data-ack]"),s=e.target.closest("[data-snooze]");if(a)notificationAction(()=>notifications.acknowledge(a.dataset.ack));if(s)notificationAction(()=>notifications.snooze(s.dataset.snooze,60));if(e.target.closest("[data-notification-link]"))el("notifications-dialog").close();});
   document.addEventListener("click",e=>{const button=e.target.closest("[data-review-ack]");if(button)setReviewAcknowledged(button.dataset.reviewAck,button.dataset.acknowledged!=="true");});
