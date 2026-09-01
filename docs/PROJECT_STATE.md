@@ -1,13 +1,27 @@
 # PolitiTrack project state
 
 Last updated: **2026-09-01 UTC**
-Status: **Scheduler freshness deployed from PR #20; live overdue health, state
-continuity and all served files verified. The device-clock follow-up is deployed
-and verified from PR #21. The redaction-boundary follow-up is deployed and
-verified from PR #23. Browser-local manual-review acknowledgement is deployed and
-verified from PR #25. Neutral zero-state attention colors are deployed and
-verified from PR #27. Acknowledgement-consistent Situation Brief wording is
-deployed and verified from PR #30. External scheduling remains inactive.**
+Status: **Runtime v2 cutover is implemented and locally verified on
+`codex/runtime-v2-cutover`. Exact protected Legislative, Executive and AI
+artifacts are frozen with provenance receipts. Google Cloud authentication and
+billing are active on the dedicated deployment project, but GitHub remains the
+production authority until the gates in `docs/RUNTIME_V2_CUTOVER.md` pass.
+Scheduler freshness deployed from PR #20; the deployed dashboard changes through
+PR #30 remain active. External scheduling remains inactive.**
+
+## Runtime v2 cutover — package ready for paused-schedule deployment
+
+Runtime v2 reuses the verified collectors and dashboard while replacing GitHub
+artifact coordination with PostgreSQL immutable snapshots, database advisory
+locks, Cloud Run jobs, Cloud Scheduler and private versioned Cloud Storage.
+Infrastructure is deliberately first-applied with schedules paused. Import,
+readiness and a four-interval acceptance period must pass before GitHub can stop
+being the production authority.
+
+The focused safety suite passes 14 tests, Python compilation passes, Terraform
+formats and validates with pinned providers, PowerShell parses, and Git diff
+validation passes. See `docs/RUNTIME_V2_CUTOVER.md` for exact inputs,
+deployment, acceptance and rollback.
 
 ## Situation Brief acknowledgement consistency — deployed and production-verified
 

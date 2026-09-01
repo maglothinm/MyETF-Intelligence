@@ -1,4 +1,4 @@
-"""Private evidence storage extending the application's Supabase architecture.
+"""Private evidence storage for Supabase, Google Cloud, and local development.
 
 Objects are content-addressed. The dev filesystem backend must be explicitly
 selected and must be outside every repository checkout. Public bucket URLs and
@@ -234,3 +234,81 @@ class SupabaseObjectStore:
                 if len(rows) < 1000:
                     break
                 offset += len(rows)
+
+
+class GoogleCloudObjectStore:
+    """Private Google Cloud Storage backend using the runtime service identity."""
+
+    def __init__(self, bucket, *, client=None, max_bytes=25 * 1024 * 1024):
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]", str(bucket or "")):
+            raise ValueError("VAULT_GCS_BUCKET must be a valid private bucket name")
+        if client is None:
+            try:
+                from google.cloud import storage
+            except ImportError as exc:  # pragma: no cover - deployment dependency
+                raise ValueError("Google Cloud Storage dependency is unavailable") from exc
+            client = storage.Client()
+        self.client = client
+        self.bucket = client.bucket(bucket)
+        self.max_bytes = max_bytes
+        try:
+            self.bucket.reload(timeout=15)
+            configuration = self.bucket.iam_configuration
+            if not configuration.uniform_bucket_level_access_enabled:
+                raise StorageError("Evidence bucket must use uniform access")
+            if configuration.public_access_prevention != "enforced":
+                raise StorageError("Evidence bucket must enforce public access prevention")
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Unable to verify private evidence bucket") from exc
+
+    def _blob(self, key):
+        return self.bucket.blob(validate_key(key))
+
+    def put(self, key, body, content_type):
+        if len(body) > self.max_bytes:
+            raise StorageError("Evidence object exceeds maximum size")
+        try:
+            self._blob(key).upload_from_string(body, content_type=content_type, timeout=30)
+        except Exception as exc:
+            raise StorageError("Evidence storage write unavailable") from exc
+
+    def get(self, key):
+        try:
+            blob = self._blob(key)
+            if not blob.exists(timeout=15):
+                return None
+            blob.reload(timeout=15)
+            if blob.size is None or blob.size > self.max_bytes:
+                raise StorageError("Evidence object exceeds maximum size")
+            body = blob.download_as_bytes(timeout=30)
+            if len(body) > self.max_bytes:
+                raise StorageError("Evidence object exceeds maximum size")
+            return body
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Evidence storage read unavailable") from exc
+
+    def delete(self, key):
+        try:
+            blob = self._blob(key)
+            if blob.exists(timeout=15):
+                blob.reload(timeout=15)
+                blob.delete(if_generation_match=blob.generation, timeout=30)
+        except Exception as exc:
+            raise StorageError("Evidence storage deletion unavailable") from exc
+
+    def list_objects(self):
+        try:
+            count = 0
+            for blob in self.client.list_blobs(self.bucket, prefix="filings/"):
+                count += 1
+                if count > 1_000_000:
+                    raise StorageError("Evidence inventory safety limit reached")
+                yield validate_key(blob.name)
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Evidence storage listing unavailable") from exc

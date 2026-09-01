@@ -1,11 +1,32 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: owner-requested acknowledgement-consistent Situation Brief. Scheduler
-[issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
-separate infrastructure task.
+Work: owner-authorized Runtime v2 cutover to remove GitHub Actions scheduling and
+artifact delivery from the operational path. The existing dashboard remains the
+production authority until migration acceptance is recorded.
 
-## Current task — Situation Brief acknowledgement consistency deployed and verified
+## Current task — Runtime v2 cloud cutover
+
+Branch `codex/runtime-v2-cutover` contains the deployable runtime, database
+migration, Cloud Run and Cloud Scheduler infrastructure, private storage,
+bootstrap, safety tests and cutover runbook. Google Cloud authentication and
+billing are active. The next safe action is a first cloud apply with schedules
+paused, followed by exact protected-state import and readiness verification.
+
+The frozen Legislative, Executive and AI artifacts are the newest successful
+canonical producer outputs observed before cutover. Their GitHub size, digest,
+workflow, exact run attempt, job and main-branch commit are bound into receipts;
+the raw inputs stay ignored under `.remediation/runtime-v2-imports`.
+
+Local verification passes 14 focused tests, Python compilation, Terraform format
+and validation, PowerShell parsing and Git diff validation. The deployment must
+still pass Cloud Build, database initialization, three generation-1 imports,
+dashboard readiness, one controlled producer cycle and four scheduled intervals.
+Do not disable GitHub schedules until all gates and browser acceptance pass.
+
+See `docs/RUNTIME_V2_CUTOVER.md` and decision D-2026-09-01-040.
+
+## Completed task — Situation Brief acknowledgement consistency deployed and verified
 
 [PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30) tested
 `9055d43ae56dd192b31b56c29a3ca14bd1422e96` in CI **33504447890 / 1** and
