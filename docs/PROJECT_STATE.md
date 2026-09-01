@@ -1,13 +1,43 @@
 # PolitiTrack project state
 
 Last updated: **2026-09-01 UTC**
-Status: **Scheduler freshness deployed from PR #20; live overdue health, state
-continuity and all served files verified. The device-clock follow-up is deployed
-and verified from PR #21. The redaction-boundary follow-up is deployed and
-verified from PR #23. Browser-local manual-review acknowledgement is deployed and
-verified from PR #25. Neutral zero-state attention colors are deployed and
-verified from PR #27. Acknowledgement-consistent Situation Brief wording is
-deployed and verified from PR #30. External scheduling remains inactive.**
+Status: **Production remains on main `e6d7ba5`; the score-receipt work in draft
+PR #33 is CI-validated but unmerged and undeployed. State-safety draft PR #3 is
+also unmerged and its production-promotion gates remain open. External scheduling
+remains inactive, and Relationship Intelligence remains gated.**
+
+## Score receipts and data-quality drilldown — draft, CI-validated, not deployed
+
+[Issue #32](https://github.com/maglothinm/MyETF-Intelligence/issues/32) tracks
+the bounded feature and [draft PR #33](https://github.com/maglothinm/MyETF-Intelligence/pull/33)
+contains it on `codex/score-receipts-data-quality`. Executable commit
+`cc0799697fc9c0e35cc445da7db0082191b4c2f7` passed PR CI
+[33518799144](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33518799144)
+/ attempt 1. This documentation is a successor to that exact validated executable
+tree; the final documentation head still requires its own PR-CI confirmation.
+
+The dashboard can now route to a retained AI analysis and show a read-only score
+receipt outside the wide table scroller. Each retained stage, component, cap,
+version, processing status, factor and safe evidence link is rendered
+independently. Missing or malformed values remain explicitly unavailable, an
+explicitly empty hard-cap list remains distinguishable from missing data, unsafe
+links and provider-error bodies are suppressed, and no total, stage, grade or
+quality judgment is inferred. Compact Wallboard cards remain unchanged.
+
+Local verification passed **561 Python tests**, **71 generated-dashboard DOM
+tests**, **6 filing-resolution DOM tests** and **11 scheduler-dispatch tests**.
+JavaScript syntax, `git diff --check` and the protected scoring/generator/workflow
+structural guard passed. Rendered desktop and 390px acceptance kept the complete
+receipt and close control visible, produced no page overflow, and reported no
+browser warnings or errors.
+
+This draft changes no scorer, Investor Edge computation, dashboard projection,
+generator, collector, parser, state writer, workflow, schedule, alert, credential,
+protected artifact, repository setting or deployment. It includes no Relationship
+Intelligence flag, graph, claim, agent, schema, fixture or implementation. Draft
+PR #3 remains separately blocked by the obsolete queued Actions runs, missing
+post-deployment Legislative success, Executive Healthchecks proof and Investor
+Edge market-data completion; PR #33 does not relax those gates.
 
 ## Situation Brief acknowledgement consistency — deployed and production-verified
 

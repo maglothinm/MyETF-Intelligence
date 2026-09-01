@@ -792,3 +792,36 @@ exceptions, no manual-exception phrase in the Situation Brief, the retained
 review's restore control, and zero browser errors. The acknowledgement was left
 in place on the verification browser. Protected publisher inputs and attempts
 remained unchanged.
+
+## D-2026-09-01-042 — Project score receipts from retained evidence without recomputation
+
+**Decision:** A dashboard score receipt is a read-only projection of one exact
+retained AI-analysis record. Retained score stages, components, hard caps,
+versions, statuses, factors and evidence are rendered independently. Missing or
+malformed values stay unavailable, an explicitly empty hard-cap list remains
+distinct from missing data, and the dashboard does not reconstruct a stage,
+total, grade or data-quality judgment.
+
+**Reason:** The owner needs to inspect why a retained signal looks the way it
+does without creating a second scoring authority in the presentation layer.
+Independently displaying source fields preserves provenance and exposes data
+gaps; recomputing or grading them in JavaScript could contradict the production
+scorer and turn missing evidence into a misleading conclusion.
+
+**Consequence:** Signal cards and the lazy AI ledger may deep-link by exact
+analysis ID to a full-width receipt outside the wide table scroller. Unsafe or
+duplicate URLs are suppressed, provider-error bodies are never rendered, strict
+date validation runs before localization, and compact Wallboard cards remain
+unchanged. The receipt changes no scorer, Investor Edge computation, dashboard
+projection, generator, collector, parser, state writer, workflow, schedule,
+alert, credential, protected artifact, repository setting or deployment
+authority. It establishes no Relationship Intelligence claim, graph, agent,
+schema or fixture.
+
+**Draft verification:** [Issue #32](https://github.com/maglothinm/MyETF-Intelligence/issues/32)
+tracks the work. [Draft PR #33](https://github.com/maglothinm/MyETF-Intelligence/pull/33)
+tested executable head `cc0799697fc9c0e35cc445da7db0082191b4c2f7` in
+[PR CI 33518799144 / attempt 1](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33518799144).
+Local verification passed 561 Python, 71 generated-dashboard DOM, 6 filing DOM
+and 11 scheduler-dispatch tests, plus rendered desktop and 390px acceptance. The
+PR remains draft, unmerged and undeployed.
