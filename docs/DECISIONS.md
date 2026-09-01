@@ -908,7 +908,7 @@ continuity and infrastructure gates.
 
 **Consequence:** Documentation and reporting must label the exact state as local,
 committed, pushed, PR-validated, merged, deployed, or production-verified. The
-reconciled tree passed 798 Python tests, the exact 17 CI Node tests, and
+reconciled tree passed 799 Python tests, the exact 17 CI Node tests, and
 `scripts/verify_repository.py`; Bash was unavailable locally, so `verify.sh`
 remains CI-required. This decision claims no current commit/push state or
 reconciliation commit SHA. Main promotion remains blocked until the obsolete

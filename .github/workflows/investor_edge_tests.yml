@@ -40,7 +40,7 @@ jobs:
           POLITITRACK_TEST_NODE: node
           POLITITRACK_TEST_NODE_MODULES: ${{ github.workspace }}/.remediation/ui-test-tools/node_modules
         run: |
-          python -m pytest -q
+          python -m pytest -q --basetemp="${RUNNER_TEMP}/polititrack-pytest"
           node --test tests/filing_resolution_dom.test.cjs
           node --test tests/scheduler_dispatch.test.mjs
       - name: Verify repository safety contract

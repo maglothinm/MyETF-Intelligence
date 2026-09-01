@@ -58,6 +58,13 @@ def test_steps_after_protected_upload_cannot_flip_the_authoritative_job_to_failu
         assert step.get("continue-on-error") == "true", step.get("name")
 
 
+def test_ci_keeps_pytest_runtime_storage_outside_the_checkout():
+    config = (ROOT / "pytest.ini").read_text(encoding="utf-8")
+    assert "--basetemp" not in config
+    ci = (WORKFLOWS / "investor_edge_tests.yml").read_text(encoding="utf-8")
+    assert '--basetemp="${RUNNER_TEMP}/polititrack-pytest"' in ci
+
+
 @pytest.mark.parametrize("filename", [
     "legislative_trade_tracker_v2.yml", "executive_trade_tracker.yml",
     "ai_filing_analyst.yml", "manual_test.yml", "filing_simulation.yml",
