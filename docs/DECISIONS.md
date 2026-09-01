@@ -683,3 +683,14 @@ consuming test or simulation evidence. Open contextual help also rehydrates when
 aging changes status, so its visible explanation cannot retain earlier green
 wording. This changes no collector, schedule, state artifact, trigger, alert,
 simulation writer, external scheduler activation or production credential.
+
+**Release verification:** [PR #23](https://github.com/maglothinm/MyETF-Intelligence/pull/23)
+tested `5aa8cef3127beba9c5a8fef002d1228710fb0b26` in CI `33498107710` and merged as
+`2c1be6040e2e6d8cda18991dbb2db38fe56a011a`. Main CI `33498254970` and Pages
+`33498255010` succeeded; Pages artifact `9796632425` is tied to that merge SHA.
+The live model remained conservatively stale because Executive evidence was
+228.833 minutes old even though the latest retained run succeeded. Legislative
+and AI were current; source data through remained the Legislative collector
+completion rather than the later dashboard build. Desktop, portrait, Wallboard,
+newest-first history and stale help were verified. External activation remains
+gated and GitHub cron remains enabled.

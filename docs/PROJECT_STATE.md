@@ -3,12 +3,12 @@
 Last updated: **2026-09-01 UTC**
 Status: **Scheduler freshness deployed from PR #20; live overdue health, state
 continuity and all served files verified. The device-clock follow-up is deployed
-and verified from PR #21. A post-release redaction-boundary fix is under local
-review; it is not deployed. External scheduling remains inactive.**
+and verified from PR #21. The redaction-boundary follow-up is deployed and
+verified from PR #23. External scheduling remains inactive.**
 
 This snapshot does not replace live GitHub evidence. Follow `AGENTS.md`.
 
-## Scheduler freshness — deployed and verified; external activation remains gated
+## Scheduler freshness — deployed and production-verified; external activation remains gated
 
 Post-release review on branch `codex/fix-freshness-redaction` found that the
 public sanitizer could remove the sole test/simulation marker before the actual
@@ -17,14 +17,35 @@ excluded row could become production evidence after redaction. The bounded fix
 retains a coarse nonproduction boolean in JSON and CSV, keeps private markers
 removed, and adds actual `build_site` regressions for Legislative, Executive and AI.
 Shared contextual help now updates its open explanation when monitoring ages.
-Local validation covers all **644 Python cases** (the full pass plus the
-five optional Node-backed cases run in their enabled subset), **67 generated DOM**
-cases and **36 native Operations** cases. The reviewed implementation is committed
-on the local branch, but is not yet pushed, reviewed in canonical CI, merged or
-deployed; it does not change protected state or scheduler authority.
+Local validation covers **639 passed / 5 skipped Python cases**, **67 generated
+DOM** cases, **36 native Operations** cases and **11 Worker** cases. Final focused
+review found no remaining issue. [PR #23](https://github.com/maglothinm/MyETF-Intelligence/pull/23)
+tested source `5aa8cef3127beba9c5a8fef002d1228710fb0b26` in CI
+**33498107710 / 1** and merged as **2c1be6040e2e6d8cda18991dbb2db38fe56a011a**.
+Main CI **33498254970 / 1** and Pages **33498255010 / 1** succeeded. Pages artifact
+**9796632425** has digest
+`sha256:73f3d2fd00f08345ea7fcd05c5992e75d03b4258bca56a0e183c6fca2d3a29a3`.
 
-Final deployed source is **5932a49950384fb9cb2bdab93c4093ea596789a1**, PR #21. Final Pages
-**33421979811 / 1**, artifact **9769279578**, and both final CI runs succeeded.
+The deployed model at **2026-09-01T10:37:02Z** reports overall **stale**:
+Legislative is current from `33497945694` at **10:33:47Z**; Executive is stale
+from `33479032715` at **06:48:12Z**, age **228.833m**, overdue **198.833m**, with
+six estimated missed intervals; AI is current from `33498060503` at **10:35:05Z**.
+The live header says **Executive polling overdue** and source data through
+**10:33:47Z** while the dashboard generation time remains separate. Operations
+shows the policy, next expected times, overdue and trigger evidence; its retained
+timeline is newest first. Desktop, 390px portrait and Wallboard checks passed,
+including concise stale help text. The publisher consumed state artifacts
+**9796523510** (Legislative), **9789261867** (Executive) and **9796566785** (AI).
+
+Real scheduled starts still do not meet the requested cadence. Across the current
+GitHub history, 18 Legislative gaps span **113–468.48m** (median **252.16m**) and
+14 Executive gaps span **146.1–534.62m** (median **327.73m**). This is production
+evidence for the independent scheduler; it is not treated as workflow success.
+No manual producer, simulation, credential, alert or protected-state mutation was
+performed for this release, and scheduler authority did not change.
+
+The prior clock checkpoint source was **5932a49950384fb9cb2bdab93c4093ea596789a1**, PR #21. Its Pages
+run **33421979811 / 1**, artifact **9769279578**, and both associated CI runs succeeded.
 All 250 live content files match; exact input lineage and unchanged protected
 state/simulator continuity passed at **2026-08-31T17:57:09Z**. Full local suite
 passed 633 tests with no skips; final clock checks passed 65 DOM and 42 native
