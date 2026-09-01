@@ -1,11 +1,35 @@
 # PolitiTrack active handoff
 
 Updated: **2026-09-01 UTC**
-Work: owner-requested neutral zero-state attention colors. Scheduler
+Work: owner-requested acknowledgement-consistent Situation Brief. Scheduler
 [issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) remains a
 separate infrastructure task.
 
-## Current task — neutral attention-counter zeroes deployed and verified
+## Current task — Situation Brief acknowledgement consistency deployed and verified
+
+[PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30) tested
+`9055d43ae56dd192b31b56c29a3ca14bd1422e96` in CI **33504447890 / 1** and
+merged it as `a2e23caaa268b04db063a360c132a57b12a3d1bb`. Main CI
+**33504566663 / 1** and Pages **33504566685 / 1** succeeded. Pages artifact
+**9799081517** has digest
+`sha256:d9907e5e7ec1069ac791773286339874c4f4db508b05c106d45d236f3bd5a877`.
+
+Acknowledging the sole Manual Parser Exception now removes its phrase from the
+Situation Brief as well as reducing the active card and queue to zero. The
+retained production review remains visible through **Show acknowledged** with a
+**Restore to active review** control. A cache-contract regression protects this
+behavior when a newly loaded application runs beside an older formatter shape.
+
+Final live acceptance used a hard refresh to load the exact deployed bundle,
+verified zero active, no manual-exception phrase, the retained restore control and
+zero browser errors, and left the acknowledgement in place. Publisher inputs
+remained Legislative **9796523510 / 33497945694 / 1**, Executive
+**9789261867 / 33479032715 / 1**, AI **9796566785 / 33498060503 / 1**, and
+simulator **9734790733 / 33320677882 / 1**. No protected state or production
+record changed. Decision D-2026-09-01-039 records the durable rule. No further
+rollout action is required; an already-open browser must hard refresh once.
+
+## Completed task — neutral attention-counter zeroes deployed and verified
 
 [PR #27](https://github.com/maglothinm/MyETF-Intelligence/pull/27) tested
 `f477c7938ce973cae898b221451577242a8cf248` in CI **33503192366 / 1** and
