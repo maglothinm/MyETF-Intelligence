@@ -66,7 +66,7 @@
   }
   function renderReviewAttention(model=state.model){
     if(!model)return;const stats=manualReviewStats(model);
-    el("attention-exceptions").textContent=number(stats.active);
+    const counter=el("attention-exceptions");counter.textContent=number(stats.active);counter.classList.toggle("attention-active",stats.active>0);
     el("attention-review-note").textContent=`${number(stats.acknowledged)} acknowledged here · ${number(model.reviews.access_required)} access/request required`;
   }
   function renderExceptionInventory(model=state.model){
@@ -254,7 +254,7 @@
     if(!m.signals.length){el("overview-signals").innerHTML=emptySignals(m);el("all-signals").innerHTML=emptySignals(m);}
   }
   function renderModel(m,change){m=healthClock(m);const summary={repository_url:m.repository_url};const signalCount=m.coverage.qualifying_signals;
-    el("attention-signals").textContent=number(signalCount);el("nav-signal-count").textContent=number(signalCount);
+    const signalCounter=el("attention-signals");signalCounter.textContent=number(signalCount);signalCounter.classList.toggle("attention-active",signalCount>0);el("nav-signal-count").textContent=number(signalCount);
     const delta=Object.values(change.changes||{}).filter(v=>typeof v==="number").reduce((a,b)=>a+b,0);el("attention-changes").textContent=change.firstVisit?"0":number(delta);el("attention-changes-note").textContent=change.firstVisit?"Baseline established quietly":"Changes on this browser";
     el("baseline-note").textContent=change.firstVisit?"Current records are your starting baseline. Future changes are tracked on this browser and device only.":"Compared with the previous successful review on this browser and device. Not synchronized account state.";
     renderReviewAttention(m);

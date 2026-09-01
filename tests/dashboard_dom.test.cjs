@@ -182,6 +182,7 @@ test('Overview loads only compact insights; sections fetch their ledgers lazily'
   assert.equal(env.byId('error-banner').hidden, true);
   assert.equal(env.byId('notification-count').textContent, '0');
   assert.equal(env.byId('attention-signals').textContent, '0');
+  assert.equal(env.byId('attention-signals').classList.contains('attention-active'), false);
   assert.ok(env.window.localStorage.getItem(KEY));
   await env.navigate('#records', () => env.byId('filings-body').children.length === 50);
   assert.deepEqual(env.requests, ['dashboard-insights', 'filings']);
@@ -748,6 +749,7 @@ test('one new qualifying signal renders one local event and unchanged refresh st
   model.coverage.qualifying_signals = 1;
   model.notifications.qualifying_signals = [{analysis_id: 'new-watch', classification: 'watchlist', ticker: 'DOMTEST', link: '#signals'}];
   await env.refresh();
+  assert.equal(env.byId('attention-signals').classList.contains('attention-active'), true);
   assert.equal(env.byId('notification-count').textContent, '1');
   assert.equal(env.byId('notification-list').querySelectorAll('.notification-item').length, 1);
   assert.match(env.byId('notification-summary').textContent, /1 actionable/);
@@ -1190,12 +1192,14 @@ test('parser links survive reload and history; chip and clear filters restore no
 test('manual parser acknowledgement clears local attention, persists, and remains reversible', async t => {
   const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception'}); t.after(env.close);
   await waitFor(() => env.byId('reviews-body').children.length === 1, 'active parser exception');
+  assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), true);
   env.byId('reviews-body').querySelector('.record-link').click();
   await waitFor(() => env.byId('selected-filings-title'), 'retained filing detail');
   const acknowledge = env.doc.querySelector('[data-review-ack]');
   assert.equal(acknowledge.textContent, 'Acknowledge manual review');
   acknowledge.click();
   await waitFor(() => env.byId('attention-exceptions').textContent === '0', 'acknowledged attention count');
+  assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), false);
   assert.match(env.byId('filings-body').textContent, /Acknowledged on this browser/);
   assert.equal(env.doc.activeElement.textContent, 'Restore to active review');
   const stored = env.window.localStorage.getItem('polititrack.manual-review-acknowledgements.v1');
@@ -1218,6 +1222,7 @@ test('manual parser acknowledgement clears local attention, persists, and remain
   await waitFor(() => reload.doc.querySelector('[data-review-ack]'), 'restore control');
   reload.doc.querySelector('[data-review-ack]').click();
   await waitFor(() => reload.byId('attention-exceptions').textContent === '1', 'restored active count');
+  assert.equal(reload.byId('attention-exceptions').classList.contains('attention-active'), true);
   assert.equal(reload.doc.activeElement.textContent, 'Acknowledge manual review');
   assert.deepEqual(env.errors, []); assert.deepEqual(reload.errors, []);
 });
