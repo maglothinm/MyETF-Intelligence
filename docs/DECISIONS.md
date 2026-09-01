@@ -726,3 +726,20 @@ merged as `95deb6263d616cfd32b14a1a8d7c1c50fc67eade`. Main CI
 restore, persistent presentation, the retained read-only boundary and zero browser
 errors, then returned the current review to active state. Protected publisher
 inputs and their producing attempts remained unchanged.
+
+## D-2026-09-01-038 — Reserve attention colors for active counts
+
+**Decision:** The Overview attention counters use the normal text color when
+their value is zero. Actionable Signals gains teal emphasis only when at least
+one signal is present; Manual Parser Exceptions gains amber emphasis only when
+at least one unacknowledged exception remains.
+
+**Reason:** A colored zero reads as an active positive or warning state even
+though there is nothing requiring attention. The count, not the card's fixed
+position, is the semantic source of emphasis.
+
+**Consequence:** Rendering toggles an explicit active-count class as data and
+browser-local acknowledgements change. This is presentation-only and changes no
+signal qualification, parser record, acknowledgement persistence, collector,
+schedule, alert, credential, protected artifact, production state, or deployment
+authority.
