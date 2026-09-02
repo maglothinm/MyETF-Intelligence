@@ -22,10 +22,14 @@ class StorageError(Exception):
 
 
 def validate_key(key: str) -> str:
-    if (not isinstance(key, str) or not key.startswith("filings/")
-            or "\\" in key or len(key) > 700
-            or any(part in ("", ".", "..") for part in key.split("/"))
-            or not re.fullmatch(r"[a-zA-Z0-9/_\-.]+", key)):
+    if (
+        not isinstance(key, str)
+        or not key.startswith("filings/")
+        or "\\" in key
+        or len(key) > 700
+        or any(part in ("", ".", "..") for part in key.split("/"))
+        or not re.fullmatch(r"[a-zA-Z0-9/_\-.]+", key)
+    ):
         raise StorageError("Invalid evidence object key")
     return key
 
@@ -37,7 +41,9 @@ def object_key(record: dict, digest: str, content_type: str) -> str:
     if source not in {"house", "senate", "oge", "executive_agency"}:
         raise StorageError("Invalid evidence source")
     # Stable opaque path components avoid exposing names and reject traversal.
-    filer = hashlib.sha256(str(record.get("filer_id") or "unknown").encode()).hexdigest()[:24]
+    filer = hashlib.sha256(
+        str(record.get("filer_id") or "unknown").encode()
+    ).hexdigest()[:24]
     filing = hashlib.sha256(record["filing_id"].encode()).hexdigest()
     suffix = "pdf" if content_type == "application/pdf" else "html"
     return validate_key(f"filings/{source}/{filer}/{filing}/{digest}.{suffix}")
@@ -63,7 +69,11 @@ class FileObjectStore:
         resolved = path.resolve()
         if self.root not in resolved.parents:
             raise StorageError("Evidence object path rejected")
-        if any(parent.is_symlink() for parent in (path, *path.parents) if parent != self.root.parent):
+        if any(
+            parent.is_symlink()
+            for parent in (path, *path.parents)
+            if parent != self.root.parent
+        ):
             raise StorageError("Evidence object symlink rejected")
         return path
 
@@ -120,6 +130,116 @@ class FileObjectStore:
             raise StorageError("Evidence storage listing unavailable") from exc
 
 
+class GoogleCloudObjectStore:
+    """Private GCS evidence store with fail-closed bucket-policy checks."""
+
+    def __init__(
+        self,
+        bucket,
+        *,
+        client=None,
+        max_bytes=25 * 1024 * 1024,
+    ):
+        if not isinstance(bucket, str) or not re.fullmatch(
+            r"[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]", bucket
+        ):
+            raise ValueError("VAULT_GCS_BUCKET must be a valid private bucket name")
+        if max_bytes < 1024 or max_bytes > 50 * 1024 * 1024:
+            raise ValueError("Evidence object size limit is invalid")
+        if client is None:
+            try:
+                from google.cloud import storage
+            except ImportError as exc:  # pragma: no cover - runtime dependency failure
+                raise StorageError("Google Cloud evidence storage is unavailable") from exc
+            client = storage.Client()
+        self.client = client
+        self.bucket = client.bucket(bucket)
+        self.max_bytes = max_bytes
+        try:
+            self.bucket.reload()
+            policy = self.bucket.iam_configuration
+            if not bool(policy.uniform_bucket_level_access_enabled):
+                raise StorageError(
+                    "Evidence bucket requires uniform bucket-level access"
+                )
+            if str(policy.public_access_prevention).strip().lower() != "enforced":
+                raise StorageError(
+                    "Evidence bucket requires public access prevention enforcement"
+                )
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Unable to verify private evidence bucket") from exc
+
+    def _blob(self, key):
+        return self.bucket.blob(validate_key(key))
+
+    def put(self, key, body, content_type):
+        if not isinstance(body, (bytes, bytearray)):
+            raise StorageError("Evidence object body must be bytes")
+        body = bytes(body)
+        if len(body) > self.max_bytes:
+            raise StorageError("Evidence object exceeds maximum size")
+        blob = self._blob(key)
+        try:
+            if blob.exists():
+                existing = self.get(key)
+                if existing != body:
+                    raise StorageError("Evidence object key already contains different bytes")
+                return
+            blob.upload_from_string(
+                body,
+                content_type=content_type,
+                if_generation_match=0,
+            )
+        except StorageError:
+            raise
+        except Exception as exc:
+            # A same-key race is safe only when the retained bytes are identical.
+            try:
+                if self.get(key) == body:
+                    return
+            except StorageError:
+                pass
+            raise StorageError("Evidence storage write unavailable") from exc
+
+    def get(self, key):
+        blob = self._blob(key)
+        try:
+            if not blob.exists():
+                return None
+            blob.reload()
+            if blob.size is None or int(blob.size) > self.max_bytes:
+                raise StorageError("Evidence object exceeds maximum size")
+            body = blob.download_as_bytes(if_generation_match=blob.generation)
+            if len(body) > self.max_bytes:
+                raise StorageError("Evidence object exceeds maximum size")
+            return body
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Evidence storage read unavailable") from exc
+
+    def delete(self, key):
+        blob = self._blob(key)
+        try:
+            if not blob.exists():
+                return
+            blob.reload()
+            blob.delete(if_generation_match=blob.generation)
+        except Exception as exc:
+            raise StorageError("Evidence storage deletion unavailable") from exc
+
+    def list_objects(self):
+        try:
+            for blob in self.client.list_blobs(self.bucket, prefix="filings/"):
+                yield validate_key(str(blob.name))
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Evidence storage listing unavailable") from exc
+
+
 class SupabaseObjectStore:
     """Bounded REST client to the existing Supabase private object store.
 
@@ -128,10 +248,25 @@ class SupabaseObjectStore:
     No bucket or permission is silently created or changed.
     """
 
-    def __init__(self, url, key, bucket, *, session=None, max_bytes=25 * 1024 * 1024):
+    def __init__(
+        self,
+        url,
+        key,
+        bucket,
+        *,
+        session=None,
+        max_bytes=25 * 1024 * 1024,
+    ):
         parsed = urlsplit(url)
-        if (parsed.scheme != "https" or not parsed.hostname or parsed.username
-                or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+            or parsed.path not in ("", "/")
+        ):
             raise ValueError("VAULT_SUPABASE_URL must be an HTTPS Supabase project origin")
         if not key or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", bucket or ""):
             raise ValueError("Private storage credentials and bucket are required")
@@ -154,25 +289,44 @@ class SupabaseObjectStore:
     def _request(self, method, path, **kwargs):
         headers = {**self.headers, **kwargs.pop("headers", {})}
         try:
-            response = self.session.request(method, self.base + path, headers=headers,
-                                            timeout=(5, 25), allow_redirects=False, **kwargs)
+            response = self.session.request(
+                method,
+                self.base + path,
+                headers=headers,
+                timeout=(5, 25),
+                allow_redirects=False,
+                **kwargs,
+            )
         except requests.RequestException as exc:
             raise StorageError("Private evidence store is temporarily unavailable") from exc
         if response.status_code not in {200, 201, 204}:
-            if response.status_code == 404 and method == "GET" and path.startswith("/object/"):
+            if (
+                response.status_code == 404
+                and method == "GET"
+                and path.startswith("/object/")
+            ):
                 return response
             response.close()
             raise StorageError("Private evidence store rejected the operation")
         return response
 
     def _object_path(self, key):
-        return "/object/" + quote(self.bucket, safe="") + "/" + quote(validate_key(key), safe="/")
+        return (
+            "/object/"
+            + quote(self.bucket, safe="")
+            + "/"
+            + quote(validate_key(key), safe="/")
+        )
 
     def put(self, key, body, content_type):
         if len(body) > self.max_bytes:
             raise StorageError("Evidence object exceeds maximum size")
-        response = self._request("POST", self._object_path(key), data=body,
-                                 headers={"Content-Type": content_type, "x-upsert": "true"})
+        response = self._request(
+            "POST",
+            self._object_path(key),
+            data=body,
+            headers={"Content-Type": content_type, "x-upsert": "true"},
+        )
         response.close()
 
     def get(self, key):
@@ -193,8 +347,11 @@ class SupabaseObjectStore:
             response.close()
 
     def delete(self, key):
-        response = self._request("DELETE", "/object/" + quote(self.bucket, safe=""),
-                                 json={"prefixes": [validate_key(key)]})
+        response = self._request(
+            "DELETE",
+            "/object/" + quote(self.bucket, safe=""),
+            json={"prefixes": [validate_key(key)]},
+        )
         response.close()
 
     def list_objects(self):
@@ -208,9 +365,16 @@ class SupabaseObjectStore:
             visited.add(prefix)
             offset = 0
             while True:
-                response = self._request("POST", "/object/list/" + quote(self.bucket, safe=""),
-                                         json={"prefix": prefix, "limit": 1000, "offset": offset,
-                                               "sortBy": {"column": "name", "order": "asc"}})
+                response = self._request(
+                    "POST",
+                    "/object/list/" + quote(self.bucket, safe=""),
+                    json={
+                        "prefix": prefix,
+                        "limit": 1000,
+                        "offset": offset,
+                        "sortBy": {"column": "name", "order": "asc"},
+                    },
+                )
                 try:
                     rows = response.json()
                 except ValueError as exc:
