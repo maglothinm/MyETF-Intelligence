@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 from .archive import extract_verified_zip
+from .mode import RuntimeModeError, resolve_runtime_mode
 from .runner import JobRunner
 from .store import NAMESPACES, PostgresSnapshotStore, StateStoreError
 
@@ -173,6 +174,7 @@ def _safe_gcs_object(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    selected_mode = resolve_runtime_mode() if args.command == "run" else None
     store = PostgresSnapshotStore()
     if args.command == "init-db":
         store.initialize_schema()
@@ -192,13 +194,19 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(store.status(), indent=2 if args.pretty else None, sort_keys=True))
         return 0
     if args.command == "run":
-        head = JobRunner(store).run(args.job)
-        print(json.dumps({
-            "result": "success",
-            "namespace": head.namespace,
-            "generation": head.generation,
-            "snapshot_sha256": head.snapshot_sha256,
-        }, sort_keys=True))
+        head = JobRunner(store, mode=selected_mode).run(args.job)
+        print(
+            json.dumps(
+                {
+                    "result": "success",
+                    "mode": selected_mode.value,
+                    "namespace": head.namespace,
+                    "generation": head.generation,
+                    "snapshot_sha256": head.snapshot_sha256,
+                },
+                sort_keys=True,
+            )
+        )
         return 0
     if args.command == "import-directory":
         head = _import_snapshot(store, args.namespace, args.directory, args.provenance, args.archive)
@@ -224,18 +232,23 @@ def main(argv: list[str] | None = None) -> int:
             _verify_import_archive(provenance, archive)
             extract_verified_zip(archive, extracted)
             head = _import_snapshot(store, args.namespace, extracted, receipt, archive)
-    print(json.dumps({
-        "result": "imported",
-        "namespace": head.namespace,
-        "generation": head.generation,
-        "snapshot_sha256": head.snapshot_sha256,
-    }, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "result": "imported",
+                "namespace": head.namespace,
+                "generation": head.generation,
+                "snapshot_sha256": head.snapshot_sha256,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (StateStoreError, OSError, ValueError) as exc:
+    except (RuntimeModeError, StateStoreError, OSError, ValueError) as exc:
         print(f"Runtime v2 refused the operation: {exc}", file=sys.stderr)
         raise SystemExit(1)
