@@ -18,12 +18,27 @@ variable "runtime_secrets" {
   description = "Map of container environment variable names to Secret Manager secret IDs."
   type        = map(string)
   default     = {}
+
+  validation {
+    condition     = !contains(keys(var.runtime_secrets), "POLITITRACK_MODE")
+    error_message = "POLITITRACK_MODE is a non-secret control and must be supplied through runtime_environment."
+  }
 }
 
 variable "runtime_environment" {
-  description = "Non-secret environment values applied to Runtime v2 producer jobs."
+  description = "Non-secret environment values applied to Runtime v2 producer jobs; POLITITRACK_MODE is mandatory."
   type        = map(string)
-  default     = {}
+  default = {
+    POLITITRACK_MODE = "shadow"
+  }
+
+  validation {
+    condition = contains(
+      ["shadow", "production"],
+      lower(trimspace(lookup(var.runtime_environment, "POLITITRACK_MODE", "")))
+    )
+    error_message = "runtime_environment must declare POLITITRACK_MODE as shadow or production."
+  }
 }
 
 variable "database_name" {
