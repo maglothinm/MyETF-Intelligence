@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from .mode import RuntimeMode, RuntimeModeError, resolve_runtime_mode
-from .store import PostgresSnapshotStore, SnapshotHead, StateStoreError
+from .store import PostgresSnapshotStore, SnapshotHead
 
 
 class RuntimeJobError(RuntimeError):
@@ -106,7 +106,11 @@ class JobRunner:
                 "POLITITRACK_MODE conflicts with the explicitly selected Runtime v2 mode"
             )
         self.environment["POLITITRACK_MODE"] = self.mode.value
-        self.source_revision = source_revision or self.environment.get("SOURCE_REVISION") or self._git_revision()
+        self.source_revision = (
+            source_revision
+            or self.environment.get("SOURCE_REVISION")
+            or self._git_revision()
+        )
         self.python = self.environment.get("PYTHON_EXECUTABLE") or sys.executable
         self.timeout = int(self.environment.get("RUNTIME_JOB_TIMEOUT_SECONDS", "3300"))
 
@@ -140,7 +144,6 @@ class JobRunner:
         )
         if self.mode.is_shadow:
             result["POLITITRACK_TRIGGER_SOURCE"] = "shadow"
-            result["POLITITRACK_EXTERNAL_CALLBACKS_ENABLED"] = "false"
             result["SUPPRESS_ALERTS"] = "true"
             result["SUPPRESS_NOTIFICATIONS"] = "true"
             for key in tuple(result):
@@ -149,6 +152,7 @@ class JobRunner:
                     marker in upper for marker in _SHADOW_EXTERNAL_ENVIRONMENT_MARKERS
                 ):
                     result.pop(key, None)
+            result["POLITITRACK_EXTERNAL_CALLBACKS_ENABLED"] = "false"
         return result
 
     def _execute(self, args: Sequence[str]) -> None:
@@ -170,15 +174,19 @@ class JobRunner:
         raise RuntimeJobError("unknown Runtime v2 job")
 
     def _notifications_suppressed(self) -> bool:
-        return self.mode.is_shadow or _truthy(
-            self.environment.get("SUPPRESS_NOTIFICATIONS")
-            or self.environment.get("POLITITRACK_RUNTIME_V2_SUPPRESS_NOTIFICATIONS")
+        mode = getattr(self, "mode", RuntimeMode.PRODUCTION)
+        environment = getattr(self, "environment", {})
+        return mode.is_shadow or _truthy(
+            environment.get("SUPPRESS_NOTIFICATIONS")
+            or environment.get("POLITITRACK_RUNTIME_V2_SUPPRESS_NOTIFICATIONS")
         )
 
     def _alerts_suppressed(self) -> bool:
-        return self.mode.is_shadow or _truthy(
-            self.environment.get("SUPPRESS_ALERTS")
-            or self.environment.get("POLITITRACK_RUNTIME_V2_SUPPRESS_AI_ALERTS")
+        mode = getattr(self, "mode", RuntimeMode.PRODUCTION)
+        environment = getattr(self, "environment", {})
+        return mode.is_shadow or _truthy(
+            environment.get("SUPPRESS_ALERTS")
+            or environment.get("POLITITRACK_RUNTIME_V2_SUPPRESS_AI_ALERTS")
         )
 
     def _tracker_command(self, branch: str, state_dir: Path, output_dir: Path) -> list[str]:
@@ -256,7 +264,9 @@ class JobRunner:
             output_dir.mkdir()
             parent = locked.restore(state_dir)
             _require_success_state(state_dir)
-            run_id = locked.start_run(branch, trigger, self.source_revision, self.mode.value)
+            run_id = locked.start_run(
+                branch, trigger, self.source_revision, self.mode.value
+            )
             side_effects_possible = False
             try:
                 command = self._tracker_command(branch, state_dir, output_dir)
@@ -326,7 +336,9 @@ class JobRunner:
             parent = locked.restore(ai_dir)
             for directory in (legislative, executive, ai_dir):
                 _require_success_state(directory)
-            run_id = locked.start_run("ai", trigger, self.source_revision, self.mode.value)
+            run_id = locked.start_run(
+                "ai", trigger, self.source_revision, self.mode.value
+            )
             side_effects_possible = False
             try:
                 command = self._ai_command(legislative, executive, ai_dir, workspace)
@@ -347,7 +359,9 @@ class JobRunner:
                             "legislative": _require_success_state(legislative)[
                                 "last_success_utc"
                             ],
-                            "executive": _require_success_state(executive)["last_success_utc"],
+                            "executive": _require_success_state(executive)[
+                                "last_success_utc"
+                            ],
                         },
                     },
                 )
@@ -368,17 +382,23 @@ class JobRunner:
             prefix="polititrack-dashboard-"
         ) as raw:
             workspace = Path(raw)
-            inputs = {name: workspace / name for name in ("legislative", "executive", "ai")}
+            inputs = {
+                name: workspace / name for name in ("legislative", "executive", "ai")
+            }
             input_heads = {
-                name: self.store.restore_latest(name, path) for name, path in inputs.items()
+                name: self.store.restore_latest(name, path)
+                for name, path in inputs.items()
             }
             head = locked.head()
             evidence = workspace / "workflow-evidence.json"
             evidence.write_text(
-                json.dumps(self.store.workflow_evidence(), indent=2) + "\n", encoding="utf-8"
+                json.dumps(self.store.workflow_evidence(), indent=2) + "\n",
+                encoding="utf-8",
             )
             site = workspace / "site"
-            run_id = locked.start_run("dashboard", trigger, self.source_revision, self.mode.value)
+            run_id = locked.start_run(
+                "dashboard", trigger, self.source_revision, self.mode.value
+            )
             try:
                 command = [
                     self.python,
@@ -400,9 +420,15 @@ class JobRunner:
                     ),
                 ]
                 self._execute(command)
-                for required in ("index.html", "filing-vault.html", "data/summary.json"):
+                for required in (
+                    "index.html",
+                    "filing-vault.html",
+                    "data/summary.json",
+                ):
                     if not (site / required).is_file():
-                        raise RuntimeJobError(f"dashboard output is missing {required}")
+                        raise RuntimeJobError(
+                            f"dashboard output is missing {required}"
+                        )
                 snapshot = locked.commit(
                     site,
                     expected_parent_sha256=head.snapshot_sha256 if head else None,
@@ -413,7 +439,8 @@ class JobRunner:
                         "mode": self.mode.value,
                         "trigger_source": trigger,
                         "inputs": {
-                            name: value.snapshot_sha256 for name, value in input_heads.items()
+                            name: value.snapshot_sha256
+                            for name, value in input_heads.items()
                         },
                     },
                     allow_initial=head is None,
@@ -421,5 +448,9 @@ class JobRunner:
                 locked.finish_run(run_id, status="success", snapshot=snapshot)
                 return snapshot
             except Exception as exc:
-                locked.finish_run(run_id, status="failure", error_code=type(exc).__name__)
+                locked.finish_run(
+                    run_id,
+                    status="failure",
+                    error_code=type(exc).__name__,
+                )
                 raise
