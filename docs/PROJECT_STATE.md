@@ -4,42 +4,32 @@
 **Canonical repository ID:** `1349678672`  
 **Current repository name:** `maglothinm/MyETF-Intelligence`  
 **Default branch:** `main`  
-**Active controlled work:** issue #36 / draft PR #37  
-**Active branch:** `codex/runtime-v2-shadow-integration`
+**Active controlled work:** issue #36 / PR #37  
+**Active branch:** `codex/runtime-v2-shadow-integration`  
+**Target endpoint:** ready for review, unmerged, undeployed
 
-This file records current operational truth. Historical release receipts remain in
+This file records current operational truth. Historical receipts remain in
 `validation/`, incident records, the append-only decision log, and Git history.
 
 ## Operational authority
 
-Canonical `main` and its existing GitHub Actions production-state contracts remain
-the operational authority. The currently published dashboard and existing
-Legislative, Executive, AI, simulation, and Filing Vault presentation behavior on
-`main` were not changed or redeployed by issue #36.
+Canonical `main`, its existing GitHub Actions production writers, and its retained
+protected-state contracts remain operational authority. The published dashboard
+and production Legislative, Executive, AI, simulation, and Filing Vault behavior
+on `main` were not redeployed or replaced by issue #36.
 
-Runtime v2 is **not** production authority. Under the current task it has not been:
+Runtime v2 is not production authority. It has not been merged, deployed,
+initialized against a live database, populated through a state import, scheduled,
+used for a live collector/AI/dashboard/simulation cycle, promoted to production
+mode, or used to publish Pages.
 
-- merged to `main`;
-- deployed to a cloud runtime;
-- initialized against a live PostgreSQL database;
-- populated through a protected-state import;
-- used for a live collector, AI, dashboard, or simulation cycle;
-- configured with an active schedule;
-- promoted to `POLITITRACK_MODE=production`;
-- used to publish GitHub Pages or replace any existing production state.
+Issue #36 did not inspect or change any external cloud project, account, billing,
+credential, database, bucket, service, job, or scheduler. Legacy
+`maglothinm/MyETF` remains excluded.
 
-No claim is made here about the current availability of an external cloud project,
-credentials, billing, database, bucket, or scheduler. Issue #36 did not inspect or
-change those resources.
+## Beast Runtime v2 Phases 1–2
 
-Legacy `maglothinm/MyETF` remains excluded from implementation and runtime work.
-
-## Active objective — Beast Runtime v2 Phases 1–2
-
-The current objective is limited to safe source consolidation and a reviewable
-shadow-mode implementation. Production cutover is outside this phase.
-
-### Verified starting evidence
+### Verified source and base
 
 | Evidence | Value |
 |---|---|
@@ -49,176 +39,138 @@ shadow-mode implementation. Production cutover is outside this phase.
 | Source merge base | `e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515` |
 | Intake divergence | 7 commits ahead, 2 commits behind `main` |
 | Preserved source-tree checkpoint | `7cceb9694ef7b50f71494f7c5b6baabe57520aa5` |
-| Active review | draft PR #37 |
+| Review branch | `codex/runtime-v2-shadow-integration` |
+| Review | PR #37 |
 
 The source branch remains unchanged. Its 29 committed Runtime v2 paths were copied
-by exact blob identity to a fresh branch based on verified `main`, avoiding an
-implicit merge or rebase of divergent history.
+by exact blob identity onto a fresh branch based on verified `main`, avoiding a
+merge or rebase of divergent history.
 
-The original ChatGPT Work filesystem is unavailable in the current environment.
-Local-only worktrees, stashes, reflogs, staged or unstaged patches, ignored files,
-and untracked files from that session are therefore **unverified**. This limitation
-does not authorize deployment, state initialization, or rebaselining. The complete
-remote-ref inventory and classifications are in
+The original ChatGPT Work filesystem is unavailable. Local-only worktrees,
+stashes, reflogs, staged/unstaged patches, ignored files, and untracked files from
+that session are **unverified**. That limitation is not permission to deploy,
+initialize, or rebaseline. The complete remote inventory is in
 `docs/CONSOLIDATION_INVENTORY.md`.
 
-## Phase 2 implementation state
+### Explicit mode contract
 
-### Explicit operating mode
-
-Producer execution now requires:
+Producer execution requires:
 
 ```text
 POLITITRACK_MODE=shadow|production
 ```
 
-Missing, blank, unknown, or conflicting values fail closed. The CLI resolves the
-mode before constructing its PostgreSQL store, and `JobRunner` validates the mode
-again before producer command construction.
+Missing, blank, unknown, or conflicting values fail closed. The CLI resolves mode
+before constructing its PostgreSQL store, and `JobRunner` validates it again.
 
-### Shadow-mode controls
-
-In `shadow` mode:
+In shadow mode:
 
 - Legislative and Executive commands always include `--no-notify`.
 - AI commands always include `--suppress-alerts`.
-- legacy suppression flags cannot opt out of those controls.
-- trigger evidence is normalized to `shadow`.
-- external notification/callback/Healthchecks/mail/webhook credentials and GitHub
-  Actions artifact credentials/context are removed from subprocess environments.
-- read-only analysis credentials are not removed solely because the mode is
-  shadow.
-- the mode is recorded in durable run rows, status output, workflow evidence, and
-  immutable snapshot provenance.
-- a failed run is not marked as possibly having emitted external side effects.
+- legacy suppression configuration cannot opt out.
+- trigger evidence is `shadow`.
+- notification, callback, Healthchecks, mail, webhook, Pushover, Slack, Discord,
+  Twilio, SendGrid, Mailgun, SMTP, and GitHub Actions artifact credentials/context
+  are removed from subprocess environments.
+- read-only analysis credentials are retained unless independently absent.
+- mode is recorded in run rows, status, workflow evidence, and snapshot provenance.
+- failed shadow runs are not classified as possibly having emitted external
+  effects.
 
-This is defense in depth around the existing producer flags; it does not make a
-live shadow cycle part of Phase 2 acceptance.
+Explicit production mode retains intended producer command behavior and existing
+explicit suppression settings. No production-mode process ran during this task.
 
-### Production compatibility
+### Durable state
 
-Explicit `production` mode retains the intended producer command behavior.
-Existing explicit notification or AI-alert suppression remains effective. Tests
-must prove that production command construction is not accidentally forced into
-shadow suppression. No production-mode process was run by this task.
+The Runtime v2 migration is additive. It adds and validates `runtime_mode`,
+backfills any earlier Runtime v2 run rows as production, and does not drop,
+recreate, initialize, import, replace, or advance a snapshot table or head.
+Database behavior in this phase is tested with source inspection and test doubles,
+not a live database.
 
-### Durable-state schema
+### Infrastructure source
 
-The Runtime v2 migration is additive:
+Terraform defaults producer environment to shadow and schedules to disabled. A
+Terraform check rejects enabled schedules unless mode is explicitly production.
+The mode is a non-secret control and cannot be supplied through the secret map.
+No Terraform, image build, cloud API, runtime, scheduler, or import action was
+executed.
 
-- adds `runtime_mode` to `runtime_job_runs`;
-- restricts it to `shadow` or `production`;
-- backfills any pre-existing Runtime v2 run rows as `production`;
-- does not drop/recreate state tables or heads;
-- does not initialize, import, replace, or advance a snapshot.
+### Filing Vault reconciliation
 
-All database behavior in this phase is validated through source inspection and
-test doubles, not a live database.
+The preserved source imported `GoogleCloudObjectStore` but did not include that
+class. This caused both focused Runtime v2 and standard repository CI to fail at
+collection. PR #37 implements the missing adapter with lazy Google Cloud imports,
+bounded object operations, content-addressed same-key verification, safe classified
+errors, and required uniform bucket-level access plus enforced public-access
+prevention. No external bucket was contacted.
 
-### Infrastructure declarations
+## CI and review evidence
 
-Terraform producer environment defaults to:
+PR #37 adds a read-only `Runtime v2 safety tests` workflow. It installs
+`requirements-runtime-v2.txt`, compiles the package, runs focused Runtime v2,
+shadow-mode, and dashboard-insight tests, and runs `verify.sh`. It invokes no
+producer and receives read-only repository permissions.
 
-```hcl
-POLITITRACK_MODE = "shadow"
-```
+The normal `Investor Edge tests` workflow provides broader integration coverage.
+The initial failure exposed the missing GCS adapter and was corrected rather than
+retried unchanged.
 
-Schedules remain disabled by default. A Terraform check rejects
-`schedules_enabled=true` unless the mode is explicitly `production`. Running
-Terraform, building/pushing the image, creating resources, importing state, or
-enabling schedules is prohibited in this phase.
+Checkpoint `1de2298bf1fbb0afcc772c6aedd82a6d4f9f4398` passed both required workflows:
 
-### Filing Vault runtime reconciliation
+| Workflow | Run | Conclusion |
+|---|---:|---|
+| Runtime v2 safety tests | `33638954917` | success |
+| Investor Edge tests | `33638955190` | success |
 
-The preserved source referenced a `GoogleCloudObjectStore` but did not include the
-class in `backend/filing_vault/storage.py`. This made both focused Runtime v2 and
-existing repository tests fail during import. Phase 2 added the missing adapter
-with:
+GitHub reported PR #37 mergeable against `main` at that checkpoint. It contains
+all executable, infrastructure, test, inventory, cutover-guide, project-state, and
+decision-log changes through D-041.
 
-- lazy Google Cloud imports, so non-cloud Vault tests retain their existing
-  dependency boundary;
-- maximum-object-size enforcement;
-- content-addressed same-key verification;
-- bounded get/list/delete behavior;
-- required uniform bucket-level access;
-- required enforced public-access prevention;
-- safe classified errors without leaking provider response details.
-
-No bucket or external storage service was contacted.
-
-## Test and CI state
-
-PR #37 includes a new read-only workflow, `Runtime v2 safety tests`, which:
-
-1. checks out the PR merge ref with read-only repository permissions;
-2. installs `requirements-runtime-v2.txt`;
-3. compiles `runtime_v2`;
-4. runs focused Runtime v2, shadow-mode, and dashboard-insight tests;
-5. runs the canonical `verify.sh` safety verifier;
-6. never invokes a producer, imports state, or receives a write token.
-
-The standard `Investor Edge tests` workflow also runs for integration coverage.
-The first exact-head attempt failed at test collection because the original source
-omitted the GCS adapter. That defect was implemented and a succeeding Runtime v2
-workflow was observed on code checkpoint
-`8e842fee952f6442066a8143ceb0b4c05e5c582e`. Final completion still requires both
-workflows to pass on the exact final PR head after documentation is complete.
-
-Do not treat an earlier green run as evidence for a later head.
+The final handoff and this state update are documentation-only successors. Their
+exact final head must pass both workflows before the PR leaves draft. PR #37 checks
+and metadata identify the exact final SHA because a tracked file cannot contain
+its own future commit SHA.
 
 ## Protected-state continuity
 
-Issue #36 has not read, downloaded, uploaded, replaced, or advanced:
+Issue #36 did not read, download, upload, replace, or advance:
 
 - `legislative-tracker-state`;
 - `executive-tracker-state`;
 - `ai-analysis-state`.
 
-It has not initialized or imported Runtime v2 state, changed seen IDs, altered
-transaction/filing ledgers, changed AI analyses or paper positions, changed
-Investor Edge history, delivered an alert, called a heartbeat, or changed a
-production dashboard.
+It did not change seen IDs, ledgers, analyses, paper positions, alerts, Investor
+Edge history, health callbacks, or a production dashboard. Historical artifact
+identifiers in the original source runbook were not revalidated and are not future
+migration authority. A later import requires fresh canonical provenance and the
+then-current one-writer/high-water-mark gates.
 
-Historical artifact identifiers copied into the old source-branch runbook are not
-revalidated by this phase and are not authority for a future import. Any later
-migration must obtain fresh canonical provenance and satisfy the then-current
-one-writer and high-water-mark gates.
-
-## Parallel work and exclusions
-
-The following remain separate:
+## Parallel work
 
 | Work | State | Treatment in issue #36 |
 |---|---|---|
 | PR #3 / `codex/production-remediation` | Draft | No merge or cherry-pick |
 | PR #33 / `codex/score-receipts-data-quality` | Draft | No merge or cherry-pick |
-| PR #35 / `codex/chatgpt-codex-phase-1-2` | Open | Separate continuity-documentation task |
-| `codex/runtime-v2-integration` | Temporary staging ref | Non-authoritative; preserved, not continued |
+| PR #35 / `codex/chatgpt-codex-phase-1-2` | Open | Separate documentation task |
+| `codex/runtime-v2-integration` | Temporary staging ref | Non-authoritative; preserved only |
 | `codex/runtime-v2-cutover` | Original source | Preserved unchanged |
 
-All other remote branches listed in `docs/CONSOLIDATION_INVENTORY.md` remain
-untouched.
+All other branches listed in `docs/CONSOLIDATION_INVENTORY.md` remain untouched.
 
-## Current gates
+## Completion gate
 
-Phase 1–2 is complete only when all of the following are true on the exact final
-PR #37 head:
-
-- focused Runtime v2 CI passes;
-- standard integration CI passes;
-- GitHub reports the PR mergeable;
-- project records identify the exact head and checks;
-- PR #37 is ready for review but remains unmerged;
-- no production, cloud, protected-state, credential, schedule, repository-setting,
-  or Pages action occurred.
+Phases 1–2 end only when both workflows succeed on the final documentation-only
+PR head, GitHub still reports mergeable, and PR #37 is marked ready for review but
+remains unmerged. No production/cloud/state/credential/schedule/settings/Pages
+action may occur.
 
 ## Next safe action
 
-Complete exact-head CI and review preparation for PR #37. Mark it ready for review
-only after all checks pass, then stop. Do not merge or deploy.
+Validate the final documentation-only head, record its SHA and run IDs in issue
+#36 and PR #37 metadata, mark PR #37 ready for review, then stop.
 
-A later explicitly authorized release phase must separately define fresh state
-provenance, import acceptance, disposable and/or live shadow validation, runtime
-readiness, dashboard/browser acceptance, production promotion, scheduler
-activation, one-writer transfer, rollback criteria, and retention of the prior
-runtime during observation.
+Fresh state provenance, isolated or live shadow acceptance, runtime/browser
+acceptance, production promotion, schedule activation, one-writer transfer,
+rollback drills, and retirement of the current GitHub production path require a
+later explicitly authorized release phase.
