@@ -12,6 +12,7 @@ from typing import Any, Mapping
 from flask import Flask, jsonify, send_from_directory
 from werkzeug.utils import safe_join
 
+from .mode import RuntimeMode
 from .store import PostgresSnapshotStore, StateStoreError
 
 
@@ -65,13 +66,19 @@ def create_app(
     store: PostgresSnapshotStore | None = None,
 ) -> Flask:
     app = Flask(__name__, static_folder=None)
-    app.config.update({key: value for key, value in os.environ.items() if key.startswith(("VAULT_", "RUNTIME_"))})
+    app.config.update({
+        key: value
+        for key, value in os.environ.items()
+        if key.startswith(("POLITITRACK_", "VAULT_", "RUNTIME_"))
+    })
     if config:
         app.config.update(config)
+    mode = RuntimeMode.from_environment(app.config)
     runtime_store = store or PostgresSnapshotStore()
     cache = DashboardCache(runtime_store, int(app.config.get("RUNTIME_DASHBOARD_REFRESH_SECONDS", 30)))
     app.extensions["runtime_v2_store"] = runtime_store
     app.extensions["runtime_v2_dashboard"] = cache
+    app.extensions["runtime_v2_mode"] = mode
 
     if _truthy(app.config.get("VAULT_ENABLED")):
         from backend.filing_vault import init_app
@@ -85,7 +92,7 @@ def create_app(
 
     @app.get("/healthz")
     def health():
-        return jsonify(status="ok", service="polititrack-runtime-v2")
+        return jsonify(status="ok", service="polititrack-runtime-v2", operating_mode=mode.value)
 
     @app.get("/readyz")
     def ready():

@@ -189,14 +189,23 @@ class LockedNamespace:
             dict(provenance),
         )
 
-    def start_run(self, job_name: str, trigger_source: str, source_revision: str) -> str:
+    def start_run(
+        self,
+        job_name: str,
+        trigger_source: str,
+        source_revision: str,
+        *,
+        operating_mode: str,
+    ) -> str:
+        if operating_mode not in {"shadow", "production"}:
+            raise StateStoreError("invalid runtime operating mode")
         run_id = str(uuid.uuid4())
         with closing(self.connection.cursor()) as cursor:
             cursor.execute(
                 "INSERT INTO runtime_job_runs "
-                "(run_id, job_name, namespace, trigger_source, source_revision, status, started_at) "
-                "VALUES (%s::uuid, %s, %s, %s, %s, 'running', now())",
-                (run_id, job_name, self.namespace, trigger_source, source_revision),
+                "(run_id, job_name, namespace, trigger_source, source_revision, operating_mode, status, started_at) "
+                "VALUES (%s::uuid, %s, %s, %s, %s, %s, 'running', now())",
+                (run_id, job_name, self.namespace, trigger_source, source_revision, operating_mode),
             )
         return run_id
 
@@ -320,7 +329,7 @@ class PostgresSnapshotStore:
                 ]
                 cursor.execute(
                     "SELECT DISTINCT ON (job_name) job_name, namespace, status, started_at, "
-                    "finished_at, error_code, side_effects_possible FROM runtime_job_runs "
+                    "finished_at, error_code, side_effects_possible, operating_mode FROM runtime_job_runs "
                     "ORDER BY job_name, started_at DESC"
                 )
                 runs = [
@@ -332,6 +341,7 @@ class PostgresSnapshotStore:
                         "finished_at": row[4].isoformat().replace("+00:00", "Z") if row[4] else None,
                         "error_code": row[5] or "",
                         "side_effects_possible": bool(row[6]),
+                        "operating_mode": row[7],
                     }
                     for row in cursor.fetchall()
                 ]
@@ -346,7 +356,7 @@ class PostgresSnapshotStore:
             with closing(connection.cursor()) as cursor:
                 for branch in ("legislative", "executive", "ai"):
                     cursor.execute(
-                        "SELECT run_id::text, status, started_at, finished_at, trigger_source, error_code "
+                        "SELECT run_id::text, status, started_at, finished_at, trigger_source, error_code, operating_mode "
                         "FROM runtime_job_runs WHERE namespace = %s ORDER BY started_at DESC LIMIT 7",
                         (branch,),
                     )
@@ -369,6 +379,8 @@ class PostgresSnapshotStore:
                             "error_count": 1 if conclusion == "failure" else 0,
                             "event_name": "external_scheduler",
                             "trigger_source": row[4] or "external_scheduler",
+                            "mode": row[6],
+                            "is_nonproduction": row[6] == "shadow",
                             "run_url": "",
                             "error_code": row[5] or "",
                         })

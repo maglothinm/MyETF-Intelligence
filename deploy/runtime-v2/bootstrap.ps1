@@ -7,6 +7,8 @@ param(
     [string]$RuntimeSecretsFile = '',
     [string]$RuntimeEnvironmentFile = '',
     [string]$MigrationDirectory = '',
+    [ValidateSet('shadow', 'production')]
+    [string]$Mode = 'shadow',
     [switch]$DisableVault,
     [switch]$EnableSchedules,
     [switch]$Apply
@@ -162,6 +164,7 @@ $baseVariables = @(
     "-var=vault_enabled=$($vaultEnabled.ToString().ToLowerInvariant())",
     "-var=runtime_secrets=$runtimeSecretsJson",
     "-var=runtime_environment=$runtimeEnvironmentJson",
+    "-var=polititrack_mode=$Mode",
     '-var=schedules_enabled=false'
 )
 
@@ -215,4 +218,4 @@ if ($EnableSchedules) {
     Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'apply', '-auto-approve') + $enabledVariables)
 }
 
-Write-Output "PolitiTrack Runtime v2 deployed at $serviceUrl from $sourceRevision. Schedules enabled: $($EnableSchedules.IsPresent)."
+Write-Output "PolitiTrack Runtime v2 deployed at $serviceUrl from $sourceRevision. Mode: $Mode. Schedules enabled: $($EnableSchedules.IsPresent)."

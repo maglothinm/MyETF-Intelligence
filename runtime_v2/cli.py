@@ -9,9 +9,11 @@ import re
 import shutil
 import sys
 import tempfile
+import os
 from pathlib import Path
 
 from .archive import extract_verified_zip
+from .mode import RuntimeMode, RuntimeModeError
 from .runner import JobRunner
 from .store import NAMESPACES, PostgresSnapshotStore, StateStoreError
 
@@ -173,6 +175,7 @@ def _safe_gcs_object(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    mode = RuntimeMode.from_environment(os.environ)
     store = PostgresSnapshotStore()
     if args.command == "init-db":
         store.initialize_schema()
@@ -186,15 +189,24 @@ def main(argv: list[str] | None = None) -> int:
             if not config.get("VAULT_DATABASE_URL") and not os.environ.get("DATABASE_URL"):
                 config["VAULT_ENGINE"] = sqlalchemy_engine()
             configured_service(config).init_schema()
-        print(json.dumps({"result": "runtime_v2_schema_created", "protected_state_changed": False}))
+        print(json.dumps({
+            "result": "runtime_v2_schema_created",
+            "operating_mode": mode.value,
+            "protected_state_changed": False,
+        }))
         return 0
     if args.command == "status":
-        print(json.dumps(store.status(), indent=2 if args.pretty else None, sort_keys=True))
+        print(json.dumps(
+            {"operating_mode": mode.value, **store.status()},
+            indent=2 if args.pretty else None,
+            sort_keys=True,
+        ))
         return 0
     if args.command == "run":
         head = JobRunner(store).run(args.job)
         print(json.dumps({
             "result": "success",
+            "operating_mode": mode.value,
             "namespace": head.namespace,
             "generation": head.generation,
             "snapshot_sha256": head.snapshot_sha256,
@@ -226,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
             head = _import_snapshot(store, args.namespace, extracted, receipt, archive)
     print(json.dumps({
         "result": "imported",
+        "operating_mode": mode.value,
         "namespace": head.namespace,
         "generation": head.generation,
         "snapshot_sha256": head.snapshot_sha256,
@@ -236,6 +249,6 @@ def main(argv: list[str] | None = None) -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (StateStoreError, OSError, ValueError) as exc:
+    except (RuntimeModeError, StateStoreError, OSError, ValueError) as exc:
         print(f"Runtime v2 refused the operation: {exc}", file=sys.stderr)
         raise SystemExit(1)

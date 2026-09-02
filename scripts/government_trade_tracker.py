@@ -1349,8 +1349,10 @@ def append_run_history(path: Path, result: TrackerResult) -> None:
         "historical_backfill": result.historical_backfill,
         "errors": result.errors,
         "run_url": run_url,
-        "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "event_name": os.environ.get("GITHUB_EVENT_NAME")
+        or ("runtime_v2" if os.environ.get("POLITITRACK_MODE") else "local"),
         "trigger_source": trigger_source(),
+        "mode": os.environ.get("POLITITRACK_MODE", ""),
         "run_attempt": run_attempt,
     }
     append_jsonl(path, (record,))

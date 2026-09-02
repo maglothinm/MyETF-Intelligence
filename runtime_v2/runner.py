@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from .mode import SideEffectPolicy
 from .store import PostgresSnapshotStore, SnapshotHead, StateStoreError
 
 
@@ -44,6 +45,8 @@ class JobRunner:
         self.store = store
         self.root = (repository_root or Path(__file__).resolve().parents[1]).resolve()
         self.environment = dict(os.environ if environment is None else environment)
+        self.side_effects = SideEffectPolicy.from_environment(self.environment)
+        self.mode = self.side_effects.mode
         self.source_revision = source_revision or self.environment.get("SOURCE_REVISION") or self._git_revision()
         self.python = self.environment.get("PYTHON_EXECUTABLE") or sys.executable
         self.timeout = int(self.environment.get("RUNTIME_JOB_TIMEOUT_SECONDS", "3300"))
@@ -71,7 +74,7 @@ class JobRunner:
             "POLITITRACK_TRIGGER_SOURCE": result.get("POLITITRACK_TRIGGER_SOURCE", "external_scheduler"),
             "SOURCE_REVISION": self.source_revision,
         })
-        return result
+        return self.side_effects.child_environment(result)
 
     def _execute(self, args: Sequence[str]) -> None:
         subprocess.run(
@@ -120,10 +123,17 @@ class JobRunner:
             output_dir.mkdir()
             parent = locked.restore(state_dir)
             _require_success_state(state_dir)
-            run_id = locked.start_run(branch, trigger, self.source_revision)
+            run_id = locked.start_run(
+                branch,
+                trigger,
+                self.source_revision,
+                operating_mode=self.mode.value,
+            )
             side_effects_possible = False
             try:
-                command = self._tracker_command(branch, state_dir, output_dir)
+                command = self.side_effects.tracker_command(
+                    self._tracker_command(branch, state_dir, output_dir)
+                )
                 if branch == "legislative":
                     command.extend(["--source", "all"])
                 else:
@@ -135,7 +145,7 @@ class JobRunner:
                         str(listings),
                     ])
                     command.extend(["--oge-listings-file", str(listings)])
-                side_effects_possible = True
+                side_effects_possible = self.side_effects.production_effects_allowed
                 self._execute(command)
                 if branch == "legislative":
                     self._execute([
@@ -153,6 +163,7 @@ class JobRunner:
                     provenance={
                         "authority": "runtime_v2",
                         "job": branch,
+                        "operating_mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
                     },
@@ -183,7 +194,12 @@ class JobRunner:
             parent = locked.restore(ai_dir)
             for directory in (legislative, executive, ai_dir):
                 _require_success_state(directory)
-            run_id = locked.start_run("ai", trigger, self.source_revision)
+            run_id = locked.start_run(
+                "ai",
+                trigger,
+                self.source_revision,
+                operating_mode=self.mode.value,
+            )
             try:
                 command = [
                     self.python,
@@ -197,8 +213,10 @@ class JobRunner:
                     "--analyses-csv", str(workspace / "ai-latest-analyses.csv"),
                     "--portfolio-csv", str(workspace / "ai-paper-portfolio.csv"),
                 ]
-                if _truthy(self.environment.get("SUPPRESS_ALERTS")):
-                    command.append("--suppress-alerts")
+                command = self.side_effects.ai_command(
+                    command,
+                    explicitly_suppressed=_truthy(self.environment.get("SUPPRESS_ALERTS")),
+                )
                 self._execute(command)
                 state = _require_success_state(ai_dir)
                 snapshot = locked.commit(
@@ -208,6 +226,7 @@ class JobRunner:
                     provenance={
                         "authority": "runtime_v2",
                         "job": "ai",
+                        "operating_mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
                         "inputs": {
@@ -223,7 +242,7 @@ class JobRunner:
                     run_id,
                     status="failure",
                     error_code=type(exc).__name__,
-                    side_effects_possible=True,
+                    side_effects_possible=self.side_effects.production_effects_allowed,
                 )
                 raise
 
@@ -237,7 +256,12 @@ class JobRunner:
             evidence = workspace / "workflow-evidence.json"
             evidence.write_text(json.dumps(self.store.workflow_evidence(), indent=2) + "\n", encoding="utf-8")
             site = workspace / "site"
-            run_id = locked.start_run("dashboard", trigger, self.source_revision)
+            run_id = locked.start_run(
+                "dashboard",
+                trigger,
+                self.source_revision,
+                operating_mode=self.mode.value,
+            )
             try:
                 command = [
                     self.python,
@@ -263,6 +287,7 @@ class JobRunner:
                     provenance={
                         "authority": "runtime_v2",
                         "job": "dashboard",
+                        "operating_mode": self.mode.value,
                         "trigger_source": trigger,
                         "inputs": {name: value.snapshot_sha256 for name, value in input_heads.items()},
                     },

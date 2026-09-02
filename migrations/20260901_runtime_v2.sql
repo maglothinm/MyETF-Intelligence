@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS runtime_job_runs (
     namespace text NOT NULL CHECK (namespace IN ('legislative', 'executive', 'ai', 'dashboard', 'simulation')),
     trigger_source text NOT NULL,
     source_revision text NOT NULL,
+    operating_mode text NOT NULL DEFAULT 'shadow' CHECK (operating_mode IN ('shadow', 'production')),
     status text NOT NULL CHECK (status IN ('running', 'success', 'failure', 'skipped')),
     started_at timestamptz NOT NULL DEFAULT now(),
     finished_at timestamptz,
@@ -37,6 +38,9 @@ CREATE TABLE IF NOT EXISTS runtime_job_runs (
     error_code text NOT NULL DEFAULT '',
     side_effects_possible boolean NOT NULL DEFAULT false
 );
+
+ALTER TABLE runtime_job_runs
+    ADD COLUMN IF NOT EXISTS operating_mode text NOT NULL DEFAULT 'shadow';
 
 CREATE INDEX IF NOT EXISTS runtime_job_runs_namespace_started
     ON runtime_job_runs(namespace, started_at DESC);

@@ -2,6 +2,10 @@ project_id = "your-billing-enabled-project-id"
 region     = "us-central1"
 image      = "us-central1-docker.pkg.dev/your-billing-enabled-project-id/polititrack/runtime-v2@sha256:replace-me"
 
+# Shadow is the fail-closed acceptance mode. Change to production only in the
+# separately authorized production-cutover phase.
+polititrack_mode = "shadow"
+
 # Values are existing Secret Manager secret IDs, never secret values. Database
 # access is passwordless through the runtime service account.
 runtime_secrets = {

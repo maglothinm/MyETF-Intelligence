@@ -9,6 +9,10 @@ from typing import Mapping
 def trigger_source(env: Mapping[str, str] | None = None) -> str:
     """An input labels a dispatch; it is never proof of scheduler authentication."""
     env = os.environ if env is None else env
+    runtime_mode = str(env.get("POLITITRACK_MODE") or "").strip().casefold()
+    runtime_trigger = str(env.get("POLITITRACK_TRIGGER_SOURCE") or "").strip()
+    if runtime_mode in {"shadow", "production"} and runtime_trigger == "external_scheduler":
+        return "external_scheduler"
     event = env.get("GITHUB_EVENT_NAME", "local")
     if event == "workflow_dispatch":
         return ("external_scheduler" if env.get("POLITITRACK_TRIGGER_SOURCE") == "external_scheduler"

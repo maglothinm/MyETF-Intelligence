@@ -30,6 +30,10 @@ locals {
       cpu      = "1"
     }
   }
+  producer_runtime_secrets = var.polititrack_mode == "shadow" ? {
+    for key, value in var.runtime_secrets : key => value
+    if length(regexall("(ALERT|CALLBACK|GMAIL|HEALTHCHECK|PUSHOVER|SMTP|WEBHOOK)", upper(key))) == 0
+  } : var.runtime_secrets
 }
 
 resource "google_project_service" "required" {
@@ -253,6 +257,10 @@ resource "google_cloud_run_v2_job" "producer" {
           value = "external_scheduler"
         }
         env {
+          name  = "POLITITRACK_MODE"
+          value = var.polititrack_mode
+        }
+        env {
           name  = "INSTANCE_CONNECTION_NAME"
           value = google_sql_database_instance.runtime.connection_name
         }
@@ -274,7 +282,7 @@ resource "google_cloud_run_v2_job" "producer" {
           }
         }
         dynamic "env" {
-          for_each = var.runtime_secrets
+          for_each = local.producer_runtime_secrets
           content {
             name = env.key
             value_source {
@@ -603,6 +611,10 @@ resource "google_cloud_run_v2_service" "web" {
       env {
         name  = "VAULT_ENABLED"
         value = tostring(var.vault_enabled)
+      }
+      env {
+        name  = "POLITITRACK_MODE"
+        value = var.polititrack_mode
       }
       env {
         name  = "VAULT_ALLOWED_ORIGINS"

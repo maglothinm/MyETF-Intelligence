@@ -3032,8 +3032,10 @@ def append_run_history(config: AnalystConfig, result: AnalystRunResult) -> None:
         "errors": result.errors,
         "warnings": result.warnings,
         "run_url": run_url,
-        "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "event_name": os.environ.get("GITHUB_EVENT_NAME")
+        or ("runtime_v2" if os.environ.get("POLITITRACK_MODE") else "local"),
         "trigger_source": trigger_source(),
+        "mode": os.environ.get("POLITITRACK_MODE", ""),
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
     }
     append_jsonl(config.ai_dir / "runs.jsonl", [record])

@@ -18,12 +18,33 @@ variable "runtime_secrets" {
   description = "Map of container environment variable names to Secret Manager secret IDs."
   type        = map(string)
   default     = {}
+
+  validation {
+    condition     = !contains(keys(var.runtime_secrets), "POLITITRACK_MODE")
+    error_message = "POLITITRACK_MODE is controlled by the dedicated polititrack_mode variable."
+  }
 }
 
 variable "runtime_environment" {
   description = "Non-secret environment values applied to Runtime v2 producer jobs."
   type        = map(string)
   default     = {}
+
+  validation {
+    condition     = !contains(keys(var.runtime_environment), "POLITITRACK_MODE")
+    error_message = "POLITITRACK_MODE is controlled by the dedicated polititrack_mode variable."
+  }
+}
+
+variable "polititrack_mode" {
+  description = "Validated Runtime v2 operating mode. Shadow is the fail-closed default."
+  type        = string
+  default     = "shadow"
+
+  validation {
+    condition     = contains(["shadow", "production"], var.polititrack_mode)
+    error_message = "polititrack_mode must be shadow or production."
+  }
 }
 
 variable "database_name" {
