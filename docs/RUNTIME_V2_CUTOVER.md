@@ -6,10 +6,15 @@ AI analyst, dashboard builder, and Filing Vault service while adding independent
 scheduling, PostgreSQL immutable snapshots, advisory locks, and private Google
 Cloud Storage.
 
-**Current status:** source integration only. Issue #36 / PR #37 implements Beast
-Phases 1–2. Runtime v2 is not merged, deployed, initialized, imported, scheduled,
-or production-authoritative. Canonical `main` and its existing GitHub Actions
-contracts remain authoritative.
+**Current status:** source integration only. Issue #36 / active PR #38 implements
+Beast Phases 1–2. Runtime v2 is not merged, deployed, initialized, imported,
+scheduled, or production-authoritative. Canonical `main` and its existing GitHub
+Actions contracts remain authoritative.
+
+Draft PR #37 was the green predecessor. It was closed without merge after the
+GitHub connector failed to clear its draft flag because of an incompatible
+GraphQL response schema. PR #38 is the non-draft successor from the same tested
+tree; the transition did not alter executable source or operational state.
 
 ## Current architecture proposal
 
@@ -37,8 +42,8 @@ POLITITRACK_MODE=production
 ```
 
 Missing, blank, unknown, or conflicting values fail closed before producer
-execution. Mode is recorded in run rows, status output, workflow evidence, and
-snapshot provenance.
+execution and PostgreSQL-store construction. Mode is recorded in run rows, status,
+workflow evidence, and snapshot provenance.
 
 ### Shadow mode
 
@@ -51,7 +56,7 @@ Shadow mode is the only mode permitted for pre-release acceptance work. It force
   and GitHub Actions artifact credentials/context from subprocess environments;
 - `side_effects_possible=false` for failed shadow runs.
 
-Shadow mode does **not** by itself authorize a live run. Phase 1–2 validation uses
+Shadow mode does **not** authorize a live run by itself. Phase 1–2 validation uses
 synthetic tests and source inspection only. A later release must identify a
 disposable or explicitly approved live database/storage boundary before invoking
 any producer.
@@ -85,8 +90,8 @@ image, database, bucket, secret, job, service, or scheduler exists.
 ## State migration policy
 
 Do not reuse artifact identifiers or local receipts copied into the original
-Runtime v2 source branch as future authority. They describe an earlier snapshot
-of production and were not revalidated during Phases 1–2.
+Runtime v2 source branch as future authority. They describe an earlier production
+snapshot and were not revalidated during Phases 1–2.
 
 A later migration must create a fresh receipt for each protected namespace and
 bind all of the following:
@@ -112,7 +117,7 @@ classified as production when the new mode column is introduced.
 
 ### Phase 1 — recovery and inventory
 
-Completed in PR #37 source history:
+Implemented in the active review history:
 
 - identify canonical base and all discoverable remote refs;
 - preserve the 29 committed source paths from `codex/runtime-v2-cutover` without
@@ -127,7 +132,7 @@ See `docs/CONSOLIDATION_INVENTORY.md`.
 
 ### Phase 2 — shadow-safe source integration
 
-Implemented for review in PR #37:
+Implemented for review in PR #38:
 
 - fail-closed mode contract;
 - central shadow command/environment enforcement;
@@ -138,8 +143,8 @@ Implemented for review in PR #37:
 - focused read-only pull-request CI and synthetic tests;
 - no merge, deployment, import, or live producer invocation.
 
-The required endpoint is a green, mergeable, ready-for-review PR that remains
-unmerged.
+The required endpoint is a green, mergeable, open-for-review PR that remains
+unmerged and undeployed.
 
 ### Phase 3 — isolated runtime provisioning and state acceptance
 
@@ -207,12 +212,13 @@ diagnosis. It does not:
 - delete evidence merely to make a later attempt appear clean.
 
 The prior GitHub production path remains available until a later release records
-that Runtime v2 has passed the complete production observation window.
+that Runtime v2 passed the complete production observation window.
 
 ## Current prohibition
 
-For PR #37, do not run the bootstrap script, Terraform, Cloud Build, Cloud Run,
+For PR #38, do not run the bootstrap script, Terraform, Cloud Build, Cloud Run,
 Cloud Scheduler, database initialization, state import, collectors, AI analyst,
 dashboard publisher, simulation, alert delivery, Healthchecks, Pages, secret
-changes, repository-setting changes, or protected-artifact operations. Finish
-exact-head CI and review preparation, then stop with the PR unmerged.
+changes, repository-setting changes, or protected-artifact operations. Complete
+exact-head CI and mergeability verification, then stop with the PR open,
+non-draft, unmerged, and undeployed.
