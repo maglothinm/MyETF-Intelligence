@@ -9,6 +9,7 @@ import pytest
 
 from runtime_v2.archive import SnapshotArchiveError, extract_verified_zip, pack_directory, unpack_directory
 from runtime_v2.cli import _normalize_import, _validated_provenance, _verify_import_archive
+from runtime_v2.mode import RuntimeMode, RuntimeModeError
 from runtime_v2.runner import JobRunner
 from runtime_v2.store import PostgresSnapshotStore, SnapshotHead, StateStoreError
 from backend.filing_vault.storage import GoogleCloudObjectStore, StorageError
@@ -154,6 +155,189 @@ def test_tracker_command_never_uses_repository_state_paths(tmp_path):
     rendered = " ".join(str(value) for value in command)
     assert str(tmp_path / "state" / "state.json") in rendered
     assert ".trade-tracker/legislative" not in rendered
+
+
+class _RunnerLock:
+    def __init__(self, owner, namespace):
+        self.owner = owner
+        self.namespace = namespace
+
+    def assert_retry_safe(self):
+        self.owner.retry_checks.append(self.namespace)
+
+    def head(self):
+        return SnapshotHead(
+            self.namespace,
+            1,
+            f"{self.namespace}-snapshot",
+            "d" * 64,
+            "2026-09-01T00:00:00Z",
+            "a" * 40,
+            {},
+        )
+
+    def restore(self, destination):
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "state.json").write_text(
+            '{"last_success_utc":"2026-09-01T00:00:00Z"}\n',
+            encoding="utf-8",
+        )
+        return self.head()
+
+    def start_run(self, job_name, trigger, revision, *, operating_mode):
+        self.owner.starts.append((job_name, trigger, revision, operating_mode))
+        return f"{job_name}-run"
+
+    def commit(self, source, **kwargs):
+        assert (source / "state.json").is_file()
+        self.owner.commits.append((self.namespace, kwargs))
+        return SnapshotHead(
+            self.namespace,
+            2,
+            f"{self.namespace}-successor",
+            "e" * 64,
+            "2026-09-02T00:00:00Z",
+            kwargs["source_revision"],
+            dict(kwargs["provenance"]),
+        )
+
+    def finish_run(self, run_id, **kwargs):
+        self.owner.finishes.append((run_id, kwargs))
+
+
+class _RunnerStore:
+    def __init__(self):
+        self.starts = []
+        self.commits = []
+        self.finishes = []
+        self.retry_checks = []
+
+    @contextmanager
+    def locked(self, namespace):
+        yield _RunnerLock(self, namespace)
+
+    def restore_latest(self, namespace, destination):
+        return _RunnerLock(self, namespace).restore(destination)
+
+
+def _capturing_runner(mode, store, executed, **extra_environment):
+    environment = {
+        "POLITITRACK_MODE": mode,
+        "HEALTHCHECKS_PING_URL": "https://hc-ping.com/production",
+        "LEGISLATIVE_HEALTHCHECKS_PING_URL": "https://hc-ping.com/legislative",
+        "PUSHOVER_API_TOKEN": "production-pushover-token",
+        "PUSHOVER_USER_KEY": "production-pushover-user",
+        "GMAIL_ADDRESS": "alerts@example.invalid",
+        "GMAIL_APP_PASSWORD": "production-gmail-password",
+        "ALERT_WEBHOOK_URL": "https://alerts.example.invalid/hook",
+        "NOTIFICATION_CALLBACK_URL": "https://alerts.example.invalid/callback",
+        "GH_TOKEN": "production-github-token",
+        **extra_environment,
+    }
+    runner = JobRunner(
+        store,
+        repository_root=Path(__file__).resolve().parents[1],
+        source_revision="a" * 40,
+        environment=environment,
+    )
+    runner._execute = lambda command: executed.append(list(command))
+    return runner
+
+
+def test_runtime_mode_defaults_to_shadow_and_rejects_unknown_values():
+    assert RuntimeMode.from_environment({}) is RuntimeMode.SHADOW
+    assert RuntimeMode.from_environment({"POLITITRACK_MODE": "production"}) is RuntimeMode.PRODUCTION
+    with pytest.raises(RuntimeModeError, match="invalid POLITITRACK_MODE"):
+        RuntimeMode.from_environment({"POLITITRACK_MODE": "enabled"})
+
+
+@pytest.mark.parametrize("branch", ["legislative", "executive"])
+def test_shadow_trackers_suppress_notifications_and_still_commit_state(branch):
+    store = _RunnerStore()
+    executed = []
+    runner = _capturing_runner("shadow", store, executed)
+
+    head = runner.run(branch)
+
+    tracker = next(command for command in executed if "government_trade_tracker.py" in " ".join(command))
+    assert "--no-notify" in tracker
+    healthchecks = [command for command in executed if "legislative_healthcheck.py" in " ".join(command)]
+    assert all("--validate-only" in command for command in healthchecks)
+    assert head.generation == 2
+    assert store.commits[-1][1]["provenance"]["operating_mode"] == "shadow"
+    assert store.starts[-1][3] == "shadow"
+    assert not any(
+        protected in " ".join(command)
+        for command in executed
+        for protected in ("legislative-tracker-state", "executive-tracker-state", "ai-analysis-state")
+    )
+
+    child = runner._env()
+    for key in (
+        "HEALTHCHECKS_PING_URL",
+        "LEGISLATIVE_HEALTHCHECKS_PING_URL",
+        "PUSHOVER_API_TOKEN",
+        "PUSHOVER_USER_KEY",
+        "GMAIL_ADDRESS",
+        "GMAIL_APP_PASSWORD",
+        "ALERT_WEBHOOK_URL",
+        "NOTIFICATION_CALLBACK_URL",
+        "GH_TOKEN",
+    ):
+        assert child[key] == ""
+    assert child["POLITITRACK_NOTIFICATIONS_ENABLED"] == "false"
+    assert child["POLITITRACK_PROTECTED_ARTIFACT_PUBLISHING"] == "false"
+
+
+def test_shadow_ai_suppresses_alerts_and_still_commits_state():
+    store = _RunnerStore()
+    executed = []
+    runner = _capturing_runner("shadow", store, executed)
+
+    head = runner.run("ai")
+
+    analyst = next(command for command in executed if "ai_filing_analyst.py" in " ".join(command))
+    assert "--suppress-alerts" in analyst
+    assert head.generation == 2
+    assert store.commits[-1][1]["provenance"]["operating_mode"] == "shadow"
+    assert store.starts[-1][3] == "shadow"
+
+
+@pytest.mark.parametrize(
+    ("job", "script", "suppression"),
+    [
+        ("legislative", "government_trade_tracker.py", "--no-notify"),
+        ("executive", "government_trade_tracker.py", "--no-notify"),
+        ("ai", "ai_filing_analyst.py", "--suppress-alerts"),
+    ],
+)
+def test_production_mode_permits_normal_side_effect_paths(job, script, suppression):
+    store = _RunnerStore()
+    executed = []
+    runner = _capturing_runner("production", store, executed)
+
+    runner.run(job)
+
+    producer = next(command for command in executed if script in " ".join(command))
+    assert suppression not in producer
+    child = runner._env()
+    assert child["PUSHOVER_API_TOKEN"] == "production-pushover-token"
+    assert child["GMAIL_APP_PASSWORD"] == "production-gmail-password"
+    assert child["HEALTHCHECKS_PING_URL"] == "https://hc-ping.com/production"
+    assert child["POLITITRACK_NOTIFICATIONS_ENABLED"] == "true"
+    assert store.starts[-1][3] == "production"
+    assert store.commits[-1][1]["provenance"]["operating_mode"] == "production"
+
+
+def test_shadow_contract_is_wired_into_terraform_and_database():
+    root = Path(__file__).resolve().parents[1]
+    variables = (root / "deploy/runtime-v2/terraform/variables.tf").read_text(encoding="utf-8")
+    infrastructure = (root / "deploy/runtime-v2/terraform/main.tf").read_text(encoding="utf-8")
+    migration = (root / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
+    assert 'default     = "shadow"' in variables
+    assert 'name  = "POLITITRACK_MODE"' in infrastructure
+    assert "producer_runtime_secrets" in infrastructure
+    assert "operating_mode text NOT NULL DEFAULT 'shadow'" in migration
 
 
 class _Cursor:

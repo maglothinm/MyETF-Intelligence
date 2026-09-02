@@ -85,6 +85,22 @@ publisher = texts["publish_trade_dashboard.yml"]
 manual = texts["manual_test.yml"]
 simulator = texts["filing_simulation.yml"]
 
+# Runtime v2 stays shadow-safe unless production is explicitly selected. The
+# canonical CI workflow must exercise this contract whenever its code changes.
+runtime_mode = (root / "runtime_v2" / "mode.py").read_text(encoding="utf-8")
+runtime_runner = (root / "runtime_v2" / "runner.py").read_text(encoding="utf-8")
+runtime_variables = (root / "deploy" / "runtime-v2" / "terraform" / "variables.tf").read_text(encoding="utf-8")
+runtime_infrastructure = (root / "deploy" / "runtime-v2" / "terraform" / "main.tf").read_text(encoding="utf-8")
+ci_workflow = texts["investor_edge_tests.yml"]
+assert 'SHADOW = "shadow"' in runtime_mode
+assert 'PRODUCTION = "production"' in runtime_mode
+assert 'cls.SHADOW.value' in runtime_mode
+assert 'tracker_command' in runtime_runner and 'ai_command' in runtime_runner
+assert '"operating_mode": self.mode.value' in runtime_runner
+assert 'default     = "shadow"' in runtime_variables
+assert 'name  = "POLITITRACK_MODE"' in runtime_infrastructure
+assert 'tests/test_runtime_v2.py' in ci_workflow
+
 # Protected state is artifact-only. Dependency caching configured through setup-python
 # is acceptable; direct Actions cache restoration or promotion is not.
 all_workflows = "\n".join(texts.values())

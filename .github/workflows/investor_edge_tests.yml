@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - "scripts/collector_freshness.py"
+      - "runtime_v2/**"
+      - "deploy/runtime-v2/**"
+      - "migrations/20260901_runtime_v2.sql"
+      - "requirements-runtime-v2.txt"
+      - "tests/test_runtime_v2.py"
       - "scripts/collect_workflow_evidence.py"
       - "scripts/run_trigger.py"
       - "scripts/dashboard_insights.py"
@@ -64,6 +69,11 @@ on:
       - main
     paths:
       - "scripts/collector_freshness.py"
+      - "runtime_v2/**"
+      - "deploy/runtime-v2/**"
+      - "migrations/20260901_runtime_v2.sql"
+      - "requirements-runtime-v2.txt"
+      - "tests/test_runtime_v2.py"
       - "scripts/collect_workflow_evidence.py"
       - "scripts/run_trigger.py"
       - "scripts/dashboard_insights.py"
@@ -146,7 +156,7 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         run: |
-          python -m pip install --requirement requirements-ai.txt --requirement requirements-vault.txt pytest==9.0.2
+          python -m pip install --requirement requirements-runtime-v2.txt pytest==9.0.2
           npm install --prefix .remediation/ui-test-tools --no-save --package-lock=false --ignore-scripts --no-audit --no-fund jsdom@26.1.0 axe-core@4.10.3
       - name: Run Investor Edge, Filing Vault and integration tests
         env:
@@ -171,6 +181,7 @@ jobs:
             tests/test_filing_vault_providers.py \
             tests/test_filing_vault_ui.py \
             tests/test_create_manual_test_filing.py
+            tests/test_runtime_v2.py
           node --test tests/filing_resolution_dom.test.cjs
           node --test tests/scheduler_dispatch.test.mjs
       - name: Verify repository safety contract

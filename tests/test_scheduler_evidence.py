@@ -66,6 +66,49 @@ def test_trigger_is_a_safe_coarse_label(event, label, expected):
     assert trigger_source({"GITHUB_EVENT_NAME": event, "POLITITRACK_TRIGGER_SOURCE": label}) == expected
 
 
+@pytest.mark.parametrize("mode", ["shadow", "production"])
+def test_runtime_v2_external_scheduler_label_is_preserved(mode):
+    assert trigger_source({
+        "POLITITRACK_MODE": mode,
+        "POLITITRACK_TRIGGER_SOURCE": "external_scheduler",
+    }) == "external_scheduler"
+
+
+def test_shadow_runtime_evidence_cannot_advance_production_freshness(monkeypatch):
+    from scripts.dashboard_insights import build_insights
+
+    monkeypatch.setenv("GITHUB_SHA", SHA)
+    shadow = {
+        "run_key": "shadow-run",
+        "branch": "legislative",
+        "run_attempt": 1,
+        "evidence_source": "runtime_v2",
+        "started_utc": "2026-09-02T12:00:00Z",
+        "finished_utc": "2026-09-02T12:01:00Z",
+        "producer_job_started_utc": "2026-09-02T12:00:00Z",
+        "conclusion": "success",
+        "success": True,
+        "event_name": "external_scheduler",
+        "trigger_source": "external_scheduler",
+        "mode": "shadow",
+        "is_nonproduction": True,
+    }
+    observed = {
+        "available": True,
+        "branches": {
+            branch: {"available": True, "attempts": [shadow] if branch == "legislative" else []}
+            for branch in ("legislative", "executive", "ai")
+        },
+    }
+    model = build_insights(
+        {"runs": [], "ai_runs": [], "workflow_evidence": observed},
+        as_of="2026-09-02T12:05:00Z",
+    )
+    legislative = next(row for row in model["health"]["branches"] if row["branch"] == "legislative")
+    assert legislative["last_success_utc"] is None
+    assert legislative["status"] == "unknown"
+
+
 def test_actions_success_is_explicit_job_observation_without_collector_timestamp():
     result = evidence.collect(FakeAPI(), REPO, SHA, "2026-08-31T12:05:00Z")
     row = result["branches"]["legislative"]["attempts"][0]
