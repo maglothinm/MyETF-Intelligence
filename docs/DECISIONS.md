@@ -823,3 +823,38 @@ archives, tamper and traversal rejection, provenance, immutable import, lock
 ownership, state isolation, web serving and private storage policy. Python
 compilation, Terraform formatting and validation, PowerShell parsing and Git diff
 validation pass. Cloud Build and live acceptance remain deployment gates.
+
+## D-2026-09-02-041 — Require explicit Runtime v2 mode and source reconciliation before cutover
+
+**Decision:** D-2026-09-01-040 remains the proposed long-term architecture, but it
+does not authorize deployment directly from `codex/runtime-v2-cutover`. Preserve
+that branch as recovery evidence and integrate its committed content onto fresh
+canonical `main` ancestry. Every Runtime v2 producer requires an explicit
+`POLITITRACK_MODE=shadow|production`; missing, blank, unknown, or conflicting
+values fail closed before producer or PostgreSQL-store initialization.
+
+Shadow mode forcibly disables tracker notifications and AI alerts, removes
+external-delivery and GitHub Actions artifact credentials/context from producer
+subprocesses, identifies retained evidence as shadow, and records the selected mode
+in run rows and snapshot provenance. Terraform defaults to shadow with schedules
+disabled and rejects schedule activation unless mode is explicitly production.
+Production mode preserves intended producer behavior but is not authorized by
+this decision.
+
+**Reason:** The recovered source branch was divergent from current `main`, its
+original Work-only filesystem state was unavailable, and its committed tree
+referenced a Google Cloud Vault adapter that was not actually present. Treating
+that branch or stale local migration receipts as immediately deployable would
+convert unverified recovery state into production risk. An explicit mode contract
+also prevents an omitted environment value from silently selecting live producer
+behavior.
+
+**Consequence:** Issue #36 / PR #37 is limited to Beast Phases 1–2: remote-ref
+inventory, exact committed-source preservation, reconciliation, synthetic tests,
+and a reviewable shadow-safe branch. It may not merge, deploy, initialize/import
+state, invoke live producers, enable schedules, alter credentials/settings,
+publish Pages, contact Healthchecks, or read/write/replace protected production
+artifacts. Fresh provenance, isolated or live shadow acceptance, production
+promotion, single-writer transfer, schedule activation, rollback drills, and
+retirement of the GitHub production path require a later explicit release and
+acceptance receipt.
