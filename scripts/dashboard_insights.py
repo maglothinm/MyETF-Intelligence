@@ -430,6 +430,9 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
     if not key:
         key = hashlib.sha256((str(row.get("run_url") or "") + "|" + str(row.get("run_attempt") or "") + "|" + str(row.get("started_utc") or "") + "|" + str(row.get("finished_utc") or "")).encode()).hexdigest()[:24]
     status = _run_status(row)
+    evidence_source = row.get("evidence_source")
+    if evidence_source not in {"github_actions", "runtime_v2"}:
+        evidence_source = "retained_state"
     return {"id": f"{branch}:{key}", "branch": branch, "started_utc": optional_timestamp(row.get("started_utc")),
             "workflow_started_utc": optional_timestamp(row.get("workflow_started_utc")),
             "producer_job_started_utc": optional_timestamp(row.get("producer_job_started_utc")),
@@ -442,8 +445,8 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
             "error_count": max(len(_errors(row.get("errors"))), _count(row.get("error_count")) or 0),
             "errors": _errors(row.get("errors")), "run_url": safe_url(row.get("run_url")),
             "trigger_source": trigger_source(row),
-            "evidence_source": "github_actions" if row.get("evidence_source") == "github_actions" else "retained_state",
-            "state_evidence": row.get("evidence_source") != "github_actions",
+            "evidence_source": evidence_source,
+            "state_evidence": evidence_source != "github_actions",
             "new_record_count": _count(row.get("completed_count")) if branch == "ai" else _sum_counts(row.get("new_filing_counts"))}
 
 
@@ -485,9 +488,14 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
         observed_branch = _mapping(_mapping(observation.get("branches")).get(branch))
         available = observed_branch.get("available", observation.get("available")) if observation else None
         for raw in _rows(observed_branch.get("attempts")):
-            if not production_run(raw, branch) or raw.get("evidence_source") != "github_actions":
+            if not production_run(raw, branch) or raw.get("evidence_source") not in {"github_actions", "runtime_v2"}:
                 continue
             row = _run(raw, branch)
+            if raw.get("evidence_source") == "runtime_v2":
+                # Runtime v2 records success only after the immutable successor is
+                # committed, so its database evidence can advance freshness.
+                by_id[row["id"]] = row
+                continue
             prior = by_id.get(row["id"])
             if prior:
                 # Actions conclusions supplement a validated artifact, never replace

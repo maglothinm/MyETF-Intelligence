@@ -1,0 +1,9 @@
+.git/
+.github/
+.remediation/
+.pytest_cache/
+**/__pycache__/
+**/*.py[cod]
+**/node_modules/
+**/.terraform/
+trade-tracker/dashboard/site/

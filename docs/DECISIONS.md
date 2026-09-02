@@ -792,3 +792,34 @@ exceptions, no manual-exception phrase in the Situation Brief, the retained
 review's restore control, and zero browser errors. The acknowledgement was left
 in place on the verification browser. Protected publisher inputs and attempts
 remained unchanged.
+
+## D-2026-09-01-040 — Cut over scheduling and state through an accepted parallel runtime
+
+**Decision:** Reuse the verified PolitiTrack collectors and dashboard in Runtime
+v2, with Cloud Run jobs, Cloud Scheduler, PostgreSQL immutable snapshots and
+private versioned Cloud Storage. Keep GitHub as production authority until an
+explicit acceptance receipt records successful imports, readiness, a controlled
+cycle, four scheduled intervals and browser acceptance.
+
+**Reason:** The repeated stale condition is a scheduler delivery gap: expected
+GitHub schedule starts do not occur even when the last collector attempt
+succeeded. Rewriting proven collector logic would add risk without correcting
+that delivery boundary.
+
+**Consequence:** Every producer has a database advisory lock and publishes a
+hashed immutable generation with compare-and-swap parent verification. Migration
+accepts only exact canonical, successful, main-branch GitHub artifacts whose
+archives match their provenance receipts. Initial import cannot replace an
+existing head. Infrastructure first applies with schedules paused, and rollback
+pauses Runtime v2 without destroying its database or versioned evidence.
+
+Filing Vault source acknowledgement and agency-host settings remain explicit and
+fail closed; cutover does not infer authorization. GitHub schedules may be
+disabled only after the complete acceptance gate, preventing dual production
+writers and blank-state initialization.
+
+**Verification:** The focused suite passes 14 tests covering deterministic
+archives, tamper and traversal rejection, provenance, immutable import, lock
+ownership, state isolation, web serving and private storage policy. Python
+compilation, Terraform formatting and validation, PowerShell parsing and Git diff
+validation pass. Cloud Build and live acceptance remain deployment gates.

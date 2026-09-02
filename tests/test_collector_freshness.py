@@ -180,6 +180,20 @@ def action_attempt(**values):
             "error_count": 1, **values}
 
 
+def runtime_attempt(branch="legislative", minutes_ago=5, **values):
+    return {**run(branch, minutes_ago), "evidence_source": "runtime_v2",
+            "event_name": "external_scheduler", "trigger_source": "external_scheduler", **values}
+
+
+def test_runtime_v2_success_advances_freshness_after_immutable_commit():
+    source = payload(runs=[run(minutes_ago=70)], workflow_evidence=observation(runtime_attempt()))
+    row = branches(build_insights(source, as_of=AS_OF))["legislative"]
+    assert row["status"] == "success"
+    assert row["last_success_utc"] == stamp(5)
+    assert row["trigger_source"] == "external_scheduler"
+    assert row["timeline"][0]["evidence_source"] == "runtime_v2"
+
+
 def test_failed_actions_attempt_is_visible_without_mutating_successful_artifact_history():
     source = payload(runs=[run()], workflow_evidence=observation(action_attempt()))
     before = copy.deepcopy(source)
