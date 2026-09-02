@@ -16,6 +16,7 @@ from .database import DatabaseConfigurationError, connect, database_url
 
 
 NAMESPACES = frozenset({"legislative", "executive", "ai", "dashboard", "simulation"})
+RUNTIME_MODES = frozenset({"shadow", "production"})
 
 
 class StateStoreError(RuntimeError):
@@ -189,14 +190,30 @@ class LockedNamespace:
             dict(provenance),
         )
 
-    def start_run(self, job_name: str, trigger_source: str, source_revision: str) -> str:
+    def start_run(
+        self,
+        job_name: str,
+        trigger_source: str,
+        source_revision: str,
+        runtime_mode: str,
+    ) -> str:
+        if runtime_mode not in RUNTIME_MODES:
+            raise StateStoreError("invalid Runtime v2 mode")
         run_id = str(uuid.uuid4())
         with closing(self.connection.cursor()) as cursor:
             cursor.execute(
                 "INSERT INTO runtime_job_runs "
-                "(run_id, job_name, namespace, trigger_source, source_revision, status, started_at) "
-                "VALUES (%s::uuid, %s, %s, %s, %s, 'running', now())",
-                (run_id, job_name, self.namespace, trigger_source, source_revision),
+                "(run_id, job_name, namespace, trigger_source, source_revision, runtime_mode, "
+                "status, started_at) "
+                "VALUES (%s::uuid, %s, %s, %s, %s, %s, 'running', now())",
+                (
+                    run_id,
+                    job_name,
+                    self.namespace,
+                    trigger_source,
+                    source_revision,
+                    runtime_mode,
+                ),
             )
         return run_id
 
@@ -319,19 +336,20 @@ class PostgresSnapshotStore:
                     for row in cursor.fetchall()
                 ]
                 cursor.execute(
-                    "SELECT DISTINCT ON (job_name) job_name, namespace, status, started_at, "
-                    "finished_at, error_code, side_effects_possible FROM runtime_job_runs "
-                    "ORDER BY job_name, started_at DESC"
+                    "SELECT DISTINCT ON (job_name) job_name, namespace, runtime_mode, status, "
+                    "started_at, finished_at, error_code, side_effects_possible "
+                    "FROM runtime_job_runs ORDER BY job_name, started_at DESC"
                 )
                 runs = [
                     {
                         "job_name": row[0],
                         "namespace": row[1],
-                        "status": row[2],
-                        "started_at": row[3].isoformat().replace("+00:00", "Z"),
-                        "finished_at": row[4].isoformat().replace("+00:00", "Z") if row[4] else None,
-                        "error_code": row[5] or "",
-                        "side_effects_possible": bool(row[6]),
+                        "runtime_mode": row[2],
+                        "status": row[3],
+                        "started_at": row[4].isoformat().replace("+00:00", "Z"),
+                        "finished_at": row[5].isoformat().replace("+00:00", "Z") if row[5] else None,
+                        "error_code": row[6] or "",
+                        "side_effects_possible": bool(row[7]),
                     }
                     for row in cursor.fetchall()
                 ]
@@ -346,32 +364,36 @@ class PostgresSnapshotStore:
             with closing(connection.cursor()) as cursor:
                 for branch in ("legislative", "executive", "ai"):
                     cursor.execute(
-                        "SELECT run_id::text, status, started_at, finished_at, trigger_source, error_code "
-                        "FROM runtime_job_runs WHERE namespace = %s ORDER BY started_at DESC LIMIT 7",
+                        "SELECT run_id::text, status, started_at, finished_at, trigger_source, "
+                        "runtime_mode, error_code FROM runtime_job_runs "
+                        "WHERE namespace = %s ORDER BY started_at DESC LIMIT 7",
                         (branch,),
                     )
                     attempts = []
                     for row in cursor.fetchall():
                         conclusion = row[1]
-                        attempts.append({
-                            "run_key": row[0],
-                            "branch": branch,
-                            "run_attempt": 1,
-                            "evidence_source": "runtime_v2",
-                            "workflow_created_utc": row[2].isoformat().replace("+00:00", "Z"),
-                            "workflow_started_utc": row[2].isoformat().replace("+00:00", "Z"),
-                            "started_utc": row[2].isoformat().replace("+00:00", "Z"),
-                            "finished_utc": row[3].isoformat().replace("+00:00", "Z") if row[3] else None,
-                            "producer_job_started_utc": row[2].isoformat().replace("+00:00", "Z"),
-                            "producer_job_conclusion": conclusion,
-                            "conclusion": conclusion,
-                            "success": True if conclusion == "success" else (False if conclusion == "failure" else None),
-                            "error_count": 1 if conclusion == "failure" else 0,
-                            "event_name": "external_scheduler",
-                            "trigger_source": row[4] or "external_scheduler",
-                            "run_url": "",
-                            "error_code": row[5] or "",
-                        })
+                        attempts.append(
+                            {
+                                "run_key": row[0],
+                                "branch": branch,
+                                "run_attempt": 1,
+                                "evidence_source": "runtime_v2",
+                                "runtime_mode": row[5],
+                                "workflow_created_utc": row[2].isoformat().replace("+00:00", "Z"),
+                                "workflow_started_utc": row[2].isoformat().replace("+00:00", "Z"),
+                                "started_utc": row[2].isoformat().replace("+00:00", "Z"),
+                                "finished_utc": row[3].isoformat().replace("+00:00", "Z") if row[3] else None,
+                                "producer_job_started_utc": row[2].isoformat().replace("+00:00", "Z"),
+                                "producer_job_conclusion": conclusion,
+                                "conclusion": conclusion,
+                                "success": True if conclusion == "success" else (False if conclusion == "failure" else None),
+                                "error_count": 1 if conclusion == "failure" else 0,
+                                "event_name": "external_scheduler",
+                                "trigger_source": row[4] or "external_scheduler",
+                                "run_url": "",
+                                "error_code": row[6] or "",
+                            }
+                        )
                     branches[branch] = {"available": bool(attempts), "attempts": attempts}
             return {
                 "schema_version": 1,
