@@ -32,7 +32,7 @@ locals {
   }
   producer_runtime_secrets = var.polititrack_mode == "shadow" ? {
     for key, value in var.runtime_secrets : key => value
-    if length(regexall("(ALERT|CALLBACK|GMAIL|HEALTHCHECK|PUSHOVER|SMTP|WEBHOOK)", upper(key))) == 0
+    if length(regexall("(ACTIONS_|ALERT|BROKERAGE|CALLBACK|GITHUB_TOKEN|GH_TOKEN|GMAIL|HEALTHCHECK|NOTIFICATION|NOTIFY|PUSHOVER|SMTP|WEBHOOK)", upper(key))) == 0
   } : var.runtime_secrets
 }
 

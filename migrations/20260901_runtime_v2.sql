@@ -42,6 +42,21 @@ CREATE TABLE IF NOT EXISTS runtime_job_runs (
 ALTER TABLE runtime_job_runs
     ADD COLUMN IF NOT EXISTS operating_mode text NOT NULL DEFAULT 'shadow';
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'runtime_job_runs'::regclass
+          AND conname = 'runtime_job_runs_operating_mode_check'
+    ) THEN
+        ALTER TABLE runtime_job_runs
+            ADD CONSTRAINT runtime_job_runs_operating_mode_check
+            CHECK (operating_mode IN ('shadow', 'production'));
+    END IF;
+END
+$$;
+
 CREATE INDEX IF NOT EXISTS runtime_job_runs_namespace_started
     ON runtime_job_runs(namespace, started_at DESC);
 

@@ -60,11 +60,16 @@ For example:
 
 ```json
 {
-  "OPENAI_API_KEY": "projects/example/secrets/openai-api-key",
-  "PUSHOVER_APP_TOKEN": "projects/example/secrets/pushover-app-token",
-  "PUSHOVER_USER_KEY": "projects/example/secrets/pushover-user-key"
+  "OPENAI_API_KEY": "polititrack-openai-api-key",
+  "PUSHOVER_APP_TOKEN": "polititrack-pushover-app-token",
+  "PUSHOVER_USER_KEY": "polititrack-pushover-user-key"
 }
 ```
+
+Without `-Apply`, the bootstrap performs only local Terraform formatting,
+initialization with the backend disabled, and validation. It does not authenticate
+to Google Cloud, build an image, enable an API, create a bucket, change IAM, or
+apply infrastructure.
 
 Source acknowledgement settings for Filing Vault default to empty and fail
 closed. They must be supplied from the existing, reviewed policy; deployment

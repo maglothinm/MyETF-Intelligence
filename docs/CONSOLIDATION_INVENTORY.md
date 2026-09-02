@@ -10,6 +10,24 @@ Phase 2 Runtime v2 integration candidate. It does not authorize deployment,
 cutover, schedule changes, protected-state writes, or merging another pull
 request.
 
+## Phase 2 final safety disposition
+
+The integration at `3bdf187dce472fab0843b9ca0524d0bdbcfbb217` was preserved as
+the immutable review base. Final work moved to the new branch
+`codex/runtime-v2-handoff-final-20260902`; the earlier
+`codex/runtime-v2-integration` branch was not rewritten.
+
+- **KEEP:** the integrated Runtime v2 implementation, frozen provenance receipts,
+  verified external rescue bundle, and ignored local migration inputs.
+- **FIXED:** stale `verify.sh` manifest digest; missing additive database CHECK
+  constraint; omitted CI shell continuation; mutating bootstrap validation path;
+  and incomplete Terraform shadow-secret exclusion.
+- **UNCHANGED:** all Runtime v1 producer workflows and protected artifact names;
+  PR #3 and PR #33 remain independent; no local artifact became source authority.
+- **NOT AUTHORIZED:** cloud apply, schedule activation, production mode, external
+  notification, Runtime v1 retirement, protected-state publication, rebaseline,
+  force-push, or merge.
+
 ## Rescue record
 
 The external rescue root is:

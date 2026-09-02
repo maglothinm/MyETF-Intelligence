@@ -1,30 +1,34 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-01 UTC**
-Work: owner-authorized Runtime v2 cutover to remove GitHub Actions scheduling and
-artifact delivery from the operational path. The existing dashboard remains the
-production authority until migration acceptance is recorded.
+Updated: **2026-09-02 UTC**
+Work: final Runtime v2 integration safety correction and dedicated PR. GitHub
+Runtime v1 and its protected artifacts remain the production authority; no
+production operation was dispatched.
 
-## Current task — Runtime v2 cloud cutover
+## Current task — Runtime v2 integration PR and CI
 
-Branch `codex/runtime-v2-cutover` contains the deployable runtime, database
-migration, Cloud Run and Cloud Scheduler infrastructure, private storage,
-bootstrap, safety tests and cutover runbook. Google Cloud authentication and
-billing are active. The next safe action is a first cloud apply with schedules
-paused, followed by exact protected-state import and readiness verification.
+Branch `codex/runtime-v2-handoff-final-20260902` starts from the preserved
+integrated head `3bdf187dce472fab0843b9ca0524d0bdbcfbb217`. It repairs the real
+`verify.sh` manifest mismatch, closes the existing-database migration constraint
+gap, fixes the canonical CI test command, and hardens bootstrap/secret behavior.
+Decision D-2026-09-02-041 records the durable boundary.
 
-The frozen Legislative, Executive and AI artifacts are the newest successful
-canonical producer outputs observed before cutover. Their GitHub size, digest,
-workflow, exact run attempt, job and main-branch commit are bound into receipts;
-the raw inputs stay ignored under `.remediation/runtime-v2-imports`.
+The safety review found no committed credential value and no Runtime v2 workflow
+that uploads or replaces a protected Runtime v1 artifact. Local migration inputs
+remain ignored and frozen; their receipts and the verified supplemental rescue
+bundle remain unchanged. Runtime v1 workflows, schedules, alerts, artifacts and
+dashboard publication were not dispatched or edited as part of the final safety
+correction.
 
-Local verification passes 14 focused tests, Python compilation, Terraform format
-and validation, PowerShell parsing and Git diff validation. The deployment must
-still pass Cloud Build, database initialization, three generation-1 imports,
-dashboard readiness, one controlled producer cycle and four scheduled intervals.
-Do not disable GitHub schedules until all gates and browser acceptance pass.
+The next safe action after PR CI succeeds is review and merge of the exact tested
+head. Cloud deployment remains a later, explicit operation: apply first with
+shadow mode and schedules paused, import the exact frozen states, verify readiness,
+run the documented acceptance period, and only then consider a separately
+authorized production/scheduler transition. Do not disable GitHub schedules or
+enable production effects before every cutover gate passes.
 
-See `docs/RUNTIME_V2_CUTOVER.md` and decision D-2026-09-01-040.
+See `docs/RUNTIME_V2_CUTOVER.md`, decision D-2026-09-01-040, and decision
+D-2026-09-02-041.
 
 ## Completed task — Situation Brief acknowledgement consistency deployed and verified
 

@@ -1,13 +1,35 @@
 # PolitiTrack project state
 
-Last updated: **2026-09-01 UTC**
-Status: **Runtime v2 cutover is implemented and locally verified on
-`codex/runtime-v2-cutover`. Exact protected Legislative, Executive and AI
-artifacts are frozen with provenance receipts. Google Cloud authentication and
-billing are active on the dedicated deployment project, but GitHub remains the
-production authority until the gates in `docs/RUNTIME_V2_CUTOVER.md` pass.
-Scheduler freshness deployed from PR #20; the deployed dashboard changes through
-PR #30 remain active. External scheduling remains inactive.**
+Last updated: **2026-09-02 UTC**
+Status: **The integrated Runtime v2 candidate is on
+`codex/runtime-v2-handoff-final-20260902`, based on preserved source commit
+`3bdf187dce472fab0843b9ca0524d0bdbcfbb217`. The final safety correction repairs
+the verifier manifest, makes the `operating_mode` constraint additive for an
+existing database, restores the Runtime v2 test to canonical CI, makes bootstrap
+validation cloud-read-only, and withholds production-effect secrets from shadow
+jobs at the Terraform boundary. GitHub Runtime v1 remains the production
+authority; Runtime v2 schedules, deployment, protected-state writes, external
+notifications, and production mode remain inactive.**
+
+## Runtime v2 integration final safety review — candidate, not deployed
+
+The continuation review covered secrets, schedules, notifications, Runtime v1
+coexistence, Terraform behavior, and local migration artifacts. The frozen
+supplemental bundle and ignored migration inputs were not modified. Runtime v1
+workflows remain unchanged and authoritative. The Runtime v2 bootstrap defaults
+to shadow mode and paused schedules; without `-Apply` it now performs only local
+Terraform formatting, backend-disabled initialization, and validation. Shadow
+jobs receive neither alert/callback credentials nor Actions/GitHub tokens from
+Terraform, and the runner independently strips those values and forces collector
+and analyst suppression flags.
+
+The migration now adds the named `runtime_job_runs_operating_mode_check`
+constraint when upgrading a database whose table predates the column constraint.
+Canonical CI's multiline test command now includes `tests/test_runtime_v2.py`
+instead of attempting to execute that path as a separate command. The dedicated
+PR and its canonical CI result are the remaining release evidence; no cloud,
+scheduler, notification, dashboard, or protected artifact operation is part of
+this review.
 
 ## Runtime v2 cutover — package ready for paused-schedule deployment
 

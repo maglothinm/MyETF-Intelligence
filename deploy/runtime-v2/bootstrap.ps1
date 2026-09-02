@@ -43,7 +43,6 @@ function Test-GcloudResource([string[]]$Arguments) {
     return $LASTEXITCODE -eq 0
 }
 
-$gcloud = Resolve-RequiredCommand 'gcloud'
 $terraform = Resolve-RequiredCommand 'terraform'
 $sourceRevision = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-f]{40}$') {
@@ -53,6 +52,18 @@ $remote = (& git -C $repositoryRoot remote get-url origin).Trim()
 if ($remote -notmatch 'maglothinm/MyETF-Intelligence(?:\.git)?$') {
     throw 'Refusing deployment from a noncanonical repository remote.'
 }
+
+$terraformData = Join-Path $env:LOCALAPPDATA 'PolitiTrack\terraform-runtime-v2'
+$env:TF_DATA_DIR = $terraformData
+if (-not $Apply) {
+    Invoke-Checked $terraform @("-chdir=$terraformRoot", 'fmt', '-check', '-recursive')
+    Invoke-Checked $terraform @("-chdir=$terraformRoot", 'init', '-backend=false', '-input=false')
+    Invoke-Checked $terraform @("-chdir=$terraformRoot", 'validate')
+    Write-Output "Validated the Runtime v2 Terraform configuration from $sourceRevision. No cloud resources were changed."
+    exit 0
+}
+
+$gcloud = Resolve-RequiredCommand 'gcloud'
 
 $account = (& $gcloud auth list --filter='status:ACTIVE' --format='value(account)').Trim()
 if (-not $account) {
@@ -149,8 +160,6 @@ if ($RuntimeEnvironmentFile) {
 }
 $runtimeEnvironmentJson = $runtimeEnvironment | ConvertTo-Json -Compress
 
-$terraformData = Join-Path $env:LOCALAPPDATA 'PolitiTrack\terraform-runtime-v2'
-$env:TF_DATA_DIR = $terraformData
 Invoke-Checked $terraform @(
     "-chdir=$terraformRoot", 'init', '-reconfigure',
     "-backend-config=bucket=$stateBucket",
@@ -167,12 +176,6 @@ $baseVariables = @(
     "-var=polititrack_mode=$Mode",
     '-var=schedules_enabled=false'
 )
-
-if (-not $Apply) {
-    Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'plan') + $baseVariables)
-    Write-Output "Validated plan for $ProjectId using immutable image $image. No infrastructure was changed."
-    exit 0
-}
 
 Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'apply', '-auto-approve') + $baseVariables)
 Invoke-Checked $gcloud @('run', 'jobs', 'execute', 'polititrack-admin', '--region', $Region, '--project', $ProjectId, '--wait', '--quiet')

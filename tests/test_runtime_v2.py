@@ -334,10 +334,16 @@ def test_shadow_contract_is_wired_into_terraform_and_database():
     variables = (root / "deploy/runtime-v2/terraform/variables.tf").read_text(encoding="utf-8")
     infrastructure = (root / "deploy/runtime-v2/terraform/main.tf").read_text(encoding="utf-8")
     migration = (root / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
+    ci_workflow = (root / ".github/workflows/investor_edge_tests.yml").read_text(encoding="utf-8")
     assert 'default     = "shadow"' in variables
     assert 'name  = "POLITITRACK_MODE"' in infrastructure
     assert "producer_runtime_secrets" in infrastructure
+    for marker in ("ACTIONS_", "BROKERAGE", "GITHUB_TOKEN", "GH_TOKEN", "NOTIFICATION", "NOTIFY"):
+        assert marker in infrastructure
     assert "operating_mode text NOT NULL DEFAULT 'shadow'" in migration
+    assert "runtime_job_runs_operating_mode_check" in migration
+    assert "CHECK (operating_mode IN ('shadow', 'production'))" in migration
+    assert "tests/test_create_manual_test_filing.py \\\n            tests/test_runtime_v2.py" in ci_workflow
 
 
 class _Cursor:

@@ -3,6 +3,27 @@
 This append-only log records durable project decisions. Corrections should add a
 new superseding entry rather than silently rewriting history.
 
+## D-2026-09-02-041 — Keep Runtime v2 validation and shadow deployment fail-closed
+
+**Decision:** A Runtime v2 bootstrap without `-Apply` may perform local Terraform
+formatting, backend-disabled initialization, and validation only. It must not
+authenticate to Google Cloud, enable services, create storage, change IAM, build
+an image, or apply infrastructure. In shadow mode, Terraform must withhold
+notification, callback, brokerage, Actions, and GitHub-token secrets in addition
+to the runner's independent suppression boundary. Existing databases must receive
+the same `operating_mode IN ('shadow', 'production')` constraint as new ones.
+
+**Reason:** A validation path must match its no-change claim, and shadow safety
+must not depend on a single child-process environment filter. Additive migrations
+must preserve the same domain invariant regardless of whether the table was
+created before or after operating mode was introduced.
+
+**Consequence:** Cloud mutation requires the explicit `-Apply` switch. Production
+mode and schedule activation remain separate owner-controlled cutover actions
+behind the acceptance gates. GitHub Runtime v1 stays authoritative until those
+gates are recorded; this documentation/safety change performs no deployment,
+schedule, alert, protected-state write, or Runtime v1 retirement.
+
 ## D-2026-08-29-001 — One canonical repository
 
 **Decision:** GitHub repository ID `1349678672`, currently named
