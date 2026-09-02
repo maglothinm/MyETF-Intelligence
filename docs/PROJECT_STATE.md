@@ -4,9 +4,9 @@
 **Canonical repository ID:** `1349678672`  
 **Current repository name:** `maglothinm/MyETF-Intelligence`  
 **Default branch:** `main`  
-**Active controlled work:** issue #36 / PR #37  
-**Active branch:** `codex/runtime-v2-shadow-integration`  
-**Target endpoint:** ready for review, unmerged, undeployed
+**Active controlled work:** issue #36 / PR #38  
+**Active branch:** `codex/runtime-v2-shadow-review`  
+**Target endpoint:** open for review, unmerged, undeployed
 
 This file records current operational truth. Historical receipts remain in
 `validation/`, incident records, the append-only decision log, and Git history.
@@ -27,6 +27,18 @@ Issue #36 did not inspect or change any external cloud project, account, billing
 credential, database, bucket, service, job, or scheduler. Legacy
 `maglothinm/MyETF` remains excluded.
 
+## Active review transition
+
+Draft PR #37 reached exact green, mergeable head
+`8b16436e14862ad7abcdf94dc7272f437f88b091`. The GitHub connector's
+ready-for-review mutation failed because its GraphQL response requested an
+unsupported repository field. PR #37 was closed without merge.
+
+PR #38 was opened non-draft from the same exact tree on
+`codex/runtime-v2-shadow-review`. It is the active review. The transition did not
+change executable source or operational state; the continuity updates following
+the branch copy are documentation-only.
+
 ## Beast Runtime v2 Phases 1–2
 
 ### Verified source and base
@@ -39,17 +51,17 @@ credential, database, bucket, service, job, or scheduler. Legacy
 | Source merge base | `e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515` |
 | Intake divergence | 7 commits ahead, 2 commits behind `main` |
 | Preserved source-tree checkpoint | `7cceb9694ef7b50f71494f7c5b6baabe57520aa5` |
-| Review branch | `codex/runtime-v2-shadow-integration` |
-| Review | PR #37 |
+| Active review branch | `codex/runtime-v2-shadow-review` |
+| Active review | PR #38, non-draft |
 
 The source branch remains unchanged. Its 29 committed Runtime v2 paths were copied
-by exact blob identity onto a fresh branch based on verified `main`, avoiding a
-merge or rebase of divergent history.
+by exact blob identity onto fresh verified `main` ancestry, avoiding a merge or
+rebase of divergent history.
 
 The original ChatGPT Work filesystem is unavailable. Local-only worktrees,
 stashes, reflogs, staged/unstaged patches, ignored files, and untracked files from
 that session are **unverified**. That limitation is not permission to deploy,
-initialize, or rebaseline. The complete remote inventory is in
+initialize, or rebaseline. The remote inventory is in
 `docs/CONSOLIDATION_INVENTORY.md`.
 
 ### Explicit mode contract
@@ -99,38 +111,38 @@ executed.
 ### Filing Vault reconciliation
 
 The preserved source imported `GoogleCloudObjectStore` but did not include that
-class. This caused both focused Runtime v2 and standard repository CI to fail at
-collection. PR #37 implements the missing adapter with lazy Google Cloud imports,
-bounded object operations, content-addressed same-key verification, safe classified
-errors, and required uniform bucket-level access plus enforced public-access
-prevention. No external bucket was contacted.
+class. This caused focused Runtime v2 and standard repository CI to fail at
+collection. The active review implements the missing adapter with lazy Google
+Cloud imports, bounded object operations, content-addressed same-key verification,
+safe classified errors, and required uniform bucket-level access plus enforced
+public-access prevention. No external bucket was contacted.
 
 ## CI and review evidence
 
-PR #37 adds a read-only `Runtime v2 safety tests` workflow. It installs
+PR #38 contains the read-only `Runtime v2 safety tests` workflow. It installs
 `requirements-runtime-v2.txt`, compiles the package, runs focused Runtime v2,
 shadow-mode, and dashboard-insight tests, and runs `verify.sh`. It invokes no
 producer and receives read-only repository permissions.
 
-The normal `Investor Edge tests` workflow provides broader integration coverage.
+The standard `Investor Edge tests` workflow provides broader integration coverage.
 The initial failure exposed the missing GCS adapter and was corrected rather than
 retried unchanged.
 
-Checkpoint `1de2298bf1fbb0afcc772c6aedd82a6d4f9f4398` passed both required workflows:
+Executable-tree checkpoint `8b16436e14862ad7abcdf94dc7272f437f88b091`
+passed:
 
 | Workflow | Run | Conclusion |
 |---|---:|---|
-| Runtime v2 safety tests | `33638954917` | success |
-| Investor Edge tests | `33638955190` | success |
+| Runtime v2 safety tests | `33639231223` | success |
+| Investor Edge tests | `33639231236` | success |
 
-GitHub reported PR #37 mergeable against `main` at that checkpoint. It contains
-all executable, infrastructure, test, inventory, cutover-guide, project-state, and
-decision-log changes through D-041.
+GitHub reported that exact tree mergeable against `main`. PR #37 retained those
+results and was closed unmerged solely because the connector could not clear its
+draft flag. PR #38 began from the identical head.
 
-The final handoff and this state update are documentation-only successors. Their
-exact final head must pass both workflows before the PR leaves draft. PR #37 checks
-and metadata identify the exact final SHA because a tracked file cannot contain
-its own future commit SHA.
+The active continuity updates are documentation-only successors and require both
+workflows on the exact final PR #38 head. PR checks and metadata identify that
+future final SHA because a tracked file cannot contain its own commit ID.
 
 ## Protected-state continuity
 
@@ -146,13 +158,15 @@ identifiers in the original source runbook were not revalidated and are not futu
 migration authority. A later import requires fresh canonical provenance and the
 then-current one-writer/high-water-mark gates.
 
-## Parallel work
+## Parallel and retained work
 
 | Work | State | Treatment in issue #36 |
 |---|---|---|
 | PR #3 / `codex/production-remediation` | Draft | No merge or cherry-pick |
 | PR #33 / `codex/score-receipts-data-quality` | Draft | No merge or cherry-pick |
-| PR #35 / `codex/chatgpt-codex-phase-1-2` | Open | Separate documentation task |
+| PR #35 / `codex/chatgpt-codex-phase-1-2` | Open | Separate continuity task |
+| PR #37 / `codex/runtime-v2-shadow-integration` | Closed, unmerged | Green predecessor retained as evidence |
+| PR #38 / `codex/runtime-v2-shadow-review` | Open, non-draft | Active review; do not merge in this phase |
 | `codex/runtime-v2-integration` | Temporary staging ref | Non-authoritative; preserved only |
 | `codex/runtime-v2-cutover` | Original source | Preserved unchanged |
 
@@ -160,15 +174,15 @@ All other branches listed in `docs/CONSOLIDATION_INVENTORY.md` remain untouched.
 
 ## Completion gate
 
-Phases 1–2 end only when both workflows succeed on the final documentation-only
-PR head, GitHub still reports mergeable, and PR #37 is marked ready for review but
-remains unmerged. No production/cloud/state/credential/schedule/settings/Pages
-action may occur.
+Phases 1–2 end only when both workflows succeed on the final PR #38 head, GitHub
+reports it mergeable, and PR #38 remains open, non-draft, unmerged, and undeployed.
+No production, cloud, state, credential, schedule, settings, or Pages action may
+occur.
 
 ## Next safe action
 
-Validate the final documentation-only head, record its SHA and run IDs in issue
-#36 and PR #37 metadata, mark PR #37 ready for review, then stop.
+Validate the final documentation-only PR #38 head, record its exact SHA and run
+IDs in issue/PR metadata, reconfirm mergeability, and stop.
 
 Fresh state provenance, isolated or live shadow acceptance, runtime/browser
 acceptance, production promotion, schedule activation, one-writer transfer,
