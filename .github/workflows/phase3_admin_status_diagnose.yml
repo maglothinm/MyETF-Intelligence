@@ -1,0 +1,136 @@
+name: Phase 3 diagnose admin status execution
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_admin_status_diagnose.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      FAILED_EXECUTION: polititrack-admin-snrjx
+    steps:
+      - name: Check out canonical main trigger revision
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Diagnose failure and verify prior cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-admin-diagnose
+          cd phase3-admin-diagnose
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-current.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-current.json)"
+          command_json="$(jq -c '.command // []' <<<"${container_json}")"
+          args_json="$(jq -c '.args // []' <<<"${container_json}")"
+          [[ "${command_json}" == '["python"]' ]] || { echo "Unexpected admin command after prior audit." >&2; exit 1; }
+          if [[ "${args_json}" == '["-m","runtime_v2","status"]' ]]; then
+            echo "Recovering admin job from interrupted status arguments."
+            gcloud run jobs update "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --args=-m,runtime_v2,init-db,--with-vault --quiet >/dev/null
+            args_json='["-m","runtime_v2","init-db","--with-vault"]'
+          fi
+          [[ "${args_json}" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin arguments are not the Terraform Phase 3 baseline." >&2; exit 1; }
+
+          gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.invoker --quiet >/dev/null 2>&1 || true
+          gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null 2>&1 || true
+
+          admin_policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]?] | any(. == $member)' <<<"${admin_policy}" >/dev/null; then
+            echo "Stale admin invoker binding remains after recovery cleanup." >&2
+            exit 1
+          fi
+
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is not paused." >&2; exit 1; }
+          done
+
+          cleanup_logging() {
+            set +e
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null 2>&1
+          }
+          trap cleanup_logging EXIT
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null
+
+          gcloud run jobs executions describe "${FAILED_EXECUTION}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
+          gcloud logging read \
+            "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND timestamp>=\"2026-09-03T14:10:30Z\" AND timestamp<=\"2026-09-03T14:13:10Z\"" \
+            --project "${PROJECT_ID}" \
+            --order=asc \
+            --limit=400 \
+            --format=json > logs.json
+
+          cleanup_logging
+          trap - EXIT
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewer") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+            echo "Temporary logging viewer binding remains after diagnostic cleanup." >&2
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          execution = json.loads(Path('execution.json').read_text(encoding='utf-8'))
+          logs = json.loads(Path('logs.json').read_text(encoding='utf-8'))
+          selected = []
+          for item in logs:
+              text = item.get('textPayload')
+              if isinstance(text, str) and text.strip():
+                  selected.append(text.strip())
+              payload = item.get('jsonPayload')
+              if isinstance(payload, dict):
+                  message = payload.get('message')
+                  if isinstance(message, str) and message.strip():
+                      selected.append(message.strip())
+          summary = {
+              'execution_name': execution.get('metadata', {}).get('name') or execution.get('name'),
+              'conditions': execution.get('status', {}).get('conditions') or execution.get('conditions') or [],
+              'log_messages': selected,
+          }
+          Path('diagnostic-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload diagnostic receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-admin-status-diagnostic
+          path: |
+            phase3-admin-diagnose/admin-current.json
+            phase3-admin-diagnose/execution.json
+            phase3-admin-diagnose/diagnostic-summary.json
+          if-no-files-found: warn
+          retention-days: 30
