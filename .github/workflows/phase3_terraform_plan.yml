@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - ".github/workflows/phase3_terraform_plan.yml"
+      - "deploy/runtime-v2/terraform/moved.tf"
 
 permissions:
   contents: read
@@ -42,6 +43,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.11.4"
+          terraform_wrapper: false
 
       - name: Verify immutable cloud boundary
         shell: bash
@@ -68,6 +70,59 @@ jobs:
           set -euo pipefail
           terraform -chdir=deploy/runtime-v2/terraform state list | tee phase3-state-list.txt
 
+      - name: Write configuration-preserving Phase 3 variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = {
+              "project_id": os.environ["PROJECT_ID"],
+              "region": os.environ["REGION"],
+              "image": os.environ["EXISTING_IMAGE"],
+              "runtime_secrets": {
+                  "OPENAI_API_KEY": "polititrack-openai-api-key",
+                  "FINNHUB_API_KEY": "polititrack-finnhub-api-key",
+                  "ALPHAVANTAGE_API_KEY": "polititrack-alphavantage-api-key",
+              },
+              "runtime_environment": {
+                  "AI_ANALYSIS_ENABLED": "true",
+                  "AI_FETCH_DOCUMENT_TEXT": "true",
+                  "AI_MAX_ANALYSES_PER_RUN": "20",
+                  "AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS": "65",
+                  "AI_PAPER_TRADING_ONLY": "true",
+                  "AI_REQUIRE_PUSHOVER": "false",
+                  "AI_WEB_SEARCH_ENABLED": "true",
+                  "ALLOW_EMPTY_SOURCES": "false",
+                  "DASHBOARD_URL": "https://polititrack-web-s6icmprjvq-uc.a.run.app",
+                  "DISCLOSURE_TERMS_ACKNOWLEDGED": "TRUE",
+                  "INVESTOR_EDGE_ENABLED": "true",
+                  "NOTIFY_ALL_FILINGS": "true",
+                  "NOTIFY_EQUITY_ONLY": "true",
+                  "NOTIFY_PENDING_REVIEWS": "true",
+                  "OPENAI_MODEL": "gpt-5.6-terra",
+                  "OPENAI_REASONING_EFFORT": "medium",
+                  "POLITITRACK_MODE": "shadow",
+                  "REQUIRE_PUSHOVER": "false",
+                  "SEC_USER_AGENT": "MyETF-Intelligence research contact maglothinm@gmail.com",
+                  "SOURCE_REVISION": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+              },
+              "vault_enabled": True,
+              "schedules_enabled": False,
+              "public_dashboard_enabled": False,
+              "dashboard_allowed_origins": "",
+              "vault_acknowledged_sources": "",
+              "vault_agency_hosts": "",
+          }
+          Path("deploy/runtime-v2/terraform/phase3-plan.auto.tfvars.json").write_text(
+              json.dumps(data, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
       - name: Create redacted reconciliation plan
         id: plan
         shell: bash
@@ -77,19 +132,9 @@ jobs:
             -no-color \
             -detailed-exitcode \
             -lock-timeout=5m \
-            -var="project_id=${PROJECT_ID}" \
-            -var="region=${REGION}" \
-            -var="image=${EXISTING_IMAGE}" \
-            -var='runtime_secrets={OPENAI_API_KEY="polititrack-openai-api-key",FINNHUB_API_KEY="polititrack-finnhub-api-key",ALPHAVANTAGE_API_KEY="polititrack-alphavantage-api-key"}' \
-            -var='runtime_environment={POLITITRACK_MODE="shadow"}' \
-            -var='vault_enabled=true' \
-            -var='schedules_enabled=false' \
-            -var='public_dashboard_enabled=false' \
-            -var='dashboard_allowed_origins=""' \
-            -var='vault_acknowledged_sources=""' \
-            -var='vault_agency_hosts=""' \
             > phase3-terraform-plan.txt 2>&1
           status=$?
+          set -e
           cat phase3-terraform-plan.txt
           if [[ "$status" -eq 0 ]]; then
             echo "plan_result=no_changes" >> "$GITHUB_OUTPUT"
@@ -107,7 +152,7 @@ jobs:
           state_sha="$(sha256sum phase3-state-list.txt | awk '{print $1}')"
           plan_sha="$(sha256sum phase3-terraform-plan.txt | awk '{print $1}')"
           cat > phase3-terraform-plan-receipt.txt <<EOF
-          schema_version=1
+          schema_version=2
           repository_id=${GITHUB_REPOSITORY_ID}
           repository=${GITHUB_REPOSITORY}
           source_revision=${GITHUB_SHA}
@@ -122,14 +167,22 @@ jobs:
           schedules_enabled=false
           public_dashboard_enabled=false
           vault_enabled=true
+          runtime_environment_preserved=true
+          state_address_moves=true
           runtime_job_execution=false
           state_import=false
           terraform_apply=false
           binary_plan_uploaded=false
+          raw_state_uploaded=false
           state_list_sha256=${state_sha}
           redacted_plan_sha256=${plan_sha}
           EOF
           cat phase3-terraform-plan-receipt.txt
+
+      - name: Remove ephemeral variable file
+        if: always()
+        shell: bash
+        run: rm -f deploy/runtime-v2/terraform/phase3-plan.auto.tfvars.json
 
       - name: Upload redacted plan evidence
         uses: actions/upload-artifact@v4
