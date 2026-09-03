@@ -71,12 +71,6 @@ variable "public_dashboard_enabled" {
   default     = false
 }
 
-variable "acceptance_details_enabled" {
-  description = "Expose Runtime v2 state-head metadata through the IAM-protected readiness endpoint for Phase 3 acceptance only."
-  type        = bool
-  default     = false
-}
-
 variable "dashboard_allowed_origins" {
   description = "Comma-separated exact HTTPS origins accepted by Filing Vault."
   type        = string
