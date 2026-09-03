@@ -16,12 +16,14 @@ def test_harvest_is_canonical_self_path_scoped_main_push() -> None:
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
+    assert 'group: runtime-v2-image-build' in text
+    assert 'cancel-in-progress: false' in text
 
 
 def test_harvest_is_pinned_to_exact_submitted_build_and_source() -> None:
     text = _text()
-    assert 'BUILD_ID: 1db569db-57a1-46fe-a061-0547ac6779b2' in text
-    assert 'BUILD_SOURCE_REVISION: 080a3df0f0b912f702a30148cedc831b833a81db' in text
+    assert 'BUILD_ID: d580d289-c02e-4f07-93e0-d0acfc17ee4b' in text
+    assert 'BUILD_SOURCE_REVISION: 9b77de78203fec04d46404e1b674325517420c5c' in text
     assert 'gcloud builds describe "${BUILD_ID}"' in text
     assert '.substitutions._SOURCE_REVISION == $source' in text
     assert '.projectId == $project' in text
@@ -36,6 +38,16 @@ def test_harvest_requires_success_and_immutable_new_digest() -> None:
     assert 'Successful build unexpectedly resolved to the stale deployed image digest.' in text
     assert 'phase3_current_runtime_image_harvested' in text
     assert 'immutable_image' in text
+    for field in (
+        'database_sha256',
+        'store_sha256',
+        'runner_sha256',
+        'migration_sha256',
+        'dockerfile_sha256',
+        'requirements_sha256',
+    ):
+        assert field in text
+    assert 'git show "${BUILD_SOURCE_REVISION}:runtime_v2/store.py"' in text
 
 
 def test_harvest_does_not_build_deploy_or_execute_runtime() -> None:
