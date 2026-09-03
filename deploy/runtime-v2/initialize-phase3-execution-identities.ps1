@@ -106,9 +106,8 @@ $stateBucket = "$projectId-polititrack-tfstate"
 $cloudBuildBucket = "${projectId}_cloudbuild"
 $artifactRepository = 'polititrack'
 
-$terraformPermissions = @(
+$terraformPermissionsRequested = @(
     'resourcemanager.projects.get',
-    'resourcemanager.projects.list',
     'serviceusage.operations.get',
     'serviceusage.services.enable',
     'serviceusage.services.get',
@@ -185,7 +184,29 @@ $forbiddenTerraformPermissions = @(
     'storage.buckets.delete'
 )
 foreach ($permission in $forbiddenTerraformPermissions) {
-    if ($permission -in $terraformPermissions) { throw "Forbidden Phase 3 permission $permission entered the Terraform role." }
+    if ($permission -in $terraformPermissionsRequested) { throw "Forbidden Phase 3 permission $permission entered the Terraform role." }
+}
+
+$projectResource = "//cloudresourcemanager.googleapis.com/projects/$projectId"
+$customRoleSupportedPermissions = @(
+    & $gcloud iam list-testable-permissions $projectResource `
+        --filter='customRolesSupportLevel!=NOT_SUPPORTED' `
+        --format='value(name)'
+)
+if ($LASTEXITCODE -ne 0 -or $customRoleSupportedPermissions.Count -eq 0) {
+    throw 'Unable to obtain the project-level custom-role-supported permission set before Phase 3 IAM mutation.'
+}
+$terraformPermissions = @(
+    $terraformPermissionsRequested | Where-Object { $_ -in $customRoleSupportedPermissions }
+)
+$omittedUnsupportedPermissions = @(
+    $terraformPermissionsRequested | Where-Object { $_ -notin $customRoleSupportedPermissions }
+)
+if ($terraformPermissions.Count -eq 0) {
+    throw 'No requested Phase 3 Terraform permissions are supported in a project-level custom role.'
+}
+foreach ($permission in $forbiddenTerraformPermissions) {
+    if ($permission -in $terraformPermissions) { throw "Forbidden Phase 3 permission $permission entered the validated Terraform role." }
 }
 
 $deployerExists = Test-GcloudResource @('iam', 'service-accounts', 'describe', $deployerEmail, '--project', $projectId)
@@ -201,6 +222,7 @@ Write-Output "Phase 3 execution identity preflight: deployer=$deployerEmail exis
 Write-Output "Phase 3 execution identity preflight: terraform_role=$terraformRoleName exists=$roleExists"
 Write-Output "Phase 3 execution identity preflight: compute_api_enabled=$computeEnabled service_networking_api_enabled=$serviceNetworkingEnabled"
 Write-Output "Phase 3 execution identity preflight: provider=$providerResource principal_set=$principalSet"
+Write-Output "Phase 3 execution identity preflight: requested_custom_role_permissions=$($terraformPermissionsRequested.Count) validated_custom_role_permissions=$($terraformPermissions.Count) omitted_unsupported=$($omittedUnsupportedPermissions -join ',')"
 Write-Output 'Phase 3 execution identity preflight: deployer custom role excludes job execution, scheduler enabling/running, secret payload access, and destructive resource permissions.'
 
 if (-not $Apply) {
@@ -321,6 +343,8 @@ Write-Output "deployer_service_account=$deployerEmail"
 Write-Output "builder_service_account=$builderEmail"
 Write-Output "terraform_role=$terraformRoleName"
 Write-Output "workload_identity_provider=$providerResource"
+Write-Output "custom_role_permissions=$($terraformPermissions -join ',')"
+Write-Output "omitted_unsupported_permissions=$($omittedUnsupportedPermissions -join ',')"
 Write-Output 'compute_api_enabled=true'
 Write-Output 'service_networking_api_enabled=true'
 Write-Output 'deployer_runtime_execution=false'
