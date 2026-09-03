@@ -99,15 +99,22 @@ def _query_history(store: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 3:
-        raise SystemExit("usage: gcs_status_probe.py BUCKET OBJECT PHASE")
-    bucket_name, object_name, phase = args
+    if len(args) not in {3, 4}:
+        raise SystemExit(
+            "usage: gcs_status_probe.py BUCKET OBJECT PHASE [initialize-schema]"
+        )
+    bucket_name, object_name, phase = args[:3]
+    initialize_schema = len(args) == 4 and args[3] == "initialize-schema"
+    if len(args) == 4 and not initialize_schema:
+        raise SystemExit("optional operation must be initialize-schema")
     if phase not in {"phase3", "phase4"}:
         raise SystemExit("phase must be phase3 or phase4")
+    if initialize_schema and phase != "phase3":
+        raise SystemExit("schema initialization is permitted only during Phase 3")
     _safe_target(bucket_name, object_name)
 
     receipt: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "probe": "runtime_v2_private_status",
         "phase": phase,
         "observed_at_utc": _utc_now(),
@@ -115,6 +122,9 @@ def main(argv: list[str] | None = None) -> int:
         "private_ip_env": str(os.environ.get("PRIVATE_IP") or ""),
         "instance_connection_name": str(os.environ.get("INSTANCE_CONNECTION_NAME") or ""),
         "source_revision": str(os.environ.get("SOURCE_REVISION") or ""),
+        "schema_initialize_requested": initialize_schema,
+        "schema_initialized": False,
+        "protected_state_changed_by_schema_initialize": False,
     }
 
     try:
@@ -138,6 +148,9 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         store = PostgresSnapshotStore()
+        if initialize_schema:
+            store.initialize_schema()
+            receipt["schema_initialized"] = True
         status = store.status()
         workflow_evidence = store.workflow_evidence()
         run_history, snapshot_history = _query_history(store)
