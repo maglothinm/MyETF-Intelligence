@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/phase3_build_current_runtime_image.yml"
+      - "deploy/runtime-v2/cloudbuild-no-source.yaml"
 
 permissions:
   contents: read
@@ -22,7 +23,7 @@ jobs:
       REGION: us-central1
       REPOSITORY: polititrack
       IMAGE_NAME: runtime-v2
-      CLOUD_BUILD_BUCKET: project-38008d5f-4918-46e6-920_cloudbuild
+      SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
@@ -40,7 +41,7 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Reconcile intended builder permissions
+      - name: Reconcile intended builder project permissions
         shell: bash
         run: |
           set -euo pipefail
@@ -59,14 +60,6 @@ jobs:
               --format=none
           done
 
-          for role in roles/storage.objectAdmin roles/storage.bucketViewer; do
-            gcloud storage buckets add-iam-policy-binding "gs://${CLOUD_BUILD_BUCKET}" \
-              --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
-              --role "${role}" \
-              --quiet \
-              --format=none
-          done
-
           policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
           for role in \
             roles/cloudbuild.builds.editor \
@@ -77,13 +70,6 @@ jobs:
               <<<"${policy}" >/dev/null || { echo "Builder is missing intended project role ${role}." >&2; exit 1; }
           done
 
-          bucket_policy="$(gcloud storage buckets get-iam-policy "gs://${CLOUD_BUILD_BUCKET}" --format=json)"
-          for role in roles/storage.objectAdmin roles/storage.bucketViewer; do
-            jq -e --arg member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" --arg role "${role}" \
-              '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' \
-              <<<"${bucket_policy}" >/dev/null || { echo "Builder is missing intended bucket role ${role}." >&2; exit 1; }
-          done
-
       - name: Authenticate as isolated Phase 3 builder
         id: builder-auth
         uses: google-github-actions/auth@v3
@@ -91,7 +77,7 @@ jobs:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
 
-      - name: Wait for builder permissions and build immutable image
+      - name: Build immutable image without source staging
         shell: bash
         env:
           CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.builder-auth.outputs.credentials_file_path }}
@@ -115,42 +101,42 @@ jobs:
 
           permission_ready=false
           for attempt in $(seq 1 18); do
-            if gcloud storage buckets describe "gs://${CLOUD_BUILD_BUCKET}" >/dev/null 2>&1 \
-              && gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" >/dev/null 2>&1 \
-              && gcloud services list --enabled --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1 \
+            if gcloud services list --enabled --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1 \
               && gcloud builds list --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1; then
               permission_ready=true
               break
             fi
-            echo "Builder permissions not effective yet (attempt ${attempt}/18)."
+            echo "Builder project permissions not effective yet (attempt ${attempt}/18)."
             sleep 10
           done
           [[ "${permission_ready}" == "true" ]] || {
-            echo "Builder permissions did not become effective within the bounded readiness window." >&2
+            echo "Builder project permissions did not become effective within the bounded readiness window." >&2
             exit 1
           }
 
-          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
-          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
-
           python - <<'PY'
           from pathlib import Path
-          text = Path('runtime_v2/database.py').read_text(encoding='utf-8')
+          source = Path('runtime_v2/database.py').read_text(encoding='utf-8')
           required = (
               'def _use_private_ip',
               'IPTypes.PRIVATE if _use_private_ip(config) else IPTypes.PUBLIC',
           )
-          missing = [value for value in required if value not in text]
+          missing = [value for value in required if value not in source]
           if missing:
               raise SystemExit('Current source lacks private Cloud SQL routing: ' + ', '.join(missing))
+          config = Path('deploy/runtime-v2/cloudbuild-no-source.yaml').read_text(encoding='utf-8')
+          for required_value in ('git clone', '_SOURCE_REVISION', 'checkout --detach FETCH_HEAD'):
+              if required_value not in config:
+                  raise SystemExit('No-source build config is missing ' + required_value)
           PY
 
           tag="${GITHUB_SHA:0:12}"
           tagged_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${tag}"
-          gcloud builds submit . \
+          gcloud builds submit \
+            --no-source \
             --project "${PROJECT_ID}" \
-            --config deploy/runtime-v2/cloudbuild.yaml \
-            --substitutions "_REGION=${REGION},_REPOSITORY=${REPOSITORY},_IMAGE=${IMAGE_NAME},_TAG=${tag}" \
+            --config deploy/runtime-v2/cloudbuild-no-source.yaml \
+            --substitutions "_REGION=${REGION},_REPOSITORY=${REPOSITORY},_IMAGE=${IMAGE_NAME},_TAG=${tag},_SOURCE_REVISION=${GITHUB_SHA},_SOURCE_REPOSITORY=${SOURCE_REPOSITORY}" \
             --quiet \
             --format=json > phase3-image-build/cloud-build.json
 
@@ -162,6 +148,7 @@ jobs:
           database_sha="$(sha256sum runtime_v2/database.py | awk '{print $1}')"
           dockerfile_sha="$(sha256sum deploy/runtime-v2/Dockerfile | awk '{print $1}')"
           requirements_sha="$(sha256sum requirements-runtime-v2.txt | awk '{print $1}')"
+          build_id="$(jq -r '.id // .metadata.build.id // empty' phase3-image-build/cloud-build.json)"
 
           jq -n \
             --arg repository_id "${GITHUB_REPOSITORY_ID}" \
@@ -171,6 +158,7 @@ jobs:
             --arg project_number "${PROJECT_NUMBER}" \
             --arg image "${immutable_image}" \
             --arg digest "${digest}" \
+            --arg build_id "${build_id}" \
             --arg database_sha256 "${database_sha}" \
             --arg dockerfile_sha256 "${dockerfile_sha}" \
             --arg requirements_sha256 "${requirements_sha}" \
@@ -181,21 +169,15 @@ jobs:
               source_revision: $source_revision,
               project_id: $project_id,
               project_number: ($project_number | tonumber),
+              cloud_build_id: $build_id,
               immutable_image: $image,
               image_digest: $digest,
               database_sha256: $database_sha256,
               dockerfile_sha256: $dockerfile_sha256,
               requirements_sha256: $requirements_sha256,
               builder_credentials_pinned: true,
-              builder_project_roles: [
-                "roles/cloudbuild.builds.editor",
-                "roles/serviceusage.serviceUsageConsumer",
-                "roles/serviceusage.serviceUsageViewer"
-              ],
-              builder_bucket_roles: [
-                "roles/storage.objectAdmin",
-                "roles/storage.bucketViewer"
-              ],
+              source_staging_used: false,
+              source_fetched_inside_build: true,
               deployed: false,
               runtime_job_execution: false,
               scheduler_execution: false,
