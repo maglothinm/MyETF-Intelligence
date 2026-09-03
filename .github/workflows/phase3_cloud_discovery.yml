@@ -1,6 +1,11 @@
 name: Phase 3 read-only cloud boundary discovery
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_cloud_discovery.yml"
   workflow_dispatch:
 
 permissions:
@@ -15,8 +20,8 @@ jobs:
     env:
       PROJECT_NUMBER: "497412818801"
       REGION: us-central1
-      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/providers/phase3-main
-      DISCOVERY_PRINCIPAL_SET: principalSet://iam.googleapis.com/projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/attribute.repository_id/1349678672
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DISCOVERY_PRINCIPAL_SET: principalSet://iam.googleapis.com/projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/attribute.repository_id/1349678672
     steps:
       - name: Check out canonical repository
         uses: actions/checkout@v7
@@ -24,7 +29,7 @@ jobs:
       - name: Authenticate with direct Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/providers/phase3-main
+          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -49,7 +54,7 @@ jobs:
           report="phase3-cloud-boundary.txt"
           : > "$report"
           printf '%s\n' \
-            "schema_version=2" \
+            "schema_version=3" \
             "repository_id=${GITHUB_REPOSITORY_ID}" \
             "repository=${GITHUB_REPOSITORY}" \
             "source_revision=${GITHUB_SHA}" \
@@ -85,7 +90,7 @@ jobs:
           capture service_accounts gcloud iam service-accounts list --project "$PROJECT_ID" --format='value(email,displayName)'
           capture discovery_principal_project_roles gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' --filter="bindings.members:${DISCOVERY_PRINCIPAL_SET}" --format='value(bindings.role)'
           capture secret_ids_only gcloud secrets list --project "$PROJECT_ID" --format='value(name)'
-          capture workload_identity_provider gcloud iam workload-identity-pools providers describe phase3-main --workload-identity-pool=polititrack-github --location=global --project="$PROJECT_ID" --format=json
+          capture workload_identity_provider gcloud iam workload-identity-pools providers describe phase3-main --workload-identity-pool=polititrack-github-phase3 --location=global --project="$PROJECT_ID" --format=json
           capture cloud_run_jobs gcloud run jobs list --project "$PROJECT_ID" --region "$REGION" --format=json
           capture cloud_run_services gcloud run services list --project "$PROJECT_ID" --region "$REGION" --platform=managed --format=json
           capture cloud_scheduler_jobs gcloud scheduler jobs list --project "$PROJECT_ID" --location "$REGION" --format=json
