@@ -111,6 +111,7 @@ def validate(plan: dict[str, Any], expected_image: str) -> dict[str, Any]:
     all_images: set[str] = set()
     producer_shadow_count = 0
     private_ip_count = 0
+    acceptance_jobs = []
     for resource in run_resources:
         values = resource.get("values") or {}
         images = _images(values)
@@ -120,10 +121,16 @@ def validate(plan: dict[str, Any], expected_image: str) -> dict[str, Any]:
             producer_shadow_count += 1
         if env.get("PRIVATE_IP") == "true":
             private_ip_count += 1
-        if resource.get("type") == "google_cloud_run_v2_service":
-            if env.get("RUNTIME_ACCEPTANCE_DETAILS") != "true":
-                raise PlanSafetyError("private Runtime v2 web service must expose Phase 3 acceptance details")
+        if resource.get("type") == "google_cloud_run_v2_job" and values.get("name") == "polititrack-acceptance":
+            acceptance_jobs.append(resource)
+            if env.get("PRIVATE_IP") != "true":
+                raise PlanSafetyError("Phase 3 acceptance job must use private Cloud SQL connectivity")
+            args = values.get("template") or []
+            if "runtime_v2.acceptance" not in json.dumps(args, sort_keys=True):
+                raise PlanSafetyError("Phase 3 acceptance job does not run the dedicated acceptance writer")
 
+    if len(acceptance_jobs) != 1:
+        raise PlanSafetyError("Phase 3 requires exactly one private acceptance job")
     if all_images != {expected_image}:
         raise PlanSafetyError(
             f"all Runtime v2 containers must use exactly the reviewed immutable image; found {sorted(all_images)}"
@@ -132,7 +139,7 @@ def validate(plan: dict[str, Any], expected_image: str) -> dict[str, Any]:
         raise PlanSafetyError("expected image is not immutable")
     if producer_shadow_count < 4:
         raise PlanSafetyError("not all producer jobs are explicitly in shadow mode")
-    if private_ip_count < 5:
+    if private_ip_count < 6:
         raise PlanSafetyError("not all database-using Runtime v2 components request private IP")
 
     service_accounts = {
@@ -140,7 +147,7 @@ def validate(plan: dict[str, Any], expected_image: str) -> dict[str, Any]:
         for resource in by_type.get("google_service_account", [])
     }
     service_accounts.discard("")
-    if len(service_accounts) < 6:
+    if len(service_accounts) < 7:
         raise PlanSafetyError("Phase 3 service identities are not sufficiently separated")
 
     return {
@@ -153,6 +160,7 @@ def validate(plan: dict[str, Any], expected_image: str) -> dict[str, Any]:
         "cloud_sql_private_network": True,
         "private_bucket_count": len(buckets),
         "service_identity_count": len(service_accounts),
+        "acceptance_job_count": 1,
         "runtime_image": expected_image,
         "runtime_mode": "shadow",
     }
