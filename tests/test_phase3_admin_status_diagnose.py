@@ -5,27 +5,15 @@ WORKFLOW = Path('.github/workflows/phase3_admin_status_diagnose.yml')
 PULSE = Path('.github/workflows/phase3_diagnostic_pulse.yml')
 
 
-def test_diagnostic_trigger_is_directly_path_scoped_and_other_triggers_remain_guarded():
+def test_diagnostic_is_manual_only_on_canonical_main():
     text = WORKFLOW.read_text(encoding='utf-8')
-    assert 'push:' in text
-    assert 'branches:' in text and '- main' in text
-    assert '".github/workflows/phase3_admin_status_diagnose.yml"' in text
-    assert "github.event_name == 'push'" in text
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'issue_comment:' not in trigger
+    assert 'workflow_run:' not in trigger
     assert "github.ref == 'refs/heads/main'" in text
-    assert 'issue_comment:' in text
-    assert 'workflow_run:' in text
-    assert 'Legislative purchase tracker v2' in text
-    assert 'Executive purchase tracker' in text
-    assert 'AI filing analyst and paper portfolio' in text
-    assert 'Publish government trade dashboard' in text
-    assert 'Runtime v2 safety tests' in text
-    assert 'Phase 3 diagnostic trigger pulse' in text
     assert "github.repository_id == '1349678672'" in text
-    assert 'github.event.issue.number == 39' in text
-    assert 'github.event.sender.id == 225069210' in text
-    assert "github.event.comment.body == '/phase3-diagnose-admin-status'" in text
-    assert "github.event.workflow_run.conclusion == 'success'" in text
-    assert "github.event.workflow_run.head_branch == 'main'" in text
 
 
 def test_diagnostic_pulse_is_noop_read_only_and_self_path_scoped():

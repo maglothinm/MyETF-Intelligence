@@ -17,6 +17,8 @@ def test_build_v2_is_canonical_self_path_scoped_main_push() -> None:
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
+    assert 'group: runtime-v2-image-build' in text
+    assert 'cancel-in-progress: false' in text
 
 
 def test_build_v2_grants_only_service_account_level_actas() -> None:
@@ -68,6 +70,9 @@ def test_build_v2_requires_private_routing_source_and_immutable_digest() -> None
     assert 'CURRENT_DEPLOYED_DIGEST' in text
     assert 'phase3_current_runtime_image_built' in text
     assert 'immutable_image' in text
+    assert 'store_sha256' in text
+    assert 'runner_sha256' in text
+    assert 'migration_sha256' in text
 
 
 def test_build_v2_performs_no_deployment_or_runtime_execution() -> None:

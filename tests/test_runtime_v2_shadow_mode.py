@@ -168,6 +168,7 @@ class _RunLock:
         self.namespace = namespace
         self.started = []
         self.provenance = None
+        self.successful_run_id = None
         self.finished = []
 
     def assert_retry_safe(self):
@@ -201,10 +202,12 @@ class _RunLock:
         source_revision,
         provenance,
         allow_initial=False,
+        successful_run_id=None,
     ):
         assert expected_parent_sha256 == "b" * 64
         assert allow_initial is False
         self.provenance = dict(provenance)
+        self.successful_run_id = successful_run_id
         return SnapshotHead(
             self.namespace,
             2,
@@ -245,8 +248,9 @@ def test_shadow_run_and_snapshot_evidence_record_mode(monkeypatch):
     assert head.provenance["mode"] == "shadow"
     assert store.lock.started == [("legislative", "shadow", REVISION, "shadow")]
     assert store.lock.provenance["mode"] == "shadow"
+    assert store.lock.successful_run_id == "run-1"
     assert "--no-notify" in commands[0]
-    assert store.lock.finished[-1][1]["status"] == "success"
+    assert store.lock.finished == []
 
 
 class _CaptureCursor:
@@ -302,3 +306,33 @@ def test_schema_records_runtime_mode_without_state_reset():
     assert "ADD COLUMN IF NOT EXISTS runtime_mode" in migration
     assert "runtime_mode IN ('shadow', 'production')" in migration
     assert "DROP TABLE" not in migration.upper()
+
+
+def test_schema_derives_legacy_mode_from_exact_committed_snapshot_provenance():
+    migration = (ROOT / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
+
+    assert "SET runtime_mode = snapshot.source_provenance ->> 'mode'" in migration
+    assert "job_run.status = 'success'" in migration
+    assert "job_run.snapshot_id = snapshot.snapshot_id" in migration
+    assert "job_run.snapshot_sha256 = snapshot.snapshot_sha256" in migration
+    assert "job_run.namespace = snapshot.namespace" in migration
+    assert "job_run.source_revision = snapshot.source_revision" in migration
+    assert "snapshot.source_provenance ->> 'authority' = 'runtime_v2'" in migration
+    assert "snapshot.source_provenance ->> 'job' = job_run.job_name" in migration
+    assert "snapshot.source_provenance ->> 'mode' IN ('shadow', 'production')" in migration
+    assert "SET runtime_mode = 'production'" not in migration
+
+
+def test_schema_fails_closed_when_a_legacy_mode_has_no_bound_provenance():
+    migration = (ROOT / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
+
+    backfill = migration.index("UPDATE runtime_job_runs AS job_run")
+    unresolved_guard = migration.index("IF EXISTS (", backfill)
+    not_null = migration.index("ALTER COLUMN runtime_mode SET NOT NULL")
+
+    assert backfill < unresolved_guard < not_null
+    assert "WHERE runtime_mode IS NULL" in migration[unresolved_guard:not_null]
+    assert (
+        "cannot provenance-derive runtime_job_runs.runtime_mode for every legacy run"
+        in migration[unresolved_guard:not_null]
+    )

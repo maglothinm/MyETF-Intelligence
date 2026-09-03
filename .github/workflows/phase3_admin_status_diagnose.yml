@@ -1,22 +1,7 @@
 name: Phase 3 diagnose admin status execution
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/phase3_admin_status_diagnose.yml"
-  issue_comment:
-    types: [created]
-  workflow_run:
-    workflows:
-      - Legislative purchase tracker v2
-      - Executive purchase tracker
-      - AI filing analyst and paper portfolio
-      - Publish government trade dashboard
-      - Runtime v2 safety tests
-      - Phase 3 diagnostic trigger pulse
-    types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,31 +9,7 @@ permissions:
 
 jobs:
   diagnose:
-    if: >-
-      github.repository_id == '1349678672' &&
-      (
-        (
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
-        ) ||
-        (
-          github.event_name == 'issue_comment' &&
-          github.event.issue.number == 39 &&
-          github.event.sender.id == 225069210 &&
-          github.event.comment.body == '/phase3-diagnose-admin-status'
-        ) ||
-        (
-          github.event_name == 'workflow_run' &&
-          github.event.workflow_run.conclusion == 'success' &&
-          (
-            github.event.workflow_run.head_branch == 'main' ||
-            (
-              github.event.workflow_run.id == 33781890281 &&
-              github.event.workflow_run.head_sha == '3d034678bf4ba1fee0609f432e206de6b34a9915'
-            )
-          )
-        )
-      )
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
