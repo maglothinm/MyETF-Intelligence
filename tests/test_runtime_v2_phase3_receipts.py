@@ -11,6 +11,7 @@ ROOT = Path("docs/runtime-v2/phase3")
 EXPECTED = {
     "legislative": {
         "archive_sha256": "a1a45416b4e6467e06493e8723f264aa11b9a20b8c3b1081d49b08b8de538394",
+        "snapshot_sha256": "f33c72c058d1cb6f4bd8e240c20614bae9c6a3b121fa351b9ac3031f84e6858e",
         "artifact_id": 9881049089,
         "job_id": 100546743583,
         "run_id": 33723283663,
@@ -18,6 +19,7 @@ EXPECTED = {
     },
     "executive": {
         "archive_sha256": "9be04931374289cf51afd2cb0b1670564b006dad21105025d77c9c2e95c04c8d",
+        "snapshot_sha256": "73ec5a75b4f5b01dead5af2d8e36be26f3a41db06c3810e4cd60697d6d2a5a14",
         "artifact_id": 9881124215,
         "job_id": 100547268592,
         "run_id": 33723462162,
@@ -25,6 +27,7 @@ EXPECTED = {
     },
     "ai": {
         "archive_sha256": "30ebd04c7418d64846dc53c84610d2a22abfe1d7a9e48121f4faa74468abab36",
+        "snapshot_sha256": "80d4729e941e33443b905e8f208ad5db4361f10e59ffb28658b9d6631ceee931",
         "artifact_id": 9827727750,
         "job_id": 100089268533,
         "run_id": 33579058808,
@@ -62,6 +65,8 @@ def test_phase3_receipt_records_success_and_inventory_evidence(namespace: str) -
     assert receipt["state_marker_verified"] is True
     assert receipt["archive_file_count"] == expected["file_count"]
     assert len(receipt["archive_inventory_sha256"]) == 64
+    assert receipt["expected_runtime_v2_generation"] == 1
+    assert receipt["expected_runtime_v2_snapshot_sha256"] == expected["snapshot_sha256"]
     assert receipt["head_branch"] == "main"
     assert receipt["conclusion"] == "success"
     assert _time(receipt["job_started_at"]) <= _time(receipt["artifact_created_at"]) <= _time(receipt["job_completed_at"])
