@@ -1,0 +1,265 @@
+name: Phase 3 current state acceptance
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_current_state_acceptance.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  accept:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      ONESHOT_MARKER: phase3-acceptance/current-state-v1.claimed
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Execute read-only status and validate Phase 3 data plane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-current-state
+          cd phase3-current-state
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
+
+          cleanup_all() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null 2>&1
+          }
+          trap cleanup_all EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 current-state acceptance marker already exists; refusing duplicate execution." >&2
+            exit 1
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\nsource_revision=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
+
+          # Fail closed unless the persistent admin job is exactly at the Terraform baseline.
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-before.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-before.json)"
+          [[ "$(jq -c '.command // []' <<<"${container_json}")" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${container_json}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Unexpected admin argument baseline." >&2; exit 1; }
+
+          # Phase 3 must remain inert while the read-only probe runs.
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is not paused." >&2; exit 1; }
+          done
+
+          cleanup_all
+          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null
+
+          # Wait for the temporary log-view binding to become effective before creating the status execution.
+          logging_ready=false
+          for attempt in $(seq 1 12); do
+            if gcloud logging read 'resource.type="cloud_run_job"' --project "${PROJECT_ID}" --limit=1 --format=json > /dev/null 2> logging-ready-error.txt; then
+              logging_ready=true
+              break
+            fi
+            echo "Log-view IAM not effective yet (attempt ${attempt}/12)."
+            sleep 10
+          done
+          [[ "${logging_ready}" == "true" ]] || { cat logging-ready-error.txt >&2 || true; echo "Cloud Logging access did not propagate." >&2; exit 1; }
+
+          # Execute the persistent admin job once with an execution-only args override. The job resource itself is not updated.
+          set +e
+          gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --args=-m,runtime_v2,status --wait --format=json > execute-result.json 2> execute-error.txt
+          execute_rc=$?
+          set -e
+          gcloud run jobs executions describe-latest --job "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > status-execution.json
+          status_execution="$(jq -r '.metadata.name // .name // empty' status-execution.json | awk -F/ '{print $NF}')"
+          [[ -n "${status_execution}" ]] || { echo "Could not resolve current status execution name." >&2; exit 1; }
+
+          status_found=false
+          for attempt in $(seq 1 12); do
+            gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${status_execution}\"" --project "${PROJECT_ID}" --order=asc --limit=200 --format=json > status-logs.json
+            jq -c '[.[] | .textPayload? | select(type == "string") | fromjson? | select(type == "object" and has("heads") and has("latest_runs"))][0] // empty' status-logs.json > status.json
+            if [[ -s status.json ]]; then
+              status_found=true
+              break
+            fi
+            echo "Waiting for status JSON log entry (attempt ${attempt}/12)."
+            sleep 5
+          done
+          [[ "${execute_rc}" -eq 0 ]] || { cat execute-error.txt >&2 || true; echo "Current read-only status execution failed." >&2; exit 1; }
+          [[ "${status_found}" == "true" ]] || { echo "Current status execution produced no durable-state JSON." >&2; exit 1; }
+
+          # Remove temporary access before interpreting acceptance evidence.
+          gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null
+          view_policy="$(gcloud logging views get-iam-policy "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' <<<"${view_policy}" >/dev/null; then
+            echo "Temporary log-view accessor remains." >&2
+            exit 1
+          fi
+          gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null
+          gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+            echo "Temporary Logging Admin remains." >&2
+            exit 1
+          fi
+          admin_policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' <<<"${admin_policy}" >/dev/null; then
+            echo "Temporary admin execution authority remains." >&2
+            exit 1
+          fi
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-after.json
+          after_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-after.json)"
+          [[ "$(jq -c '.command // []' <<<"${after_container}")" == '["python"]' ]] || { echo "Admin command changed after execution override." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${after_container}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin args changed after execution override." >&2; exit 1; }
+
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} changed state." >&2; exit 1; }
+          done
+
+          gcloud sql instances describe "${SQL_INSTANCE}" --project "${PROJECT_ID}" --format=json > sql.json
+          jq -e '.settings.ipConfiguration.ipv4Enabled == false and any(.ipAddresses[]?; .type == "PRIVATE")' sql.json >/dev/null || { echo "Cloud SQL is not private-only with a private address." >&2; exit 1; }
+          web_policy="$(gcloud run services get-iam-policy "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e '[.bindings[]?.members[]?] | any(. == "allUsers")' <<<"${web_policy}" >/dev/null; then
+            echo "Runtime v2 web service has public allUsers access." >&2
+            exit 1
+          fi
+
+          STATUS_EXECUTION="${status_execution}" SOURCE_REVISION="${GITHUB_SHA}" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          status = json.loads(Path('status.json').read_text(encoding='utf-8'))
+          heads = {item['namespace']: item for item in status.get('heads', [])}
+          expected = {
+              'legislative': {'run_id': 33723283663, 'job_id': 100546743583, 'artifact_id': 9881049089},
+              'executive': {'run_id': 33723462162, 'job_id': 100547268592, 'artifact_id': 9881124215},
+              'ai': {'run_id': 33579058808, 'job_id': 100089268533, 'artifact_id': 9827727750},
+          }
+          errors = []
+          for namespace, receipt in expected.items():
+              head = heads.get(namespace)
+              if not head:
+                  errors.append(f'missing {namespace} head')
+                  continue
+              if head.get('generation') != 1:
+                  errors.append(f'{namespace} generation is not 1')
+              provenance = head.get('provenance') or {}
+              if provenance.get('authority') != 'github_actions_migration':
+                  errors.append(f'{namespace} authority is not github_actions_migration')
+              if provenance.get('repository_id') != 1349678672:
+                  errors.append(f'{namespace} repository_id mismatch')
+              for key, value in receipt.items():
+                  if provenance.get(key) != value:
+                      errors.append(f'{namespace} {key} mismatch')
+
+          dashboard = heads.get('dashboard')
+          if not dashboard:
+              errors.append('missing dashboard head')
+          else:
+              if dashboard.get('generation') != 1:
+                  errors.append('dashboard generation is not 1')
+              provenance = dashboard.get('provenance') or {}
+              if provenance.get('authority') != 'runtime_v2' or provenance.get('job') != 'dashboard':
+                  errors.append('dashboard provenance is not Runtime v2 dashboard')
+              if provenance.get('mode') != 'shadow':
+                  errors.append('dashboard generation 1 was not created in shadow mode')
+              inputs = provenance.get('inputs') or {}
+              for namespace in ('legislative', 'executive', 'ai'):
+                  if heads.get(namespace) and inputs.get(namespace) != heads[namespace].get('snapshot_sha256'):
+                      errors.append(f'dashboard {namespace} input hash mismatch')
+
+          if 'simulation' in heads:
+              errors.append('simulation durable head exists during Phase 3')
+
+          latest_runs = {item.get('job_name'): item for item in status.get('latest_runs', [])}
+          for producer in ('legislative', 'executive', 'ai'):
+              if producer in latest_runs:
+                  errors.append(f'Runtime v2 producer run exists for {producer} before Phase 4')
+          dashboard_run = latest_runs.get('dashboard')
+          if not dashboard_run:
+              errors.append('missing dashboard run receipt')
+          else:
+              if dashboard_run.get('runtime_mode') != 'shadow' or dashboard_run.get('status') != 'success':
+                  errors.append('dashboard run is not successful shadow execution')
+              if dashboard_run.get('side_effects_possible'):
+                  errors.append('dashboard run reports possible side effects')
+          for run in status.get('latest_runs', []):
+              if run.get('side_effects_possible'):
+                  errors.append(f"{run.get('job_name')} reports possible side effects")
+
+          if errors:
+              raise SystemExit('Phase 3 data-plane acceptance failed: ' + '; '.join(errors))
+
+          receipt = {
+              'result': 'phase3_ready_for_phase4',
+              'source_revision': os.environ['SOURCE_REVISION'],
+              'status_execution': os.environ['STATUS_EXECUTION'],
+              'protected_generations': {name: heads[name]['generation'] for name in ('legislative', 'executive', 'ai')},
+              'protected_snapshot_sha256': {name: heads[name]['snapshot_sha256'] for name in ('legislative', 'executive', 'ai')},
+              'dashboard_generation': dashboard['generation'],
+              'dashboard_snapshot_sha256': dashboard['snapshot_sha256'],
+              'dashboard_inputs': dashboard['provenance']['inputs'],
+              'canonical_sources': expected,
+              'schedulers_paused': True,
+              'admin_baseline_preserved': True,
+              'temporary_execution_authority_removed': True,
+              'temporary_logging_authority_removed': True,
+              'cloud_sql_private_only': True,
+              'web_public_invoker_absent': True,
+              'production_authority_transferred': False,
+              'phase4_started': False,
+          }
+          Path('phase3-acceptance.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(receipt, indent=2, sort_keys=True))
+          PY
+
+          trap - EXIT
+
+      - name: Upload Phase 3 acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-current-state-acceptance
+          path: |
+            phase3-current-state/status.json
+            phase3-current-state/phase3-acceptance.json
+            phase3-current-state/oneshot-marker.txt
+          if-no-files-found: warn
+          retention-days: 90
