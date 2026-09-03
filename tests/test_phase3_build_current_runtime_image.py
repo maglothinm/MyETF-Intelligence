@@ -38,10 +38,22 @@ def test_build_reconciles_only_intended_builder_project_and_bucket_roles() -> No
     assert "'roles/editor'" not in text
 
 
+def test_build_pins_commands_to_builder_auth_output() -> None:
+    text = _text()
+    assert 'id: builder-auth' in text
+    assert 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.builder-auth.outputs.credentials_file_path }}' in text
+    assert 'GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.builder-auth.outputs.credentials_file_path }}' in text
+    assert 'GOOGLE_GHA_CREDS_PATH: ${{ steps.builder-auth.outputs.credentials_file_path }}' in text
+    assert 'credential_file="${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE}"' in text
+    assert 'service_account_impersonation_url' in text
+    assert 'contains($account)' in text
+    assert 'The active credential file does not impersonate the isolated Phase 3 builder.' in text
+    assert 'gcloud auth list' not in text
+    assert 'builder_credentials_pinned: true' in text
+
+
 def test_build_waits_until_builder_permissions_are_effective() -> None:
     text = _text()
-    assert 'active_account="$(gcloud auth list' in text
-    assert 'gcloud is not authenticated as the isolated Phase 3 builder.' in text
     assert 'for attempt in $(seq 1 18)' in text
     assert 'gcloud storage buckets describe "gs://${CLOUD_BUILD_BUCKET}"' in text
     assert 'gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" --limit=1' in text
