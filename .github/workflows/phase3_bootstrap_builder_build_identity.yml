@@ -1,0 +1,154 @@
+name: Phase 3 bootstrap builder build identity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_bootstrap_builder_build_identity.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Establish narrow build identity edges
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-builder-build-identity
+          member_deployer="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          member_builder="serviceAccount:${BUILDER_SERVICE_ACCOUNT}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          # The deployer receives only read-only Cloud Build discovery, allowing it
+          # to resolve the platform-selected execution identity deterministically.
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member_deployer}" \
+            --role roles/cloudbuild.builds.viewer \
+            --condition=None \
+            --quiet \
+            --format=none
+
+          default_build_service_account=""
+          for attempt in $(seq 1 12); do
+            set +e
+            candidate="$(gcloud builds get-default-service-account \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format='value(serviceAccountEmail)' 2> phase3-builder-build-identity/default-build-sa-error.txt)"
+            rc=$?
+            set -e
+            if [[ "${rc}" -eq 0 && -n "${candidate}" ]]; then
+              default_build_service_account="${candidate##*/}"
+              break
+            fi
+            echo "Cloud Build Viewer binding not effective yet (attempt ${attempt}/12)."
+            sleep 10
+          done
+          [[ "${default_build_service_account}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.gserviceaccount\.com$ ]] || {
+            cat phase3-builder-build-identity/default-build-sa-error.txt >&2 || true
+            echo "Could not resolve Cloud Build's default execution service account." >&2
+            exit 1
+          }
+          [[ "${default_build_service_account}" != "${BUILDER_SERVICE_ACCOUNT}" ]] || {
+            echo "Refusing to collapse the isolated submitter and build-execution identities." >&2
+            exit 1
+          }
+
+          gcloud iam service-accounts add-iam-policy-binding "${default_build_service_account}" \
+            --project "${PROJECT_ID}" \
+            --member "${member_builder}" \
+            --role roles/iam.serviceAccountUser \
+            --condition=None \
+            --quiet \
+            --format=none
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          jq -e \
+            --arg member "${member_deployer}" \
+            '[.bindings[]? | select(.role == "roles/cloudbuild.builds.viewer") | .members[]?] | any(. == $member)' \
+            <<<"${project_policy}" >/dev/null || {
+              echo "Deployer lacks Cloud Build Viewer after bootstrap." >&2
+              exit 1
+            }
+          if jq -e \
+            --arg member "${member_builder}" \
+            '[.bindings[]? | select(.role == "roles/iam.serviceAccountUser") | .members[]?] | any(. == $member)' \
+            <<<"${project_policy}" >/dev/null; then
+            echo "Builder has unexpected project-wide Service Account User authority." >&2
+            exit 1
+          fi
+
+          build_sa_policy="$(gcloud iam service-accounts get-iam-policy "${default_build_service_account}" \
+            --project "${PROJECT_ID}" \
+            --format=json)"
+          jq -e \
+            --arg member "${member_builder}" \
+            '[.bindings[]? | select(.role == "roles/iam.serviceAccountUser") | .members[]?] | any(. == $member)' \
+            <<<"${build_sa_policy}" >/dev/null || {
+              echo "Builder lacks actAs on the resolved default build identity." >&2
+              exit 1
+            }
+
+          jq -n \
+            --arg project_id "${PROJECT_ID}" \
+            --arg project_number "${PROJECT_NUMBER}" \
+            --arg deployer "${DEPLOYER_SERVICE_ACCOUNT}" \
+            --arg builder "${BUILDER_SERVICE_ACCOUNT}" \
+            --arg default_build_service_account "${default_build_service_account}" \
+            '{
+              result: "phase3_builder_build_identity_ready",
+              project_id: $project_id,
+              project_number: ($project_number | tonumber),
+              deployer_service_account: $deployer,
+              builder_service_account: $builder,
+              default_build_service_account: $default_build_service_account,
+              deployer_cloud_build_access: "viewer_only",
+              builder_actas_scope: "default_build_service_account_only",
+              build_started: false,
+              deployed: false,
+              runtime_job_execution: false,
+              scheduler_execution: false,
+              production_authority_transferred: false,
+              phase4_started: false
+            }' > phase3-builder-build-identity/receipt.json
+          cat phase3-builder-build-identity/receipt.json
+
+      - name: Upload builder identity receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-builder-build-identity
+          path: phase3-builder-build-identity/
+          if-no-files-found: warn
+          retention-days: 90
