@@ -4,7 +4,7 @@
   "archive_inventory_sha256": "4b34a0d1100a4189188218d41f85c5e9d1679cc4d1c8f70330cc0161e77b65ee",
   "archive_sha256": "a1a45416b4e6467e06493e8723f264aa11b9a20b8c3b1081d49b08b8de538394",
   "archive_size_bytes": 476334,
-  "archive_uncompressed_bytes": 6006820,
+  "archive_uncompressed_bytes": 6114873,
   "artifact_created_at": "2026-09-03T06:29:02Z",
   "artifact_created_within_job_window": true,
   "artifact_digest": "sha256:a1a45416b4e6467e06493e8723f264aa11b9a20b8c3b1081d49b08b8de538394",
