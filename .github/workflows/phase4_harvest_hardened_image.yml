@@ -1,0 +1,143 @@
+name: Phase 4 harvest hardened Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_harvest_hardened_image.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  harvest:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: d580d289-c02e-4f07-93e0-d0acfc17ee4b
+      BUILD_SOURCE_REVISION: 9b77de78203fec04d46404e1b674325517420c5c
+      PRIOR_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest exact hardened build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-hardened-image
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          terminal=false
+          for attempt in $(seq 1 48); do
+            gcloud builds describe "${BUILD_ID}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format=json > phase4-hardened-image/build.json
+            status="$(jq -r '.status // empty' phase4-hardened-image/build.json)"
+            case "${status}" in
+              SUCCESS|FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                terminal=true
+                break
+                ;;
+            esac
+            echo "Cloud Build is ${status:-unknown}; waiting for terminal state (attempt ${attempt}/48)."
+            sleep 10
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Cloud Build did not reach terminal state within the bounded harvest window." >&2
+            exit 1
+          }
+
+          status="$(jq -r '.status' phase4-hardened-image/build.json)"
+          [[ "${status}" == "SUCCESS" ]] || {
+            jq -r '.failureInfo.detail // .statusDetail // "Cloud Build failed without detail."' \
+              phase4-hardened-image/build.json >&2
+            exit 1
+          }
+          jq -e --arg source "${BUILD_SOURCE_REVISION}" \
+            '.substitutions._SOURCE_REVISION == $source' \
+            phase4-hardened-image/build.json >/dev/null || {
+              echo "Cloud Build source revision mismatch." >&2
+              exit 1
+            }
+          jq -e --arg project "${PROJECT_ID}" '.projectId == $project' \
+            phase4-hardened-image/build.json >/dev/null || {
+              echo "Cloud Build project mismatch." >&2
+              exit 1
+            }
+
+          tag="${BUILD_SOURCE_REVISION:0:12}"
+          tagged_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${tag}"
+          digest="$(gcloud artifacts docker images describe "${tagged_image}" \
+            --project "${PROJECT_ID}" \
+            --format='value(image_summary.digest)')"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "Successful build has no resolvable immutable digest." >&2
+            exit 1
+          }
+          [[ "${digest}" != "${PRIOR_DEPLOYED_DIGEST}" ]] || {
+            echo "Hardened build resolved to the prior deployed digest." >&2
+            exit 1
+          }
+
+          immutable_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}@${digest}"
+          jq -n \
+            --arg project_id "${PROJECT_ID}" \
+            --arg project_number "${PROJECT_NUMBER}" \
+            --arg build_id "${BUILD_ID}" \
+            --arg source_revision "${BUILD_SOURCE_REVISION}" \
+            --arg status "${status}" \
+            --arg immutable_image "${immutable_image}" \
+            --arg digest "${digest}" \
+            '{
+              schema_version: 1,
+              result: "phase4_hardened_runtime_image_harvested",
+              project_id: $project_id,
+              project_number: ($project_number | tonumber),
+              cloud_build_id: $build_id,
+              build_source_revision: $source_revision,
+              build_status: $status,
+              immutable_image: $immutable_image,
+              image_digest: $digest,
+              build_started_by_this_workflow: false,
+              deployed: false,
+              runtime_job_execution: false,
+              scheduler_execution: false,
+              production_authority_transferred: false,
+              phase4_started: false
+            }' > phase4-hardened-image/receipt.json
+          cat phase4-hardened-image/receipt.json
+
+      - name: Upload hardened image receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase4-hardened-runtime-image
+          path: phase4-hardened-image/
+          if-no-files-found: warn
+          retention-days: 90
