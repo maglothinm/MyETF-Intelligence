@@ -1,0 +1,36 @@
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: polititrack
+  _IMAGE: runtime-v2
+  _TAG: manual
+  _SOURCE_REVISION: "0000000000000000000000000000000000000000"
+  _SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
+
+steps:
+  - name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        git clone --filter=blob:none --no-checkout "${_SOURCE_REPOSITORY}" /workspace/repository
+        git -C /workspace/repository fetch --depth=1 origin "${_SOURCE_REVISION}"
+        git -C /workspace/repository checkout --detach FETCH_HEAD
+        test "$(git -C /workspace/repository rev-parse HEAD)" = "${_SOURCE_REVISION}"
+
+  - name: gcr.io/cloud-builders/docker
+    dir: repository
+    args:
+      - build
+      - --file
+      - deploy/runtime-v2/Dockerfile
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${_TAG}
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${_TAG}
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${_TAG}
