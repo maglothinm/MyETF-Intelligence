@@ -1,0 +1,206 @@
+name: Phase 3 Runtime image routing diagnostic
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_runtime_image_routing_diagnostic.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Probe deployed image routing code without database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-runtime-image-diagnostic
+          cd phase3-runtime-image-diagnostic
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          cleanup() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" \
+              --bucket "${LOG_BUCKET}" \
+              --location "${LOG_LOCATION}" \
+              --project "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.viewAccessor \
+              --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.admin \
+              --condition=None \
+              --quiet >/dev/null 2>&1
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --member "${member}" \
+              --role roles/run.jobsExecutorWithOverrides \
+              --quiet >/dev/null 2>&1
+          }
+          trap cleanup EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is not paused." >&2; exit 1; }
+          done
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-before.json
+          container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-before.json)"
+          [[ "$(jq -c '.command // []' <<<"${container}")" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${container}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Unexpected admin argument baseline." >&2; exit 1; }
+          [[ "$(jq -r '[.env[]? | select(.name == "PRIVATE_IP") | .value][0] // empty' <<<"${container}")" == "true" ]] || { echo "Admin PRIVATE_IP is not true before image diagnostic." >&2; exit 1; }
+
+          cleanup
+          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --member "${member}" \
+            --role roles/run.jobsExecutorWithOverrides \
+            --quiet >/dev/null
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" \
+            --role roles/logging.admin \
+            --condition=None \
+            --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" \
+            --bucket "${LOG_BUCKET}" \
+            --location "${LOG_LOCATION}" \
+            --project "${PROJECT_ID}" \
+            --member "${member}" \
+            --role roles/logging.viewAccessor \
+            --quiet >/dev/null
+
+          logging_ready=false
+          for attempt in $(seq 1 15); do
+            if gcloud logging read 'resource.type="cloud_run_job"' --project "${PROJECT_ID}" --limit=1 --format=json >/dev/null 2>&1; then
+              logging_ready=true
+              break
+            fi
+            echo "Log-view IAM not effective yet (attempt ${attempt}/15)."
+            sleep 10
+          done
+          [[ "${logging_ready}" == "true" ]] || { echo "Cloud Logging access did not propagate." >&2; exit 1; }
+
+          diagnostic_code='import os; import hashlib; import importlib.metadata as md; from pathlib import Path; import runtime_v2.database as d; from google.cloud.sql.connector import IPTypes; print("PRIVATE_IP="+str(os.environ.get("PRIVATE_IP"))); print("USE_PRIVATE="+str(d._use_private_ip())); print("DATABASE_SHA256="+hashlib.sha256(Path(d.__file__).read_bytes()).hexdigest()); print("CONNECTOR_VERSION="+md.version("cloud-sql-python-connector")); print("PRIVATE_VALUE="+str(IPTypes.PRIVATE.value)); print("PUBLIC_VALUE="+str(IPTypes.PUBLIC.value))'
+          previous_execution="$(gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.latestCreatedExecution.name)')"
+          gcloud run jobs execute "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --args="-c,${diagnostic_code}" \
+            --wait \
+            --format=json > execute-result.json
+
+          execution="$(gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.latestCreatedExecution.name)')"
+          [[ -n "${execution}" && "${execution}" != "${previous_execution}" ]] || { echo "A new image diagnostic execution was not created." >&2; exit 1; }
+          gcloud run jobs executions describe "${execution}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
+          jq -e 'any(.status.conditions[]?; .type == "Completed" and .status == "True")' execution.json >/dev/null || { echo "Image diagnostic execution did not complete successfully." >&2; exit 1; }
+
+          found=false
+          for attempt in $(seq 1 20); do
+            gcloud logging read \
+              "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+              --project "${PROJECT_ID}" \
+              --order=asc \
+              --limit=200 \
+              --format=json > logs.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          entries = json.loads(Path('logs.json').read_text(encoding='utf-8'))
+          prefixes = ('PRIVATE_IP=', 'USE_PRIVATE=', 'DATABASE_SHA256=', 'CONNECTOR_VERSION=', 'PRIVATE_VALUE=', 'PUBLIC_VALUE=')
+          values = {}
+          for entry in entries:
+              text = entry.get('textPayload')
+              if isinstance(text, str):
+                  text = text.strip()
+                  for prefix in prefixes:
+                      if text.startswith(prefix):
+                          values[prefix[:-1]] = text[len(prefix):]
+          Path('diagnostic.json').write_text(json.dumps(values, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+            if [[ "$(jq 'length' diagnostic.json)" -eq 6 ]]; then
+              found=true
+              break
+            fi
+            echo "Waiting for image diagnostic output (attempt ${attempt}/20)."
+            sleep 5
+          done
+          [[ "${found}" == "true" ]] || { echo "Image diagnostic output was incomplete." >&2; exit 1; }
+
+          expected_database_sha256="$(sha256sum ../runtime_v2/database.py | awk '{print $1}')"
+          jq --arg expected "${expected_database_sha256}" --arg execution "${execution}" \
+            '. + {EXPECTED_DATABASE_SHA256: $expected, EXECUTION: $execution, DATABASE_SOURCE_MATCHES_MAIN: (.DATABASE_SHA256 == $expected)}' \
+            diagnostic.json > diagnostic-receipt.json
+          cat diagnostic-receipt.json
+
+          cleanup
+          trap - EXIT
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+            echo "Temporary Logging Admin remains." >&2
+            exit 1
+          fi
+          view_policy="$(gcloud logging views get-iam-policy "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' <<<"${view_policy}" >/dev/null; then
+            echo "Temporary log-view accessor remains." >&2
+            exit 1
+          fi
+          admin_policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' <<<"${admin_policy}" >/dev/null; then
+            echo "Temporary admin execution authority remains." >&2
+            exit 1
+          fi
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-after.json
+          after_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-after.json)"
+          [[ "$(jq -c '.command // []' <<<"${after_container}")" == '["python"]' ]] || { echo "Admin command changed after diagnostic override." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${after_container}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin args changed after diagnostic override." >&2; exit 1; }
+          [[ "$(jq -r '[.env[]? | select(.name == "PRIVATE_IP") | .value][0] // empty' <<<"${after_container}")" == "true" ]] || { echo "Admin PRIVATE_IP changed after image diagnostic." >&2; exit 1; }
+
+      - name: Upload Runtime image diagnostic
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-runtime-image-routing-diagnostic
+          path: |
+            phase3-runtime-image-diagnostic/diagnostic-receipt.json
+            phase3-runtime-image-diagnostic/execution.json
+            phase3-runtime-image-diagnostic/admin-before.json
+            phase3-runtime-image-diagnostic/admin-after.json
+          if-no-files-found: warn
+          retention-days: 30
