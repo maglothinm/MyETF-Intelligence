@@ -11,6 +11,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: runtime-v2-image-build
+  cancel-in-progress: false
+
 jobs:
   harvest:
     if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
@@ -22,14 +26,16 @@ jobs:
       REGION: us-central1
       REPOSITORY: polititrack
       IMAGE_NAME: runtime-v2
-      BUILD_ID: 1db569db-57a1-46fe-a061-0547ac6779b2
-      BUILD_SOURCE_REVISION: 080a3df0f0b912f702a30148cedc831b833a81db
-      CURRENT_DEPLOYED_DIGEST: sha256:82b691179c422aba5c3ffa205e1a2d548f8cd6e8e9ed8ac2b5df5f7f8c71a565
+      BUILD_ID: d580d289-c02e-4f07-93e0-d0acfc17ee4b
+      BUILD_SOURCE_REVISION: 9b77de78203fec04d46404e1b674325517420c5c
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Authenticate as constrained Phase 3 deployer
         uses: google-github-actions/auth@v3
@@ -102,6 +108,12 @@ jobs:
           }
 
           immutable_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}@${digest}"
+          database_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/database.py" | sha256sum | awk '{print $1}')"
+          store_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/store.py" | sha256sum | awk '{print $1}')"
+          runner_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/runner.py" | sha256sum | awk '{print $1}')"
+          migration_sha="$(git show "${BUILD_SOURCE_REVISION}:migrations/20260901_runtime_v2.sql" | sha256sum | awk '{print $1}')"
+          dockerfile_sha="$(git show "${BUILD_SOURCE_REVISION}:deploy/runtime-v2/Dockerfile" | sha256sum | awk '{print $1}')"
+          requirements_sha="$(git show "${BUILD_SOURCE_REVISION}:requirements-runtime-v2.txt" | sha256sum | awk '{print $1}')"
           jq -n \
             --arg project_id "${PROJECT_ID}" \
             --arg project_number "${PROJECT_NUMBER}" \
@@ -110,6 +122,12 @@ jobs:
             --arg status "${status}" \
             --arg immutable_image "${immutable_image}" \
             --arg digest "${digest}" \
+            --arg database_sha256 "${database_sha}" \
+            --arg store_sha256 "${store_sha}" \
+            --arg runner_sha256 "${runner_sha}" \
+            --arg migration_sha256 "${migration_sha}" \
+            --arg dockerfile_sha256 "${dockerfile_sha}" \
+            --arg requirements_sha256 "${requirements_sha}" \
             '{
               result: "phase3_current_runtime_image_harvested",
               project_id: $project_id,
@@ -119,6 +137,12 @@ jobs:
               build_status: $status,
               immutable_image: $immutable_image,
               image_digest: $digest,
+              database_sha256: $database_sha256,
+              store_sha256: $store_sha256,
+              runner_sha256: $runner_sha256,
+              migration_sha256: $migration_sha256,
+              dockerfile_sha256: $dockerfile_sha256,
+              requirements_sha256: $requirements_sha256,
               build_started_by_this_workflow: false,
               deployed: false,
               runtime_job_execution: false,
