@@ -21,6 +21,17 @@ def test_wif_bootstrap_defaults_to_nonmutating_preflight() -> None:
     assert "No Google Cloud resource or IAM policy was changed" in text
 
 
+def test_wif_resource_probes_treat_expected_not_found_as_absent() -> None:
+    text = _text()
+    start = text.index("function Test-GcloudResource")
+    end = text.index("\n}\n\n$gcloud", start) + 2
+    function_text = text[start:end]
+    assert "try {" in function_text
+    assert "catch {" in function_text
+    assert "return $false" in function_text
+    assert "*> $null" in function_text
+
+
 def test_wif_bootstrap_pins_immutable_ids_and_main_ref() -> None:
     text = _text()
     assert "[string]$ProjectNumber = '497412818801'" in text

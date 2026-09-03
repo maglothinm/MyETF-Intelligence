@@ -24,8 +24,13 @@ function Invoke-Checked([string]$File, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$File failed with exit code $LASTEXITCODE." }
 }
 function Test-GcloudResource([string[]]$Arguments) {
-    & $script:gcloud @Arguments *> $null
-    return $LASTEXITCODE -eq 0
+    try {
+        & $script:gcloud @Arguments *> $null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
 }
 
 $gcloud = Resolve-RequiredCommand 'gcloud'
