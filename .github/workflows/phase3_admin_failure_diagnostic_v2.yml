@@ -1,0 +1,162 @@
+name: Phase 3 admin failure diagnostic v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_admin_failure_diagnostic_v2.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      FAILED_EXECUTION: polititrack-admin-snrjx
+      ONESHOT_MARKER: phase3-diagnostics/admin-failure-v4.claimed
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Read failed admin execution and verify cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-admin-failure-v2
+          cd phase3-admin-failure-v2
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 admin failure diagnostic marker already exists; skipping duplicate execution."
+            exit 0
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\nsource_revision=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-current.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-current.json)"
+          command_json="$(jq -c '.command // []' <<<"${container_json}")"
+          args_json="$(jq -c '.args // []' <<<"${container_json}")"
+          [[ "${command_json}" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+          if [[ "${args_json}" == '["-m","runtime_v2","status"]' ]]; then
+            gcloud run jobs update "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --args=-m,runtime_v2,init-db,--with-vault --quiet >/dev/null
+            args_json='["-m","runtime_v2","init-db","--with-vault"]'
+          fi
+          [[ "${args_json}" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin job is not at the Terraform Phase 3 baseline." >&2; exit 1; }
+
+          gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.invoker --quiet >/dev/null 2>&1 || true
+          for role in roles/logging.viewer roles/logging.viewAccessor; do
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role "${role}" --condition=None --quiet >/dev/null 2>&1 || true
+          done
+
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is not paused." >&2; exit 1; }
+          done
+
+          cleanup_logging() {
+            set +e
+            for role in roles/logging.viewer roles/logging.viewAccessor; do
+              gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role "${role}" --condition=None --quiet >/dev/null 2>&1
+            done
+          }
+          trap cleanup_logging EXIT
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --condition=None --quiet >/dev/null
+
+          gcloud run jobs executions describe "${FAILED_EXECUTION}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
+          gcloud logging read \
+            "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${FAILED_EXECUTION}\"" \
+            --project "${PROJECT_ID}" \
+            --order=asc \
+            --limit=400 \
+            --format=json > logs.json
+
+          cleanup_logging
+          trap - EXIT
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          for role in roles/logging.viewer roles/logging.viewAccessor; do
+            if jq -e --arg member "${member}" --arg role "${role}" '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+              echo "Temporary ${role} binding remains after diagnostic cleanup." >&2
+              exit 1
+            fi
+          done
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          execution = json.loads(Path('execution.json').read_text(encoding='utf-8'))
+          logs = json.loads(Path('logs.json').read_text(encoding='utf-8'))
+          messages = []
+          for item in logs:
+              candidates = []
+              text = item.get('textPayload')
+              if isinstance(text, str):
+                  candidates.append(text)
+              payload = item.get('jsonPayload')
+              if isinstance(payload, dict):
+                  for key in ('message', 'error', 'exception'):
+                      value = payload.get(key)
+                      if isinstance(value, str):
+                          candidates.append(value)
+              proto = item.get('protoPayload')
+              if isinstance(proto, dict):
+                  status = proto.get('status')
+                  if isinstance(status, dict) and isinstance(status.get('message'), str):
+                      candidates.append(status['message'])
+              for value in candidates:
+                  value = value.strip()
+                  if value and value not in messages:
+                      messages.append(value)
+          summary = {
+              'execution_name': execution.get('metadata', {}).get('name') or execution.get('name'),
+              'conditions': execution.get('status', {}).get('conditions') or execution.get('conditions') or [],
+              'log_entry_count': len(logs),
+              'messages': messages,
+          }
+          Path('diagnostic-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if not messages:
+              raise SystemExit('No diagnostic log messages were recovered for the failed execution.')
+          PY
+
+      - name: Upload diagnostic receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-admin-failure-diagnostic-v2
+          path: |
+            phase3-admin-failure-v2/admin-current.json
+            phase3-admin-failure-v2/execution.json
+            phase3-admin-failure-v2/logs.json
+            phase3-admin-failure-v2/diagnostic-summary.json
+            phase3-admin-failure-v2/oneshot-marker.txt
+          if-no-files-found: warn
+          retention-days: 30
