@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - ".github/workflows/phase3_cloud_discovery.yml"
+      - "docs/runtime-v2/phase3/cloud-auth-ready.txt"
   workflow_dispatch:
 
 permissions:
@@ -21,14 +21,19 @@ jobs:
       PROJECT_ID: project-38008d5f-4918-46e6-920
       PROJECT_NUMBER: "497412818801"
       REGION: us-central1
-      DISCOVERY_SERVICE_ACCOUNT: polititrack-secret-transfer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WIF_POOL: polititrack-runtime-v2
+      WIF_PROVIDER: github-main
+      DISCOVERY_SERVICE_ACCOUNT: polititrack-p3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
     steps:
-      - name: Authenticate to established Google Cloud boundary
+      - name: Check out canonical source
+        uses: actions/checkout@v7
+
+      - name: Authenticate through durable Phase 3 Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
           project_id: project-38008d5f-4918-46e6-920
-          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/providers/secret-transfer
-          service_account: polititrack-secret-transfer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-runtime-v2/providers/github-main
+          service_account: polititrack-p3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -41,13 +46,15 @@ jobs:
           : > "$report"
 
           printf '%s\n' \
-            "schema_version=1" \
+            "schema_version=2" \
             "repository_id=${GITHUB_REPOSITORY_ID}" \
             "repository=${GITHUB_REPOSITORY}" \
             "source_revision=${GITHUB_SHA}" \
             "project_id=${PROJECT_ID}" \
             "expected_project_number=${PROJECT_NUMBER}" \
             "selected_region=${REGION}" \
+            "wif_pool=${WIF_POOL}" \
+            "wif_provider=${WIF_PROVIDER}" \
             "discovery_service_account=${DISCOVERY_SERVICE_ACCOUNT}" \
             "mode=shadow" \
             "schedules_enabled=false" \
@@ -95,9 +102,14 @@ jobs:
               --format='value(bindings.role)'
           capture secret_ids_only \
             gcloud secrets list --project "$PROJECT_ID" --format='value(name)'
+          capture workload_identity_pool \
+            gcloud iam workload-identity-pools describe "$WIF_POOL" \
+              --location=global \
+              --project="$PROJECT_ID" \
+              --format=json
           capture workload_identity_provider \
-            gcloud iam workload-identity-pools providers describe secret-transfer \
-              --workload-identity-pool=polititrack-github \
+            gcloud iam workload-identity-pools providers describe "$WIF_PROVIDER" \
+              --workload-identity-pool="$WIF_POOL" \
               --location=global \
               --project="$PROJECT_ID" \
               --format=json
