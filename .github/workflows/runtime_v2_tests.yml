@@ -31,6 +31,7 @@ on:
       - "tests/test_phase3_build_current_runtime_image.py"
       - "tests/test_phase3_build_current_runtime_image_v2.py"
       - "tests/test_phase3_bootstrap_builder_build_identity.py"
+      - "tests/test_phase3_harvest_current_runtime_build.py"
       - "tests/test_dashboard_insights.py"
       - ".github/workflows/phase3_cloud_discovery.yml"
       - ".github/workflows/phase3_gcp_auth_inventory.yml"
@@ -48,6 +49,7 @@ on:
       - ".github/workflows/phase3_build_current_runtime_image.yml"
       - ".github/workflows/phase3_build_current_runtime_image_v2.yml"
       - ".github/workflows/phase3_bootstrap_builder_build_identity.yml"
+      - ".github/workflows/phase3_harvest_current_runtime_build.yml"
       - ".github/workflows/phase3_diagnostic_pulse.yml"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:
@@ -135,6 +137,7 @@ jobs:
             tests/test_phase3_build_current_runtime_image.py \
             tests/test_phase3_build_current_runtime_image_v2.py \
             tests/test_phase3_bootstrap_builder_build_identity.py \
+            tests/test_phase3_harvest_current_runtime_build.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
