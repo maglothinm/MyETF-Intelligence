@@ -93,15 +93,25 @@ jobs:
 
       - name: Wait for builder permissions and build immutable image
         shell: bash
+        env:
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.builder-auth.outputs.credentials_file_path }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.builder-auth.outputs.credentials_file_path }}
+          GOOGLE_GHA_CREDS_PATH: ${{ steps.builder-auth.outputs.credentials_file_path }}
         run: |
           set -euo pipefail
           mkdir -p phase3-image-build
 
-          active_account="$(gcloud auth list --filter='status:ACTIVE' --format='value(account)')"
-          [[ "${active_account}" == "${BUILDER_SERVICE_ACCOUNT}" ]] || {
-            echo "gcloud is not authenticated as the isolated Phase 3 builder." >&2
+          credential_file="${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE}"
+          [[ -n "${credential_file}" && -f "${credential_file}" ]] || {
+            echo "The isolated builder credential file is missing." >&2
             exit 1
           }
+          jq -e --arg account "${BUILDER_SERVICE_ACCOUNT}" \
+            '(.service_account_impersonation_url // "") | contains($account)' \
+            "${credential_file}" >/dev/null || {
+              echo "The active credential file does not impersonate the isolated Phase 3 builder." >&2
+              exit 1
+            }
 
           permission_ready=false
           for attempt in $(seq 1 18); do
@@ -176,6 +186,7 @@ jobs:
               database_sha256: $database_sha256,
               dockerfile_sha256: $dockerfile_sha256,
               requirements_sha256: $requirements_sha256,
+              builder_credentials_pinned: true,
               builder_project_roles: [
                 "roles/cloudbuild.builds.editor",
                 "roles/serviceusage.serviceUsageConsumer",
