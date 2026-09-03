@@ -116,7 +116,7 @@ jobs:
           permission_ready=false
           for attempt in $(seq 1 18); do
             if gcloud storage buckets describe "gs://${CLOUD_BUILD_BUCKET}" >/dev/null 2>&1 \
-              && gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" --limit=1 >/dev/null 2>&1 \
+              && gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" >/dev/null 2>&1 \
               && gcloud services list --enabled --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1 \
               && gcloud builds list --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1; then
               permission_ready=true

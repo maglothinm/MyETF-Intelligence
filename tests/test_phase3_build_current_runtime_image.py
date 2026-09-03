@@ -52,11 +52,12 @@ def test_build_pins_commands_to_builder_auth_output() -> None:
     assert 'builder_credentials_pinned: true' in text
 
 
-def test_build_waits_until_builder_permissions_are_effective() -> None:
+def test_build_waits_until_builder_permissions_are_effective_with_valid_commands() -> None:
     text = _text()
     assert 'for attempt in $(seq 1 18)' in text
     assert 'gcloud storage buckets describe "gs://${CLOUD_BUILD_BUCKET}"' in text
-    assert 'gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" --limit=1' in text
+    assert 'gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" >/dev/null' in text
+    assert 'gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" --limit=1' not in text
     assert 'gcloud services list --enabled --project "${PROJECT_ID}" --limit=1' in text
     assert 'gcloud builds list --project "${PROJECT_ID}" --limit=1' in text
     assert 'Builder permissions did not become effective within the bounded readiness window.' in text
