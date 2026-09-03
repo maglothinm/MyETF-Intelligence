@@ -25,6 +25,7 @@ on:
       - "tests/test_phase3_admin_status_diagnose.py"
       - "tests/test_phase3_admin_failure_diagnostic_v2.py"
       - "tests/test_phase3_current_state_acceptance.py"
+      - "tests/test_phase3_harvest_current_status.py"
       - "tests/test_dashboard_insights.py"
       - ".github/workflows/phase3_cloud_discovery.yml"
       - ".github/workflows/phase3_gcp_auth_inventory.yml"
@@ -35,6 +36,7 @@ on:
       - ".github/workflows/phase3_admin_status_diagnose.yml"
       - ".github/workflows/phase3_admin_failure_diagnostic_v2.yml"
       - ".github/workflows/phase3_current_state_acceptance.yml"
+      - ".github/workflows/phase3_harvest_current_status.yml"
       - ".github/workflows/phase3_diagnostic_pulse.yml"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:
@@ -116,6 +118,7 @@ jobs:
             tests/test_phase3_admin_status_diagnose.py \
             tests/test_phase3_admin_failure_diagnostic_v2.py \
             tests/test_phase3_current_state_acceptance.py \
+            tests/test_phase3_harvest_current_status.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
