@@ -83,7 +83,7 @@ def test_frozen_reconciliation_config_preserves_existing_nonsecret_runtime_behav
         "OPENAI_MODEL": "gpt-5.6-terra",
         "OPENAI_REASONING_EFFORT": "medium",
         "REQUIRE_PUSHOVER": "false",
-        "SOURCE_REVISION": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+        "SOURCE_REVISION": "080a3df0f0b912f702a30148cedc831b833a81db",
     }
     for name, value in expected.items():
         assert env[name] == value
@@ -106,7 +106,7 @@ def test_phase3_plan_uses_frozen_immutable_image_without_building() -> None:
     config = _config()
     assert config["image"] == (
         "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/"
-        "polititrack/runtime-v2@sha256:82b691179c422aba5c3ffa205e1a2d548f8cd6e8e9ed8ac2b5df5f7f8c71a565"
+        "polititrack/runtime-v2@sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b"
     )
     assert "builds submit" not in text
 
