@@ -1,0 +1,493 @@
+name: Phase 3 apply exact saved Terraform plan
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_apply_saved_plan.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      SAVED_SOURCE_REVISION: 7f14bba18130fc1d40d2e5d7891078a65c4d4eec
+      SAVED_PLAN_SHA256: 85101209392051c5abbc3ad5c5671e5f8c3420362ea5a3aaa1ab1a9d2ae1692c
+      RECONCILIATION_CONFIG_SHA256: a59da1f64e5dc11885bc9beeeabc8b723ba0dbfb595491102aa5cc8c2eb94aaa
+      TERRAFORM_LOCK_SHA256: 65dee896a641b225cfb60f7b25ef9bdb8934c8d7adcd81fa47a9754c2280da9b
+      MOVED_TF_SHA256: 5bd25f6d1465796f9d40779af4b290c16e02a0d24dd42cf6cea5d1617e1ce957
+      ACTION_INVENTORY_SHA256: 125f8a5f0946e625be21206f3064c4bbb69d0f530a0a1b7e595e1d34e1999841
+    steps:
+      - name: Check out canonical main trigger revision
+        uses: actions/checkout@v7
+
+      - name: Verify one-shot main trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "${GITHUB_SHA}" ]]; then
+            echo "Trigger checkout does not match the canonical main event revision." >&2
+            exit 1
+          fi
+          echo "Phase 3 exact-plan apply trigger verified at ${GITHUB_SHA}."
+
+      - name: Check out exact saved-plan source revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SAVED_SOURCE_REVISION }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact saved source and frozen files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "${SAVED_SOURCE_REVISION}" ]]; then
+            echo "Saved-plan source checkout mismatch." >&2
+            exit 1
+          fi
+          config_sha="$(sha256sum deploy/runtime-v2/phase3-reconciliation.tfvars.json | awk '{print $1}')"
+          lock_sha="$(sha256sum deploy/runtime-v2/terraform/.terraform.lock.hcl | awk '{print $1}')"
+          moved_sha="$(sha256sum deploy/runtime-v2/terraform/moved.tf | awk '{print $1}')"
+          [[ "${config_sha}" == "${RECONCILIATION_CONFIG_SHA256}" ]] || { echo "Frozen reconciliation config hash mismatch." >&2; exit 1; }
+          [[ "${lock_sha}" == "${TERRAFORM_LOCK_SHA256}" ]] || { echo "Terraform provider lock hash mismatch." >&2; exit 1; }
+          [[ "${moved_sha}" == "${MOVED_TF_SHA256}" ]] || { echo "Terraform moved.tf hash mismatch." >&2; exit 1; }
+          echo "Exact saved-plan source and frozen input hashes verified."
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up exact Terraform version
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Verify immutable Google Cloud boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          if [[ "${actual_number}" != "${PROJECT_NUMBER}" ]]; then
+            echo "Project ID no longer maps to the expected immutable project number." >&2
+            exit 1
+          fi
+          echo "Phase 3 apply boundary verified: ${PROJECT_ID}/${PROJECT_NUMBER}"
+
+      - name: Download private saved plan and receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan_uri="gs://${STATE_BUCKET}/phase3-plans/${SAVED_SOURCE_REVISION}/phase3-runtime-v2.tfplan"
+          receipt_uri="gs://${STATE_BUCKET}/phase3-plans/${SAVED_SOURCE_REVISION}/phase3-runtime-v2.receipt.json"
+          gcloud storage cp "${plan_uri}" "${RUNNER_TEMP}/phase3-runtime-v2.tfplan" --quiet
+          gcloud storage cp "${receipt_uri}" "${RUNNER_TEMP}/phase3-runtime-v2.receipt.json" --quiet
+          actual_plan_sha="$(sha256sum "${RUNNER_TEMP}/phase3-runtime-v2.tfplan" | awk '{print $1}')"
+          if [[ "${actual_plan_sha}" != "${SAVED_PLAN_SHA256}" ]]; then
+            echo "Downloaded saved-plan SHA-256 mismatch." >&2
+            exit 1
+          fi
+          echo "Private saved-plan SHA-256 verified: ${actual_plan_sha}"
+
+      - name: Verify saved-plan receipt before apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          receipt = json.loads(
+              Path(os.environ["RUNNER_TEMP"], "phase3-runtime-v2.receipt.json").read_text(encoding="utf-8")
+          )
+          expected = {
+              "schema_version": 1,
+              "repository_id": "1349678672",
+              "repository": "maglothinm/MyETF-Intelligence",
+              "source_revision": os.environ["SAVED_SOURCE_REVISION"],
+              "project_id": os.environ["PROJECT_ID"],
+              "project_number": os.environ["PROJECT_NUMBER"],
+              "region": os.environ["REGION"],
+              "workload_identity_provider": os.environ["WIF_PROVIDER"],
+              "service_account": os.environ["DEPLOYER_SERVICE_ACCOUNT"],
+              "terraform_version": "1.11.4",
+              "terraform_mode": "saved_plan_only",
+              "plan_result": "changes_present",
+              "mode": "shadow",
+              "schedules_enabled": False,
+              "public_dashboard_enabled": False,
+              "vault_enabled": True,
+              "runtime_job_execution": False,
+              "state_import": False,
+              "terraform_apply": False,
+              "binary_plan_github_uploaded": False,
+              "plan_json_uploaded": False,
+              "create_count": 28,
+              "update_count": 17,
+              "delete_count": 10,
+              "delete_allowlist_exact": True,
+              "all_schedulers_paused": True,
+              "cloud_sql_public_ipv4": False,
+              "producer_environment_preserved": True,
+              "producer_private_ip": True,
+              "plan_sha256": os.environ["SAVED_PLAN_SHA256"],
+              "reconciliation_config_sha256": os.environ["RECONCILIATION_CONFIG_SHA256"],
+              "terraform_lock_sha256": os.environ["TERRAFORM_LOCK_SHA256"],
+              "moved_tf_sha256": os.environ["MOVED_TF_SHA256"],
+              "action_inventory_sha256": os.environ["ACTION_INVENTORY_SHA256"],
+          }
+          for key, value in expected.items():
+              if receipt.get(key) != value:
+                  raise SystemExit(f"Saved-plan receipt mismatch for {key}: {receipt.get(key)!r}")
+          expected_plan_uri = (
+              f"gs://{os.environ['STATE_BUCKET']}/phase3-plans/{os.environ['SAVED_SOURCE_REVISION']}/"
+              "phase3-runtime-v2.tfplan"
+          )
+          expected_receipt_uri = (
+              f"gs://{os.environ['STATE_BUCKET']}/phase3-plans/{os.environ['SAVED_SOURCE_REVISION']}/"
+              "phase3-runtime-v2.receipt.json"
+          )
+          if receipt.get("plan_gcs_uri") != expected_plan_uri:
+              raise SystemExit("Saved-plan receipt plan URI mismatch.")
+          if receipt.get("receipt_gcs_uri") != expected_receipt_uri:
+              raise SystemExit("Saved-plan receipt URI mismatch.")
+          print("Saved-plan receipt verified against hard-coded Phase 3 acceptance constants.")
+          PY
+
+      - name: Initialize exact saved-plan Terraform backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform init -reconfigure -lockfile=readonly \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="prefix=runtime-v2"
+
+      - name: Re-enforce saved binary plan machine policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform show -json "${RUNNER_TEMP}/phase3-runtime-v2.tfplan" > "${RUNNER_TEMP}/phase3-runtime-v2-plan.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path(os.environ["RUNNER_TEMP"], "phase3-runtime-v2-plan.json").read_text(encoding="utf-8"))
+          changes = data.get("resource_changes", [])
+          by_address = {change["address"]: change for change in changes}
+          allowed_delete = {
+              'google_cloud_run_v2_job_iam_member.scheduler["ai"]',
+              'google_cloud_run_v2_job_iam_member.scheduler["dashboard"]',
+              'google_cloud_run_v2_job_iam_member.scheduler["executive"]',
+              'google_cloud_run_v2_job_iam_member.scheduler["legislative"]',
+              'google_cloud_run_v2_job_iam_member.vault_scheduler[0]',
+              'google_cloud_run_v2_service_iam_member.public_dashboard[0]',
+              'google_secret_manager_secret_iam_member.vault_signing_key',
+              'google_storage_bucket_iam_member.migration_runtime',
+              'google_storage_bucket_iam_member.vault_runtime[0]',
+              'google_storage_bucket_iam_member.vault_runtime_metadata[0]',
+          }
+          scheduler_addresses = {
+              'google_cloud_scheduler_job.producer["ai"]',
+              'google_cloud_scheduler_job.producer["dashboard"]',
+              'google_cloud_scheduler_job.producer["executive"]',
+              'google_cloud_scheduler_job.producer["legislative"]',
+              'google_cloud_scheduler_job.vault_lifecycle[0]',
+          }
+          producer_addresses = {
+              'google_cloud_run_v2_job.producer["ai"]',
+              'google_cloud_run_v2_job.producer["dashboard"]',
+              'google_cloud_run_v2_job.producer["executive"]',
+              'google_cloud_run_v2_job.producer["legislative"]',
+          }
+          preserved_runtime_env = {
+              "AI_ANALYSIS_ENABLED": "true",
+              "AI_FETCH_DOCUMENT_TEXT": "true",
+              "AI_MAX_ANALYSES_PER_RUN": "20",
+              "AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS": "65",
+              "AI_PAPER_TRADING_ONLY": "true",
+              "AI_REQUIRE_PUSHOVER": "false",
+              "AI_WEB_SEARCH_ENABLED": "true",
+              "ALLOW_EMPTY_SOURCES": "false",
+              "DISCLOSURE_TERMS_ACKNOWLEDGED": "TRUE",
+              "INVESTOR_EDGE_ENABLED": "true",
+              "NOTIFY_ALL_FILINGS": "true",
+              "NOTIFY_EQUITY_ONLY": "true",
+              "NOTIFY_PENDING_REVIEWS": "true",
+              "OPENAI_MODEL": "gpt-5.6-terra",
+              "OPENAI_REASONING_EFFORT": "medium",
+              "POLITITRACK_MODE": "shadow",
+              "REQUIRE_PUSHOVER": "false",
+              "SOURCE_REVISION": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+          }
+          create_count = update_count = delete_count = 0
+          delete_addresses = set()
+          for resource in changes:
+              actions = resource.get("change", {}).get("actions", [])
+              if "create" in actions:
+                  create_count += 1
+              if actions == ["update"]:
+                  update_count += 1
+              if "delete" in actions:
+                  delete_count += 1
+                  delete_addresses.add(resource["address"])
+          if (create_count, update_count, delete_count) != (28, 17, 10):
+              raise SystemExit(f"Saved plan action-count drift: {create_count}/{update_count}/{delete_count}")
+          if delete_addresses != allowed_delete:
+              raise SystemExit("Saved plan delete allowlist drift.")
+          for address in scheduler_addresses:
+              after = (by_address.get(address) or {}).get("change", {}).get("after") or {}
+              if after.get("paused") is not True:
+                  raise SystemExit(f"Saved plan would unpause Scheduler: {address}")
+          sql_after = (by_address.get("google_sql_database_instance.runtime") or {}).get("change", {}).get("after") or {}
+          ip_config = (((sql_after.get("settings") or [{}])[0].get("ip_configuration") or [{}])[0])
+          if ip_config.get("ipv4_enabled") is not False:
+              raise SystemExit("Saved plan does not disable Cloud SQL public IPv4.")
+
+          def collect_name_values(value, found):
+              if isinstance(value, dict):
+                  name = value.get("name")
+                  if isinstance(name, str) and isinstance(value.get("value"), str):
+                      found[name] = value["value"]
+                  for child in value.values():
+                      collect_name_values(child, found)
+              elif isinstance(value, list):
+                  for child in value:
+                      collect_name_values(child, found)
+
+          for address in producer_addresses:
+              resource = by_address.get(address)
+              if not resource:
+                  raise SystemExit(f"Saved plan missing producer: {address}")
+              env = {}
+              collect_name_values(resource.get("change", {}).get("after"), env)
+              for name, expected in preserved_runtime_env.items():
+                  if env.get(name) != expected:
+                      raise SystemExit(f"Saved plan producer environment drift: {address}/{name}")
+              if env.get("PRIVATE_IP") != "true":
+                  raise SystemExit(f"Saved plan producer not private-IP enabled: {address}")
+          print("Saved binary plan machine policy re-verified immediately before apply.")
+          PY
+
+      - name: Apply exact saved Terraform plan only
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform apply -auto-approve "${RUNNER_TEMP}/phase3-runtime-v2.tfplan" | tee phase3-exact-plan-apply.txt
+
+      - name: Collect read-only post-apply cloud evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/phase3-post-apply"
+          out="${RUNNER_TEMP}/phase3-post-apply"
+          gcloud scheduler jobs list --project "${PROJECT_ID}" --location "${REGION}" --format=json > "${out}/schedulers.json"
+          gcloud sql instances describe polititrack-runtime-v2 --project "${PROJECT_ID}" --format=json > "${out}/sql.json"
+          gcloud compute networks describe polititrack-runtime-v2 --project "${PROJECT_ID}" --format=json > "${out}/network.json"
+          gcloud compute networks subnets describe polititrack-runtime-v2 --region "${REGION}" --project "${PROJECT_ID}" --format=json > "${out}/subnet.json"
+          gcloud compute addresses describe polititrack-runtime-v2-private-services --global --project "${PROJECT_ID}" --format=json > "${out}/private-services-address.json"
+          gcloud iam service-accounts list --project "${PROJECT_ID}" --format=json > "${out}/service-accounts.json"
+          for job in polititrack-ai polititrack-dashboard polititrack-executive polititrack-legislative polititrack-admin polititrack-import-ai polititrack-import-executive polititrack-import-legislative polititrack-vault-lifecycle; do
+            gcloud run jobs describe "${job}" --region "${REGION}" --project "${PROJECT_ID}" --format=json > "${out}/${job}.json"
+          done
+          gcloud run services describe polititrack-web --region "${REGION}" --project "${PROJECT_ID}" --format=json > "${out}/polititrack-web.json"
+          gcloud run services get-iam-policy polititrack-web --region "${REGION}" --project "${PROJECT_ID}" --format=json > "${out}/polititrack-web-iam.json"
+
+      - name: Verify Phase 3 isolation after apply
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"], "phase3-post-apply")
+          project = os.environ["PROJECT_ID"]
+          sa_domain = f"@{project}.iam.gserviceaccount.com"
+
+          def load(name):
+              return json.loads((root / name).read_text(encoding="utf-8"))
+
+          schedulers = load("schedulers.json")
+          expected_scheduler_names = {
+              "polititrack-ai",
+              "polititrack-dashboard",
+              "polititrack-executive",
+              "polititrack-legislative",
+              "polititrack-vault-lifecycle",
+          }
+          seen = set()
+          for item in schedulers:
+              name = str(item.get("name", "")).split("/")[-1]
+              if name in expected_scheduler_names:
+                  seen.add(name)
+                  if item.get("state") != "PAUSED":
+                      raise SystemExit(f"Scheduler not paused after apply: {name}/{item.get('state')}")
+          if seen != expected_scheduler_names:
+              raise SystemExit(f"Missing Scheduler jobs after apply: {sorted(expected_scheduler_names - seen)}")
+
+          sql = load("sql.json")
+          ip_config = ((sql.get("settings") or {}).get("ipConfiguration") or {})
+          if ip_config.get("ipv4Enabled") is not False:
+              raise SystemExit("Cloud SQL public IPv4 remains enabled after apply.")
+          if "polititrack-runtime-v2" not in str(ip_config.get("privateNetwork", "")):
+              raise SystemExit("Cloud SQL is not attached to the Phase 3 private VPC.")
+          if not any(item.get("type") == "PRIVATE" for item in sql.get("ipAddresses", [])):
+              raise SystemExit("Cloud SQL has no private IP after apply.")
+
+          network = load("network.json")
+          if network.get("name") != "polititrack-runtime-v2" or network.get("autoCreateSubnetworks") is not False:
+              raise SystemExit("Phase 3 VPC verification failed.")
+          subnet = load("subnet.json")
+          if subnet.get("name") != "polititrack-runtime-v2" or subnet.get("ipCidrRange") != "10.88.0.0/24":
+              raise SystemExit("Phase 3 subnet verification failed.")
+          private_address = load("private-services-address.json")
+          if private_address.get("purpose") != "VPC_PEERING" or private_address.get("addressType") != "INTERNAL":
+              raise SystemExit("Private Services Access range verification failed.")
+
+          service_accounts = {item.get("email") for item in load("service-accounts.json")}
+          expected_service_accounts = {
+              "polititrack-runtime-v2" + sa_domain,
+              "polititrack-admin-v2" + sa_domain,
+              "polititrack-import-v2" + sa_domain,
+              "polititrack-web-v2" + sa_domain,
+              "polititrack-vault-v2" + sa_domain,
+              "polititrack-scheduler-v2" + sa_domain,
+          }
+          if not expected_service_accounts.issubset(service_accounts):
+              raise SystemExit(f"Missing split Runtime v2 identities: {sorted(expected_service_accounts - service_accounts)}")
+
+          def walk(value):
+              if isinstance(value, dict):
+                  yield value
+                  for child in value.values():
+                      yield from walk(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      yield from walk(child)
+
+          def service_account_values(data):
+              values = set()
+              for node in walk(data):
+                  for key in ("serviceAccount", "service_account", "serviceAccountName"):
+                      value = node.get(key)
+                      if isinstance(value, str):
+                          values.add(value)
+              return values
+
+          def name_values(data):
+              found = {}
+              for node in walk(data):
+                  name = node.get("name")
+                  value = node.get("value")
+                  if isinstance(name, str) and isinstance(value, str):
+                      found[name] = value
+              return found
+
+          def has_vpc(data):
+              text = json.dumps(data, sort_keys=True)
+              return text.count("polititrack-runtime-v2") >= 2
+
+          producer_jobs = {
+              "polititrack-ai": "polititrack-runtime-v2" + sa_domain,
+              "polititrack-dashboard": "polititrack-runtime-v2" + sa_domain,
+              "polititrack-executive": "polititrack-runtime-v2" + sa_domain,
+              "polititrack-legislative": "polititrack-runtime-v2" + sa_domain,
+          }
+          other_jobs = {
+              "polititrack-admin": "polititrack-admin-v2" + sa_domain,
+              "polititrack-import-ai": "polititrack-import-v2" + sa_domain,
+              "polititrack-import-executive": "polititrack-import-v2" + sa_domain,
+              "polititrack-import-legislative": "polititrack-import-v2" + sa_domain,
+              "polititrack-vault-lifecycle": "polititrack-vault-v2" + sa_domain,
+          }
+          for job, expected_sa in {**producer_jobs, **other_jobs}.items():
+              data = load(f"{job}.json")
+              if expected_sa not in service_account_values(data):
+                  raise SystemExit(f"Unexpected service account after apply: {job}")
+              env = name_values(data)
+              if env.get("PRIVATE_IP") != "true":
+                  raise SystemExit(f"PRIVATE_IP missing after apply: {job}")
+              if not has_vpc(data):
+                  raise SystemExit(f"VPC attachment missing after apply: {job}")
+              if job in producer_jobs and env.get("POLITITRACK_MODE") != "shadow":
+                  raise SystemExit(f"Producer not in shadow mode after apply: {job}")
+
+          web = load("polititrack-web.json")
+          if ("polititrack-web-v2" + sa_domain) not in service_account_values(web):
+              raise SystemExit("Web service does not use dedicated web identity.")
+          if name_values(web).get("PRIVATE_IP") != "true" or not has_vpc(web):
+              raise SystemExit("Web service private networking verification failed.")
+          iam = load("polititrack-web-iam.json")
+          for binding in iam.get("bindings", []):
+              if binding.get("role") == "roles/run.invoker" and "allUsers" in binding.get("members", []):
+                  raise SystemExit("Public allUsers Cloud Run invoker remains after apply.")
+
+          receipt = {
+              "schema_version": 1,
+              "apply_trigger_revision": os.environ["GITHUB_SHA"],
+              "saved_source_revision": os.environ["SAVED_SOURCE_REVISION"],
+              "saved_plan_sha256": os.environ["SAVED_PLAN_SHA256"],
+              "project_id": os.environ["PROJECT_ID"],
+              "project_number": os.environ["PROJECT_NUMBER"],
+              "region": os.environ["REGION"],
+              "terraform_version": "1.11.4",
+              "apply_mode": "exact_saved_plan_only",
+              "terraform_apply_succeeded": True,
+              "runtime_job_execution": False,
+              "state_import": False,
+              "scheduler_execution": False,
+              "schedulers_paused": True,
+              "cloud_sql_public_ipv4": False,
+              "cloud_sql_private_ip": True,
+              "private_vpc_verified": True,
+              "split_runtime_identities_verified": True,
+              "producer_shadow_mode_verified": True,
+              "producer_private_ip_verified": True,
+              "public_dashboard_invoker_absent": True,
+          }
+          Path("phase3-exact-plan-apply-receipt.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(receipt, indent=2, sort_keys=True))
+          PY
+
+      - name: Delete local saved plan and plan JSON
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${RUNNER_TEMP}/phase3-runtime-v2.tfplan" \
+                "${RUNNER_TEMP}/phase3-runtime-v2-plan.json" \
+                "${RUNNER_TEMP}/phase3-runtime-v2.receipt.json"
+
+      - name: Upload non-sensitive exact-apply receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-exact-plan-apply-${{ github.run_id }}
+          path: |
+            phase3-exact-plan-apply.txt
+            phase3-exact-plan-apply-receipt.json
+          if-no-files-found: error
+          retention-days: 30
