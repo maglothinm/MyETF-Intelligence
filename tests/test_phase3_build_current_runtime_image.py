@@ -18,16 +18,36 @@ def test_build_is_canonical_self_path_scoped_main_push() -> None:
     assert 'PROJECT_NUMBER: "497412818801"' in text
 
 
-def test_build_reconciles_only_bucket_scoped_metadata_access() -> None:
+def test_build_reconciles_only_intended_builder_project_and_bucket_roles() -> None:
     text = _text()
     assert 'DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@' in text
     assert 'CLOUD_BUILD_BUCKET: project-38008d5f-4918-46e6-920_cloudbuild' in text
+    for role in (
+        'roles/cloudbuild.builds.editor',
+        'roles/serviceusage.serviceUsageConsumer',
+        'roles/serviceusage.serviceUsageViewer',
+        'roles/storage.objectAdmin',
+        'roles/storage.bucketViewer',
+    ):
+        assert role in text
+    assert 'gcloud projects add-iam-policy-binding "${PROJECT_ID}"' in text
     assert 'gcloud storage buckets add-iam-policy-binding "gs://${CLOUD_BUILD_BUCKET}"' in text
     assert '--member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}"' in text
-    assert '--role roles/storage.bucketViewer' in text
     assert 'roles/storage.admin' not in text
     assert 'roles/owner' not in text
-    assert 'roles/editor' not in text
+    assert "'roles/editor'" not in text
+
+
+def test_build_waits_until_builder_permissions_are_effective() -> None:
+    text = _text()
+    assert 'active_account="$(gcloud auth list' in text
+    assert 'gcloud is not authenticated as the isolated Phase 3 builder.' in text
+    assert 'for attempt in $(seq 1 18)' in text
+    assert 'gcloud storage buckets describe "gs://${CLOUD_BUILD_BUCKET}"' in text
+    assert 'gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" --limit=1' in text
+    assert 'gcloud services list --enabled --project "${PROJECT_ID}" --limit=1' in text
+    assert 'gcloud builds list --project "${PROJECT_ID}" --limit=1' in text
+    assert 'Builder permissions did not become effective within the bounded readiness window.' in text
 
 
 def test_build_uses_isolated_builder_and_immutable_digest() -> None:
