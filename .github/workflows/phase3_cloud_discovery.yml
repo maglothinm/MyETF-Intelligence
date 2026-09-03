@@ -1,11 +1,6 @@
 name: Phase 3 read-only cloud boundary discovery
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/phase3_cloud_discovery.yml"
   workflow_dispatch:
 
 permissions:
@@ -18,20 +13,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PROJECT_ID: project-38008d5f-4918-46e6-920
       PROJECT_NUMBER: "497412818801"
       REGION: us-central1
-      DISCOVERY_SERVICE_ACCOUNT: polititrack-secret-transfer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/providers/phase3-main
+      DISCOVERY_PRINCIPAL_SET: principalSet://iam.googleapis.com/projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/attribute.repository_id/1349678672
     steps:
-      - name: Authenticate to established Google Cloud boundary
+      - name: Check out canonical repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate with direct Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
-          project_id: project-38008d5f-4918-46e6-920
-          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/providers/secret-transfer
-          service_account: polititrack-secret-transfer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github/providers/phase3-main
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+
+      - name: Resolve immutable Google Cloud boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_id="$(gcloud projects describe "${PROJECT_NUMBER}" --format='value(projectId)')"
+          live_project_number="$(gcloud projects describe "${project_id}" --format='value(projectNumber)')"
+          if [[ -z "${project_id}" || "${live_project_number}" != "${PROJECT_NUMBER}" ]]; then
+            echo "Resolved Google Cloud project does not match immutable project number ${PROJECT_NUMBER}." >&2
+            exit 1
+          fi
+          echo "PROJECT_ID=${project_id}" >> "${GITHUB_ENV}"
+          echo "Resolved Phase 3 Google Cloud boundary: project_id=${project_id} project_number=${PROJECT_NUMBER}"
 
       - name: Collect read-only Phase 3 boundary evidence
         shell: bash
@@ -39,75 +48,47 @@ jobs:
           set -uo pipefail
           report="phase3-cloud-boundary.txt"
           : > "$report"
-
           printf '%s\n' \
-            "schema_version=1" \
+            "schema_version=2" \
             "repository_id=${GITHUB_REPOSITORY_ID}" \
             "repository=${GITHUB_REPOSITORY}" \
             "source_revision=${GITHUB_SHA}" \
             "project_id=${PROJECT_ID}" \
-            "expected_project_number=${PROJECT_NUMBER}" \
+            "project_number=${PROJECT_NUMBER}" \
             "selected_region=${REGION}" \
-            "discovery_service_account=${DISCOVERY_SERVICE_ACCOUNT}" \
+            "workload_identity_provider=${WIF_PROVIDER}" \
+            "federation=direct" \
             "mode=shadow" \
             "schedules_enabled=false" \
             "public_dashboard_enabled=false" >> "$report"
 
           capture() {
-            local label="$1"
-            shift
+            local label="$1"; shift
             printf '\n## %s\n' "$label" >> "$report"
             local output
             if output=$("$@" 2>&1); then
-              if [[ -n "$output" ]]; then
-                printf '%s\n' "$output" >> "$report"
-              else
-                printf '[empty]\n' >> "$report"
-              fi
+              [[ -n "$output" ]] && printf '%s\n' "$output" >> "$report" || printf '[empty]\n' >> "$report"
             else
               local status=$?
               printf '[unavailable exit=%s]\n%s\n' "$status" "$output" >> "$report"
             fi
           }
 
-          capture active_account \
-            gcloud auth list --filter='status:ACTIVE' --format='value(account)'
-          capture project \
-            gcloud projects describe "$PROJECT_ID" --format=json
-          capture billing \
-            gcloud billing projects describe "$PROJECT_ID" --format=json
-          capture enabled_services \
-            gcloud services list --enabled --project "$PROJECT_ID" --format='value(config.name)'
-          capture artifact_registry_us_central1 \
-            gcloud artifacts repositories list --project "$PROJECT_ID" --location "$REGION" --format=json
-          capture storage_buckets \
-            gcloud storage buckets list --project "$PROJECT_ID" --format=json
-          capture cloud_sql_instances \
-            gcloud sql instances list --project "$PROJECT_ID" --format=json
-          capture compute_networks \
-            gcloud compute networks list --project "$PROJECT_ID" --format=json
-          capture service_accounts \
-            gcloud iam service-accounts list --project "$PROJECT_ID" --format='value(email,displayName)'
-          capture discovery_service_account_project_roles \
-            gcloud projects get-iam-policy "$PROJECT_ID" \
-              --flatten='bindings[].members' \
-              --filter="bindings.members:serviceAccount:${DISCOVERY_SERVICE_ACCOUNT}" \
-              --format='value(bindings.role)'
-          capture secret_ids_only \
-            gcloud secrets list --project "$PROJECT_ID" --format='value(name)'
-          capture workload_identity_provider \
-            gcloud iam workload-identity-pools providers describe secret-transfer \
-              --workload-identity-pool=polititrack-github \
-              --location=global \
-              --project="$PROJECT_ID" \
-              --format=json
-          capture cloud_run_jobs \
-            gcloud run jobs list --project "$PROJECT_ID" --region "$REGION" --format=json
-          capture cloud_run_services \
-            gcloud run services list --project "$PROJECT_ID" --region "$REGION" --platform=managed --format=json
-          capture cloud_scheduler_jobs \
-            gcloud scheduler jobs list --project "$PROJECT_ID" --location "$REGION" --format=json
-
+          capture active_account gcloud auth list --filter='status:ACTIVE' --format='value(account)'
+          capture project gcloud projects describe "$PROJECT_ID" --format=json
+          capture billing gcloud billing projects describe "$PROJECT_ID" --format=json
+          capture enabled_services gcloud services list --enabled --project "$PROJECT_ID" --format='value(config.name)'
+          capture artifact_registry_us_central1 gcloud artifacts repositories list --project "$PROJECT_ID" --location "$REGION" --format=json
+          capture storage_buckets gcloud storage buckets list --project "$PROJECT_ID" --format=json
+          capture cloud_sql_instances gcloud sql instances list --project "$PROJECT_ID" --format=json
+          capture compute_networks gcloud compute networks list --project "$PROJECT_ID" --format=json
+          capture service_accounts gcloud iam service-accounts list --project "$PROJECT_ID" --format='value(email,displayName)'
+          capture discovery_principal_project_roles gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' --filter="bindings.members:${DISCOVERY_PRINCIPAL_SET}" --format='value(bindings.role)'
+          capture secret_ids_only gcloud secrets list --project "$PROJECT_ID" --format='value(name)'
+          capture workload_identity_provider gcloud iam workload-identity-pools providers describe phase3-main --workload-identity-pool=polititrack-github --location=global --project="$PROJECT_ID" --format=json
+          capture cloud_run_jobs gcloud run jobs list --project "$PROJECT_ID" --region "$REGION" --format=json
+          capture cloud_run_services gcloud run services list --project "$PROJECT_ID" --region "$REGION" --platform=managed --format=json
+          capture cloud_scheduler_jobs gcloud scheduler jobs list --project "$PROJECT_ID" --location "$REGION" --format=json
           cat "$report"
 
       - name: Upload read-only boundary receipt
