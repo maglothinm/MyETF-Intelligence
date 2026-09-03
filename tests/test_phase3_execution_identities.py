@@ -17,16 +17,15 @@ def _terraform_permissions_block(text: str) -> str:
 def test_execution_identity_bootstrap_defaults_to_preflight_only() -> None:
     text = _text()
     apply_gate = text.index("if (-not $Apply)")
+    apply_body = text[apply_gate:]
     assert "[switch]$Apply" in text
-    for mutation in (
-        "'services', 'enable'",
-        "'service-accounts', 'create'",
-        "'iam', 'roles', 'create'",
-        "'projects', 'add-iam-policy-binding'",
-        "'storage', 'buckets', 'add-iam-policy-binding'",
-        "'artifacts', 'repositories', 'add-iam-policy-binding'",
-    ):
-        assert text.index(mutation) > apply_gate
+    assert "exit 0" in text[apply_gate : text.index("$servicesToEnable", apply_gate)]
+    assert "Invoke-Checked $gcloud (@('services', 'enable')" in apply_body
+    assert "Ensure-ServiceAccount $projectId $DeployerServiceAccountId" in apply_body
+    assert "Ensure-ServiceAccount $projectId $BuilderServiceAccountId" in apply_body
+    assert "'iam', 'roles', 'create'" in apply_body
+    assert "'storage', 'buckets', 'add-iam-policy-binding'" in apply_body
+    assert "'artifacts', 'repositories', 'add-iam-policy-binding'" in apply_body
     assert "Preflight only. No service account, IAM binding, custom role, or API state was changed." in text
 
 
