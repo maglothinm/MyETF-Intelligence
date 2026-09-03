@@ -26,8 +26,9 @@ def test_phase3_default_path_does_not_hide_cloud_mutations() -> None:
     assert "add-iam-policy-binding" not in text
     assert "schedules_enabled=true" not in text
     assert "-var=schedules_enabled=false" in text
+    assert "-var=public_dashboard_enabled=false" in text
     assert "'plan', '-lock=false'" in text
-    assert "No infrastructure apply, image build, scheduler activation, or producer execution occurred" in text
+    assert "No infrastructure apply, image build, scheduler activation, producer execution, or public dashboard publication occurred" in text
 
 
 def test_foundation_and_build_mutations_are_explicitly_guarded() -> None:
@@ -42,6 +43,12 @@ def test_foundation_and_build_mutations_are_explicitly_guarded() -> None:
     assert build < text.index("'builds', 'submit'", build) < plan_guard
 
 
+def test_foundation_includes_private_networking_apis() -> None:
+    text = _text()
+    assert "'compute.googleapis.com'" in text
+    assert "'servicenetworking.googleapis.com'" in text
+
+
 def test_apply_requires_saved_plan_receipt_and_immutable_image() -> None:
     text = _text()
     apply_guard = text.index("if ($Apply)")
@@ -50,14 +57,31 @@ def test_apply_requires_saved_plan_receipt_and_immutable_image() -> None:
     assert "Phase 3 apply plan hash no longer matches its receipt." in text[apply_guard:]
     assert "Assert-ImmutableImage ([string]$receipt.image)" in text[apply_guard:]
     assert "'apply', '-auto-approve', $PlanFile" in text[apply_guard:]
+    assert "The optional Apply -Image value does not match the immutable image recorded in the plan receipt." in text[apply_guard:]
 
 
-def test_phase3_refuses_production_mode_and_schedule_activation() -> None:
+def test_phase3_refuses_production_mode_schedule_activation_and_public_dashboard() -> None:
     text = _text()
     assert "Phase 3 bootstrap refuses schedule activation" in text
     assert "Phase 3 bootstrap refuses any POLITITRACK_MODE other than shadow." in text
     assert "$runtimeEnvironment['POLITITRACK_MODE'] = 'shadow'" in text
-    assert "mode=shadow schedules_enabled=false" in text
+    assert "public_dashboard_enabled = $false" in text
+    assert "mode=shadow schedules_enabled=false public_dashboard_enabled=false" in text
+
+
+def test_phase3_defaults_vault_off_and_records_opt_in() -> None:
+    text = _text()
+    assert "[switch]$EnableVault" in text
+    assert "$vaultEnabled = $EnableVault.IsPresent" in text
+    assert "vault_enabled = $vaultEnabled" in text
+    assert "Phase 3 plan receipt vault setting does not match this apply invocation." in text
+
+
+def test_private_dashboard_readiness_uses_identity_token() -> None:
+    text = _text()
+    assert "auth print-identity-token" in text
+    assert 'Authorization = "Bearer $identityToken"' in text
+    assert "authenticated readiness after migration" in text
 
 
 def test_phase3_requires_canonical_clean_origin_main() -> None:
