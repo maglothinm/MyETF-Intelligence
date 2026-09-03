@@ -4,6 +4,16 @@ from pathlib import Path
 WORKFLOW = Path('.github/workflows/phase3_admin_status_diagnose.yml')
 
 
+def test_diagnostic_trigger_is_issue39_owner_command_only():
+    text = WORKFLOW.read_text(encoding='utf-8')
+    assert 'issue_comment:' in text
+    assert "github.repository_id == '1349678672'" in text
+    assert 'github.event.issue.number == 39' in text
+    assert 'github.event.sender.id == 225069210' in text
+    assert "github.event.comment.body == '/phase3-diagnose-admin-status'" in text
+    assert 'push:' not in text
+
+
 def test_diagnostic_does_not_execute_runtime_jobs():
     text = WORKFLOW.read_text(encoding='utf-8')
     assert 'gcloud run jobs execute' not in text

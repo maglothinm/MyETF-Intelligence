@@ -1,11 +1,8 @@
 name: Phase 3 diagnose admin status execution
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/phase3_admin_status_diagnose.yml"
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -13,7 +10,11 @@ permissions:
 
 jobs:
   diagnose:
-    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event.issue.number == 39 &&
+      github.event.sender.id == 225069210 &&
+      github.event.comment.body == '/phase3-diagnose-admin-status'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
@@ -25,8 +26,17 @@ jobs:
       ADMIN_JOB: polititrack-admin
       FAILED_EXECUTION: polititrack-admin-snrjx
     steps:
-      - name: Check out canonical main trigger revision
+      - name: Check out canonical main
         uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Verify canonical main source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]]
+          echo "diagnostic_source_revision=$(git rev-parse HEAD)"
 
       - name: Authenticate as constrained Phase 3 deployer
         uses: google-github-actions/auth@v3
@@ -86,7 +96,7 @@ jobs:
 
           gcloud run jobs executions describe "${FAILED_EXECUTION}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
           gcloud logging read \
-            "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND timestamp>=\"2026-09-03T14:10:30Z\" AND timestamp<=\"2026-09-03T14:13:10Z\"" \
+            "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND labels.\"run.googleapis.com/execution_name\"=\"${FAILED_EXECUTION}\"" \
             --project "${PROJECT_ID}" \
             --order=asc \
             --limit=400 \
