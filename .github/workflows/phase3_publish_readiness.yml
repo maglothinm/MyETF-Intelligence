@@ -1,0 +1,260 @@
+name: Phase 3 publish immutable readiness
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3_publish_readiness.yml"
+      - "tests/test_phase3_publish_readiness.py"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_publish_readiness.yml"
+
+concurrency:
+  group: phase3-publish-immutable-readiness
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  static-safety:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify publication gate contract
+        run: python -m pytest -q tests/test_phase3_publish_readiness.py
+
+  publish:
+    if: github.event_name == 'push' && github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reverify private acceptance and publish marker plus tag atomically
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          evidence="${GITHUB_WORKSPACE}/phase3-publish-evidence"
+          marker="${GITHUB_WORKSPACE}/docs/runtime-v2/phase3/PHASE4_READY.md"
+          final_uri="gs://${STATE_BUCKET}/phase3-acceptance/final/phase3-acceptance.json"
+          deployer_member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          admin_member="serviceAccount:${ADMIN_SERVICE_ACCOUNT}"
+          rm -rf "${evidence}"
+          mkdir -p "${evidence}" "$(dirname "${marker}")"
+          cd "${GITHUB_WORKSPACE}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          remote_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote remove origin >/dev/null 2>&1 || true
+          git remote add origin "${remote_url}"
+          git fetch --force origin main --tags
+          [[ "$(git rev-parse origin/main)" == "${GITHUB_SHA}" ]] || {
+            echo "Canonical main moved after this gate started." >&2
+            exit 1
+          }
+
+          existing_tag="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${existing_tag}" || -f "${marker}" ]]; then
+            [[ -n "${existing_tag}" && -f "${marker}" ]] || {
+              echo "Partial Phase 3 readiness publication exists." >&2
+              exit 1
+            }
+            marker_commit="$(git rev-list -n 1 refs/tags/phase3-ready)"
+            git merge-base --is-ancestor "${marker_commit}" origin/main
+            printf 'result=already_published\ntag_target=%s\n' "${marker_commit}" > "${evidence}/publication.txt"
+            exit 0
+          fi
+
+          schedulers=(
+            polititrack-legislative
+            polititrack-executive
+            polititrack-ai
+            polititrack-dashboard
+            polititrack-vault-lifecycle
+          )
+          : > "${evidence}/schedulers.txt"
+          for scheduler in "${schedulers[@]}"; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" \
+              --project "${PROJECT_ID}" --location "${REGION}" \
+              --format='value(state)')"
+            printf '%s=%s\n' "${scheduler}" "${state}" >> "${evidence}/schedulers.txt"
+            [[ "${state}" == "PAUSED" ]] || {
+              echo "Scheduler ${scheduler} is not PAUSED." >&2
+              exit 1
+            }
+          done
+
+          gcloud sql instances describe "${SQL_INSTANCE}" \
+            --project "${PROJECT_ID}" --format=json > "${evidence}/sql.json"
+          jq -e '.settings.ipConfiguration.ipv4Enabled == false and any(.ipAddresses[]?; .type == "PRIVATE")' \
+            "${evidence}/sql.json" >/dev/null || {
+              echo "Cloud SQL is not private-only." >&2
+              exit 1
+            }
+
+          gcloud run services get-iam-policy "${WEB_SERVICE}" \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > "${evidence}/web-policy.json"
+          if jq -e '[.bindings[]?.members[]?] | any(. == "allUsers")' \
+            "${evidence}/web-policy.json" >/dev/null; then
+            echo "Runtime v2 web service is public." >&2
+            exit 1
+          fi
+
+          gcloud run jobs describe "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > "${evidence}/admin.json"
+          admin_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' "${evidence}/admin.json")"
+          [[ "$(jq -c '.command // []' <<<"${admin_container}")" == '["python"]' ]]
+          [[ "$(jq -c '.args // []' <<<"${admin_container}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]]
+          [[ "$(jq -r '[.env[]? | select(.name == "PRIVATE_IP") | .value][0] // empty' <<<"${admin_container}" | tr '[:upper:]' '[:lower:]')" == "true" ]]
+          [[ "$(jq -r 'first(.. | objects | .serviceAccountName? // empty)' "${evidence}/admin.json")" == "${ADMIN_SERVICE_ACCOUNT}" ]]
+
+          gcloud run jobs get-iam-policy "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > "${evidence}/admin-policy.json"
+          if jq -e --arg member "${deployer_member}" \
+            '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' \
+            "${evidence}/admin-policy.json" >/dev/null; then
+            echo "Temporary Phase 3 execution authority remains." >&2
+            exit 1
+          fi
+
+          gcloud projects get-iam-policy "${PROJECT_ID}" --format=json > "${evidence}/project-policy.json"
+          if jq -e --arg member "${deployer_member}" \
+            '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' \
+            "${evidence}/project-policy.json" >/dev/null; then
+            echo "Temporary Phase 3 logging administrator authority remains." >&2
+            exit 1
+          fi
+
+          gcloud logging views get-iam-policy "${LOG_VIEW}" \
+            --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" \
+            --project "${PROJECT_ID}" --format=json > "${evidence}/log-view-policy.json"
+          if jq -e --arg member "${deployer_member}" \
+            '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' \
+            "${evidence}/log-view-policy.json" >/dev/null; then
+            echo "Temporary Phase 3 log-view authority remains." >&2
+            exit 1
+          fi
+
+          gcloud storage buckets get-iam-policy "gs://${STATE_BUCKET}" \
+            --format=json > "${evidence}/state-bucket-policy.json"
+          if jq -e --arg member "${admin_member}" \
+            '[.bindings[]? | select(.role == "roles/storage.objectCreator") | .members[]?] | any(. == $member)' \
+            "${evidence}/state-bucket-policy.json" >/dev/null; then
+            echo "Temporary Phase 3 probe-storage authority remains." >&2
+            exit 1
+          fi
+
+          gcloud storage cp "${final_uri}" "${evidence}/phase3-acceptance.json" --quiet
+          receipt_sha="$(sha256sum "${evidence}/phase3-acceptance.json" | awk '{print $1}')"
+          jq -e '
+            .result == "phase3_ready_for_phase4"
+            and .phase4_started == false
+            and .production_authority_transferred == false
+            and .acceptance_channel == "private_gcs_probe"
+            and .schedulers_paused == true
+            and .cloud_sql_private_only == true
+            and .web_public_invoker_absent == true
+            and .temporary_execution_authority_removed == true
+            and .temporary_probe_storage_authority_removed == true
+            and .private_ip_env == "true"
+            and .database_private_ip_selected == true
+            and .protected_generations.legislative == 1
+            and .protected_generations.executive == 1
+            and .protected_generations.ai == 1
+            and .dashboard_generation == 1
+            and (.source_revision | test("^[0-9a-f]{40}$"))
+            and (.protected_snapshot_sha256.legislative | test("^[0-9a-f]{64}$"))
+            and (.protected_snapshot_sha256.executive | test("^[0-9a-f]{64}$"))
+            and (.protected_snapshot_sha256.ai | test("^[0-9a-f]{64}$"))
+            and (.dashboard_snapshot_sha256 | test("^[0-9a-f]{64}$"))
+          ' "${evidence}/phase3-acceptance.json" >/dev/null
+          receipt_source="$(jq -r '.source_revision' "${evidence}/phase3-acceptance.json")"
+          git cat-file -e "${receipt_source}^{commit}"
+          git merge-base --is-ancestor "${receipt_source}" "${GITHUB_SHA}" || {
+            echo "Accepted Phase 3 source is not an ancestor of the publication commit." >&2
+            exit 1
+          }
+
+          cat > "${marker}" <<EOF
+          # Runtime v2 Phase 4 Readiness
+
+          Phase 3 is accepted for controlled Phase 4 shadow execution.
+
+          - Canonical repository ID: \`1349678672\`
+          - Accepted source revision: \`${receipt_source}\`
+          - Publication base revision: \`${GITHUB_SHA}\`
+          - Acceptance receipt: \`${final_uri}\`
+          - Acceptance receipt SHA-256: \`${receipt_sha}\`
+          - Acceptance channel: private GCS probe
+          - Publication workflow run: \`${GITHUB_RUN_ID}\` / attempt \`${GITHUB_RUN_ATTEMPT}\`
+
+          The immutable \`phase3-ready\` tag is published atomically with the commit containing this marker and therefore targets that marker commit.
+
+          The gate independently reverified exact generation-1 Legislative, Executive, and AI migration provenance; dashboard generation 1; private-only Cloud SQL and Runtime v2 routing; all five Cloud Scheduler jobs PAUSED; nonpublic web IAM; the persistent admin baseline; and removal of temporary Phase 3 execution, logging, log-view, and probe-storage authority.
+
+          Phase 4 may perform only the controlled shadow acceptance authorized by issue #82. This marker does not authorize production mode, Scheduler activation, external delivery, protected GitHub artifact mutation, GitHub Pages publication, simulation, one-writer transfer, or Phase 5 promotion.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/runtime-v2/phase3/PHASE4_READY.md
+          git commit -m "Record immutable Phase 4 readiness"
+          marker_commit="$(git rev-parse HEAD)"
+          git tag phase3-ready "${marker_commit}"
+          git push --atomic origin "${marker_commit}:refs/heads/main" refs/tags/phase3-ready
+          printf 'result=published\ntag_target=%s\nreceipt_sha256=%s\n' \
+            "${marker_commit}" "${receipt_sha}" > "${evidence}/publication.txt"
+
+      - name: Upload Phase 3 readiness publication evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-readiness-publication
+          path: phase3-publish-evidence/
+          if-no-files-found: warn
+          retention-days: 90
