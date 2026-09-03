@@ -12,6 +12,8 @@
   "artifact_name": "executive-tracker-state",
   "conclusion": "success",
   "complete_required_inventory_verified": true,
+  "expected_runtime_v2_generation": 1,
+  "expected_runtime_v2_snapshot_sha256": "73ec5a75b4f5b01dead5af2d8e36be26f3a41db06c3810e4cd60697d6d2a5a14",
   "head_branch": "main",
   "head_sha": "d603e9b40ffb78c51f635589bc886875f411299b",
   "job_completed_at": "2026-09-03T06:31:50Z",
