@@ -18,9 +18,11 @@ on:
       - "tests/test_phase3_gcp_auth_inventory.py"
       - "tests/test_phase3_wif_bootstrap.py"
       - "tests/test_phase3_execution_identities.py"
+      - "tests/test_phase3_terraform_plan.py"
       - "tests/test_dashboard_insights.py"
       - ".github/workflows/phase3_cloud_discovery.yml"
       - ".github/workflows/phase3_gcp_auth_inventory.yml"
+      - ".github/workflows/phase3_terraform_plan.yml"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:
 
@@ -87,6 +89,7 @@ jobs:
             tests/test_phase3_gcp_auth_inventory.py \
             tests/test_phase3_wif_bootstrap.py \
             tests/test_phase3_execution_identities.py \
+            tests/test_phase3_terraform_plan.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
