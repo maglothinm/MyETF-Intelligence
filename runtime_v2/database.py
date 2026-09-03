@@ -1,4 +1,4 @@
-"""Database connections for local PostgreSQL and passwordless Cloud SQL."""
+"""Database connections for local PostgreSQL and Cloud SQL."""
 
 from __future__ import annotations
 
@@ -40,6 +40,17 @@ def _cloud_sql_settings(config: Mapping[str, Any] | None = None) -> tuple[str, s
     return instance, database, user, password
 
 
+def _use_private_ip(config: Mapping[str, Any] | None = None) -> bool:
+    value = str(_environment(config).get("PRIVATE_IP") or "").strip().lower()
+    if not value:
+        return False
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise DatabaseConfigurationError("PRIVATE_IP must be a boolean value")
+
+
 def _cloud_connector():
     global _connector
     if _connector is None:
@@ -64,7 +75,7 @@ atexit.register(close_connector)
 
 
 def connect(config: Mapping[str, Any] | None = None):
-    """Return a DB-API PostgreSQL connection without exposing a cloud password."""
+    """Return a DB-API PostgreSQL connection using the configured Cloud SQL route."""
     url = database_url(config)
     if url:
         if not url.startswith(("postgresql://", "postgres://")):
@@ -74,12 +85,19 @@ def connect(config: Mapping[str, Any] | None = None):
         except ImportError as exc:  # pragma: no cover - image dependency failure
             raise DatabaseConfigurationError("psycopg2 dependency is unavailable") from exc
         return psycopg2.connect(url, connect_timeout=15)
+
     instance, name, user, password = _cloud_sql_settings(config)
+    try:
+        from google.cloud.sql.connector import IPTypes
+    except ImportError as exc:  # pragma: no cover - image dependency failure
+        raise DatabaseConfigurationError("Cloud SQL connector dependency is unavailable") from exc
+
     options = {
         "user": user,
         "db": name,
         "enable_iam_auth": not bool(password),
         "timeout": 15,
+        "ip_type": IPTypes.PRIVATE if _use_private_ip(config) else IPTypes.PUBLIC,
     }
     if password:
         options["password"] = password
