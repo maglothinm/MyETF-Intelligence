@@ -1,0 +1,300 @@
+name: Phase 3 data-plane acceptance audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_data_plane_audit.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      PHASE3_AUTHORIZED_AT: "2026-09-03T09:51:22Z"
+    steps:
+      - name: Check out canonical main trigger revision
+        uses: actions/checkout@v7
+
+      - name: Verify one-shot main trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          echo "Phase 3 data-plane audit trigger verified at ${GITHUB_SHA}."
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Run reversible read-only data-plane audit
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-data-plane-audit
+          cd phase3-data-plane-audit
+
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          baseline_args_json=''
+          mutation_started=false
+          cleaned=false
+
+          cleanup() {
+            set +e
+            if [[ "${mutation_started}" == "true" && -n "${baseline_args_json}" ]]; then
+              restore_args="$(jq -r 'join(",")' <<<"${baseline_args_json}")"
+              gcloud run jobs update "${ADMIN_JOB}" \
+                --project "${PROJECT_ID}" \
+                --region "${REGION}" \
+                --args="${restore_args}" \
+                --quiet >/dev/null 2>&1
+              gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+                --project "${PROJECT_ID}" \
+                --region "${REGION}" \
+                --member "${member}" \
+                --role roles/run.invoker \
+                --quiet >/dev/null 2>&1
+              gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+                --member "${member}" \
+                --role roles/logging.viewer \
+                --condition=None \
+                --quiet >/dev/null 2>&1
+            fi
+          }
+          trap cleanup EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          expected_schedulers=(
+            polititrack-legislative
+            polititrack-executive
+            polititrack-ai
+            polititrack-dashboard
+            polititrack-vault-lifecycle
+          )
+          : > schedulers-before.txt
+          for scheduler in "${expected_schedulers[@]}"; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            printf '%s\t%s\n' "${scheduler}" "${state}" >> schedulers-before.txt
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is not paused." >&2; exit 1; }
+          done
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-before.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-before.json)"
+          baseline_command_json="$(jq -c '.command // []' <<<"${container_json}")"
+          baseline_args_json="$(jq -c '.args // []' <<<"${container_json}")"
+          [[ "${baseline_command_json}" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+          if [[ "${baseline_args_json}" != '["-m","runtime_v2","init-db","--with-vault"]' && "${baseline_args_json}" != '["-m","runtime_v2","init-db"]' ]]; then
+            echo "Unexpected admin arguments baseline: ${baseline_args_json}" >&2
+            exit 1
+          fi
+
+          web_policy="$(gcloud run services get-iam-policy "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e '[.bindings[]?.members[]?] | any(. == "allUsers" or . == "allAuthenticatedUsers")' <<<"${web_policy}" >/dev/null; then
+            echo "Runtime v2 web service has a public invoker." >&2
+            exit 1
+          fi
+
+          mutation_started=true
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" \
+            --role roles/logging.viewer \
+            --condition=None \
+            --quiet >/dev/null
+          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --member "${member}" \
+            --role roles/run.invoker \
+            --quiet >/dev/null
+
+          gcloud run jobs update "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --args=-m,runtime_v2,status \
+            --quiet >/dev/null
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-audit.json
+          audit_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-audit.json)"
+          [[ "$(jq -c '.command // []' <<<"${audit_container}")" == '["python"]' ]]
+          [[ "$(jq -c '.args // []' <<<"${audit_container}")" == '["-m","runtime_v2","status"]' ]]
+
+          audit_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          printf '%s\n' "${audit_started}" > audit-started.txt
+          gcloud run jobs execute "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --wait \
+            --quiet
+
+          found=false
+          for attempt in $(seq 1 18); do
+            gcloud logging read \
+              "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND timestamp>=\"${audit_started}\"" \
+              --project "${PROJECT_ID}" \
+              --order=asc \
+              --limit=300 \
+              --format='value(textPayload)' > audit.log || true
+            if python - <<'PY'
+          import json
+          from pathlib import Path
+          for raw in Path('audit.log').read_text(encoding='utf-8', errors='replace').splitlines():
+              raw = raw.strip()
+              if not raw.startswith('{'):
+                  continue
+              try:
+                  value = json.loads(raw)
+              except json.JSONDecodeError:
+                  continue
+              if isinstance(value, dict) and isinstance(value.get('heads'), list) and isinstance(value.get('latest_runs'), list):
+                  Path('runtime-status.json').write_text(json.dumps(value, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+                  raise SystemExit(0)
+          raise SystemExit(1)
+          PY
+            then
+              found=true
+              break
+            fi
+            sleep 5
+          done
+          [[ "${found}" == "true" ]] || { echo "Runtime v2 status output was not found in Cloud Run logs." >&2; exit 1; }
+
+          cleanup
+          cleaned=true
+          trap - EXIT
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-after.json
+          after_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-after.json)"
+          [[ "$(jq -c '.command // []' <<<"${after_container}")" == "${baseline_command_json}" ]] || { echo "Admin command was not restored." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${after_container}")" == "${baseline_args_json}" ]] || { echo "Admin arguments were not restored." >&2; exit 1; }
+
+          admin_policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]?] | any(. == $member)' <<<"${admin_policy}" >/dev/null; then
+            echo "Temporary admin invoker binding remains after cleanup." >&2
+            exit 1
+          fi
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewer") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+            echo "Temporary logging viewer binding remains after cleanup." >&2
+            exit 1
+          fi
+
+          : > schedulers-after.txt
+          for scheduler in "${expected_schedulers[@]}"; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            printf '%s\t%s\n' "${scheduler}" "${state}" >> schedulers-after.txt
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} changed state during audit." >&2; exit 1; }
+          done
+
+          BASELINE_ARGS_JSON="${baseline_args_json}" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          status = json.loads(Path('runtime-status.json').read_text(encoding='utf-8'))
+          heads = {item['namespace']: item for item in status['heads']}
+          expected_artifacts = {
+              'legislative': 9881049089,
+              'executive': 9881124215,
+              'ai': 9827727750,
+          }
+          failures = []
+          for namespace, artifact_id in expected_artifacts.items():
+              head = heads.get(namespace)
+              if not head:
+                  failures.append(f'{namespace}: missing durable head')
+                  continue
+              if head.get('generation') != 1:
+                  failures.append(f"{namespace}: expected generation 1, found {head.get('generation')}")
+              provenance = head.get('provenance') or {}
+              if provenance.get('authority') != 'github_actions_migration':
+                  failures.append(f"{namespace}: unexpected authority {provenance.get('authority')!r}")
+              if provenance.get('repository_id') != 1349678672:
+                  failures.append(f'{namespace}: wrong repository_id')
+              if provenance.get('repository_full_name') != 'maglothinm/MyETF-Intelligence':
+                  failures.append(f'{namespace}: wrong repository_full_name')
+              if provenance.get('artifact_id') != artifact_id:
+                  failures.append(f"{namespace}: expected artifact {artifact_id}, found {provenance.get('artifact_id')}")
+
+          dashboard = heads.get('dashboard')
+          if not dashboard:
+              failures.append('dashboard: missing durable head')
+          else:
+              if dashboard.get('generation') != 1:
+                  failures.append(f"dashboard: expected generation 1, found {dashboard.get('generation')}")
+              provenance = dashboard.get('provenance') or {}
+              if provenance.get('authority') != 'runtime_v2' or provenance.get('job') != 'dashboard':
+                  failures.append('dashboard: unexpected provenance authority/job')
+              if provenance.get('mode') != 'shadow':
+                  failures.append(f"dashboard: expected shadow mode, found {provenance.get('mode')!r}")
+              expected_inputs = {name: heads[name]['snapshot_sha256'] for name in expected_artifacts if name in heads}
+              if provenance.get('inputs') != expected_inputs:
+                  failures.append('dashboard: input hashes do not match protected generation-1 heads')
+
+          cutoff = os.environ['PHASE3_AUTHORIZED_AT']
+          for run in status.get('latest_runs', []):
+              if run.get('job_name') in {'legislative', 'executive', 'ai', 'dashboard'}:
+                  started = run.get('started_at') or ''
+                  if started >= cutoff:
+                      failures.append(f"{run.get('job_name')}: Runtime v2 execution occurred after Phase 3 authorization at {started}")
+
+          receipt = {
+              'schema_version': 1,
+              'phase': 3,
+              'result': 'accepted' if not failures else 'rejected',
+              'repository_id': 1349678672,
+              'repository_full_name': 'maglothinm/MyETF-Intelligence',
+              'audit_source_revision': os.environ['GITHUB_SHA'],
+              'project_id': os.environ['PROJECT_ID'],
+              'project_number': os.environ['PROJECT_NUMBER'],
+              'region': os.environ['REGION'],
+              'runtime_status': status,
+              'admin_baseline_args': json.loads(os.environ['BASELINE_ARGS_JSON']),
+              'temporary_permissions_removed': True,
+              'admin_job_restored': True,
+              'schedulers_paused_before_and_after': True,
+              'runtime_v2_web_public_invoker': False,
+              'phase4_cycles_observed_after_authorization': False if not any('execution occurred after Phase 3 authorization' in item for item in failures) else True,
+              'failures': failures,
+          }
+          Path('phase3-data-plane-acceptance.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          if failures:
+              for failure in failures:
+                  print(f'ACCEPTANCE_FAILURE: {failure}')
+              raise SystemExit(2)
+          print('Phase 3 data-plane acceptance passed.')
+          PY
+
+      - name: Upload Phase 3 data-plane audit receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-data-plane-acceptance
+          path: |
+            phase3-data-plane-audit/runtime-status.json
+            phase3-data-plane-audit/phase3-data-plane-acceptance.json
+            phase3-data-plane-audit/schedulers-before.txt
+            phase3-data-plane-audit/schedulers-after.txt
+            phase3-data-plane-audit/audit-started.txt
+          if-no-files-found: warn
+          retention-days: 30
