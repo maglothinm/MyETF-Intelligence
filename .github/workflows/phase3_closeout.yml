@@ -1,0 +1,175 @@
+name: Phase 3 closeout
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_closeout.yml"
+
+concurrency:
+  group: phase3-closeout
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  close:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify closeout controller is bounded
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/converge-phase3-readiness-v2.sh
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/converge-phase3-readiness-v2.sh').read_text(encoding='utf-8')
+          for forbidden in (
+              'gcloud scheduler jobs run',
+              'gcloud scheduler jobs resume',
+              'runtime_v2,run',
+              'import-gcs',
+              'secrets versions access',
+              'terraform apply',
+              'gcloud run deploy',
+              'gcloud run jobs deploy',
+              'gcloud sql instances patch',
+          ):
+              assert forbidden not in text, forbidden
+          assert text.count('gcloud run jobs execute') == 1
+          assert '--args=-m,runtime_v2,status' in text
+          assert 'validate_phase3_status.py' in text
+          assert 'verify_temporary_access_removed' in text
+          PY
+
+      - name: Check existing immutable readiness tag
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+          if [[ -n "${target}" ]]; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Authenticate as constrained Phase 3 deployer
+        if: steps.before.outputs.exists != 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        if: steps.before.outputs.exists != 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Converge private routing and exact Phase 3 acceptance
+        if: steps.before.outputs.exists != 'true'
+        shell: bash
+        run: bash deploy/runtime-v2/converge-phase3-readiness-v2.sh
+
+      - name: Create immutable readiness tag when newly accepted
+        if: steps.before.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${current}" ]]; then
+            [[ "${current}" == "${GITHUB_SHA}" ]] || {
+              echo "Concurrent phase3-ready tag points to ${current}." >&2
+              exit 1
+            }
+          else
+            git tag phase3-ready "${GITHUB_SHA}"
+            git push origin refs/tags/phase3-ready
+          fi
+
+      - name: Verify readiness tag exists
+        id: after
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          [[ "${target}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Immutable phase3-ready tag is absent." >&2
+            exit 1
+          }
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit Phase 4 readiness marker
+        shell: bash
+        env:
+          READY_TARGET: ${{ steps.after.outputs.target }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/runtime-v2/phase3
+          cat > docs/runtime-v2/phase3/PHASE4_READY.md <<EOF
+          # Runtime v2 Phase 4 Readiness
+
+          Phase 3 is accepted at immutable tag `phase3-ready`, targeting commit `${READY_TARGET}`.
+
+          The tag is created only after the bounded readiness controller verifies:
+
+          - exact canonical generation-1 Legislative, Executive, and AI migration provenance;
+          - the first private, nonpublished Runtime v2 dashboard snapshot in shadow mode;
+          - private-only Cloud SQL and `PRIVATE_IP=true` on Runtime v2 workloads;
+          - all Runtime v2 Cloud Scheduler jobs remaining paused;
+          - no public `allUsers` invoker on the Runtime v2 web service;
+          - the persistent admin command remaining `python -m runtime_v2 init-db --with-vault`;
+          - removal of temporary log-view, Logging Admin, and admin execution authority;
+          - no Phase 4 Legislative, Executive, or AI producer cycle having run;
+          - no transfer of production authority from the existing GitHub workflows.
+
+          Phase 4 is ready but has not started. This marker does not authorize Scheduler activation, public publication, notifications, callbacks, production cutover, or Phase 5 promotion.
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/runtime-v2/phase3/PHASE4_READY.md; then
+            echo "Readiness marker already matches the accepted boundary."
+            exit 0
+          fi
+          git add docs/runtime-v2/phase3/PHASE4_READY.md
+          git commit -m "Record Phase 4 readiness after Phase 3 acceptance"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Upload closeout evidence
+        if: always() && steps.before.outputs.exists != 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-closeout
+          path: |
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/phase3-acceptance.json
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/phase3-acceptance.sha256
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/phase4-ready.txt
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/status.json
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/status-execution.json
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/private-ip-reconciliation.txt
+          if-no-files-found: warn
+          retention-days: 90
