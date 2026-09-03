@@ -9,7 +9,7 @@ def _text() -> str:
 
 
 def _terraform_permissions_block(text: str) -> str:
-    start = text.index("$terraformPermissions = @(")
+    start = text.index("$terraformPermissionsRequested = @(")
     end = text.index("\n)\n\n$forbiddenTerraformPermissions", start) + 2
     return text[start:end]
 
@@ -90,6 +90,24 @@ def test_custom_terraform_role_contains_required_nonexecution_control_permission
     )
     for permission in required:
         assert permission in permissions
+
+
+def test_custom_role_permissions_are_validated_for_project_before_mutation() -> None:
+    text = _text()
+    validation = text.index("iam list-testable-permissions")
+    apply_gate = text.index("if (-not $Apply)")
+    assert validation < apply_gate
+    assert "//cloudresourcemanager.googleapis.com/projects/$projectId" in text
+    assert "customRolesSupportLevel!=NOT_SUPPORTED" in text
+    assert "$terraformPermissionsRequested | Where-Object { $_ -in $customRoleSupportedPermissions }" in text
+    assert "$terraformPermissionsRequested | Where-Object { $_ -notin $customRoleSupportedPermissions }" in text
+    assert "omitted_unsupported_permissions" in text
+
+
+def test_known_project_invalid_resource_manager_list_permission_is_not_requested() -> None:
+    permissions = _terraform_permissions_block(_text())
+    assert "resourcemanager.projects.get" in permissions
+    assert "resourcemanager.projects.list" not in permissions
 
 
 def test_deployer_uses_service_specific_infrastructure_roles_not_owner_editor() -> None:
