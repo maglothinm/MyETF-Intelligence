@@ -191,15 +191,17 @@ foreach ($permission in $forbiddenTerraformPermissions) {
 $deployerExists = Test-GcloudResource @('iam', 'service-accounts', 'describe', $deployerEmail, '--project', $projectId)
 $builderExists = Test-GcloudResource @('iam', 'service-accounts', 'describe', $builderEmail, '--project', $projectId)
 $roleExists = Test-GcloudResource @('iam', 'roles', 'describe', $TerraformRoleId, '--project', $projectId)
-$computeEnabled = Test-GcloudResource @('services', 'describe', 'compute.googleapis.com', '--project', $projectId, '--filter=state:ENABLED')
-$serviceNetworkingEnabled = Test-GcloudResource @('services', 'describe', 'servicenetworking.googleapis.com', '--project', $projectId, '--filter=state:ENABLED')
+$enabledServices = @(& $gcloud services list --enabled --project $projectId --format='value(config.name)')
+if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect enabled Google Cloud services.' }
+$computeEnabled = 'compute.googleapis.com' -in $enabledServices
+$serviceNetworkingEnabled = 'servicenetworking.googleapis.com' -in $enabledServices
 
 Write-Output "Phase 3 execution identity preflight: account=$account project_id=$projectId project_number=$ProjectNumber region=$Region"
 Write-Output "Phase 3 execution identity preflight: deployer=$deployerEmail exists=$deployerExists builder=$builderEmail exists=$builderExists"
 Write-Output "Phase 3 execution identity preflight: terraform_role=$terraformRoleName exists=$roleExists"
 Write-Output "Phase 3 execution identity preflight: compute_api_enabled=$computeEnabled service_networking_api_enabled=$serviceNetworkingEnabled"
 Write-Output "Phase 3 execution identity preflight: provider=$providerResource principal_set=$principalSet"
-Write-Output 'Phase 3 execution identity preflight: deployer role explicitly excludes job execution, scheduler enabling/running, secret payload access, and destructive resource permissions.'
+Write-Output 'Phase 3 execution identity preflight: deployer custom role excludes job execution, scheduler enabling/running, secret payload access, and destructive resource permissions.'
 
 if (-not $Apply) {
     Write-Output 'Preflight only. No service account, IAM binding, custom role, or API state was changed. Re-run with -Apply to establish the Phase 3 execution identities.'
@@ -269,6 +271,7 @@ foreach ($role in @(
     'roles/servicenetworking.networksAdmin',
     'roles/cloudsql.admin',
     'roles/iam.serviceAccountAdmin',
+    'roles/iam.serviceAccountUser',
     'roles/resourcemanager.projectIamAdmin'
 )) {
     Ensure-ProjectBinding $projectId "serviceAccount:$deployerEmail" $role
