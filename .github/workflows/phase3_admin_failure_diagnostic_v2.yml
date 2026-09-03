@@ -15,7 +15,7 @@ jobs:
   diagnose:
     if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       PROJECT_ID: project-38008d5f-4918-46e6-920
       PROJECT_NUMBER: "497412818801"
@@ -28,7 +28,7 @@ jobs:
       LOG_BUCKET: _Default
       LOG_VIEW: _Default
       LOG_LOCATION: global
-      ONESHOT_MARKER: phase3-diagnostics/admin-failure-v5.claimed
+      ONESHOT_MARKER: phase3-diagnostics/admin-failure-v6.claimed
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
@@ -113,12 +113,26 @@ jobs:
             --quiet >/dev/null
 
           gcloud run jobs executions describe "${FAILED_EXECUTION}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
-          gcloud logging read \
-            "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${FAILED_EXECUTION}\"" \
-            --project "${PROJECT_ID}" \
-            --order=asc \
-            --limit=400 \
-            --format=json > logs.json
+
+          log_read_ok=false
+          for attempt in $(seq 1 12); do
+            if gcloud logging read \
+              "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${FAILED_EXECUTION}\"" \
+              --project "${PROJECT_ID}" \
+              --order=asc \
+              --limit=400 \
+              --format=json > logs.json 2> log-read-error.txt; then
+              log_read_ok=true
+              break
+            fi
+            echo "Log-view IAM not effective yet (attempt ${attempt}/12)."
+            sleep 10
+          done
+          if [[ "${log_read_ok}" != "true" ]]; then
+            cat log-read-error.txt >&2 || true
+            echo "Cloud Logging access did not propagate within the bounded diagnostic window." >&2
+            exit 1
+          fi
 
           cleanup_logging
           trap - EXIT
@@ -184,5 +198,6 @@ jobs:
             phase3-admin-failure-v2/logs.json
             phase3-admin-failure-v2/diagnostic-summary.json
             phase3-admin-failure-v2/oneshot-marker.txt
+            phase3-admin-failure-v2/log-read-error.txt
           if-no-files-found: warn
           retention-days: 30
