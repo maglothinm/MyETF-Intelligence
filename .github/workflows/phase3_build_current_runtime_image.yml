@@ -15,7 +15,7 @@ jobs:
   build:
     if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       PROJECT_ID: project-38008d5f-4918-46e6-920
       PROJECT_NUMBER: "497412818801"
@@ -40,28 +40,85 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Reconcile builder Cloud Build bucket metadata access
+      - name: Reconcile intended builder permissions
         shell: bash
         run: |
           set -euo pipefail
           actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
           [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
-          gcloud storage buckets add-iam-policy-binding "gs://${CLOUD_BUILD_BUCKET}" \
-            --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
-            --role roles/storage.bucketViewer \
-            --quiet >/dev/null
+
+          for role in \
+            roles/cloudbuild.builds.editor \
+            roles/serviceusage.serviceUsageConsumer \
+            roles/serviceusage.serviceUsageViewer; do
+            gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+              --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+              --role "${role}" \
+              --condition=None \
+              --quiet \
+              --format=none
+          done
+
+          for role in roles/storage.objectAdmin roles/storage.bucketViewer; do
+            gcloud storage buckets add-iam-policy-binding "gs://${CLOUD_BUILD_BUCKET}" \
+              --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+              --role "${role}" \
+              --quiet \
+              --format=none
+          done
+
+          policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          for role in \
+            roles/cloudbuild.builds.editor \
+            roles/serviceusage.serviceUsageConsumer \
+            roles/serviceusage.serviceUsageViewer; do
+            jq -e --arg member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" --arg role "${role}" \
+              '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' \
+              <<<"${policy}" >/dev/null || { echo "Builder is missing intended project role ${role}." >&2; exit 1; }
+          done
+
+          bucket_policy="$(gcloud storage buckets get-iam-policy "gs://${CLOUD_BUILD_BUCKET}" --format=json)"
+          for role in roles/storage.objectAdmin roles/storage.bucketViewer; do
+            jq -e --arg member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" --arg role "${role}" \
+              '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' \
+              <<<"${bucket_policy}" >/dev/null || { echo "Builder is missing intended bucket role ${role}." >&2; exit 1; }
+          done
 
       - name: Authenticate as isolated Phase 3 builder
+        id: builder-auth
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
 
-      - name: Build and resolve immutable image
+      - name: Wait for builder permissions and build immutable image
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p phase3-image-build
+
+          active_account="$(gcloud auth list --filter='status:ACTIVE' --format='value(account)')"
+          [[ "${active_account}" == "${BUILDER_SERVICE_ACCOUNT}" ]] || {
+            echo "gcloud is not authenticated as the isolated Phase 3 builder." >&2
+            exit 1
+          }
+
+          permission_ready=false
+          for attempt in $(seq 1 18); do
+            if gcloud storage buckets describe "gs://${CLOUD_BUILD_BUCKET}" >/dev/null 2>&1 \
+              && gcloud storage ls "gs://${CLOUD_BUILD_BUCKET}" --limit=1 >/dev/null 2>&1 \
+              && gcloud services list --enabled --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1 \
+              && gcloud builds list --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1; then
+              permission_ready=true
+              break
+            fi
+            echo "Builder permissions not effective yet (attempt ${attempt}/18)."
+            sleep 10
+          done
+          [[ "${permission_ready}" == "true" ]] || {
+            echo "Builder permissions did not become effective within the bounded readiness window." >&2
+            exit 1
+          }
 
           actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
           [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
@@ -119,7 +176,15 @@ jobs:
               database_sha256: $database_sha256,
               dockerfile_sha256: $dockerfile_sha256,
               requirements_sha256: $requirements_sha256,
-              builder_bucket_metadata_access: "roles/storage.bucketViewer",
+              builder_project_roles: [
+                "roles/cloudbuild.builds.editor",
+                "roles/serviceusage.serviceUsageConsumer",
+                "roles/serviceusage.serviceUsageViewer"
+              ],
+              builder_bucket_roles: [
+                "roles/storage.objectAdmin",
+                "roles/storage.bucketViewer"
+              ],
               deployed: false,
               runtime_job_execution: false,
               scheduler_execution: false,
