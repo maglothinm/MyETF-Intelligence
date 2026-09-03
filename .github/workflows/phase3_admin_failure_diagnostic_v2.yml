@@ -25,7 +25,10 @@ jobs:
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_JOB: polititrack-admin
       FAILED_EXECUTION: polititrack-admin-snrjx
-      ONESHOT_MARKER: phase3-diagnostics/admin-failure-v4.claimed
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      ONESHOT_MARKER: phase3-diagnostics/admin-failure-v5.claimed
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
@@ -70,7 +73,7 @@ jobs:
           [[ "${args_json}" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin job is not at the Terraform Phase 3 baseline." >&2; exit 1; }
 
           gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.invoker --quiet >/dev/null 2>&1 || true
-          for role in roles/logging.viewer roles/logging.viewAccessor; do
+          for role in roles/logging.viewer roles/logging.viewAccessor roles/logging.admin; do
             gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role "${role}" --condition=None --quiet >/dev/null 2>&1 || true
           done
 
@@ -81,13 +84,33 @@ jobs:
 
           cleanup_logging() {
             set +e
-            for role in roles/logging.viewer roles/logging.viewAccessor; do
-              gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role "${role}" --condition=None --quiet >/dev/null 2>&1
-            done
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" \
+              --bucket "${LOG_BUCKET}" \
+              --location "${LOG_LOCATION}" \
+              --project "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.viewAccessor \
+              --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.admin \
+              --condition=None \
+              --quiet >/dev/null 2>&1
           }
           trap cleanup_logging EXIT
-          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null
-          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --condition=None --quiet >/dev/null
+
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" \
+            --role roles/logging.admin \
+            --condition=None \
+            --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" \
+            --bucket "${LOG_BUCKET}" \
+            --location "${LOG_LOCATION}" \
+            --project "${PROJECT_ID}" \
+            --member "${member}" \
+            --role roles/logging.viewAccessor \
+            --quiet >/dev/null
 
           gcloud run jobs executions describe "${FAILED_EXECUTION}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
           gcloud logging read \
@@ -101,12 +124,15 @@ jobs:
           trap - EXIT
 
           project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
-          for role in roles/logging.viewer roles/logging.viewAccessor; do
-            if jq -e --arg member "${member}" --arg role "${role}" '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
-              echo "Temporary ${role} binding remains after diagnostic cleanup." >&2
-              exit 1
-            fi
-          done
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+            echo "Temporary roles/logging.admin binding remains after diagnostic cleanup." >&2
+            exit 1
+          fi
+          view_policy="$(gcloud logging views get-iam-policy "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' <<<"${view_policy}" >/dev/null; then
+            echo "Temporary log-view accessor binding remains after diagnostic cleanup." >&2
+            exit 1
+          fi
 
           python - <<'PY'
           import json
