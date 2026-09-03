@@ -2,12 +2,15 @@ locals {
   services = toset([
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
+    "compute.googleapis.com",
     "run.googleapis.com",
     "cloudscheduler.googleapis.com",
     "sqladmin.googleapis.com",
     "secretmanager.googleapis.com",
+    "servicenetworking.googleapis.com",
     "storage.googleapis.com",
   ])
+
   jobs = {
     legislative = {
       schedule = "5,20,35,50 * * * *"
@@ -39,16 +42,81 @@ resource "google_project_service" "required" {
   disable_on_destroy = false
 }
 
-resource "google_service_account" "runtime" {
-  account_id   = "polititrack-runtime-v2"
-  display_name = "PolitiTrack Runtime v2"
+resource "google_compute_network" "runtime" {
+  name                    = "polititrack-runtime-v2"
+  auto_create_subnetworks = false
+  routing_mode            = "REGIONAL"
+
+  depends_on = [google_project_service.required]
 }
 
-resource "google_project_iam_member" "runtime_cloudsql" {
-  for_each = toset(["roles/cloudsql.client"])
+resource "google_compute_subnetwork" "runtime" {
+  name                     = "polititrack-runtime-v2"
+  ip_cidr_range            = "10.88.0.0/24"
+  region                   = var.region
+  network                  = google_compute_network.runtime.id
+  private_ip_google_access = true
+}
+
+resource "google_compute_global_address" "private_services" {
+  name          = "polititrack-runtime-v2-private-services"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 24
+  network       = google_compute_network.runtime.id
+}
+
+resource "google_service_networking_connection" "private_vpc" {
+  network                 = google_compute_network.runtime.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_services.name]
+}
+
+resource "google_service_account" "producer" {
+  account_id   = "polititrack-runtime-v2"
+  display_name = "PolitiTrack Runtime v2 producers"
+}
+
+resource "google_service_account" "admin" {
+  account_id   = "polititrack-admin-v2"
+  display_name = "PolitiTrack Runtime v2 schema admin"
+}
+
+resource "google_service_account" "import" {
+  account_id   = "polititrack-import-v2"
+  display_name = "PolitiTrack Runtime v2 state importer"
+}
+
+resource "google_service_account" "web" {
+  account_id   = "polititrack-web-v2"
+  display_name = "PolitiTrack Runtime v2 web service"
+}
+
+resource "google_service_account" "vault" {
+  account_id   = "polititrack-vault-v2"
+  display_name = "PolitiTrack Runtime v2 Filing Vault lifecycle"
+}
+
+resource "google_service_account" "scheduler" {
+  account_id   = "polititrack-scheduler-v2"
+  display_name = "PolitiTrack Runtime v2 scheduler invoker"
+}
+
+locals {
+  database_service_accounts = {
+    producer = google_service_account.producer.email
+    admin    = google_service_account.admin.email
+    import   = google_service_account.import.email
+    web      = google_service_account.web.email
+    vault    = google_service_account.vault.email
+  }
+}
+
+resource "google_project_iam_member" "database_client" {
+  for_each = local.database_service_accounts
   project  = var.project_id
-  role     = each.value
-  member   = "serviceAccount:${google_service_account.runtime.email}"
+  role     = "roles/cloudsql.client"
+  member   = "serviceAccount:${each.value}"
 }
 
 resource "google_sql_database_instance" "runtime" {
@@ -76,7 +144,8 @@ resource "google_sql_database_instance" "runtime" {
     }
 
     ip_configuration {
-      ipv4_enabled = true
+      ipv4_enabled    = false
+      private_network = google_compute_network.runtime.id
     }
   }
 
@@ -84,7 +153,10 @@ resource "google_sql_database_instance" "runtime" {
     prevent_destroy = true
   }
 
-  depends_on = [google_project_service.required]
+  depends_on = [
+    google_project_service.required,
+    google_service_networking_connection.private_vpc,
+  ]
 }
 
 resource "google_sql_database" "runtime" {
@@ -124,10 +196,11 @@ resource "google_secret_manager_secret_version" "database_password" {
 }
 
 resource "google_secret_manager_secret_iam_member" "database_password" {
+  for_each  = local.database_service_accounts
   project   = var.project_id
   secret_id = google_secret_manager_secret.database_password.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.runtime.email}"
+  member    = "serviceAccount:${each.value}"
 }
 
 resource "random_password" "vault_signing_key" {
@@ -158,7 +231,7 @@ resource "google_secret_manager_secret_iam_member" "vault_signing_key" {
   project   = var.project_id
   secret_id = google_secret_manager_secret.vault_signing_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.runtime.email}"
+  member    = "serviceAccount:${google_service_account.web.email}"
 }
 
 resource "google_storage_bucket" "vault" {
@@ -180,18 +253,14 @@ resource "google_storage_bucket" "vault" {
   depends_on = [google_project_service.required]
 }
 
-resource "google_storage_bucket_iam_member" "vault_runtime" {
-  count  = var.vault_enabled ? 1 : 0
+resource "google_storage_bucket_iam_member" "vault_object_admin" {
+  for_each = var.vault_enabled ? {
+    web       = google_service_account.web.email
+    lifecycle = google_service_account.vault.email
+  } : {}
   bucket = google_storage_bucket.vault[0].name
   role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.runtime.email}"
-}
-
-resource "google_storage_bucket_iam_member" "vault_runtime_metadata" {
-  count  = var.vault_enabled ? 1 : 0
-  bucket = google_storage_bucket.vault[0].name
-  role   = "roles/storage.legacyBucketReader"
-  member = "serviceAccount:${google_service_account.runtime.email}"
+  member = "serviceAccount:${each.value}"
 }
 
 resource "google_storage_bucket" "migration" {
@@ -212,10 +281,10 @@ resource "google_storage_bucket" "migration" {
   depends_on = [google_project_service.required]
 }
 
-resource "google_storage_bucket_iam_member" "migration_runtime" {
+resource "google_storage_bucket_iam_member" "migration_import" {
   bucket = google_storage_bucket.migration.name
   role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.runtime.email}"
+  member = "serviceAccount:${google_service_account.import.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "runtime" {
@@ -223,7 +292,7 @@ resource "google_secret_manager_secret_iam_member" "runtime" {
   project   = var.project_id
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.runtime.email}"
+  member    = "serviceAccount:${google_service_account.producer.email}"
 }
 
 resource "google_cloud_run_v2_job" "producer" {
@@ -235,9 +304,17 @@ resource "google_cloud_run_v2_job" "producer" {
     task_count  = 1
     parallelism = 1
     template {
-      service_account = google_service_account.runtime.email
+      service_account = google_service_account.producer.email
       timeout         = "3300s"
       max_retries     = 0
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.runtime.name
+          subnetwork = google_compute_subnetwork.runtime.name
+        }
+      }
+
       containers {
         image   = var.image
         command = ["python"]
@@ -255,6 +332,10 @@ resource "google_cloud_run_v2_job" "producer" {
         env {
           name  = "INSTANCE_CONNECTION_NAME"
           value = google_sql_database_instance.runtime.connection_name
+        }
+        env {
+          name  = "PRIVATE_IP"
+          value = "true"
         }
         env {
           name  = "DB_NAME"
@@ -302,6 +383,8 @@ resource "google_cloud_run_v2_job" "producer" {
 
   depends_on = [
     google_project_service.required,
+    google_project_iam_member.database_client,
+    google_secret_manager_secret_iam_member.database_password,
     google_secret_manager_secret_iam_member.runtime,
   ]
 }
@@ -314,9 +397,17 @@ resource "google_cloud_run_v2_job" "admin" {
     task_count  = 1
     parallelism = 1
     template {
-      service_account = google_service_account.runtime.email
+      service_account = google_service_account.admin.email
       timeout         = "900s"
       max_retries     = 0
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.runtime.name
+          subnetwork = google_compute_subnetwork.runtime.name
+        }
+      }
+
       containers {
         image   = var.image
         command = ["python"]
@@ -330,6 +421,10 @@ resource "google_cloud_run_v2_job" "admin" {
         env {
           name  = "INSTANCE_CONNECTION_NAME"
           value = google_sql_database_instance.runtime.connection_name
+        }
+        env {
+          name  = "PRIVATE_IP"
+          value = "true"
         }
         env {
           name  = "DB_NAME"
@@ -373,7 +468,8 @@ resource "google_cloud_run_v2_job" "admin" {
 
   depends_on = [
     google_project_service.required,
-    google_secret_manager_secret_iam_member.runtime,
+    google_project_iam_member.database_client,
+    google_secret_manager_secret_iam_member.database_password,
   ]
 }
 
@@ -386,9 +482,17 @@ resource "google_cloud_run_v2_job" "import" {
     task_count  = 1
     parallelism = 1
     template {
-      service_account = google_service_account.runtime.email
+      service_account = google_service_account.import.email
       timeout         = "900s"
       max_retries     = 0
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.runtime.name
+          subnetwork = google_compute_subnetwork.runtime.name
+        }
+      }
+
       containers {
         image   = var.image
         command = ["python"]
@@ -407,6 +511,10 @@ resource "google_cloud_run_v2_job" "import" {
         env {
           name  = "INSTANCE_CONNECTION_NAME"
           value = google_sql_database_instance.runtime.connection_name
+        }
+        env {
+          name  = "PRIVATE_IP"
+          value = "true"
         }
         env {
           name  = "DB_NAME"
@@ -434,7 +542,8 @@ resource "google_cloud_run_v2_job" "import" {
   }
 
   depends_on = [
-    google_storage_bucket_iam_member.migration_runtime,
+    google_storage_bucket_iam_member.migration_import,
+    google_project_iam_member.database_client,
     google_secret_manager_secret_iam_member.database_password,
   ]
 }
@@ -448,9 +557,17 @@ resource "google_cloud_run_v2_job" "vault_lifecycle" {
     task_count  = 1
     parallelism = 1
     template {
-      service_account = google_service_account.runtime.email
+      service_account = google_service_account.vault.email
       timeout         = "1800s"
       max_retries     = 0
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.runtime.name
+          subnetwork = google_compute_subnetwork.runtime.name
+        }
+      }
+
       containers {
         image   = var.image
         command = ["python"]
@@ -464,6 +581,10 @@ resource "google_cloud_run_v2_job" "vault_lifecycle" {
         env {
           name  = "INSTANCE_CONNECTION_NAME"
           value = google_sql_database_instance.runtime.connection_name
+        }
+        env {
+          name  = "PRIVATE_IP"
+          value = "true"
         }
         env {
           name  = "DB_NAME"
@@ -503,8 +624,9 @@ resource "google_cloud_run_v2_job" "vault_lifecycle" {
   }
 
   depends_on = [
-    google_project_service.required,
-    google_secret_manager_secret_iam_member.runtime,
+    google_project_iam_member.database_client,
+    google_secret_manager_secret_iam_member.database_password,
+    google_storage_bucket_iam_member.vault_object_admin,
   ]
 }
 
@@ -514,7 +636,7 @@ resource "google_cloud_run_v2_job_iam_member" "vault_scheduler" {
   location = var.region
   name     = google_cloud_run_v2_job.vault_lifecycle[0].name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.runtime.email}"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
 }
 
 resource "google_cloud_scheduler_job" "vault_lifecycle" {
@@ -535,7 +657,7 @@ resource "google_cloud_scheduler_job" "vault_lifecycle" {
     http_method = "POST"
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.vault_lifecycle[0].name}:run"
     oauth_token {
-      service_account_email = google_service_account.runtime.email
+      service_account_email = google_service_account.scheduler.email
     }
   }
 
@@ -548,7 +670,7 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler" {
   location = var.region
   name     = google_cloud_run_v2_job.producer[each.key].name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.runtime.email}"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
 }
 
 resource "google_cloud_scheduler_job" "producer" {
@@ -569,7 +691,7 @@ resource "google_cloud_scheduler_job" "producer" {
     http_method = "POST"
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.producer[each.key].name}:run"
     oauth_token {
-      service_account_email = google_service_account.runtime.email
+      service_account_email = google_service_account.scheduler.email
     }
   }
 
@@ -582,11 +704,20 @@ resource "google_cloud_run_v2_service" "web" {
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
-    service_account = google_service_account.runtime.email
+    service_account = google_service_account.web.email
+
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.runtime.name
+        subnetwork = google_compute_subnetwork.runtime.name
+      }
+    }
+
     scaling {
       min_instance_count = 0
       max_instance_count = 3
     }
+
     containers {
       image   = var.image
       command = ["gunicorn"]
@@ -611,6 +742,10 @@ resource "google_cloud_run_v2_service" "web" {
       env {
         name  = "INSTANCE_CONNECTION_NAME"
         value = google_sql_database_instance.runtime.connection_name
+      }
+      env {
+        name  = "PRIVATE_IP"
+        value = "true"
       }
       env {
         name  = "DB_NAME"
@@ -669,12 +804,14 @@ resource "google_cloud_run_v2_service" "web" {
   }
 
   depends_on = [
-    google_project_service.required,
-    google_secret_manager_secret_iam_member.runtime,
+    google_project_iam_member.database_client,
+    google_secret_manager_secret_iam_member.database_password,
+    google_secret_manager_secret_iam_member.vault_signing_key,
   ]
 }
 
 resource "google_cloud_run_v2_service_iam_member" "public_dashboard" {
+  count    = var.public_dashboard_enabled ? 1 : 0
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.web.name

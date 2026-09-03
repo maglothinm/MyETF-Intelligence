@@ -10,6 +10,8 @@ on:
       - "tests/test_runtime_v2.py"
       - "tests/test_runtime_v2_shadow_mode.py"
       - "tests/test_runtime_v2_bootstrap_safety.py"
+      - "tests/test_runtime_v2_database.py"
+      - "tests/test_runtime_v2_terraform_safety.py"
       - "tests/test_dashboard_insights.py"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:
@@ -30,6 +32,10 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-runtime-v2.txt
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
       - name: Install Runtime v2 dependencies
         run: python -m pip install --requirement requirements-runtime-v2.txt
       - name: Compile Runtime v2 package
@@ -48,12 +54,20 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
+      - name: Check Terraform formatting
+        run: terraform -chdir=deploy/runtime-v2/terraform fmt -check
+      - name: Initialize Terraform without backend
+        run: terraform -chdir=deploy/runtime-v2/terraform init -backend=false
+      - name: Validate Terraform configuration
+        run: terraform -chdir=deploy/runtime-v2/terraform validate
       - name: Run Runtime v2 focused tests
         run: |
           python -m pytest -q \
             tests/test_runtime_v2.py \
             tests/test_runtime_v2_shadow_mode.py \
             tests/test_runtime_v2_bootstrap_safety.py \
+            tests/test_runtime_v2_database.py \
+            tests/test_runtime_v2_terraform_safety.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
