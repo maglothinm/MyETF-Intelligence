@@ -35,6 +35,7 @@ def test_wif_resource_probes_treat_expected_not_found_as_absent() -> None:
 def test_wif_bootstrap_pins_immutable_ids_and_main_ref() -> None:
     text = _text()
     assert "[string]$ProjectNumber = '497412818801'" in text
+    assert "[string]$PoolId = 'polititrack-github-phase3'" in text
     assert "$ExpectedRepositoryId = '1349678672'" in text
     assert "$ExpectedRepositoryOwnerId = '225069210'" in text
     assert "$ExpectedRef = 'refs/heads/main'" in text
