@@ -1,4 +1,4 @@
-name: Phase 3 harvest current Runtime build
+name: Phase 3 harvest hardened Runtime build
 
 on:
   push:
@@ -11,6 +11,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: phase3-harvest-hardened-runtime-image
+  cancel-in-progress: false
+
 jobs:
   harvest:
     if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
@@ -22,14 +26,16 @@ jobs:
       REGION: us-central1
       REPOSITORY: polititrack
       IMAGE_NAME: runtime-v2
-      BUILD_ID: 1db569db-57a1-46fe-a061-0547ac6779b2
-      BUILD_SOURCE_REVISION: 080a3df0f0b912f702a30148cedc831b833a81db
-      CURRENT_DEPLOYED_DIGEST: sha256:82b691179c422aba5c3ffa205e1a2d548f8cd6e8e9ed8ac2b5df5f7f8c71a565
+      BUILD_ID: d580d289-c02e-4f07-93e0-d0acfc17ee4b
+      BUILD_SOURCE_REVISION: 9b77de78203fec04d46404e1b674325517420c5c
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Authenticate as constrained Phase 3 deployer
         uses: google-github-actions/auth@v3
@@ -40,7 +46,7 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Harvest exact submitted build and immutable digest
+      - name: Harvest exact hardened build and immutable digest
         shell: bash
         run: |
           set -euo pipefail
@@ -51,6 +57,25 @@ jobs:
             echo "Immutable project boundary mismatch." >&2
             exit 1
           }
+          git cat-file -e "${BUILD_SOURCE_REVISION}^{commit}"
+          git merge-base --is-ancestor "${BUILD_SOURCE_REVISION}" "${GITHUB_SHA}" || {
+            echo "Hardened image source is not an ancestor of this harvest commit." >&2
+            exit 1
+          }
+
+          python - <<'PY'
+          from pathlib import Path
+          migration = Path('migrations/20260901_runtime_v2.sql').read_text(encoding='utf-8')
+          required = (
+              "snapshot.source_provenance ->> 'mode'",
+              "cannot provenance-derive runtime_job_runs.runtime_mode for every legacy run",
+          )
+          missing = [value for value in required if value not in migration]
+          if missing:
+              raise SystemExit('Canonical migration is not fail-closed: ' + ', '.join(missing))
+          if "SET runtime_mode = 'production'\nWHERE runtime_mode IS NULL" in migration:
+              raise SystemExit('Canonical migration still contains the unsafe blanket production backfill.')
+          PY
 
           terminal=false
           for attempt in $(seq 1 36); do
@@ -78,14 +103,17 @@ jobs:
             jq -r '.failureInfo.detail // .statusDetail // "Cloud Build failed without detail."' phase3-runtime-build-harvest/build.json >&2
             exit 1
           }
-          jq -e --arg source "${BUILD_SOURCE_REVISION}" '.substitutions._SOURCE_REVISION == $source' phase3-runtime-build-harvest/build.json >/dev/null || {
-            echo "Cloud Build source revision does not match the authorized exact SHA." >&2
-            exit 1
-          }
-          jq -e --arg project "${PROJECT_ID}" '.projectId == $project' phase3-runtime-build-harvest/build.json >/dev/null || {
-            echo "Cloud Build project mismatch." >&2
-            exit 1
-          }
+          jq -e --arg source "${BUILD_SOURCE_REVISION}" \
+            '.substitutions._SOURCE_REVISION == $source' \
+            phase3-runtime-build-harvest/build.json >/dev/null || {
+              echo "Cloud Build source revision does not match the authorized hardened SHA." >&2
+              exit 1
+            }
+          jq -e --arg project "${PROJECT_ID}" '.projectId == $project' \
+            phase3-runtime-build-harvest/build.json >/dev/null || {
+              echo "Cloud Build project mismatch." >&2
+              exit 1
+            }
 
           tag="${BUILD_SOURCE_REVISION:0:12}"
           tagged_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${tag}"
@@ -102,6 +130,13 @@ jobs:
           }
 
           immutable_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}@${digest}"
+          database_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/database.py" | sha256sum | awk '{print $1}')"
+          store_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/store.py" | sha256sum | awk '{print $1}')"
+          runner_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/runner.py" | sha256sum | awk '{print $1}')"
+          migration_sha="$(git show "${BUILD_SOURCE_REVISION}:migrations/20260901_runtime_v2.sql" | sha256sum | awk '{print $1}')"
+          dockerfile_sha="$(git show "${BUILD_SOURCE_REVISION}:deploy/runtime-v2/Dockerfile" | sha256sum | awk '{print $1}')"
+          requirements_sha="$(git show "${BUILD_SOURCE_REVISION}:requirements-runtime-v2.txt" | sha256sum | awk '{print $1}')"
+
           jq -n \
             --arg project_id "${PROJECT_ID}" \
             --arg project_number "${PROJECT_NUMBER}" \
@@ -110,8 +145,15 @@ jobs:
             --arg status "${status}" \
             --arg immutable_image "${immutable_image}" \
             --arg digest "${digest}" \
+            --arg database_sha256 "${database_sha}" \
+            --arg store_sha256 "${store_sha}" \
+            --arg runner_sha256 "${runner_sha}" \
+            --arg migration_sha256 "${migration_sha}" \
+            --arg dockerfile_sha256 "${dockerfile_sha}" \
+            --arg requirements_sha256 "${requirements_sha}" \
             '{
-              result: "phase3_current_runtime_image_harvested",
+              result: "phase3_hardened_runtime_image_harvested",
+              repository_id: 1349678672,
               project_id: $project_id,
               project_number: ($project_number | tonumber),
               cloud_build_id: $build_id,
@@ -119,6 +161,14 @@ jobs:
               build_status: $status,
               immutable_image: $immutable_image,
               image_digest: $digest,
+              database_sha256: $database_sha256,
+              store_sha256: $store_sha256,
+              runner_sha256: $runner_sha256,
+              migration_sha256: $migration_sha256,
+              dockerfile_sha256: $dockerfile_sha256,
+              requirements_sha256: $requirements_sha256,
+              fail_closed_runtime_mode_migration: true,
+              atomic_snapshot_head_run_commit: true,
               build_started_by_this_workflow: false,
               deployed: false,
               runtime_job_execution: false,
@@ -128,11 +178,11 @@ jobs:
             }' > phase3-runtime-build-harvest/build-receipt.json
           cat phase3-runtime-build-harvest/build-receipt.json
 
-      - name: Upload harvested build receipt
+      - name: Upload harvested hardened build receipt
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: phase3-current-runtime-build-harvest
+          name: phase3-hardened-runtime-build-harvest
           path: phase3-runtime-build-harvest/
           if-no-files-found: warn
           retention-days: 90
