@@ -1,0 +1,172 @@
+name: Phase 3 force convergence
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_force_converge.yml"
+
+concurrency:
+  group: phase3-force-convergence
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  converge:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Verify force-convergence safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/force-converge-phase3.sh
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/force-converge-phase3.sh').read_text(encoding='utf-8')
+          forbidden = (
+              'gcloud scheduler jobs run',
+              'gcloud scheduler jobs resume',
+              'import-gcs',
+              'runtime_v2,run',
+              'secrets versions access',
+              'terraform apply',
+          )
+          for value in forbidden:
+              assert value not in text, value
+          assert text.count('gcloud run jobs execute') == 1
+          assert '--args=-m,runtime_v2,status' in text
+          assert 'roles/run.jobsExecutorWithOverrides' in text
+          assert 'roles/run.invoker' not in text
+          assert 'phase4_started' in text
+          assert 'production_authority_transferred' in text
+          PY
+
+      - name: Check immutable readiness tag
+        id: ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${target}" ]]; then
+            echo "existing=true" >> "${GITHUB_OUTPUT}"
+            echo "Phase 3 readiness tag already exists at ${target}; no rebuild or execution is required."
+          else
+            echo "existing=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Authenticate as isolated image builder
+        if: steps.ready.outputs.existing != 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud for build
+        if: steps.ready.outputs.existing != 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and resolve immutable Runtime v2 image
+        if: steps.ready.outputs.existing != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dockerfile=""
+          for candidate in deploy/runtime-v2/Dockerfile Dockerfile runtime_v2/Dockerfile; do
+            if [[ -f "${candidate}" ]]; then
+              dockerfile="${candidate}"
+              break
+            fi
+          done
+          if [[ -z "${dockerfile}" ]]; then
+            dockerfile="$(find . -maxdepth 4 -type f -iname Dockerfile -print -quit)"
+          fi
+          [[ -n "${dockerfile}" && -f "${dockerfile}" ]] || {
+            echo "No Runtime v2 Dockerfile was found." >&2
+            exit 1
+          }
+          image_tag="${REGION}-docker.pkg.dev/${PROJECT_ID}/polititrack/runtime-v2:phase3-${GITHUB_SHA}"
+          cat > "${RUNNER_TEMP}/phase3-cloudbuild.yaml" <<EOF
+          steps:
+            - name: gcr.io/cloud-builders/docker
+              args: ["build", "-f", "${dockerfile}", "-t", "${image_tag}", "."]
+          images:
+            - "${image_tag}"
+          options:
+            logging: CLOUD_LOGGING_ONLY
+          EOF
+          gcloud builds submit . \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --config "${RUNNER_TEMP}/phase3-cloudbuild.yaml" \
+            --format=json > "${RUNNER_TEMP}/phase3-build.json"
+          digest="$(jq -r '.results.images[0].digest // empty' "${RUNNER_TEMP}/phase3-build.json")"
+          if [[ -z "${digest}" ]]; then
+            digest="$(gcloud artifacts docker images describe "${image_tag}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(image_summary.digest)')"
+          fi
+          [[ "${digest}" == sha256:* ]] || { echo "Cloud Build returned no immutable digest." >&2; exit 1; }
+          echo "RUNTIME_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/polititrack/runtime-v2@${digest}" >> "${GITHUB_ENV}"
+          echo "Built Runtime v2 image at ${digest}."
+
+      - name: Authenticate as constrained Phase 3 deployer
+        if: steps.ready.outputs.existing != 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Converge deployment and prove acceptance
+        if: steps.ready.outputs.existing != 'true'
+        shell: bash
+        run: bash deploy/runtime-v2/force-converge-phase3.sh
+
+      - name: Create immutable readiness tag
+        if: steps.ready.outputs.existing != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${target}" ]]; then
+            [[ "${target}" == "${GITHUB_SHA}" ]] || { echo "Concurrent phase3-ready tag points elsewhere." >&2; exit 1; }
+          else
+            git tag phase3-ready "${GITHUB_SHA}"
+            git push origin refs/tags/phase3-ready
+          fi
+
+      - name: Upload Phase 3 convergence evidence
+        if: always() && steps.ready.outputs.existing != 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-force-convergence
+          path: |
+            ${{ runner.temp }}/phase3-build.json
+            ${{ runner.temp }}/phase3-force-converge-${{ github.run_id }}/phase3-acceptance.json
+            ${{ runner.temp }}/phase3-force-converge-${{ github.run_id }}/phase3-acceptance.sha256
+            ${{ runner.temp }}/phase3-force-converge-${{ github.run_id }}/phase4-ready.txt
+            ${{ runner.temp }}/phase3-force-converge-${{ github.run_id }}/status.json
+            ${{ runner.temp }}/phase3-force-converge-${{ github.run_id }}/execution.json
+            ${{ runner.temp }}/phase3-force-converge-${{ github.run_id }}/deployment-reconciliation.txt
+          if-no-files-found: warn
+          retention-days: 90
