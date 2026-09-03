@@ -4,7 +4,7 @@ from pathlib import Path
 WORKFLOW = Path('.github/workflows/phase3_admin_status_diagnose.yml')
 
 
-def test_diagnostic_trigger_allows_authenticated_issue_or_existing_workflow_completion():
+def test_diagnostic_trigger_allows_authenticated_issue_existing_workflow_or_exact_safe_ci():
     text = WORKFLOW.read_text(encoding='utf-8')
     assert 'issue_comment:' in text
     assert 'workflow_run:' in text
@@ -12,12 +12,15 @@ def test_diagnostic_trigger_allows_authenticated_issue_or_existing_workflow_comp
     assert 'Executive purchase tracker' in text
     assert 'AI filing analyst and paper portfolio' in text
     assert 'Publish government trade dashboard' in text
+    assert 'Runtime v2 safety tests' in text
     assert "github.repository_id == '1349678672'" in text
     assert 'github.event.issue.number == 39' in text
     assert 'github.event.sender.id == 225069210' in text
     assert "github.event.comment.body == '/phase3-diagnose-admin-status'" in text
     assert "github.event.workflow_run.conclusion == 'success'" in text
     assert "github.event.workflow_run.head_branch == 'main'" in text
+    assert 'github.event.workflow_run.id == 33781890281' in text
+    assert "github.event.workflow_run.head_sha == '3d034678bf4ba1fee0609f432e206de6b34a9915'" in text
     assert 'push:' not in text
 
 
