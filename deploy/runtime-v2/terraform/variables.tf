@@ -65,6 +65,12 @@ variable "schedules_enabled" {
   default     = false
 }
 
+variable "public_dashboard_enabled" {
+  description = "Grant unauthenticated allUsers access to the Runtime v2 web service. Must remain false during Phase 3."
+  type        = bool
+  default     = false
+}
+
 variable "dashboard_allowed_origins" {
   description = "Comma-separated exact HTTPS origins accepted by Filing Vault."
   type        = string
