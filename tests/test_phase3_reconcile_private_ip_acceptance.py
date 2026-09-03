@@ -25,7 +25,7 @@ def test_reconciliation_changes_only_admin_private_ip_setting() -> None:
     assert '--update-env-vars PRIVATE_IP=true' in text
     assert 'Admin command or arguments changed during PRIVATE_IP reconciliation.' in text
     assert "for key in ('image', 'service_account', 'network', 'subnetwork')" in text
-    assert 'Admin ${key} changed during PRIVATE_IP reconciliation.' in text
+    assert "f'Admin {key} changed during PRIVATE_IP reconciliation.'" in text
     assert 'gcloud run jobs update polititrack-legislative' not in text
     assert 'gcloud run jobs update polititrack-executive' not in text
     assert 'gcloud run jobs update polititrack-ai' not in text
