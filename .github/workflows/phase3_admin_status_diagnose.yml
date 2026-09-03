@@ -9,6 +9,7 @@ on:
       - Executive purchase tracker
       - AI filing analyst and paper portfolio
       - Publish government trade dashboard
+      - Runtime v2 safety tests
     types: [completed]
 
 permissions:
@@ -29,7 +30,13 @@ jobs:
         (
           github.event_name == 'workflow_run' &&
           github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.head_branch == 'main'
+          (
+            github.event.workflow_run.head_branch == 'main' ||
+            (
+              github.event.workflow_run.id == 33781890281 &&
+              github.event.workflow_run.head_sha == '3d034678bf4ba1fee0609f432e206de6b34a9915'
+            )
+          )
         )
       )
     runs-on: ubuntu-latest
