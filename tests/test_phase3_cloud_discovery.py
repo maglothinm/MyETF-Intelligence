@@ -24,7 +24,8 @@ def test_phase3_cloud_discovery_is_pinned_to_canonical_boundary() -> None:
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
-    assert "polititrack-github/providers/phase3-main" in text
+    assert "polititrack-github-phase3/providers/phase3-main" in text
+    assert "polititrack-github/providers/phase3-main" not in text
     assert "project-38008d5f-4918-46e6-920" not in text
     assert "secret-transfer" not in text
 
@@ -52,10 +53,10 @@ def test_phase3_cloud_discovery_emits_no_secret_values() -> None:
     assert "secret_data" not in text
 
 
-def test_phase3_cloud_discovery_is_manual_only_after_wif_bootstrap() -> None:
+def test_phase3_cloud_discovery_has_single_path_scoped_main_push_trigger() -> None:
     text = _text()
+    assert 'push:\n    branches:\n      - main\n    paths:\n      - ".github/workflows/phase3_cloud_discovery.yml"' in text
     assert "workflow_dispatch:" in text
-    assert "\n  push:" not in text
     assert "schedule:" not in text
 
 

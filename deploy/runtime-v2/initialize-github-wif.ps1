@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$ProjectNumber = '497412818801',
-    [string]$PoolId = 'polititrack-github',
+    [string]$PoolId = 'polititrack-github-phase3',
     [string]$ProviderId = 'phase3-main',
     [switch]$Apply
 )
