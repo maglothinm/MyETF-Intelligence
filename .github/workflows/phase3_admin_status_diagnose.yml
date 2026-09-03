@@ -3,6 +3,13 @@ name: Phase 3 diagnose admin status execution
 on:
   issue_comment:
     types: [created]
+  workflow_run:
+    workflows:
+      - Legislative purchase tracker v2
+      - Executive purchase tracker
+      - AI filing analyst and paper portfolio
+      - Publish government trade dashboard
+    types: [completed]
 
 permissions:
   contents: read
@@ -12,19 +19,31 @@ jobs:
   diagnose:
     if: >-
       github.repository_id == '1349678672' &&
-      github.event.issue.number == 39 &&
-      github.event.sender.id == 225069210 &&
-      github.event.comment.body == '/phase3-diagnose-admin-status'
+      (
+        (
+          github.event_name == 'issue_comment' &&
+          github.event.issue.number == 39 &&
+          github.event.sender.id == 225069210 &&
+          github.event.comment.body == '/phase3-diagnose-admin-status'
+        ) ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main'
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
       PROJECT_ID: project-38008d5f-4918-46e6-920
       PROJECT_NUMBER: "497412818801"
       REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_JOB: polititrack-admin
       FAILED_EXECUTION: polititrack-admin-snrjx
+      ONESHOT_MARKER: phase3-diagnostics/admin-status-v3.claimed
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
@@ -54,9 +73,17 @@ jobs:
           mkdir -p phase3-admin-diagnose
           cd phase3-admin-diagnose
           member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
 
           actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
           [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 admin diagnostic one-shot marker already exists; skipping duplicate execution."
+            exit 0
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
 
           gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-current.json
           container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-current.json)"
@@ -147,5 +174,6 @@ jobs:
             phase3-admin-diagnose/admin-current.json
             phase3-admin-diagnose/execution.json
             phase3-admin-diagnose/diagnostic-summary.json
+            phase3-admin-diagnose/oneshot-marker.txt
           if-no-files-found: warn
           retention-days: 30
