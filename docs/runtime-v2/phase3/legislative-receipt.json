@@ -12,6 +12,8 @@
   "artifact_name": "legislative-tracker-state",
   "conclusion": "success",
   "complete_required_inventory_verified": true,
+  "expected_runtime_v2_generation": 1,
+  "expected_runtime_v2_snapshot_sha256": "f33c72c058d1cb6f4bd8e240c20614bae9c6a3b121fa351b9ac3031f84e6858e",
   "head_branch": "main",
   "head_sha": "d603e9b40ffb78c51f635589bc886875f411299b",
   "job_completed_at": "2026-09-03T06:29:07Z",
