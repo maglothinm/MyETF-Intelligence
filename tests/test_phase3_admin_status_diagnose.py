@@ -5,8 +5,13 @@ WORKFLOW = Path('.github/workflows/phase3_admin_status_diagnose.yml')
 PULSE = Path('.github/workflows/phase3_diagnostic_pulse.yml')
 
 
-def test_diagnostic_trigger_allows_authenticated_issue_existing_workflow_exact_safe_ci_or_pulse():
+def test_diagnostic_trigger_is_directly_path_scoped_and_other_triggers_remain_guarded():
     text = WORKFLOW.read_text(encoding='utf-8')
+    assert 'push:' in text
+    assert 'branches:' in text and '- main' in text
+    assert '".github/workflows/phase3_admin_status_diagnose.yml"' in text
+    assert "github.event_name == 'push'" in text
+    assert "github.ref == 'refs/heads/main'" in text
     assert 'issue_comment:' in text
     assert 'workflow_run:' in text
     assert 'Legislative purchase tracker v2' in text
@@ -21,9 +26,6 @@ def test_diagnostic_trigger_allows_authenticated_issue_existing_workflow_exact_s
     assert "github.event.comment.body == '/phase3-diagnose-admin-status'" in text
     assert "github.event.workflow_run.conclusion == 'success'" in text
     assert "github.event.workflow_run.head_branch == 'main'" in text
-    assert 'github.event.workflow_run.id == 33781890281' in text
-    assert "github.event.workflow_run.head_sha == '3d034678bf4ba1fee0609f432e206de6b34a9915'" in text
-    assert 'push:' not in text
 
 
 def test_diagnostic_pulse_is_noop_read_only_and_self_path_scoped():
