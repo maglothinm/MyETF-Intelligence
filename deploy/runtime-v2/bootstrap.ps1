@@ -5,6 +5,7 @@ param(
     [string]$RuntimeSecretsFile = '',
     [string]$RuntimeEnvironmentFile = '',
     [string]$MigrationDirectory = '',
+    [switch]$EnableVault,
     [switch]$DisableVault,
     [string]$Image = '',
     [string]$PlanFile = '',
@@ -24,7 +25,12 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $terraformRoot = Join-Path $PSScriptRoot 'terraform'
-$vaultEnabled = -not $DisableVault
+if ($EnableVault -and $DisableVault) {
+    throw 'EnableVault and DisableVault are mutually exclusive.'
+}
+# Phase 3 defaults Filing Vault off. DisableVault is retained as an explicit
+# compatibility no-op; only EnableVault opts the isolated acceptance runtime in.
+$vaultEnabled = $EnableVault.IsPresent
 
 function Resolve-RequiredCommand([string]$Name) {
     $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -131,10 +137,12 @@ $repositoryName = 'polititrack'
 $requiredServices = @(
     'artifactregistry.googleapis.com',
     'cloudbuild.googleapis.com',
+    'compute.googleapis.com',
     'run.googleapis.com',
     'cloudscheduler.googleapis.com',
     'sqladmin.googleapis.com',
     'secretmanager.googleapis.com',
+    'servicenetworking.googleapis.com',
     'storage.googleapis.com',
     'cloudresourcemanager.googleapis.com',
     'iam.googleapis.com'
@@ -152,7 +160,7 @@ $repositoryExists = Test-GcloudResource @('artifacts', 'repositories', 'describe
 
 Write-Output "Phase 3 preflight: account=$account project=$ProjectId project_number=$projectNumber region=$Region source=$sourceRevision"
 Write-Output "Phase 3 preflight: state_bucket=$stateBucket exists=$stateBucketExists artifact_repository=$repositoryName exists=$repositoryExists"
-Write-Output "Phase 3 preflight: missing_services=$($missingServices -join ',') mode=shadow schedules_enabled=false"
+Write-Output "Phase 3 preflight: missing_services=$($missingServices -join ',') mode=shadow schedules_enabled=false public_dashboard_enabled=false vault_enabled=$($vaultEnabled.ToString().ToLowerInvariant())"
 
 if ($InitializeFoundation) {
     if ($missingServices.Count -gt 0) {
@@ -239,67 +247,6 @@ Invoke-Checked $terraform @(
     '-backend-config=prefix=runtime-v2'
 )
 
-$placeholderDigest = 'sha256:' + ('0' * 64)
-$placeholderImage = "$Region-docker.pkg.dev/$ProjectId/$repositoryName/runtime-v2@$placeholderDigest"
-$selectedImage = $Image
-if (-not $selectedImage -and $PSCmdlet.ParameterSetName -eq 'Plan') {
-    $selectedImage = $placeholderImage
-    Write-Output 'Phase 3 structural plan is using a nondeployable placeholder image digest. Build the immutable image only after this plan is accepted.'
-}
-if (-not $selectedImage) {
-    throw 'An immutable -Image digest is required for the final apply plan.'
-}
-if ($selectedImage -ne $placeholderImage) {
-    Assert-ImmutableImage $selectedImage
-}
-if ($Apply -and $selectedImage -eq $placeholderImage) {
-    throw 'A placeholder image can never be applied.'
-}
-
-$baseVariables = @(
-    "-var=project_id=$ProjectId",
-    "-var=region=$Region",
-    "-var=image=$selectedImage",
-    "-var=vault_enabled=$($vaultEnabled.ToString().ToLowerInvariant())",
-    "-var=runtime_secrets=$runtimeSecretsJson",
-    "-var=runtime_environment=$runtimeEnvironmentJson",
-    '-var=schedules_enabled=false'
-)
-
-if ($PSCmdlet.ParameterSetName -eq 'Plan') {
-    Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'plan', '-lock=false') + $baseVariables)
-    Write-Output "Validated read-only Phase 3 structural plan for $ProjectId from $sourceRevision. No infrastructure apply, image build, scheduler activation, or producer execution occurred."
-    exit 0
-}
-
-if ($PrepareApplyPlan) {
-    if (-not $PlanFile) {
-        $PlanFile = Join-Path ([System.IO.Path]::GetTempPath()) "polititrack-runtime-v2-$($sourceRevision.Substring(0, 12)).tfplan"
-    }
-    $planParent = Split-Path -Parent $PlanFile
-    if ($planParent -and -not (Test-Path $planParent)) {
-        New-Item -ItemType Directory -Path $planParent -Force | Out-Null
-    }
-    Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'plan', '-lock=false', "-out=$PlanFile") + $baseVariables)
-    $planHash = (Get-FileHash -LiteralPath $PlanFile -Algorithm SHA256).Hash.ToLowerInvariant()
-    $receipt = [ordered]@{
-        schema_version = 1
-        project_id = $ProjectId
-        project_number = $projectNumber
-        region = $Region
-        source_revision = $sourceRevision
-        image = $selectedImage
-        mode = 'shadow'
-        schedules_enabled = $false
-        plan_sha256 = $planHash
-    }
-    $receiptPath = "$PlanFile.receipt.json"
-    $receipt | ConvertTo-Json | Set-Content -LiteralPath $receiptPath -Encoding utf8
-    Write-Output "Prepared Phase 3 apply plan: $PlanFile"
-    Write-Output "Prepared Phase 3 plan receipt: $receiptPath sha256=$planHash"
-    exit 0
-}
-
 if ($Apply) {
     if (-not $PlanFile -or -not (Test-Path -LiteralPath $PlanFile)) {
         throw 'Apply requires an existing -PlanFile created by -PrepareApplyPlan.'
@@ -319,10 +266,16 @@ if ($Apply) {
     if ($receipt.source_revision -ne $sourceRevision) {
         throw 'Phase 3 plan receipt does not match canonical origin/main.'
     }
-    if ($receipt.mode -ne 'shadow' -or $receipt.schedules_enabled -ne $false) {
-        throw 'Phase 3 plan receipt violates shadow/schedules-disabled controls.'
+    if ($receipt.mode -ne 'shadow' -or $receipt.schedules_enabled -ne $false -or $receipt.public_dashboard_enabled -ne $false) {
+        throw 'Phase 3 plan receipt violates shadow/schedules-disabled/private-dashboard controls.'
+    }
+    if ([bool]$receipt.vault_enabled -ne $vaultEnabled) {
+        throw 'Phase 3 plan receipt vault setting does not match this apply invocation.'
     }
     Assert-ImmutableImage ([string]$receipt.image)
+    if ($Image -and $Image -ne [string]$receipt.image) {
+        throw 'The optional Apply -Image value does not match the immutable image recorded in the plan receipt.'
+    }
 
     Invoke-Checked $terraform @("-chdir=$terraformRoot", 'apply', '-auto-approve', $PlanFile)
     Invoke-Checked $gcloud @('run', 'jobs', 'execute', 'polititrack-admin', '--region', $Region, '--project', $ProjectId, '--wait', '--quiet')
@@ -353,13 +306,79 @@ if ($Apply) {
         throw 'The deployed dashboard service URL could not be resolved.'
     }
     if ($MigrationDirectory) {
-        $ready = Invoke-RestMethod -Uri "$serviceUrl/readyz" -TimeoutSec 30
+        $identityToken = (& $gcloud auth print-identity-token).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $identityToken) {
+            throw 'Could not obtain an identity token for the private Runtime v2 readiness check.'
+        }
+        $headers = @{ Authorization = "Bearer $identityToken" }
+        $ready = Invoke-RestMethod -Uri "$serviceUrl/readyz" -Headers $headers -TimeoutSec 30
         if ($ready.status -ne 'ready') {
-            throw 'The deployed dashboard did not pass readiness after migration.'
+            throw 'The deployed dashboard did not pass authenticated readiness after migration.'
         }
     }
 
-    Write-Output "PolitiTrack Runtime v2 Phase 3 apply completed at $serviceUrl from $sourceRevision. mode=shadow schedules_enabled=false."
+    Write-Output "PolitiTrack Runtime v2 Phase 3 apply completed at $serviceUrl from $sourceRevision. mode=shadow schedules_enabled=false public_dashboard_enabled=false vault_enabled=$($vaultEnabled.ToString().ToLowerInvariant())."
+    exit 0
+}
+
+$placeholderDigest = 'sha256:' + ('0' * 64)
+$placeholderImage = "$Region-docker.pkg.dev/$ProjectId/$repositoryName/runtime-v2@$placeholderDigest"
+$selectedImage = $Image
+if (-not $selectedImage -and $PSCmdlet.ParameterSetName -eq 'Plan') {
+    $selectedImage = $placeholderImage
+    Write-Output 'Phase 3 structural plan is using a nondeployable placeholder image digest. Build the immutable image only after this plan is accepted.'
+}
+if (-not $selectedImage) {
+    throw 'An immutable -Image digest is required for the final apply plan.'
+}
+if ($selectedImage -ne $placeholderImage) {
+    Assert-ImmutableImage $selectedImage
+}
+
+$baseVariables = @(
+    "-var=project_id=$ProjectId",
+    "-var=region=$Region",
+    "-var=image=$selectedImage",
+    "-var=vault_enabled=$($vaultEnabled.ToString().ToLowerInvariant())",
+    "-var=runtime_secrets=$runtimeSecretsJson",
+    "-var=runtime_environment=$runtimeEnvironmentJson",
+    '-var=schedules_enabled=false',
+    '-var=public_dashboard_enabled=false'
+)
+
+if ($PSCmdlet.ParameterSetName -eq 'Plan') {
+    Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'plan', '-lock=false') + $baseVariables)
+    Write-Output "Validated read-only Phase 3 structural plan for $ProjectId from $sourceRevision. No infrastructure apply, image build, scheduler activation, producer execution, or public dashboard publication occurred."
+    exit 0
+}
+
+if ($PrepareApplyPlan) {
+    if (-not $PlanFile) {
+        $PlanFile = Join-Path ([System.IO.Path]::GetTempPath()) "polititrack-runtime-v2-$($sourceRevision.Substring(0, 12)).tfplan"
+    }
+    $planParent = Split-Path -Parent $PlanFile
+    if ($planParent -and -not (Test-Path $planParent)) {
+        New-Item -ItemType Directory -Path $planParent -Force | Out-Null
+    }
+    Invoke-Checked $terraform (@("-chdir=$terraformRoot", 'plan', '-lock=false', "-out=$PlanFile") + $baseVariables)
+    $planHash = (Get-FileHash -LiteralPath $PlanFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    $receipt = [ordered]@{
+        schema_version = 1
+        project_id = $ProjectId
+        project_number = $projectNumber
+        region = $Region
+        source_revision = $sourceRevision
+        image = $selectedImage
+        mode = 'shadow'
+        schedules_enabled = $false
+        public_dashboard_enabled = $false
+        vault_enabled = $vaultEnabled
+        plan_sha256 = $planHash
+    }
+    $receiptPath = "$PlanFile.receipt.json"
+    $receipt | ConvertTo-Json | Set-Content -LiteralPath $receiptPath -Encoding utf8
+    Write-Output "Prepared Phase 3 apply plan: $PlanFile"
+    Write-Output "Prepared Phase 3 plan receipt: $receiptPath sha256=$planHash"
     exit 0
 }
 
