@@ -37,6 +37,7 @@ on:
       - ".github/workflows/phase3_admin_failure_diagnostic_v2.yml"
       - ".github/workflows/phase3_current_state_acceptance.yml"
       - ".github/workflows/phase3_harvest_current_status.yml"
+      - ".github/workflows/phase3_diagnose_current_status.yml"
       - ".github/workflows/phase3_diagnostic_pulse.yml"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:

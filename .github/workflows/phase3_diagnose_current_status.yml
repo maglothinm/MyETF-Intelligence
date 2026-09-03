@@ -1,0 +1,87 @@
+name: Phase 3 diagnose current status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3_diagnose_current_status.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - uses: actions/checkout@v7
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Diagnose latest status execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-current-status-diagnose
+          cd phase3-current-status-diagnose
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]]
+          cleanup() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+          }
+          trap cleanup EXIT
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null
+          ready=false
+          for attempt in $(seq 1 12); do
+            if gcloud logging read 'resource.type="cloud_run_job"' --project "${PROJECT_ID}" --limit=1 --format=json >/dev/null 2>&1; then ready=true; break; fi
+            sleep 10
+          done
+          [[ "${ready}" == "true" ]]
+          execution="$(gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.latestCreatedExecution.name)')"
+          [[ -n "${execution}" ]]
+          gcloud run jobs executions describe "${execution}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
+          gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" --project "${PROJECT_ID}" --order=asc --limit=200 --format=json > logs.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          execution=json.loads(Path('execution.json').read_text())
+          logs=json.loads(Path('logs.json').read_text())
+          messages=[]
+          for item in logs:
+              t=item.get('textPayload')
+              if isinstance(t,str) and t.strip(): messages.append(t.strip())
+              p=item.get('jsonPayload')
+              if isinstance(p,dict):
+                  for k in ('message','error','exception'):
+                      v=p.get(k)
+                      if isinstance(v,str) and v.strip(): messages.append(v.strip())
+          print(json.dumps({'execution':execution.get('metadata',{}).get('name') or execution.get('name'),'conditions':execution.get('status',{}).get('conditions',[]),'messages':messages},indent=2))
+          PY
+          cleanup
+          trap - EXIT
+      - name: Upload diagnostic receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-current-status-diagnostic
+          path: phase3-current-status-diagnose/
+          if-no-files-found: warn
+          retention-days: 30
