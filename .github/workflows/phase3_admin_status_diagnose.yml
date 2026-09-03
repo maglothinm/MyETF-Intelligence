@@ -1,6 +1,11 @@
 name: Phase 3 diagnose admin status execution
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_admin_status_diagnose.yml"
   issue_comment:
     types: [created]
   workflow_run:
@@ -22,6 +27,10 @@ jobs:
     if: >-
       github.repository_id == '1349678672' &&
       (
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
+        ) ||
         (
           github.event_name == 'issue_comment' &&
           github.event.issue.number == 39 &&
