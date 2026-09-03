@@ -12,6 +12,8 @@
   "artifact_name": "ai-analysis-state",
   "conclusion": "success",
   "complete_required_inventory_verified": true,
+  "expected_runtime_v2_generation": 1,
+  "expected_runtime_v2_snapshot_sha256": "80d4729e941e33443b905e8f208ad5db4361f10e59ffb28658b9d6631ceee931",
   "head_branch": "main",
   "head_sha": "d603e9b40ffb78c51f635589bc886875f411299b",
   "job_completed_at": "2026-09-02T01:22:47Z",
