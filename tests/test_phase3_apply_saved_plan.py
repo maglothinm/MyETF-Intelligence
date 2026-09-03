@@ -70,8 +70,9 @@ def test_exact_plan_apply_never_executes_runtime_or_activates_scheduler() -> Non
     )
     for value in forbidden:
         assert value not in text
-    assert "runtime_job_execution=false" in text
-    assert "schedules_enabled=false" in text
+    assert '"runtime_job_execution": False' in text
+    assert '"scheduler_execution": False' in text
+    assert '"schedules_enabled": False' in text
 
 
 def test_exact_plan_apply_postchecks_phase3_isolation() -> None:
@@ -86,11 +87,17 @@ def test_exact_plan_apply_postchecks_phase3_isolation() -> None:
         "get-iam-policy",
     ):
         assert required in text
-    assert "all_schedulers_paused=true" in text
-    assert "cloud_sql_public_ipv4=false" in text
-    assert "public_dashboard_enabled=false" in text
-    assert "producer_shadow_mode=true" in text
-    assert "runtime_job_execution=false" in text
+    for required in (
+        '"schedulers_paused": True',
+        '"cloud_sql_public_ipv4": False',
+        '"cloud_sql_private_ip": True',
+        '"private_vpc_verified": True',
+        '"split_runtime_identities_verified": True',
+        '"producer_shadow_mode_verified": True',
+        '"producer_private_ip_verified": True',
+        '"public_dashboard_invoker_absent": True',
+    ):
+        assert required in text
 
 
 def test_exact_plan_apply_does_not_publish_sensitive_plan_material_to_github() -> None:
@@ -99,8 +106,8 @@ def test_exact_plan_apply_does_not_publish_sensitive_plan_material_to_github() -
     upload = text[text.index("uses: actions/upload-artifact@v4") :]
     assert "phase3-runtime-v2.tfplan" not in upload
     assert "phase3-runtime-v2-plan.json" not in upload
-    assert "binary_plan_github_uploaded=false" in text
-    assert "plan_json_uploaded=false" in text
+    assert '"binary_plan_github_uploaded": False' in text
+    assert '"plan_json_uploaded": False' in text
     assert "rm -f" in text
 
 
