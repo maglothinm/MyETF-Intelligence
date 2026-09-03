@@ -18,8 +18,21 @@ def test_build_is_canonical_self_path_scoped_main_push() -> None:
     assert 'PROJECT_NUMBER: "497412818801"' in text
 
 
+def test_build_reconciles_only_bucket_scoped_metadata_access() -> None:
+    text = _text()
+    assert 'DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@' in text
+    assert 'CLOUD_BUILD_BUCKET: project-38008d5f-4918-46e6-920_cloudbuild' in text
+    assert 'gcloud storage buckets add-iam-policy-binding "gs://${CLOUD_BUILD_BUCKET}"' in text
+    assert '--member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}"' in text
+    assert '--role roles/storage.bucketViewer' in text
+    assert 'roles/storage.admin' not in text
+    assert 'roles/owner' not in text
+    assert 'roles/editor' not in text
+
+
 def test_build_uses_isolated_builder_and_immutable_digest() -> None:
     text = _text()
+    assert 'Authenticate as isolated Phase 3 builder' in text
     assert 'polititrack-phase3-builder@' in text
     assert 'gcloud builds submit .' in text
     assert '--config deploy/runtime-v2/cloudbuild.yaml' in text
