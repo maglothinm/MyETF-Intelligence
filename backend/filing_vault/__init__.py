@@ -17,7 +17,7 @@ from werkzeug.exceptions import HTTPException
 from .api import create_blueprint
 from .providers import ProviderRegistry, SecureHTTPClient
 from .service import VaultService
-from .storage import FileObjectStore, SupabaseObjectStore
+from .storage import FileObjectStore, GoogleCloudObjectStore, SupabaseObjectStore
 
 
 def _csv(value):
@@ -31,19 +31,21 @@ def configured_service(config):
     if supplied:
         return supplied
     mode = config.get("VAULT_ENV", "production")
-    database = config.get("VAULT_DATABASE_URL") or config.get("SQLALCHEMY_DATABASE_URI")
-    if not database:
-        raise ValueError("VAULT_DATABASE_URL must point to the persistent application database")
-    if database.startswith("sqlite") and mode not in {"development", "test"}:
-        raise ValueError("SQLite is supported only for explicit Filing Vault development/testing")
-    if not database.startswith(("postgresql://", "postgresql+psycopg2://", "sqlite://")):
-        raise ValueError("Use the existing PostgreSQL database or explicit development SQLite")
-    options = {"pool_pre_ping": True}
-    if database.startswith("sqlite"):
-        options["connect_args"] = {"check_same_thread": False, "timeout": 5}
-        if database.endswith(":memory:") or database == "sqlite://":
-            options["poolclass"] = StaticPool
-    engine = create_engine(database, **options)
+    engine = config.get("VAULT_ENGINE")
+    if engine is None:
+        database = config.get("VAULT_DATABASE_URL") or config.get("SQLALCHEMY_DATABASE_URI")
+        if not database:
+            raise ValueError("VAULT_DATABASE_URL must point to the persistent application database")
+        if database.startswith("sqlite") and mode not in {"development", "test"}:
+            raise ValueError("SQLite is supported only for explicit Filing Vault development/testing")
+        if not database.startswith(("postgresql://", "postgresql+psycopg2://", "sqlite://")):
+            raise ValueError("Use the existing PostgreSQL database or explicit development SQLite")
+        options = {"pool_pre_ping": True}
+        if database.startswith("sqlite"):
+            options["connect_args"] = {"check_same_thread": False, "timeout": 5}
+            if database.endswith(":memory:") or database == "sqlite://":
+                options["poolclass"] = StaticPool
+        engine = create_engine(database, **options)
     backend = config.get("VAULT_STORAGE_BACKEND", "supabase")
     maximum = int(config.get("VAULT_MAX_DOCUMENT_BYTES", 25 * 1024 * 1024))
     if maximum < 1024 or maximum > 50 * 1024 * 1024:
@@ -57,6 +59,8 @@ def configured_service(config):
         store = SupabaseObjectStore(config.get("VAULT_SUPABASE_URL", ""),
                                     config.get("VAULT_SUPABASE_KEY", ""),
                                     config.get("VAULT_SUPABASE_BUCKET", ""), max_bytes=maximum)
+    elif backend == "gcs":
+        store = GoogleCloudObjectStore(config.get("VAULT_GCS_BUCKET", ""), max_bytes=maximum)
     else:
         raise ValueError("Unknown Filing Vault storage backend")
     providers = ProviderRegistry(http_client=SecureHTTPClient(max_bytes=maximum),

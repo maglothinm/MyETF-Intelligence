@@ -1,942 +1,190 @@
 # PolitiTrack project state
 
-Last updated: **2026-09-01 UTC**
-Status: **Scheduler freshness deployed from PR #20; live overdue health, state
-continuity and all served files verified. The device-clock follow-up is deployed
-and verified from PR #21. The redaction-boundary follow-up is deployed and
-verified from PR #23. Browser-local manual-review acknowledgement is deployed and
-verified from PR #25. Neutral zero-state attention colors are deployed and
-verified from PR #27. Acknowledgement-consistent Situation Brief wording is
-deployed and verified from PR #30. External scheduling remains inactive.**
+**Current as of:** 2026-09-02 UTC  
+**Canonical repository ID:** `1349678672`  
+**Current repository name:** `maglothinm/MyETF-Intelligence`  
+**Default branch:** `main`  
+**Active controlled work:** issue #36 / PR #38  
+**Active branch:** `codex/runtime-v2-shadow-review`  
+**Target endpoint:** open for review, unmerged, undeployed
 
-## Situation Brief acknowledgement consistency — deployed and production-verified
+This file records current operational truth. Historical receipts remain in
+`validation/`, incident records, the append-only decision log, and Git history.
 
-[PR #30](https://github.com/maglothinm/MyETF-Intelligence/pull/30) tested
-`9055d43ae56dd192b31b56c29a3ca14bd1422e96` in PR CI **33504447890 / 1**
-and merged it as `a2e23caaa268b04db063a360c132a57b12a3d1bb`. Main CI
-**33504566663 / 1** and Pages **33504566685 / 1** succeeded. Pages artifact
-**9799081517** has digest
-`sha256:d9907e5e7ec1069ac791773286339874c4f4db508b05c106d45d236f3bd5a877`.
+## Operational authority
 
-The Situation Brief now uses the same browser-local active manual-review count as
-the attention card, exception inventory and queue. When the sole retained review
-is acknowledged, its active count is zero and the Brief omits the manual parsing
-exception phrase. The production record remains retained and reversible through
-**Show acknowledged** and **Restore to active review**.
+Canonical `main`, its existing GitHub Actions production writers, and its retained
+protected-state contracts remain operational authority. The published dashboard
+and production Legislative, Executive, AI, simulation, and Filing Vault behavior
+on `main` were not redeployed or replaced by issue #36.
 
-Live acceptance found an older cached application bundle after the first
-publication, so the final regression deliberately exercises the earlier formatter
-contract. A hard refresh loaded the exact final bundle and verified zero active,
-no exception phrase, the retained restore control and zero browser errors. The
-acknowledgement remained in place on the verification browser.
+Runtime v2 is not production authority. It has not been merged, deployed,
+initialized against a live database, populated through a state import, scheduled,
+used for a live collector/AI/dashboard/simulation cycle, promoted to production
+mode, or used to publish Pages.
 
-The publisher restored the same read-only inputs: Legislative **9796523510** from
-**33497945694 / 1**; Executive **9789261867** from **33479032715 / 1**; AI
-**9796566785** from **33498060503 / 1**; and simulator **9734790733** from
-**33320677882 / 1**. No collector, review record, schedule, alert, credential,
-protected artifact, or production state changed.
+Issue #36 did not inspect or change any external cloud project, account, billing,
+credential, database, bucket, service, job, or scheduler. Legacy
+`maglothinm/MyETF` remains excluded.
 
-## Attention-counter colors — deployed and production-verified
+## Active review transition
 
-[PR #27](https://github.com/maglothinm/MyETF-Intelligence/pull/27) merged the
-exact CI-tested head `f477c7938ce973cae898b221451577242a8cf248` as
-`1be235768c5c5885f83f62e4e2e61eec989cb16b`. PR CI **33503192366 / 1**,
-main CI **33503300913 / 1**, and Pages **33503300907 / 1** succeeded. Pages
-artifact **9798587857** has digest
-`sha256:419777922d8f47c3b091ebe76fcd0b12419f8116c0bc40437097fef5f1d280fa`.
+Draft PR #37 reached exact green, mergeable head
+`8b16436e14862ad7abcdf94dc7272f437f88b091`. The GitHub connector's
+ready-for-review mutation failed because its GraphQL response requested an
+unsupported repository field. PR #37 was closed without merge.
 
-The live Overview now renders a zero Actionable Signals count in neutral white
-and reserves teal for positive counts. Manual Parser Exceptions stays amber while
-an active exception remains, turns neutral white when browser-local
-acknowledgement reduces the active count to zero, and returns to amber when the
-review is restored. The live retained review was restored to active state after
-verification, and no browser errors were reported.
+PR #38 was opened non-draft from the same exact tree on
+`codex/runtime-v2-shadow-review`. It is the active review. The transition did not
+change executable source or operational state; the continuity updates following
+the branch copy are documentation-only.
 
-The publisher restored the same read-only inputs: Legislative artifact
-**9796523510** from **33497945694 / 1**; Executive **9789261867** from
-**33479032715 / 1**; AI **9796566785** from **33498060503 / 1**; and simulator
-**9734790733** from **33320677882 / 1**. No collector, parser record, signal,
-schedule, alert, credential, protected artifact, or production state changed.
+## Beast Runtime v2 Phases 1–2
 
-This snapshot does not replace live GitHub evidence. Follow `AGENTS.md`.
+### Verified source and base
 
-## Manual Parser Exception acknowledgement — deployed and production-verified
-
-[PR #25](https://github.com/maglothinm/MyETF-Intelligence/pull/25) merged the
-unchanged tested head `b77d5f422043c304704c9ab521811bc457a6b737` as
-`95deb6263d616cfd32b14a1a8d7c1c50fc67eade`. PR CI
-**33501903449 / 1**, main CI **33502068627 / 1**, and Pages
-**33502068474 / 1** succeeded. Pages artifact **9798105632** has digest
-`sha256:7626f8caa4c2f1cd246c97b78e8d81ccc8b76327572dfeea31b14106500e2e9b`.
-
-The live site serves HTTP 200 for the page, application script, and insights
-model. The live model identifies the merge SHA and contains one manual exception
-with one matching current identity. A production browser check opened the retained
-Richard Blumenthal paper-filing review, acknowledged it, verified the restore
-control and explicit read-only boundary, then restored it to active review. The
-original active state returned and the browser reported no errors. The action was
-browser-local only; no production review record changed.
-
-The publisher restored the same provenance-valid protected inputs read-only:
-Legislative artifact **9796523510** from run **33497945694 / 1**; Executive
-**9789261867** from **33479032715 / 1**; AI **9796566785** from
-**33498060503 / 1**; and optional simulator **9734790733** from
-**33320677882 / 1**. Build validation and the repository safety contract passed.
-No collector, parser retry, workflow dispatch, schedule, alert, credential,
-protected artifact, or production state was mutated for this rollout.
-
-## Scheduler freshness — deployed and production-verified; external activation remains gated
-
-Post-release review on branch `codex/fix-freshness-redaction` found that the
-public sanitizer could remove the sole test/simulation marker before the actual
-site build evaluated health. Direct model behavior was correct, but a recently
-excluded row could become production evidence after redaction. The bounded fix
-retains a coarse nonproduction boolean in JSON and CSV, keeps private markers
-removed, and adds actual `build_site` regressions for Legislative, Executive and AI.
-Shared contextual help now updates its open explanation when monitoring ages.
-Local validation covers **639 passed / 5 skipped Python cases**, **67 generated
-DOM** cases, **36 native Operations** cases and **11 Worker** cases. Final focused
-review found no remaining issue. [PR #23](https://github.com/maglothinm/MyETF-Intelligence/pull/23)
-tested source `5aa8cef3127beba9c5a8fef002d1228710fb0b26` in CI
-**33498107710 / 1** and merged as **2c1be6040e2e6d8cda18991dbb2db38fe56a011a**.
-Main CI **33498254970 / 1** and Pages **33498255010 / 1** succeeded. Pages artifact
-**9796632425** has digest
-`sha256:73f3d2fd00f08345ea7fcd05c5992e75d03b4258bca56a0e183c6fca2d3a29a3`.
-
-The deployed model at **2026-09-01T10:37:02Z** reports overall **stale**:
-Legislative is current from `33497945694` at **10:33:47Z**; Executive is stale
-from `33479032715` at **06:48:12Z**, age **228.833m**, overdue **198.833m**, with
-six estimated missed intervals; AI is current from `33498060503` at **10:35:05Z**.
-The live header says **Executive polling overdue** and source data through
-**10:33:47Z** while the dashboard generation time remains separate. Operations
-shows the policy, next expected times, overdue and trigger evidence; its retained
-timeline is newest first. Desktop, 390px portrait and Wallboard checks passed,
-including concise stale help text. The publisher consumed state artifacts
-**9796523510** (Legislative), **9789261867** (Executive) and **9796566785** (AI).
-
-Real scheduled starts still do not meet the requested cadence. Across the current
-GitHub history, 18 Legislative gaps span **113–468.48m** (median **252.16m**) and
-14 Executive gaps span **146.1–534.62m** (median **327.73m**). This is production
-evidence for the independent scheduler; it is not treated as workflow success.
-No manual producer, simulation, credential, alert or protected-state mutation was
-performed for this release, and scheduler authority did not change.
-
-The prior clock checkpoint source was **5932a49950384fb9cb2bdab93c4093ea596789a1**, PR #21. Its Pages
-run **33421979811 / 1**, artifact **9769279578**, and both associated CI runs succeeded.
-All 250 live content files match; exact input lineage and unchanged protected
-state/simulator continuity passed at **2026-08-31T17:57:09Z**. Full local suite
-passed 633 tests with no skips; final clock checks passed 65 DOM and 42 native
-cases. Source time remains 15:32:55 UTC; all workers are correctly stale. No newer
-collector has established cadence. Full final details are in the release receipt.
-
-The initial [PR #20](https://github.com/maglothinm/MyETF-Intelligence/pull/20) merged tested
-`c9dd3a5` as **b9380f231d09eb8610a96c6d4c83399ace67b008**, with identical trees.
-Repository ID **1349678672**, live name **maglothinm/MyETF-Intelligence**,
-default **main**. Original checkout and unrelated work remain preserved.
-[Issue #19](https://github.com/maglothinm/MyETF-Intelligence/issues/19) stays open.
-Release work used `codex/freshness-clock-audit` in the isolated scheduler worktree.
-
-Central policy: Legislative expected 15 / stale >30 minutes; Executive 30 / >60;
-downstream AI >75. Failure > stale > unknown > success. Header, Operations and
-Monitor distinguish freshness from conclusions; source time excludes build and
-AI refresh. Operations shows timing, cadence, overdue/missed estimates and safe
-trigger evidence. Executive cron is `13,43`; Legislative stays `7,22,37,52`.
-Serialized writers, validated restore and deduplication remain; potentially
-side-effecting unretained retries fail closed. External Worker is disabled.
-
-Local regression: **633 passed with no skips**, plus **11 Worker tests**.
-PR CI **33420373213 / 1** and main CI **33420549112 / 1** each passed
-550 Python, 6 filing DOM and 11 Worker cases plus the Linux safety verifier.
-Initial CI exposed the verifier's old hourly expectation; the expected cron and
-checksum were corrected without weakening state-safety checks.
-
-Automatic Pages **33420549071 / 1** succeeded from `b9380f2`, artifact
-**9768730400**. All **250 served content files** matched at 17:39 UTC.
-Live header: **Legislative polling overdue**; source through **15:32:55 UTC**
-remains unchanged by the **17:38:02 UTC** build. All workers are stale and
-read-only Actions evidence is available. Exact Pages logs and independent
-provenance/high-water/expiry/ancestry/hash/continuity checks passed for:
-
-| Input | Artifact | Producer run / attempt | Job |
-|---|---:|---|---:|
-| Legislative | 9764350004 | 33408974583 / 1 | 99543508327 |
-| Executive | 9760298853 | 33398375467 / 1 | 99508337018 |
-| AI | 9764387095 | 33409079174 / 1 | 99543844689 |
-
-Protected inputs and simulator 9734790733's two rows remain unchanged. At 17:39
-there was no newer collector; latest measured gaps were 468.5/493.8 minutes.
-Actual 15/30-minute cadence, post-release source advancement and external delivery
-are unverified. No manual producer, simulation, rebaseline or alert test occurred.
-
-A final fixed-clock audit found a fresh publication could stop aging while the
-device clock trails the server. The shared elapsed-clock fix passes 65 DOM and
-42 native JS tests, including late publications and suspended tabs. Final CI/Pages verification passed;
-clock behavior is covered by fixed-time and actual generated-DOM regressions. GitHub clearance for obsolete queued
-writers **33219808359** and **33221027676** still gates external activation.
-Cloudflare account/secret setup and several real cycles remain infrastructure
-work. GitHub cron remains enabled; no credentials/settings changed. Full evidence,
-counts, hashes and limits are in [the release receipt](validation/scheduler-freshness-2026-08-31.md).
-
-## Approved PolitiTrack icon package — deployed and verified, 2026-08-31
-
-Canonical repository ID **1349678672**, current name
-**maglothinm/MyETF-Intelligence**, default **main**.
-[PR #18](https://github.com/maglothinm/MyETF-Intelligence/pull/18) merged source
-`aa8201a7b3b95c575adf069f39688e1ac811f0c6` as
-`6bd76843e604941efef757aab434699feb1944f1`; both have tree
-`c2300379c6347fdf2b652f86c7a25d2886f554f7`. The isolated
-`codex/polititrack-icon-assets` checkout preserves shared files and worktrees.
-
-All 22 owner-supplied images, including the 1254px original and seven-frame
-Windows ICO, are preserved byte-for-byte under `assets/branding/polititrack/`.
-Both dashboard generators publish the 11 web images and manifest. Main page,
-Wallboard, Filing Vault and the retained React frontend use the approved header
-image with unchanged dimensions/layout; Investor Edge retains its text heading.
-No Windows packaging configuration exists. No workflows, collectors, state,
-alerts, schedules, credentials, hosting settings or Vault runtime were changed.
-
-Local verification passed **524 Python tests**, **1 React App test**, production
-React build, source/generated-byte checks and responsive layout comparisons.
-Existing React warnings remain in unchanged legacy code/dependencies.
-PR CI **33416929114 / 1** and main CI **33417300859 / 1** each passed 441 tests,
-6 DOM cases and Linux verification. Automatic Pages **33417300834 / 1** succeeded
-at **17:02:40 UTC**, source `6bd76843`, artifact **9767514649**.
-The final archive and **250 served files plus root** match byte-for-byte;
-live desktop/mobile checks show the new image with unchanged layout and no
-browser warnings/errors. All 12 added web assets match the approved source.
-
-Pages consumed unchanged Legislative **9764350004** (run **33408974583 / 1**),
-Executive **9760298853** (**33398375467 / 1**), AI **9764387095**
-(**33409079174 / 1**) and simulator **9734790733** (**33320677882 / 1**).
-Fresh producer high-water checks passed with no later producer run.
-No production writer, simulation or external alert was dispatched.
-See [the icon release receipt](validation/icon-assets-2026-08-31.md) for exact
-jobs, archive hashes, state continuity, rollback and acceptance limits.
-The icon request is complete; existing device/runtime/cutover gates remain
-separate and no settings changes or additional operational dispatch are needed.
-
-## Persistent header and Workspace shell — deployed and verified, 2026-08-31
-
-The owner explicitly requested **Deploy** after local validation and native-input
-limits were disclosed. [PR #17](https://github.com/maglothinm/MyETF-Intelligence/pull/17)
-merged tested head `6967a170d1925f06cccb7cb0ae2dbf637c7f22cc` as
-`42351e2c8b462566b69a4d05b8ca256f3731fc8c` on canonical `main`; their trees
-match exactly. Repository ID **1349678672**, live name
-**maglothinm/MyETF-Intelligence**. The isolated branch
-`codex/persistent-shell-layout` preserves all approved Operations, Investor Edge
-and Filing Vault code/tests/evidence, including `d6b1e41` production prerequisites.
-The shared checkout and unrelated worktrees are preserved.
-
-One measured sticky header covers the six dashboard hash routes. Desktop Workspace
-fits below it and scrolls independently only when needed; the document remains
-the content scroller. Tables retain horizontal access without a third vertical
-height cap. The seven Workspace links, separate Filing Vault page, native overlays,
-help/focus behavior and mobile layout remain intact. This root-only presentation
-delta changes no collector, scoring, schema, state, workflow, alert, simulation,
-credential, schedule or hosting configuration.
-
-Combined local verification: **524 tests passed in 102.74 seconds**, with one
-benign cache ACL warning. Syntax, diff checks and static generation passed. An
-external temporary directory resolved earlier fixture setup errors without changing
-source safety guards. Integrated preview checks passed desktop independent
-scrolling and native Actions focus; all seven links remain visible at 320px/390px
-without horizontal overflow. Original rendered checks covered 320px–3840px.
-
-[PR CI 33395139807](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33395139807)
-and [main CI 33395366037](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33395366037)
-both succeeded on attempt 1: **441 tests**, **6 filing-link DOM cases**, Linux
-**VERIFICATION PASSED**. The preflight's final **12:57:41 UTC** readback verified
-169 runs, exact protected provenance/high-water marks and unchanged inventories.
-[Pages 33395506967](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33395506967)
-was explicitly dispatched at **13:10:28 UTC** through the unchanged existing
-publisher and succeeded on attempt 1, with build/deploy jobs **99498953297 /
-99499100656**. Artifact **9759155643** has verified SHA-256
-`6f1ecc514659cb0e488bb818172b66ad4c112a3610ec80744584c8e6cdeeea60`.
-The **13:12:37 UTC** postflight checked **172 runs** and matched all **238 served
-content files plus the root URL** to the artifact. Exact restore logs, fresh
-producer attempts/high-water marks, downloaded hashes and inventories confirm
-unchanged Legislative **9749549239**, Executive **9746602231**, AI **9749567326**
-and two-row simulator **9734790733**. Only `github-pages` was uploaded.
-
-Live browser checks passed all six routes, sticky header/sidebar alignment,
-anchor clearance, independent short-screen scroll and mobile/ultrawide layouts
-from 320px through 3840px without horizontal overflow. All seven links remain
-visible on no-hash mobile landing. The native Actions dialog and shared coverage
-popover remained visible; warning/error logs were empty. The 239-file public
-inventory, all 204 PDF-related/vendor files and honest blank Vault API-origin
-configuration are preserved. No production writer, simulation or alert was
-dispatched by this publication.
-
-See the [shell release receipt](validation/persistent-shell-release-2026-08-31.md)
-for exact source/run/job IDs, input hashes/counts, rollback and test limits.
-Physical wheel/keyboard/touch/Safari, audio and CHG90 acceptance remain unverified;
-issues #4/#6 and separate producer/runtime/cutover gates stay open.
-
-## Full deployment follow-up — Investor Edge production gate remains
-
-The owner's **Fully deploy** request was checked against current main and live
-GitHub state after publication. Current code is deployed; the existing trackers,
-AI workflow and Pages publisher are active. Fresh read-only artifact provenance,
-inventory/continuity and live Pages checks passed with unchanged production inputs.
-No additional producer has yet supplied the historical bootstrap acceptance.
-
-The obsolete queued runs remain unresolved, with no GitHub clearance in the
-recovery issues. The existing manual Legislative gate therefore remains in force.
-AI-only processing cannot reconstruct catalog-only transactions and would not
-complete the bootstrap. No writer, simulation, rebaseline, external alert or
-infrastructure configuration was performed in this follow-up. The next safe action
-requires GitHub clearance, fresh provenance checks and the existing bounded
-tracker -> AI -> Pages chain; see the retained Investor Edge prerequisite record in [the handoff](HANDOFF.md).
-
-## Filing Vault — published interface, private runtime inactive, 2026-08-31
-
-[Issue #13](https://github.com/maglothinm/MyETF-Intelligence/issues/13) remains open
-for runtime/source/device acceptance. The owner explicitly requested Publish.
-Canonical repository **1349678672**, live name **maglothinm/MyETF-Intelligence**,
-default `main`: [PR #16](https://github.com/maglothinm/MyETF-Intelligence/pull/16)
-merged tested head `755349945bf8fdd4389a8c6aa6d770370df487af` as
-`104fc519d883c93153c639e85a2474d3d816a336`; their trees match exactly. This
-preserves approved Operations/Investor Edge releases and receipts through `b5169f3`.
-
-The private API implementation, six additive tables, absolute 30-day document
-retention, integrity/versioning, source-specific access and acknowledgement gates,
-lifecycle tooling and shared evidence viewer are published. Exact filing conflicts
-remain visible but cannot become clickable through weaker compact projections.
-No protected writer, artifact identity, source ledger, schedule, concurrency group,
-simulation workflow/history or external-alert configuration changed for the Vault.
-
-Local verification: **524 tests passed without skips**, plus **6 shared link DOM
-cases**. Python/JavaScript syntax, workflow YAML and **201 vendor hashes/sizes**
-passed. [PR CI 33392460770](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392460770)
-and [main CI 33392608687](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608687)
-both succeeded on attempt 1: **441 tests**, **6 link DOM cases**, and Linux
-**VERIFICATION PASSED**. [Pages 33392608680](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33392608680)
-succeeded on attempt 1, artifact **9758066553**, build `104fc51`. All **238**
-served public content files matched the artifact at **12:43:45 UTC**, including
-all 201 pinned PDF assets; emitted/live config is exactly `{"api_origin":""}`.
-
-The [live Filing Vault](https://maglothinm.github.io/MyETF-Intelligence/filing-vault.html)
-shows **5,079** retained filings, source filters, exact-ID details and Official
-Source links. Desktop/mobile-width checks passed without overflow or console
-warnings/errors. It truthfully states that retrieval is unavailable. The published
-API origin is blank; static Pages cannot operate private document storage.
-Private API hosting, database migration, private Supabase bucket/server credentials,
-verified catalog supply, daily runtime timer and real source/device acceptance are
-**not activated or verified by this release**. No acknowledgement is inferred.
-
-| Protected artifact | ID | Exact producing run / attempt | Successful job |
-|---|---:|---|---:|
-| legislative-tracker-state | 9749549239 | 33369634244 / 1 | 99417536057 |
-| executive-tracker-state | 9746602231 | 33360633323 / 1 | 99391153447 |
-| ai-analysis-state | 9749567326 | 33369677492 / 1 | 99417669143 |
-
-The final **12:45:06 UTC** audit covered **169 runs / 82 producer records**.
-Read-only pre/postpublication checks verify exact producer identity/attempt/job,
-expiry, ancestry, high-water marks, archive hashes and unchanged inventories.
-Pages consumed these same three inputs and simulator **9734790733** (two rows).
-No writer, simulation or alert was dispatched. Detailed source/run/job/hash,
-live-content evidence and runtime limits are in the
-[release receipt](validation/filing-vault-release-2026-08-31.md).
-Configuration and the next safe activation procedure are in
-[FILING_VAULT.md](FILING_VAULT.md).
-
-## Investor Edge release — published and verified 2026-08-31
-
-The owner requested “Release the commit”. [PR #15](https://github.com/maglothinm/MyETF-Intelligence/pull/15)
-merged tested head `c27e884a4981db4a84982bbf665962ec2e081daa` as
-`676701ac1521458aefd72e2329d4e87c8781e41f` on canonical `main`; their trees
-match. This includes implementation `b4a9049` and preserves concurrent PR #14
-(`7a1108f`) and both regression suites. The integrated local suite passed
-**347 tests**, without skips, including optional DOM checks.
-
-Integrated [PR CI 33391078330](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391078330)
-and [main CI 33391179298](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391179298)
-both succeeded on attempt 1: **264 tests passed** and Linux `verify.sh`
-reported **VERIFICATION PASSED**. Automatic [Pages 33391179240](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391179240)
-also succeeded on attempt 1. All **30** checked public URLs matched the exact
-deployment artifact. The [live Investor Edge view](https://maglothinm.github.io/MyETF-Intelligence/#investor-edge)
-and standalone page rendered without console warnings/errors or document-width
-overflow in the in-app browser. Physical-device acceptance remains separate.
-
-Fresh read-only verification confirmed protected inputs and isolated simulator
-history unchanged. No production writer, simulation or alert was manually
-dispatched. The live publication still uses retained pre-bootstrap data; this
-release does not claim completed production population or market observations.
-Detailed release receipts remain in the ignored local evidence directory.
-This documentation-only successor records the verified release result.
-
-The records below retain the earlier local-acceptance checkpoints; they are not
-claims that the bootstrap has already advanced production data.
-
-## Investor Edge historical bootstrap — pre-release acceptance 2026-08-31
-
-[Issue #11](https://github.com/maglothinm/MyETF-Intelligence/issues/11) implements
-combined normalized history, explicit zero-candidate global maintenance,
-discovery-first building profiles, durable breadth-first market backfill, and a
-separate 20-filing historical transaction reconstruction pass inside the existing
-tracker writers. Full root/standalone inventories now expose actual population
-and pending-work telemetry. Scoring, owner identity, no-lookahead protections,
-40/40/30/40/2,200 limits, protected artifact names and writer ownership are
-unchanged. Workflow edits add only test coverage/path filters.
-
-The demonstrated production cause was missing parsed history, not candidate-only
-input: main already combined both branches and globally refreshed Edge, but the
-artifacts held only **60 unique transactions / 1 eligible purchase / 1 identity**
-alongside **5,066 catalog-only filings**. Baseline-seen filings were never revisited
-by normal unseen-filing processing. Historical rows now append idempotently with
-original IDs/observation timestamps and no new-filing, AI-candidate, external-alert
-or Notification Center events. Global Edge persistence failures stop successful
-state promotion; live candidate delivery waits until final maintenance succeeds.
-
-Actual artifact-copy acceptance: 40 bounded House filing attempts parsed 30
-filings and added 299 unique transactions. Copies now contain **359 unique
-transactions / 122 eligible purchases / 17 identities and profiles**. All 17
-profiles are building; no completed market outcomes were fabricated. Each of two
-Edge passes processed 30 attempts, but **122 observations remain pending** because
-no provider credentials were supplied and cached benchmark/stock coverage was
-insufficient. Deterministic available-price tests separately show 43 pending
-observations falling to 13, then 0, without new filings. The actual acceptance is
-not evidence of decreasing production market backlog.
-
-Remaining catalog-only work: **5,036** (849 House, 90 Senate, 4,097 OGE/request).
-Eight sampled scans need missing local Tesseract; two expose an existing House
-multiline amount parser limitation. OGE Form 201 originals require legitimate
-access; they were not automatically retrieved. Cache-only replay reproduced all
-299 transactions and its repeated sample added none. Original input hashes,
-seen IDs, ledger prefixes and immutable AI decision history remain unchanged.
-
-Local verification: **346 tests passed**, including available DOM checks;
-syntax/compilation, YAML contracts, static generation and actual-copy root and
-standalone browser checks passed. No new remote CI/Linux workflow result was
-claimed at that pre-release checkpoint. Implementation is in the isolated same-repository worktree
-`.remediation/investor-edge-worktree`, branch `codex/investor-edge-bootstrap`,
-based on canonical main `f2df59740b095417e3883fd81ac0a16c1d16fdad`. Other tasks'
-checkout, unpublished work and the approved Senate/UI release evidence are
-preserved. At that pre-release checkpoint, this local implementation had not
-advanced main or production state.
-
-Final read-only GitHub audit at **11:48:35 UTC** reconfirmed the unchanged
-protected authorities: Legislative **9749549239 / 33369634244 / attempt 1**,
-Executive **9746602231 / 33360633323 / attempt 1**, AI
-**9749567326 / 33369677492 / attempt 1**. Exact producer jobs, workflow identity,
-ancestry, high-water marks, expiry, ZIP hashes and full continuity passed.
-Simulation **9734790733 / 33320677882 / attempt 1** remains two rows, unchanged.
-At that checkpoint Pages was **33385044313 / attempt 1**, artifact **9755242103**, source
-`9d9e7be`; four fixed live surfaces returned HTTP 200 and matched its bytes.
-No collector, AI, simulator, alert or heartbeat was dispatched by this task.
-
-See [the validation report](validation/investor-edge-bootstrap-2026-08-31.md)
-for raw/deduplicated counts, exact run links/jobs/hashes, A–J test coverage,
-source failures and remaining limits. Release verification is recorded above;
-verify future normal sole-writer successors and real pending reduction separately.
-Do not upload acceptance copies, rebaseline, change held PR #3's allowlist, or
-bypass the existing obsolete-run gate for a separate manual production run.
-
-## Operations history ordering — published and preserved in current release
-
-Issue #12 uses isolated branch `codex/operations-history-order`, based on canonical
-`main` `f2df59740b095417e3883fd81ac0a16c1d16fdad`, the documentation-only
-successor of deployed `9d9e7be`. The shared health-card renderer
-now sorts a copied timeline by parsed execution finish time (valid start fallback),
-newest first, with deterministic ID/URL ties. Operations and its Overview preview
-share DOM, link and timestamp order. Native horizontal scrolling remains unchanged;
-refresh rebuilds the strip at its leftmost/latest item. No backend, stored state,
-workflow, scheduling, alert, simulation or hosting configuration changed.
-
-Local verification: **296 active Python tests passed**, **47 DOM scenarios**,
-**10 native history scenarios** and **32 native notification scenarios** passed.
-Generated TEST previews passed desktop/mobile-width native scrolling and refresh
-checks. Physical keyboard/touch/Safari acceptance remains unverified.
-
-The owner's explicit “Merge and publish” instruction authorized this release.
-[PR #14](https://github.com/maglothinm/MyETF-Intelligence/pull/14) merged tested
-head `d621257b28620b7559f41cd1698f7c281aa5fe98` as
-`7a1108fb2e32c39f6af943395c1bb9b9a550d26f` on canonical `main`; the trees
-match. Issue #12 closed with the merge. This evidence update changes only docs.
-
-| Original PR #14 release evidence | Verified result |
+| Evidence | Value |
 |---|---|
-| Final PR CI | [33387446310](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33387446310), attempt 1, job `99473151241`; success |
-| Main CI | [33390543725](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33390543725), attempt 1, job `99482912240`; success |
-| CI coverage | 214 selected tests passed; Linux `verify.sh` reported `VERIFICATION PASSED` |
-| Pages | [33390642511](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33390642511), attempt 1, explicit existing `workflow_dispatch` on `main`; success |
-| Pages jobs | Build `99483229101`; deploy `99483408539`; both successful |
-| Pages artifact | `9757309134`; SHA-256 `6c36174d26ebf1e8b6495c435150da8e3c4703a02b595f6fba297dedab8e683a` |
-| Live content | 12:14:31 UTC: all 28 public content files matched the artifact; published build is `7a1108f` |
-
-[Live Operations](https://maglothinm.github.io/MyETF-Intelligence/#operations)
-uses the existing canonical Pages deployment. An explicit Pages dispatch was
-needed because its unchanged push-path filter does not include `common.js`.
-No collector, AI, simulator or external-alert workflow was dispatched.
-
-Preflight at 12:11:02 UTC and postflight at 12:14:31 UTC verified exact producer
-attempts/jobs, expiry, ancestry, global high-water marks, ZIP hashes and full
-inventories. The publisher consumed Legislative `9749549239` (`33369634244`/1,
-job `99417536057`), Executive `9746602231` (`33360633323`/1, job `99391153447`),
-and AI `9749567326` (`33369677492`/1, job `99417669143`), as confirmed by its
-exact build log. All protected payloads are unchanged; only `github-pages` was
-uploaded. Simulation `9734790733` (`33320677882`/1, job `99281977011`) retains
-the same two-entry history across this publication; the immediate-predecessor
-prefix check passed. The separate historical rewrite concern remains open. Published counts remain
-5,079 filings / 60 transactions / 1,496 reviews / 11 analyses.
-
-Rollback evidence is prior Pages `33385044313`/1, artifact `9755242103`, ZIP
-SHA-256 `ca3b63daecb7c4e6ce5e92e162cbb363e753c07d8983fddcc1306ca7ac7e4014`.
-Rollback would use a reviewed source revert and current valid inputs, never a
-state replacement. Ignored receipts and exports are under the shared workspace's
-`.remediation/operations-history-publish/`; they are evidence, not restore authority.
-See the active handoff for browser verification and remaining device limits.
-
-### Current published build and Operations acceptance
-
-The concurrent Investor Edge release, PR #15, subsequently published
-`676701ac1521458aefd72e2329d4e87c8781e41f`. It includes `7a1108f` and keeps
-the Operations `common.js` blob unchanged in all three generated JavaScript
-bundles. Main CI [33391179298](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391179298)
-/ attempt 1 / job `99484924620` passed **264 tests** and Linux `verify.sh`.
-Automatic Pages [33391179240](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33391179240)
-/ attempt 1 succeeded, build `99484924587`, deploy `99485120700`.
-Artifact **9757512563**, created 12:20:05 UTC, expires 2026-09-01 12:20:04 UTC;
-ZIP SHA-256 `eb83f2101c9137bbaab71214da50b6e30eb576fee60ff35cec3510db9df108b8`.
-The carry-forward audit completed at **12:22:10 UTC** and all **28 public content
-files** matched this artifact at **12:22:11 UTC**. The separate Investor Edge
-release audit checked 30 URLs, including its additional entry-point requests.
-Exact protected producer attempts, high-water marks, ZIPs and inventories remain
-unchanged from the Operations publication checkpoint below.
-
-A fresh live browser tab on build `676701ac` verified all three Operations
-histories newest first at scroll offset zero, with each first/last link and label
-attached to its correct run. At 1440x1000, rightward scroll reached 126.4px and
-showed older August 29 runs; Refresh returned to zero. At 390x844, scrolling
-reached 150.4px and Refresh again returned to zero. An older tab had retained
-the prior script under Pages' `max-age=600` cache; the fresh-tab verification
-resolved that stale-view observation. Native external-tab opening was not
-observable through the browser tool. DOM activation/target/status tests passed;
-physical keyboard, touch and Safari acceptance remain unverified.
-
-Current two-entry simulator history is unchanged by this UI publication, and the
-verifier's immediate-predecessor prefix check passed. This is not an exhaustive
-historical append-lineage audit. Preserve the separately recorded historical
-rewrite concern and its gate before future manual simulator work.
-
-Current receipts: `.remediation/operations-history-publish/audit/carryforward-evidence.json`
-and `.remediation/operations-history-publish/browser/verification.json`, with
-desktop/mobile screenshots. This documentation integration starts from canonical
-`main` documentation successor `895bc5739d14524bb7d4a1d7b546cd4e105665a4`,
-preserving the Investor Edge release report, validation report and decision 026.
-
-## Dashboard review UX — published and verified 2026-08-31 11:04 UTC
-
-The owner explicitly requested “Publish” after the local implementation and its
-device limits were reported. PR [#10](https://github.com/maglothinm/MyETF-Intelligence/pull/10)
-merged tested head `ca0152044bec58032acc3c7604398e844b2ba12f` as
-`9d9e7bef326a0e24a5f846ea1310dec24a647019` on canonical `main`; their trees
-match. This release preserved the separately approved recovery documentation
-from `ac6342ac85e5a395f1b8bab251b8f608c47249e0`, including its unchanged
-incident record. This final evidence update changes documentation only.
-
-[Live dashboard](https://maglothinm.github.io/MyETF-Intelligence/) and
-[Manual Parser Exceptions](https://maglothinm.github.io/MyETF-Intelligence/#records/reviews?category=manual_exception)
-are published from repository ID **1349678672**, current name
-**maglothinm/MyETF-Intelligence**. Local `main` at `9e5de909` remains preserved.
-
-The Overview card opens the full exception inventory with stale filters cleared.
-One shared Python projection/classifier drives counts and public JSON/CSV rows,
-including synthetic-record exclusion from production totals. Clickable reviews
-select an exact retained filing or show their original review when no exact match
-exists. Source filters expose retained source/branch taxonomy and consistent OGE
-capitalization. Signals, Records and Operations reuse the existing workspace
-tooltip behavior. Refresh keeps newly opened tables consistent with the summary.
-No workflow, collector, scoring, state schema, alert, simulation or hosting path
-changed. The dashboard remains read-only, without retry or resolution actions.
-
-| Release evidence | Verified result |
-|---|---|
-| PR CI | [33384840936](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33384840936), attempt 1, job `99465044563`; success |
-| Main CI | [33385044349](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044349), attempt 1, job `99465680760`; success |
-| CI coverage | Both exact-attempt logs show 213 selected tests passed and Linux `verify.sh` reporting `VERIFICATION PASSED` |
-| Pages | [33385044313](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33385044313), attempt 1, push; success |
-| Pages jobs | Build `99465681041`; deploy `99465807219`; both successful |
-| Pages artifact | `9755242103`; exact successful attempt/build window, expiration and ZIP digest verified |
-| Pages ZIP SHA-256 | `ca3b63daecb7c4e6ce5e92e162cbb363e753c07d8983fddcc1306ca7ac7e4014` |
-| Live content | 11:04:50 UTC: all 21 fixed dashboard/Wallboard/Edge/assets/JSON URLs returned HTTP 200 and matched the artifact bytes |
-| Published build | `9d9e7bef326a0e24a5f846ea1310dec24a647019` in dashboard insights |
-
-Full local suite rerun after integration: **295 passed**, including the nested
-release checks. **34 DOM scenarios**, **32 native notification scenarios**, JS
-syntax, Python compilation, static generation and diff checks passed. The Linux
-CI results resolve the local Windows Bash limitation; they do not imply that CI
-provisioned the optional JSDOM/browser dependencies.
-
-Rendered preview checks passed at 1440×1000 and 390×844 for card/filter/detail
-navigation, selected-record focus, mobile visibility and all five hover bubbles.
-After deployment, the in-app browser at 1280×720 confirmed card → one exception →
-exact filing → back, visible focused record, source choices, shared help attributes
-and no horizontal document overflow. The retained record is RICHARD BLUMENTHAL,
-filed 2026-08-21; the queue and card both show **1** manual parser exception.
-Keyboard/touch behavior passed DOM fixtures; native keyboard activation, physical
-touch/iPhone Safari, audio and physical ultrawide acceptance remain unverified.
-Axe fixture checks exclude layout and color contrast. Issues #4 and #6 stay open
-for those acceptance limits, not for deployment.
-
-### Protected inputs and continuity
-
-Fresh preflight completed at 11:00 UTC; post-deployment audit at 11:04:50 UTC
-verified actual publisher restore logs, exact workflow/job/attempt identity,
-ancestry, global producer high-water marks, expiration, downloaded ZIP digests,
-full inventories and unchanged retained counts/IDs:
-
-| Protected input | Artifact | Successful run / attempt | Producer job |
-|---|---:|---|---:|
-| Legislative | `9749549239` | [33369634244](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369634244) / 1 | `99417536057` |
-| Executive | `9746602231` | [33360633323](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33360633323) / 1 | `99391153447` |
-| AI | `9749567326` | [33369677492](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369677492) / 1 | `99417669143` |
-
-The publisher consumed these exact inputs and uploaded only `github-pages`.
-No protected state was replaced or advanced. Published counts reconcile to
-**5,079 filings / 60 transactions / 1,496 reviews / 11 analyses**, including
-1 manual exception and 1,495 access/request-required records. Isolated
-`simulation-state` artifact `9734790733`, run `33320677882` / attempt 1 / job
-`99281977011`, is unchanged with two replay rows and preserved predecessor bytes.
-No collector, AI, simulator or external-alert workflow was manually dispatched.
-No credentials or repository settings were changed or independently tested.
-
-Known-good pre-release rollback Pages: `33369728437` / attempt 1, artifact
-`9749580990`, exported ZIP SHA-256
-`330d1e4e343d827d917eb3902ba289eed59f00554147a82c38469b86a05df427`.
-Rollback is a reviewed source revert through Pages using current valid inputs;
-it never replaces protected state with a historical snapshot. Ignored evidence:
-`.remediation/dashboard-review-publish/`, including `release-evidence.json`,
-`deployment-verification.json`, exact CI receipts/logs and exported artifacts.
-These records are verification evidence, not production restore authority.
-
-The two known obsolete queued runs were the only active runs at verification.
-Their manual-dispatch gate, support-route blocker, held PR #3, rename/privacy,
-legacy settings and Gmail delivery proof remain separate open work. The Senate
-recovery checkpoint below is preserved from the approved upstream documentation.
-
-## Senate recovery — verified 2026-08-31 09:51 UTC
-
-Issue #8 adds strict official-source session validation, bounded retries and
-complete Legislative discovery before processing. The code preserves existing
-production artifacts, stable IDs, baselines and alert deduplication. Two later
-scheduled runs used the merged fix and passed independent operational validation.
-The owner explicitly approved the new recovery evidence for issue #8, PR #9 and
-main. It is published in [issue comment 5477003406](https://github.com/maglothinm/MyETF-Intelligence/issues/8#issuecomment-5477003406)
-and linked from [PR comment 5477009236](https://github.com/maglothinm/MyETF-Intelligence/pull/9#issuecomment-5477009236).
-This documentation-only publication records the same checkpoint. A fresh audit
-at **10:24 UTC** reconfirmed unchanged authority, full continuity, both obsolete
-queues and all 21 live Pages files. See [the incident evidence](incidents/senate-efd-2026-08-30.md) for
-exact run URLs, jobs, hashes, continuity and queue-cleanup receipts. Older tables
-below remain historical checkpoints, not current artifact authority.
-
-PR [#9](https://github.com/maglothinm/MyETF-Intelligence/pull/9) merged source
-`125eac1aba5a5f5324040cbfac7f30b63a2f0347` as
-`19f7044e8bd12fd4d693cf7f468623f318034717`; their trees match. Local full suite:
-283 passed. PR CI [33346339195](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346339195)
-and main CI [33346456045](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33346456045)
-both succeeded with 212 selected tests and `VERIFICATION PASSED` from Linux
-`verify.sh`. The audited runtime commit is
-`3902968d5d70cd00030248ae4a6bcea18aa2e6ea`; this evidence update changes no code.
-
-Scheduled Legislative runs
-[33348331610](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33348331610)
-and [33369634244](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369634244),
-both attempt 1, succeeded with House **883** / Senate **91**, complete discovery,
-zero baseline changes and zero alerts. Each delivered exactly one classified
-Healthchecks success request accepted with **HTTP 200**. Provider-side UP/status
-history was not separately queried. Neither run was manually dispatched by this
-session. The additional requested manual run has **not** been dispatched.
-
-| Current protected checkpoint | Artifact | Successful run / attempt | Job | Retained counts |
-|---|---:|---|---:|---|
-| Legislative | `9749549239` | `33369634244` / 1 | `99417536057` | 983 filings; 65 transactions; 19 purchases; 1 review; 31 runs |
-| Executive | `9746602231` | `33360633323` / 1 | `99391153447` | 4,109 filings; 1,495 reviews; 23 runs |
-| AI | `9749567326` | `33369677492` / 1 | `99417669143` | 12 analyses; 36 runs |
-
-Exact workflow/job/attempt provenance, commit ancestry, producer high-water
-marks, expiration, ZIP digests, complete inventories, ledger prefixes and
-protected IDs passed. Legislative actual restore lineage is
-`9739239507 → 9742750536 → 9749549239`; run-history counts advanced 29 → 30 → 31.
-All pre-incident non-run ledgers remain byte-identical. No rebaseline occurred.
-
-Pages [33369728437](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33369728437)
-/ attempt 1 succeeded, artifact `9749580990`. It restored exactly the three
-checkpoints above. All **21** checked live files returned HTTP 200 and matched
-the artifact; published build is `3902968`, with 5,079 filings, 60 transactions,
-1,496 reviews and 11 analyses. Existing contextual help remains deployed. This
-is content/deployment acceptance, not physical-device acceptance.
-
-## Repository identity
-
-| Role | Repository | Repository ID | Recorded head | Status |
-|---|---|---:|---|---|
-| Canonical | `maglothinm/MyETF-Intelligence` | `1349678672` | Verified shell release / Pages `42351e2`; final release evidence is documentation-only | **Public** standalone repository with Pages enabled; awaiting same-ID rename and intended privacy correction |
-| Final canonical name | `maglothinm/PolitiTrack` | `1349678672` | Same history | Approved target name; do not create a new repository |
-| Legacy | `maglothinm/MyETF` | `1033519491` | `36447a2` | Code-frozen public history; all six workflows removed, but Pages and archive settings remain open |
-
-GitHub issue `#1`, **Consolidate repositories and cut over to PolitiTrack**, remains the
-cutover record; issue #4 tracks the UI release and remaining device acceptance. The canonical repository's numeric ID is authoritative if an
-old URL redirects after the rename.
-
-## UI release checkpoint — 2026-08-30
-
-The UI-only branch `codex/dashboard-redesign` starts from live main
-`4a9135a8c12af6eebfce01cf33772ffa13e41951` and excludes held PR #3. There is no
-workflow, collector, analyst-runtime, scoring, schema, alert or simulation-contract
-change. Existing read-only Pages publishing is the only deployment path.
-
-Fresh audit at 16:35 UTC verified latest protected artifacts, exact successful
-attempts/jobs, producer high-water marks, ZIP digests, inventories and continuity:
-
-| Pipeline | Artifact | Producing run / attempt | Producer job | Retained counts |
-|---|---:|---|---:|---|
-| Legislative | `9734211271` | `33318579174` / `1` | `99276401831` | 983 filings; 65 transactions; 19 purchases; 1 review; 27 runs |
-| Executive | `9732455687` | `33312565343` / `1` | `99260139758` | 4,109 filings; 1,495 reviews; 19 runs |
-| AI | `9734221839` | `33318614858` / `1` | `99276494661` | 12 analyses; 28 runs |
-
-Producer commits are `4a9135a`. No eligible canonical producer was pending.
-The two obsolete queued runs remain unchanged cutover blockers. Latest isolated
-`simulation-state` is `9734790733`, run `33320677882` / attempt 1, job
-`99281977011`, with two replay rows and verified predecessor prefix.
-
-Known-good Pages rollback: `33320697336` / attempt 1, artifact `9734796157`,
-exported ZIP SHA-256
-`e8dc54967255af1fca24ed0f16383b3b2fa145cca947a8ec1d133e3ab4c0bca2`.
-Old live Pages matched this artifact. After development, 209 immutable input/copy
-hash-size checks passed with zero differences. Copies are fixtures, not authority.
-
-Published deduplicated counts: 5,079 filings, 60 transactions, 1,496 reviews,
-11 analyses and zero open paper positions. Coverage separates 5,066 cataloged-only,
-6 processed and 7 review-required filings; review inventory separates 1 manual
-exception from 1,495 access-required records. No signal qualifies at this snapshot.
-
-Final local active suite: 181 passed; final targeted suite: 9 passed including the
-additive UI suites (61 model, 32 native Node notification and 12 DOM scenarios).
-Axe found zero serious/critical fixture findings with contrast/layout unavailable.
-Linux verify.sh and PR/main CI passed; Pages evidence follows. Chrome, iPhone Safari,
-real audio, responsive screenshots and physical CHG90 are unverified. The owner
-explicitly requested merge/deploy after disclosure; issue #4 remains open for
-device acceptance. No collectors, AI, simulations or external alerts were
-manually dispatched. See D-2026-08-30-019 and the active handoff.
-
-## Verified deployed release
-
-## Contextual-help publication — verified 2026-08-30 17:36 UTC
-
-The owner explicitly requested publication after the Chrome/device gap was
-disclosed. PR [#7](https://github.com/maglothinm/MyETF-Intelligence/pull/7) merged
-tested source `2a955f571c2cd4cf26b033984daa39904c11d64c` as
-`1aa87398b53689873de350155d33afdb993fb036` on canonical `main`. Their trees match.
-Documentation-only successors do not change the deployed application source.
-
-[Live dashboard](https://maglothinm.github.io/MyETF-Intelligence/),
-[Investor Edge](https://maglothinm.github.io/MyETF-Intelligence/investor-edge.html)
-and [Wallboard](https://maglothinm.github.io/MyETF-Intelligence/wallboard.html)
-are published from repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
-
-| Release evidence | Verified result |
-|---|---|
-| PR CI | [33325538713](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325538713), attempt 1, job `99294887628`; success, 78 selected tests |
-| Main CI | [33325629684](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629684), attempt 1, job `99295130888`; success, 78 selected tests |
-| Linux verifier | Both CI runs passed the existing release gate, which executes full `verify.sh` and requires `VERIFICATION PASSED` |
-| Pages | [33325629663](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33325629663), attempt 1; success; build `99295130679`, deploy `99295188583` |
-| Pages artifact | `9736138918`; exact successful attempt/build window and ZIP digest verified |
-| Pages ZIP SHA-256 | `f8d5a8e65fa26e34b06e425a6016100fd0e488b312a3aa2fae5731a378acf283` |
-| Live verification | 17:36:13 UTC: 21 root/Wallboard/Edge/assets/JSON URLs returned HTTP 200 and exactly matched the Pages artifact |
-| Published build | `1aa87398b53689873de350155d33afdb993fb036` |
-| Source-content check | 27 additional checks passed across 11 fixed live URLs, including exact source asset/script comparisons, shared copy, help/touch attributes and persistent warnings |
-
-The earlier Windows verifier limitation is resolved for this release by Linux CI.
-Local verification remains **182 tests passed**, including **24 JSDOM scenarios**
-and **32 native Node notification scenarios**. JSDOM is an optional dependency
-not provisioned by CI; its local results are not inferred remote CI results.
-Real Chrome/Safari/touch, responsive screenshots, rendered overflow/caret/CSP and
-physical-device acceptance remain unverified under issue #6.
-
-### Protected inputs and continuity
-
-Scheduled Executive and downstream AI runs completed before publication. Their
-newer artifacts passed exact workflow/job/attempt identity, ancestry, producer
-high-water checks, ZIP digests, schema and full inventory/record continuity
-against original, prior and last-deployed checkpoints. No eligible writer was
-active before merging or at final verification.
-
-| Pipeline | Newest protected artifact | Successful run / attempt | Job | Retained counts |
-|---|---:|---|---:|---|
-| Legislative | `9734211271` | `33318579174` / 1 | `99276401831` | 983 filings; 65 transactions; 19 purchases; 1 review; 27 runs |
-| Executive | `9736054489` | `33325239324` / 1 | `99294089255` | 4,109 filings; 1,495 reviews; 20 runs |
-| AI | `9736064296` | `33325343519` / 1 | `99294369216` | 12 analyses; 29 runs |
-
-Actual publisher restore logs, fresh global authority checks and downloaded
-protected ZIPs/full inventories prove these inputs were unchanged through
-publication. Published counts reconcile to 5,079 filings, 60 transactions,
-1,496 reviews and 11 analyses. The Pages run uploaded only `github-pages`.
-No collectors, AI, simulations, external alerts or production-state writers were
-dispatched by this release task, and no workflow rules were changed.
-
-Isolated simulation artifact `9734790733`, run `33320677882` / attempt 1, remains
-unchanged with two replay history rows and preserved predecessor bytes.
-Known-good rollback Pages is `33325376676` / attempt 1, artifact `9736074454`,
-exported ZIP SHA-256
-`910f9e40171a11ea3f0ade63b6dae4386ca4979faaa48d31c7cc4e785739b371`.
-Ignored local evidence: `.remediation/tooltip-publish-preflight`,
-`.remediation/tooltip-published/deployment-verification.json`, and
-`.remediation/tooltip-live-content.json`. These are recovery/verification records,
-not alternate production authority.
-
-Only the two known obsolete queued runs remained at final verification. Issue #1,
-held PR #3, repository rename/privacy, legacy settings retirement and Gmail
-delivery proof remain separate open work. Issue #6 remains open for device
-acceptance, not because publication is pending.
-
-## Earlier deployed redesign evidence
-
-PR [#5](https://github.com/maglothinm/MyETF-Intelligence/pull/5) merged UI source
-`e2f71cff8029871656ba2dbd8c4021e406ea2e9c` as
-`12d58964060885696ef4f5d3724ba5575de33fb2` on canonical `main`. The merge tree
-exactly matches the tested PR tree. This evidence update changes documentation
-only and does not change the deployed application source.
-
-| Evidence | Verified result |
-|---|---|
-| PR CI | [33323384450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323384450), attempt 1, job `99289162854`; success |
-| Main CI | [33323430401](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430401), attempt 1, job `99289284185`; success |
-| CI coverage | 77 selected tests in each run; included release gate executes additive UI suites and Linux `verify.sh`, requiring `VERIFICATION PASSED` |
-| Pages | [33323430450](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/33323430450), attempt 1, `push`; success |
-| Pages jobs | Build `99289284456`; deploy `99289373251`; both successful |
-| Pages artifact | `9735544864`, exact build-attempt window and ZIP digest verified |
-| Pages ZIP SHA-256 | `0edc98bfc0176f4b2407edfd15218ccb76451426a99380b7a39a6172f107c692` |
-| Live acceptance | 2026-08-30 16:49:28 UTC: 21 fixed root/Wallboard/Investor Edge/assets/JSON URLs returned HTTP 200 and exactly matched the Pages artifact |
-| Deployed build SHA | `dashboard-insights.json.build_sha` equals `12d58964060885696ef4f5d3724ba5575de33fb2` |
-| Continuity | Actual restore logs, newest global authority and high-water checks passed; all three protected ZIPs and full inventories are unchanged from the release checkpoint |
-| Simulation isolation | `9734790733` and its two replay rows unchanged; no new simulation run |
-| Final active-run inventory | No active eligible production writer; only the two previously known obsolete queued runs remain |
-
-Live [dashboard](https://maglothinm.github.io/MyETF-Intelligence/),
-[Wallboard](https://maglothinm.github.io/MyETF-Intelligence/wallboard.html) and
-[Investor Edge](https://maglothinm.github.io/MyETF-Intelligence/investor-edge.html)
-are deployed. This is HTTP/content acceptance, not real-browser visual or device
-acceptance. No production-state artifact was uploaded by the Pages run.
-
-## Historical post-reconciliation checkpoint
-
-The state was migrated into the canonical repository by successful run
-`33179207530`. The following successful production runs and unexpired artifacts
-are the post-reconciliation checkpoint. Always query GitHub for newer valid artifacts
-before a run; do not hard-code these IDs as permanent restore targets.
-
-| Pipeline | Successful run | Protected artifact | Artifact ID | `state.json` SHA-256 | Validated record counts |
-|---|---:|---|---:|---|---|
-| Legislative tracker v2 | `33283553866` | `legislative-tracker-state` | `9723708154` | `045a3f8c5f5a9f096ef12290f7db84228e1a5f127cff56fb20960e851c25cf58` | 983 filings; 65 transactions; 19 purchases; 1 pending review; 24 runs |
-| Executive tracker | `33283609603` | `executive-tracker-state` | `9723732691` | `7a70efafe057f2e9883bcb69d2ea312804d3431b7dabeff89c558a3cd6271d75` | 4,109 filings; 1,495 pending-review records; 17 runs |
-| AI analyst / paper portfolio | `33283690942` | `ai-analysis-state` | `9723743439` | `65cfa452dcb78dd14843155218b65178fb6fea7030cfbee95ac655bd22e2df19` | 12 analyses; 23 runs |
-
-The 2026-08-30 post-deployment validation found that every filing, transaction,
-purchase, review, and analysis ledger is byte-identical to the pre-change
-checkpoint. Only successful run lineage and state timestamps advanced. No
-approved task in the repository consolidation
-authorizes a rebaseline. State absence, ambiguous rerun-attempt provenance, a
-failed restore, or a later successful producer with no valid successor artifact is
-a stop condition.
-
-Production-state authority is the newest provenance-valid artifact, not a cache.
-Selection must verify repository, branch, workflow identity, producer job and
-commit, and the exact successful attempt whose time window contains the artifact.
-A rerun's aggregate run conclusion is insufficient because all attempts share the
-same run ID.
-
-## Current design and deployment evidence
-
-- Commit `1af4696` deployed the reconciled PolitiTrack tree on top of `5a132e1`.
-  Commit `fe6d180` fixed read-only permissions only in the isolated Run Simulation
-  copy. Production acceptance commit `d5ef440` then exercised the canonical chain.
-- Candidate alerts support the existing Pushover channel and optional Gmail SMTP
-  delivery when both `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD` are configured.
-  The code and workflow wiring exist at `5a132e1`; live credential presence and a
-  successful real Gmail delivery remain separately unverified.
-- The canonical repository has two separate simulation workflows:
-  - **Run Simulation** (`.github/workflows/manual_test.yml`) is a one-day Investor
-    Edge acceptance. It clones provenance-valid protected inputs into temporary
-    directories, creates TEST-marked data, uses deterministic local evidence,
-    emits an alert preview, and uploads only a one-day
-    `simulation-dashboard-<run-id>-<attempt>` artifact.
-  - **Run $10K portfolio simulator**
-    (`.github/workflows/filing_simulation.yml`) performs isolated historical replay
-    from $10,000 toward a $20,000 goal. Its only durable write is
-    `simulation-state`, consisting of `simulation-result.json` plus append-only
-    `simulation-runs.jsonl` history.
-  Neither workflow receives live alert credentials or writes a protected
-  production artifact. The simulation state is not production paper-portfolio
-  state.
-- Run Simulation acceptance `33283294140` succeeded and uploaded only
-  `simulation-dashboard-33283294140-1` artifact `9723624975`. The $10K replay
-  `33283104953` succeeded and uploaded only `simulation-state` artifact
-  `9723569827`; its result is paper-only, used no network or alert delivery, and
-  left production inputs unmodified.
-- The one-time production controller `33283549659` succeeded. It verified, in
-  order, Legislative `33283553866`, Executive `33283609603`, AI `33283690942`,
-  and dashboard `33283725400` at commit `d5ef440`.
-- GitHub Pages deployed successfully and returned HTTP 200 at
-  `https://maglothinm.github.io/MyETF-Intelligence/` with PolitiTrack branding,
-  both simulation actions, and current canonical data. The URL is expected to
-  change after the repository rename.
-- The seven public-repository simulator commits ending at `c16c37e` were audited
-  but were not cherry-picked. Their workflow restored and then uploaded
-  `ai-analysis-state`, so it violated simulation isolation. Run Simulation
-  and the separately isolated $10K replay supersede that unsafe code path.
-- Legislative v2, Executive, and AI are the only permitted scheduled writers for
-  their respective protected state. Duplicate schedules and failed-run state
-  uploads must remain disabled.
-- Production state is restored only from provenance-validated Actions artifacts.
-  Caches are not a state authority. Artifact selection maps rerun artifacts to the
-  exact successful attempt and fails closed when attempt provenance or a producer
-  high-water mark cannot be established.
-- The former recovery overlay is retired: `apply.sh` exits fail-closed without
-  modifying files, and `repo-files/` contains only `RETIRED.md`.
-
-## Known blockers
-
-Obsolete canonical workflow runs `33219808359` and `33221027676` remain stale and queued.
-They must be cancelled or otherwise proven incapable of running before the
-duplicate-writer retirement and cutover can be called complete. Their queued state
-is not evidence of successful work. Exact-identity cancellation attempts with
-both the ordinary and force-cancel Actions endpoints returned HTTP 409 because
-GitHub reports the runs as queued while its cancellation service considers them
-pre-queued. The retired workflow is absent from the default branch, but those two
-pre-existing run records remain a stop condition. On August 31 the owner
-authorized clearing both. Ordinary/force cancellation still returned HTTP 409;
-supported exact deletion after hash-verified exports of their empty job/artifact
-records returned HTTP 403. Signed-in UI cancellation also failed for both. Fresh
-readback at 09:52 UTC still shows queued, attempt 1, zero jobs/artifacts and
-workflow ID `344663675` in `deleted` state. No clearance is claimed. A concrete
-GitHub Support draft is prepared locally and submission is authorized, but it
-remains unsent: the signed-in portal offered no applicable Actions ticket route.
-No ticket number exists and no unrelated category was submitted. GitHub must clear the
-server-side records or confirm they cannot execute before the requested fresh
-manual production run. Existing schedules were not changed.
-
-GitHub settings still report the canonical repository as public and pre-rename,
-and the legacy repository as public, unarchived, and Pages-enabled. The browser
-settings runtime was unavailable, so privacy, same-ID rename, legacy Pages
-unpublish, Actions setting disablement, and archive flag were not claimed.
-
-## Cutover gates still open
-
-The following settings-dependent items remain open:
-
-1. Cancel stale queued legacy runs `33219808359` and `33221027676`, then verify no
-   retired scheduler or duplicate writer can start.
-2. Correct canonical visibility deliberately, then rename repository ID
-   `1349678672` in place to `maglothinm/PolitiTrack`; update
-   URLs/settings/integrations, and verify the redirect and default branch.
-3. Disable legacy Actions and Pages at the repository-settings level and archive
-   repository ID `1033519491`. Its README/workflow code freeze at `36447a2` is
-   complete, but it is not a substitute for those settings.
-4. Re-publish and inspect both Pages surfaces at the post-rename URL.
-5. Re-check Gmail credential configuration and prove delivery only with a
-   separately authorized live candidate-alert test. Until then, report Gmail as
-   implemented but delivery-unverified.
-
-When these gates change, update this file with the final commit, exact Actions run
-and artifact IDs, deployment URL, and archive/settings results.
+| Intake `main` | `d603e9b40ffb78c51f635589bc886875f411299b` |
+| Runtime v2 source branch | `codex/runtime-v2-cutover` |
+| Runtime v2 source head | `62a13eaa8ae5ac46046c992aedd42bc4816e2ce6` |
+| Source merge base | `e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515` |
+| Intake divergence | 7 commits ahead, 2 commits behind `main` |
+| Preserved source-tree checkpoint | `7cceb9694ef7b50f71494f7c5b6baabe57520aa5` |
+| Active review branch | `codex/runtime-v2-shadow-review` |
+| Active review | PR #38, non-draft |
+
+The source branch remains unchanged. Its 29 committed Runtime v2 paths were copied
+by exact blob identity onto fresh verified `main` ancestry, avoiding a merge or
+rebase of divergent history.
+
+The original ChatGPT Work filesystem is unavailable. Local-only worktrees,
+stashes, reflogs, staged/unstaged patches, ignored files, and untracked files from
+that session are **unverified**. That limitation is not permission to deploy,
+initialize, or rebaseline. The remote inventory is in
+`docs/CONSOLIDATION_INVENTORY.md`.
+
+### Explicit mode contract
+
+Producer execution requires:
+
+```text
+POLITITRACK_MODE=shadow|production
+```
+
+Missing, blank, unknown, or conflicting values fail closed. The CLI resolves mode
+before constructing its PostgreSQL store, and `JobRunner` validates it again.
+
+In shadow mode:
+
+- Legislative and Executive commands always include `--no-notify`.
+- AI commands always include `--suppress-alerts`.
+- legacy suppression configuration cannot opt out.
+- trigger evidence is `shadow`.
+- notification, callback, Healthchecks, mail, webhook, Pushover, Slack, Discord,
+  Twilio, SendGrid, Mailgun, SMTP, and GitHub Actions artifact credentials/context
+  are removed from subprocess environments.
+- read-only analysis credentials are retained unless independently absent.
+- mode is recorded in run rows, status, workflow evidence, and snapshot provenance.
+- failed shadow runs are not classified as possibly having emitted external
+  effects.
+
+Explicit production mode retains intended producer command behavior and existing
+explicit suppression settings. No production-mode process ran during this task.
+
+### Durable state
+
+The Runtime v2 migration is additive. It adds and validates `runtime_mode`,
+backfills any earlier Runtime v2 run rows as production, and does not drop,
+recreate, initialize, import, replace, or advance a snapshot table or head.
+Database behavior in this phase is tested with source inspection and test doubles,
+not a live database.
+
+### Infrastructure source
+
+Terraform defaults producer environment to shadow and schedules to disabled. A
+Terraform check rejects enabled schedules unless mode is explicitly production.
+The mode is a non-secret control and cannot be supplied through the secret map.
+No Terraform, image build, cloud API, runtime, scheduler, or import action was
+executed.
+
+### Filing Vault reconciliation
+
+The preserved source imported `GoogleCloudObjectStore` but did not include that
+class. This caused focused Runtime v2 and standard repository CI to fail at
+collection. The active review implements the missing adapter with lazy Google
+Cloud imports, bounded object operations, content-addressed same-key verification,
+safe classified errors, and required uniform bucket-level access plus enforced
+public-access prevention. No external bucket was contacted.
+
+## CI and review evidence
+
+PR #38 contains the read-only `Runtime v2 safety tests` workflow. It installs
+`requirements-runtime-v2.txt`, compiles the package, runs focused Runtime v2,
+shadow-mode, and dashboard-insight tests, and runs `verify.sh`. It invokes no
+producer and receives read-only repository permissions.
+
+The standard `Investor Edge tests` workflow provides broader integration coverage.
+The initial failure exposed the missing GCS adapter and was corrected rather than
+retried unchanged.
+
+Executable-tree checkpoint `8b16436e14862ad7abcdf94dc7272f437f88b091`
+passed:
+
+| Workflow | Run | Conclusion |
+|---|---:|---|
+| Runtime v2 safety tests | `33639231223` | success |
+| Investor Edge tests | `33639231236` | success |
+
+GitHub reported that exact tree mergeable against `main`. PR #37 retained those
+results and was closed unmerged solely because the connector could not clear its
+draft flag. PR #38 began from the identical head.
+
+The active continuity updates are documentation-only successors and require both
+workflows on the exact final PR #38 head. PR checks and metadata identify that
+future final SHA because a tracked file cannot contain its own commit ID.
+
+## Protected-state continuity
+
+Issue #36 did not read, download, upload, replace, or advance:
+
+- `legislative-tracker-state`;
+- `executive-tracker-state`;
+- `ai-analysis-state`.
+
+It did not change seen IDs, ledgers, analyses, paper positions, alerts, Investor
+Edge history, health callbacks, or a production dashboard. Historical artifact
+identifiers in the original source runbook were not revalidated and are not future
+migration authority. A later import requires fresh canonical provenance and the
+then-current one-writer/high-water-mark gates.
+
+## Parallel and retained work
+
+| Work | State | Treatment in issue #36 |
+|---|---|---|
+| PR #3 / `codex/production-remediation` | Draft | No merge or cherry-pick |
+| PR #33 / `codex/score-receipts-data-quality` | Draft | No merge or cherry-pick |
+| PR #35 / `codex/chatgpt-codex-phase-1-2` | Open | Separate continuity task |
+| PR #37 / `codex/runtime-v2-shadow-integration` | Closed, unmerged | Green predecessor retained as evidence |
+| PR #38 / `codex/runtime-v2-shadow-review` | Open, non-draft | Active review; do not merge in this phase |
+| `codex/runtime-v2-integration` | Temporary staging ref | Non-authoritative; preserved only |
+| `codex/runtime-v2-cutover` | Original source | Preserved unchanged |
+
+All other branches listed in `docs/CONSOLIDATION_INVENTORY.md` remain untouched.
+
+## Completion gate
+
+Phases 1–2 end only when both workflows succeed on the final PR #38 head, GitHub
+reports it mergeable, and PR #38 remains open, non-draft, unmerged, and undeployed.
+No production, cloud, state, credential, schedule, settings, or Pages action may
+occur.
+
+## Next safe action
+
+Validate the final documentation-only PR #38 head, record its exact SHA and run
+IDs in issue/PR metadata, reconfirm mergeability, and stop.
+
+Fresh state provenance, isolated or live shadow acceptance, runtime/browser
+acceptance, production promotion, schedule activation, one-writer transfer,
+rollback drills, and retirement of the current GitHub production path require a
+later explicitly authorized release phase.

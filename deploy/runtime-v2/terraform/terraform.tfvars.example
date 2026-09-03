@@ -1,0 +1,25 @@
+project_id = "your-billing-enabled-project-id"
+region     = "us-central1"
+image      = "us-central1-docker.pkg.dev/your-billing-enabled-project-id/polititrack/runtime-v2@sha256:replace-me"
+
+# Values are existing Secret Manager secret IDs, never secret values. Database
+# access is passwordless through the runtime service account.
+runtime_secrets = {
+  OPENAI_API_KEY                    = "polititrack-openai-api-key"
+  PUSHOVER_API_TOKEN                = "polititrack-pushover-api-token"
+  PUSHOVER_USER_KEY                 = "polititrack-pushover-user-key"
+  LEGISLATIVE_HEALTHCHECKS_PING_URL = "polititrack-legislative-healthcheck"
+  EXECUTIVE_HEALTHCHECKS_PING_URL   = "polititrack-executive-healthcheck"
+  AI_HEALTHCHECKS_PING_URL          = "polititrack-ai-healthcheck"
+}
+
+# Phase 1-2 acceptance remains in shadow mode. A later release must change this
+# to production explicitly before schedules can be enabled.
+runtime_environment = {
+  POLITITRACK_MODE = "shadow"
+}
+
+vault_enabled             = true
+schedules_enabled         = false
+vault_bucket_name         = "your-globally-unique-private-bucket"
+dashboard_allowed_origins = "https://your-runtime-domain.example"

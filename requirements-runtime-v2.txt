@@ -1,0 +1,9 @@
+-r requirements-tracker.txt
+-r requirements-ai.txt
+-r requirements-vault.txt
+
+# Runtime service and test surface.
+gunicorn>=22,<24; sys_platform != 'win32'
+cloud-sql-python-connector[pg8000]>=1.18,<2
+google-cloud-storage>=3.3,<4
+pytest>=8.3,<9

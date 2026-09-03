@@ -792,3 +792,69 @@ exceptions, no manual-exception phrase in the Situation Brief, the retained
 review's restore control, and zero browser errors. The acknowledgement was left
 in place on the verification browser. Protected publisher inputs and attempts
 remained unchanged.
+
+## D-2026-09-01-040 — Cut over scheduling and state through an accepted parallel runtime
+
+**Decision:** Reuse the verified PolitiTrack collectors and dashboard in Runtime
+v2, with Cloud Run jobs, Cloud Scheduler, PostgreSQL immutable snapshots and
+private versioned Cloud Storage. Keep GitHub as production authority until an
+explicit acceptance receipt records successful imports, readiness, a controlled
+cycle, four scheduled intervals and browser acceptance.
+
+**Reason:** The repeated stale condition is a scheduler delivery gap: expected
+GitHub schedule starts do not occur even when the last collector attempt
+succeeded. Rewriting proven collector logic would add risk without correcting
+that delivery boundary.
+
+**Consequence:** Every producer has a database advisory lock and publishes a
+hashed immutable generation with compare-and-swap parent verification. Migration
+accepts only exact canonical, successful, main-branch GitHub artifacts whose
+archives match their provenance receipts. Initial import cannot replace an
+existing head. Infrastructure first applies with schedules paused, and rollback
+pauses Runtime v2 without destroying its database or versioned evidence.
+
+Filing Vault source acknowledgement and agency-host settings remain explicit and
+fail closed; cutover does not infer authorization. GitHub schedules may be
+disabled only after the complete acceptance gate, preventing dual production
+writers and blank-state initialization.
+
+**Verification:** The focused suite passes 14 tests covering deterministic
+archives, tamper and traversal rejection, provenance, immutable import, lock
+ownership, state isolation, web serving and private storage policy. Python
+compilation, Terraform formatting and validation, PowerShell parsing and Git diff
+validation pass. Cloud Build and live acceptance remain deployment gates.
+
+## D-2026-09-02-041 — Require explicit Runtime v2 mode and source reconciliation before cutover
+
+**Decision:** D-2026-09-01-040 remains the proposed long-term architecture, but it
+does not authorize deployment directly from `codex/runtime-v2-cutover`. Preserve
+that branch as recovery evidence and integrate its committed content onto fresh
+canonical `main` ancestry. Every Runtime v2 producer requires an explicit
+`POLITITRACK_MODE=shadow|production`; missing, blank, unknown, or conflicting
+values fail closed before producer or PostgreSQL-store initialization.
+
+Shadow mode forcibly disables tracker notifications and AI alerts, removes
+external-delivery and GitHub Actions artifact credentials/context from producer
+subprocesses, identifies retained evidence as shadow, and records the selected mode
+in run rows and snapshot provenance. Terraform defaults to shadow with schedules
+disabled and rejects schedule activation unless mode is explicitly production.
+Production mode preserves intended producer behavior but is not authorized by
+this decision.
+
+**Reason:** The recovered source branch was divergent from current `main`, its
+original Work-only filesystem state was unavailable, and its committed tree
+referenced a Google Cloud Vault adapter that was not actually present. Treating
+that branch or stale local migration receipts as immediately deployable would
+convert unverified recovery state into production risk. An explicit mode contract
+also prevents an omitted environment value from silently selecting live producer
+behavior.
+
+**Consequence:** Issue #36 / PR #37 is limited to Beast Phases 1–2: remote-ref
+inventory, exact committed-source preservation, reconciliation, synthetic tests,
+and a reviewable shadow-safe branch. It may not merge, deploy, initialize/import
+state, invoke live producers, enable schedules, alter credentials/settings,
+publish Pages, contact Healthchecks, or read/write/replace protected production
+artifacts. Fresh provenance, isolated or live shadow acceptance, production
+promotion, single-writer transfer, schedule activation, rollback drills, and
+retirement of the GitHub production path require a later explicit release and
+acceptance receipt.
