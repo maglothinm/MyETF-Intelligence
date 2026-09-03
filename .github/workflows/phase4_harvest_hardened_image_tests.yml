@@ -1,0 +1,27 @@
+name: Phase 4 hardened image harvest safety tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase4_harvest_hardened_image.yml"
+      - ".github/workflows/phase4_harvest_hardened_image_tests.yml"
+      - "tests/test_phase4_harvest_hardened_image.py"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install "pytest>=8.3,<9"
+      - name: Run focused safety tests
+        run: python -m pytest -q tests/test_phase4_harvest_hardened_image.py
