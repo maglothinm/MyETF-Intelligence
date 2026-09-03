@@ -1,12 +1,9 @@
 name: Phase 3 read-only cloud boundary discovery
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "docs/runtime-v2/phase3/cloud-auth-ready.txt"
-  workflow_dispatch:
+  issue_comment:
+    types:
+      - created
 
 permissions:
   contents: read
@@ -14,7 +11,12 @@ permissions:
 
 jobs:
   discover:
-    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event.issue.number == 39 &&
+      github.event.issue.pull_request == null &&
+      github.actor == 'maglothinm' &&
+      github.event.comment.body == '/phase3 discover-cloud'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
