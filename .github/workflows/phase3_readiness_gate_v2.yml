@@ -1,0 +1,130 @@
+name: Phase 3 readiness gate v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_readiness_gate_v2.yml"
+
+concurrency:
+  group: phase3-readiness-gate-v2
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  accept:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Verify bounded readiness controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/converge-phase3-readiness-v2.sh
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/converge-phase3-readiness-v2.sh').read_text(encoding='utf-8')
+          forbidden = (
+              'gcloud scheduler jobs run',
+              'gcloud scheduler jobs resume',
+              'runtime_v2,run',
+              'import-gcs',
+              'secrets versions access',
+              'terraform apply',
+              'gcloud run deploy',
+              'gcloud run jobs deploy',
+              'gcloud sql instances patch',
+          )
+          for value in forbidden:
+              assert value not in text, value
+          assert text.count('gcloud run jobs execute') == 1
+          assert '--args=-m,runtime_v2,status' in text
+          assert '--update-env-vars=PRIVATE_IP=true' in text
+          assert 'roles/run.jobsExecutorWithOverrides' in text
+          assert 'roles/run.invoker' not in text
+          assert 'verify_temporary_access_removed' in text
+          assert 'validate_phase3_status.py' in text
+          assert "'phase4_started': False" in text
+          assert "'production_authority_transferred': False" in text
+          PY
+
+      - name: Check immutable readiness tag
+        id: ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${target}" ]]; then
+            echo "existing=true" >> "${GITHUB_OUTPUT}"
+            echo "Phase 3 readiness tag already exists at ${target}."
+          else
+            echo "existing=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Authenticate as constrained Phase 3 deployer
+        if: steps.ready.outputs.existing != 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        if: steps.ready.outputs.existing != 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reconcile private routing and validate exact Phase 3 state
+        if: steps.ready.outputs.existing != 'true'
+        shell: bash
+        run: bash deploy/runtime-v2/converge-phase3-readiness-v2.sh
+
+      - name: Create immutable Phase 4 readiness tag
+        if: steps.ready.outputs.existing != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${target}" ]]; then
+            [[ "${target}" == "${GITHUB_SHA}" ]] || {
+              echo "Concurrent phase3-ready tag points to ${target}." >&2
+              exit 1
+            }
+          else
+            git tag phase3-ready "${GITHUB_SHA}"
+            git push origin refs/tags/phase3-ready
+          fi
+
+      - name: Upload final Phase 3 evidence
+        if: always() && steps.ready.outputs.existing != 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-readiness-gate-v2
+          path: |
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/phase3-acceptance.json
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/phase3-acceptance.sha256
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/phase4-ready.txt
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/status.json
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/status-execution.json
+            ${{ runner.temp }}/phase3-readiness-v2-${{ github.run_id }}/private-ip-reconciliation.txt
+          if-no-files-found: warn
+          retention-days: 90
