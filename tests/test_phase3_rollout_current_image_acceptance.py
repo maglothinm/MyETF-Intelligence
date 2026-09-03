@@ -45,13 +45,13 @@ def test_terraform_plan_is_exactly_update_only_on_ten_runtime_resources() -> Non
     text = _text()
     expected = (
         'google_cloud_run_v2_job.admin',
-        'google_cloud_run_v2_job.import[\\"ai\\"]',
-        'google_cloud_run_v2_job.import[\\"executive\\"]',
-        'google_cloud_run_v2_job.import[\\"legislative\\"]',
-        'google_cloud_run_v2_job.producer[\\"ai\\"]',
-        'google_cloud_run_v2_job.producer[\\"dashboard\\"]',
-        'google_cloud_run_v2_job.producer[\\"executive\\"]',
-        'google_cloud_run_v2_job.producer[\\"legislative\\"]',
+        'google_cloud_run_v2_job.import["ai"]',
+        'google_cloud_run_v2_job.import["executive"]',
+        'google_cloud_run_v2_job.import["legislative"]',
+        'google_cloud_run_v2_job.producer["ai"]',
+        'google_cloud_run_v2_job.producer["dashboard"]',
+        'google_cloud_run_v2_job.producer["executive"]',
+        'google_cloud_run_v2_job.producer["legislative"]',
         'google_cloud_run_v2_job.vault_lifecycle[0]',
         'google_cloud_run_v2_service.web',
     )
