@@ -16,6 +16,7 @@ on:
       - "tests/test_runtime_v2_phase3_receipts.py"
       - "tests/test_phase3_cloud_discovery.py"
       - "tests/test_phase3_gcp_auth_inventory.py"
+      - "tests/test_phase3_wif_bootstrap.py"
       - "tests/test_dashboard_insights.py"
       - ".github/workflows/phase3_cloud_discovery.yml"
       - ".github/workflows/phase3_gcp_auth_inventory.yml"
@@ -46,19 +47,24 @@ jobs:
         run: python -m pip install --requirement requirements-runtime-v2.txt
       - name: Compile Runtime v2 package
         run: python -m compileall -q runtime_v2
-      - name: Parse Phase 3 PowerShell bootstrap
+      - name: Parse Phase 3 PowerShell entry scripts
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'deploy/runtime-v2/bootstrap.ps1'),
-            [ref]$tokens,
-            [ref]$errors
-          )
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            exit 1
+          foreach ($path in @(
+            'deploy/runtime-v2/bootstrap.ps1',
+            'deploy/runtime-v2/initialize-github-wif.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$path: $($_.Message)" }
+              exit 1
+            }
           }
       - name: Check Terraform formatting
         run: terraform -chdir=deploy/runtime-v2/terraform fmt -check
@@ -77,6 +83,7 @@ jobs:
             tests/test_runtime_v2_phase3_receipts.py \
             tests/test_phase3_cloud_discovery.py \
             tests/test_phase3_gcp_auth_inventory.py \
+            tests/test_phase3_wif_bootstrap.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
