@@ -1,0 +1,30 @@
+name: Phase 3 GCS closeout v2 safety tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3_closeout_gcs_v2.yml"
+      - ".github/workflows/phase3_closeout_gcs_v2_tests.yml"
+      - "deploy/runtime-v2/close-phase3-gcs-v2.sh"
+      - "tests/test_phase3_closeout_gcs_v2.py"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Parse closeout shell
+        run: bash -n deploy/runtime-v2/close-phase3-gcs-v2.sh
+      - name: Install pytest
+        run: python -m pip install "pytest>=8.3,<9"
+      - name: Run focused safety tests
+        run: python -m pytest -q tests/test_phase3_closeout_gcs_v2.py
