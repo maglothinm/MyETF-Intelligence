@@ -17,6 +17,7 @@ on:
       - "tests/test_phase3_cloud_discovery.py"
       - "tests/test_phase3_gcp_auth_inventory.py"
       - "tests/test_phase3_wif_bootstrap.py"
+      - "tests/test_phase3_execution_identities.py"
       - "tests/test_dashboard_insights.py"
       - ".github/workflows/phase3_cloud_discovery.yml"
       - ".github/workflows/phase3_gcp_auth_inventory.yml"
@@ -52,7 +53,8 @@ jobs:
         run: |
           foreach ($path in @(
             'deploy/runtime-v2/bootstrap.ps1',
-            'deploy/runtime-v2/initialize-github-wif.ps1'
+            'deploy/runtime-v2/initialize-github-wif.ps1',
+            'deploy/runtime-v2/initialize-phase3-execution-identities.ps1'
           )) {
             $tokens = $null
             $errors = $null
@@ -84,6 +86,7 @@ jobs:
             tests/test_phase3_cloud_discovery.py \
             tests/test_phase3_gcp_auth_inventory.py \
             tests/test_phase3_wif_bootstrap.py \
+            tests/test_phase3_execution_identities.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
