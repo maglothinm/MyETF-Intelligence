@@ -62,6 +62,7 @@ jobs:
 
           gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.invoker --quiet >/dev/null 2>&1 || true
           gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null 2>&1 || true
+          gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --condition=None --quiet >/dev/null 2>&1 || true
 
           admin_policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
           if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]?] | any(. == $member)' <<<"${admin_policy}" >/dev/null; then
@@ -77,9 +78,11 @@ jobs:
           cleanup_logging() {
             set +e
             gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --condition=None --quiet >/dev/null 2>&1
           }
           trap cleanup_logging EXIT
           gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewer --condition=None --quiet >/dev/null
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --condition=None --quiet >/dev/null
 
           gcloud run jobs executions describe "${FAILED_EXECUTION}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
           gcloud logging read \
@@ -93,10 +96,12 @@ jobs:
           trap - EXIT
 
           project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
-          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewer") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
-            echo "Temporary logging viewer binding remains after diagnostic cleanup." >&2
-            exit 1
-          fi
+          for role in roles/logging.viewer roles/logging.viewAccessor; do
+            if jq -e --arg member "${member}" --arg role "${role}" '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then
+              echo "Temporary ${role} binding remains after diagnostic cleanup." >&2
+              exit 1
+            fi
+          done
 
           python - <<'PY'
           import json
