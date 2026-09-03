@@ -22,21 +22,40 @@ jobs:
       REGION: us-central1
       REPOSITORY: polititrack
       IMAGE_NAME: runtime-v2
+      CLOUD_BUILD_BUCKET: project-38008d5f-4918-46e6-920_cloudbuild
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       CURRENT_DEPLOYED_DIGEST: sha256:82b691179c422aba5c3ffa205e1a2d548f8cd6e8e9ed8ac2b5df5f7f8c71a565
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
 
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reconcile builder Cloud Build bucket metadata access
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+          gcloud storage buckets add-iam-policy-binding "gs://${CLOUD_BUILD_BUCKET}" \
+            --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+            --role roles/storage.bucketViewer \
+            --quiet >/dev/null
+
       - name: Authenticate as isolated Phase 3 builder
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
 
       - name: Build and resolve immutable image
         shell: bash
@@ -100,6 +119,7 @@ jobs:
               database_sha256: $database_sha256,
               dockerfile_sha256: $dockerfile_sha256,
               requirements_sha256: $requirements_sha256,
+              builder_bucket_metadata_access: "roles/storage.bucketViewer",
               deployed: false,
               runtime_job_execution: false,
               scheduler_execution: false,
