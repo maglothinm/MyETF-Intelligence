@@ -300,6 +300,7 @@ class JobRunner:
                     state_dir,
                     expected_parent_sha256=parent.snapshot_sha256,
                     source_revision=self.source_revision,
+                    successful_run_id=run_id,
                     provenance={
                         "authority": "runtime_v2",
                         "job": branch,
@@ -308,7 +309,6 @@ class JobRunner:
                         "last_success_utc": state["last_success_utc"],
                     },
                 )
-                locked.finish_run(run_id, status="success", snapshot=snapshot)
                 return snapshot
             except Exception as exc:
                 locked.finish_run(
@@ -331,8 +331,10 @@ class JobRunner:
                 workspace / "executive",
                 workspace / "ai",
             )
-            self.store.restore_latest("legislative", legislative)
-            self.store.restore_latest("executive", executive)
+            input_heads = {
+                "legislative": self.store.restore_latest("legislative", legislative),
+                "executive": self.store.restore_latest("executive", executive),
+            }
             parent = locked.restore(ai_dir)
             for directory in (legislative, executive, ai_dir):
                 _require_success_state(directory)
@@ -349,6 +351,7 @@ class JobRunner:
                     ai_dir,
                     expected_parent_sha256=parent.snapshot_sha256,
                     source_revision=self.source_revision,
+                    successful_run_id=run_id,
                     provenance={
                         "authority": "runtime_v2",
                         "job": "ai",
@@ -356,16 +359,14 @@ class JobRunner:
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
                         "inputs": {
-                            "legislative": _require_success_state(legislative)[
-                                "last_success_utc"
-                            ],
-                            "executive": _require_success_state(executive)[
-                                "last_success_utc"
-                            ],
+                            name: {
+                                "generation": input_head.generation,
+                                "snapshot_sha256": input_head.snapshot_sha256,
+                            }
+                            for name, input_head in input_heads.items()
                         },
                     },
                 )
-                locked.finish_run(run_id, status="success", snapshot=snapshot)
                 return snapshot
             except Exception as exc:
                 locked.finish_run(
@@ -433,6 +434,7 @@ class JobRunner:
                     site,
                     expected_parent_sha256=head.snapshot_sha256 if head else None,
                     source_revision=self.source_revision,
+                    successful_run_id=run_id,
                     provenance={
                         "authority": "runtime_v2",
                         "job": "dashboard",
@@ -445,7 +447,6 @@ class JobRunner:
                     },
                     allow_initial=head is None,
                 )
-                locked.finish_run(run_id, status="success", snapshot=snapshot)
                 return snapshot
             except Exception as exc:
                 locked.finish_run(
