@@ -75,14 +75,12 @@ jobs:
           }
       - name: Check Terraform formatting
         run: terraform -chdir=deploy/runtime-v2/terraform fmt -check
-      - name: Generate Windows and Linux provider checksums
+      - name: Verify Windows and Linux provider checksums
         run: |
           terraform -chdir=deploy/runtime-v2/terraform providers lock \
             -platform=linux_amd64 \
             -platform=windows_amd64
-          echo '---BEGIN TERRAFORM LOCK---'
-          cat deploy/runtime-v2/terraform/.terraform.lock.hcl
-          echo '---END TERRAFORM LOCK---'
+          git diff --exit-code -- deploy/runtime-v2/terraform/.terraform.lock.hcl
       - name: Initialize Terraform without backend
         run: terraform -chdir=deploy/runtime-v2/terraform init -backend=false -lockfile=readonly
       - name: Validate Terraform configuration
