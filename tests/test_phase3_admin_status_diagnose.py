@@ -21,8 +21,9 @@ def test_diagnostic_repairs_only_known_admin_status_override():
 def test_diagnostic_removes_temporary_permissions():
     text = WORKFLOW.read_text(encoding='utf-8')
     assert 'roles/logging.viewer' in text
-    assert 'remove-iam-policy-binding' in text
-    assert 'Temporary logging viewer binding remains after diagnostic cleanup.' in text
+    assert 'roles/logging.viewAccessor' in text
+    assert text.count('remove-iam-policy-binding') >= 4
+    assert 'binding remains after diagnostic cleanup.' in text
     assert 'roles/run.invoker' in text
 
 
