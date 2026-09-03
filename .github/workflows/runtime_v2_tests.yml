@@ -31,6 +31,7 @@ on:
       - ".github/workflows/phase3_apply_saved_plan.yml"
       - ".github/workflows/phase3_data_plane_audit.yml"
       - ".github/workflows/phase3_admin_status_diagnose.yml"
+      - ".github/workflows/phase3_diagnostic_pulse.yml"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:
 

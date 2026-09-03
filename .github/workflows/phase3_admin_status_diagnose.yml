@@ -10,6 +10,7 @@ on:
       - AI filing analyst and paper portfolio
       - Publish government trade dashboard
       - Runtime v2 safety tests
+      - Phase 3 diagnostic trigger pulse
     types: [completed]
 
 permissions:
