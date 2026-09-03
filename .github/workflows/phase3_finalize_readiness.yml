@@ -1,0 +1,277 @@
+name: Phase 3 finalize readiness
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_finalize_readiness.yml"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  finalize:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      CLAIM_OBJECT: phase3-acceptance/finalize-readiness-v2.claimed
+      READY_OBJECT: phase3-acceptance/PHASE3_READY.json
+      READY_BRANCH: phase3-ready
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reconcile private routing and validate Phase 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-final-readiness
+          cd phase3-final-readiness
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          claim_uri="gs://${STATE_BUCKET}/${CLAIM_OBJECT}"
+          ready_uri="gs://${STATE_BUCKET}/${READY_OBJECT}"
+
+          cleanup_temporary_access() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null 2>&1
+          }
+          trap cleanup_temporary_access EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+          if gcloud storage ls "${claim_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 finalizer claim already exists; refusing duplicate execution." >&2
+            exit 1
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\nsource_revision=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > claim.txt
+          gcloud storage cp claim.txt "${claim_uri}" >/dev/null
+
+          schedulers=(polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle)
+          for scheduler in "${schedulers[@]}"; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is not paused." >&2; exit 1; }
+          done
+
+          runtime_jobs=(
+            polititrack-admin
+            polititrack-legislative
+            polititrack-executive
+            polititrack-ai
+            polititrack-dashboard
+            polititrack-import-legislative
+            polititrack-import-executive
+            polititrack-import-ai
+          )
+          : > repaired-jobs.txt
+          for job in "${runtime_jobs[@]}"; do
+            safe="${job//-/_}"
+            gcloud run jobs describe "${job}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > "${safe}-before.json"
+            before_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' "${safe}-before.json")"
+            before_command="$(jq -c '.command // []' <<<"${before_container}")"
+            before_args="$(jq -c '.args // []' <<<"${before_container}")"
+            before_image="$(jq -r '.image // empty' <<<"${before_container}")"
+            before_env_names="$(jq -c '[.env[]?.name] | sort' <<<"${before_container}")"
+            before_private="$(jq -r '[.env[]? | select(.name == "PRIVATE_IP") | .value][0] // empty' <<<"${before_container}")"
+            before_service_account="$(jq -r 'first(.. | objects | .serviceAccount? // empty)' "${safe}-before.json")"
+            before_vpc="$(jq -c 'first(.. | objects | .vpcAccess? // empty)' "${safe}-before.json")"
+            [[ -n "${before_command}" && -n "${before_args}" && -n "${before_image}" && -n "${before_service_account}" && -n "${before_vpc}" ]] || { echo "${job} baseline is incomplete." >&2; exit 1; }
+
+            if [[ "${before_private,,}" != "true" ]]; then
+              gcloud run jobs update "${job}" --project "${PROJECT_ID}" --region "${REGION}" --update-env-vars=PRIVATE_IP=true --quiet >/dev/null
+              printf '%s\n' "${job}" >> repaired-jobs.txt
+            fi
+
+            gcloud run jobs describe "${job}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > "${safe}-after.json"
+            after_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' "${safe}-after.json")"
+            after_command="$(jq -c '.command // []' <<<"${after_container}")"
+            after_args="$(jq -c '.args // []' <<<"${after_container}")"
+            after_image="$(jq -r '.image // empty' <<<"${after_container}")"
+            after_env_names="$(jq -c '[.env[]?.name] | sort' <<<"${after_container}")"
+            after_private="$(jq -r '[.env[]? | select(.name == "PRIVATE_IP") | .value][0] // empty' <<<"${after_container}")"
+            after_service_account="$(jq -r 'first(.. | objects | .serviceAccount? // empty)' "${safe}-after.json")"
+            after_vpc="$(jq -c 'first(.. | objects | .vpcAccess? // empty)' "${safe}-after.json")"
+            expected_env_names="$(jq -c '(. + ["PRIVATE_IP"]) | unique | sort' <<<"${before_env_names}")"
+            [[ "${after_command}" == "${before_command}" && "${after_args}" == "${before_args}" ]] || { echo "${job} command or args changed." >&2; exit 1; }
+            [[ "${after_image}" == "${before_image}" && "${after_service_account}" == "${before_service_account}" ]] || { echo "${job} image or identity changed." >&2; exit 1; }
+            [[ "${after_vpc}" == "${before_vpc}" ]] || { echo "${job} VPC attachment changed." >&2; exit 1; }
+            [[ "${after_env_names}" == "${expected_env_names}" ]] || { echo "${job} environment-name set changed unexpectedly." >&2; exit 1; }
+            [[ "${after_private,,}" == "true" ]] || { echo "${job} PRIVATE_IP is not true." >&2; exit 1; }
+            for required_env in INSTANCE_CONNECTION_NAME PRIVATE_IP DB_NAME DB_USER DB_PASSWORD; do
+              jq -e --arg name "${required_env}" 'any(.env[]?; .name == $name)' <<<"${after_container}" >/dev/null || { echo "${job} is missing ${required_env}." >&2; exit 1; }
+            done
+            case "${job}" in
+              polititrack-legislative|polititrack-executive|polititrack-ai|polititrack-dashboard)
+                mode="$(jq -r '[.env[]? | select(.name == "POLITITRACK_MODE") | .value][0] // empty' <<<"${after_container}")"
+                [[ "${mode}" == "shadow" ]] || { echo "${job} is not configured for shadow mode." >&2; exit 1; }
+                ;;
+            esac
+          done
+
+          admin_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' polititrack_admin-after.json)"
+          [[ "$(jq -c '.command // []' <<<"${admin_container}")" == '["python"]' ]] || { echo "Admin command baseline mismatch." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${admin_container}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin args baseline mismatch." >&2; exit 1; }
+
+          cleanup_temporary_access
+          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null
+
+          logging_ready=false
+          for attempt in $(seq 1 18); do
+            if gcloud logging read 'resource.type="cloud_run_job"' --project "${PROJECT_ID}" --limit=1 --format=json >/dev/null 2> logging-ready-error.txt; then logging_ready=true; break; fi
+            echo "Log-view IAM not effective yet (attempt ${attempt}/18)."
+            sleep 10
+          done
+          [[ "${logging_ready}" == "true" ]] || { cat logging-ready-error.txt >&2 || true; echo "Cloud Logging access did not propagate." >&2; exit 1; }
+          sleep 20
+
+          probe_started_epoch="$(date -u +%s)"
+          set +e
+          status_execution="$(gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --args=-m,runtime_v2,status --update-env-vars=PRIVATE_IP=true --async --format='value(metadata.name)' 2> execute-error.txt | awk -F/ 'NF{print $NF}' | tail -1)"
+          launch_rc=$?
+          set -e
+          if [[ -z "${status_execution}" ]]; then
+            sleep 3
+            status_execution="$(gcloud run jobs executions list --job "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --sort-by='~createTime' --limit=1 --format='value(name)' | awk -F/ '{print $NF}')"
+          fi
+          [[ "${launch_rc}" -eq 0 && -n "${status_execution}" ]] || { cat execute-error.txt >&2 || true; echo "Could not launch or resolve the status execution." >&2; exit 1; }
+
+          completed=false
+          succeeded=false
+          for attempt in $(seq 1 72); do
+            gcloud run jobs executions describe "${status_execution}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > status-execution.json
+            condition="$(jq -r '[.status.conditions[]? | select(.type == "Completed")][0].status // empty' status-execution.json)"
+            if [[ "${condition}" == "True" ]]; then completed=true; succeeded=true; break; fi
+            if [[ "${condition}" == "False" ]]; then completed=true; break; fi
+            sleep 5
+          done
+          [[ "${completed}" == "true" ]] || { echo "Status execution did not finish within the bounded window." >&2; exit 1; }
+
+          execution_start="$(jq -r '.status.startTime // empty' status-execution.json)"
+          execution_start_epoch="$(date -u -d "${execution_start}" +%s)"
+          [[ "${execution_start_epoch}" -ge "${probe_started_epoch}" ]] || { echo "Resolved execution predates the current probe." >&2; exit 1; }
+          execution_container="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' status-execution.json)"
+          [[ "$(jq -c '.command // []' <<<"${execution_container}")" == '["python"]' ]] || { echo "Status execution command mismatch." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${execution_container}")" == '["-m","runtime_v2","status"]' ]] || { echo "Status execution args mismatch." >&2; exit 1; }
+          execution_private="$(jq -r '[.env[]? | select(.name == "PRIVATE_IP") | .value][0] // empty' <<<"${execution_container}")"
+          [[ "${execution_private,,}" == "true" ]] || { echo "Status execution did not use private routing." >&2; exit 1; }
+
+          gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${status_execution}\"" --project "${PROJECT_ID}" --order=asc --limit=300 --format=json > status-logs.json
+          if [[ "${succeeded}" != "true" ]]; then
+            jq -r '.[] | .textPayload? // .jsonPayload.message? // empty' status-logs.json >&2 || true
+            echo "Current private-route status execution failed." >&2
+            exit 1
+          fi
+
+          status_found=false
+          for attempt in $(seq 1 18); do
+            jq -c '[.[] | .textPayload? | select(type == "string") | fromjson? | select(type == "object" and has("heads") and has("latest_runs"))][0] // empty' status-logs.json > status.json
+            if [[ -s status.json ]]; then status_found=true; break; fi
+            sleep 5
+            gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${status_execution}\"" --project "${PROJECT_ID}" --order=asc --limit=300 --format=json > status-logs.json
+          done
+          [[ "${status_found}" == "true" ]] || { echo "Status execution produced no durable-state JSON." >&2; exit 1; }
+
+          cleanup_temporary_access
+          view_policy="$(gcloud logging views get-iam-policy "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' <<<"${view_policy}" >/dev/null; then echo "Temporary log-view access remains." >&2; exit 1; fi
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' <<<"${project_policy}" >/dev/null; then echo "Temporary Logging Admin remains." >&2; exit 1; fi
+          admin_policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e --arg member "${member}" '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' <<<"${admin_policy}" >/dev/null; then echo "Temporary execution authority remains." >&2; exit 1; fi
+
+          for scheduler in "${schedulers[@]}"; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} changed state." >&2; exit 1; }
+          done
+          gcloud sql instances describe "${SQL_INSTANCE}" --project "${PROJECT_ID}" --format=json > sql.json
+          jq -e '.settings.ipConfiguration.ipv4Enabled == false and any(.ipAddresses[]?; .type == "PRIVATE")' sql.json >/dev/null || { echo "Cloud SQL is not private-only." >&2; exit 1; }
+          web_policy="$(gcloud run services get-iam-policy "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e '[.bindings[]?.members[]?] | any(. == "allUsers")' <<<"${web_policy}" >/dev/null; then echo "Runtime v2 web service is public." >&2; exit 1; fi
+
+          python ../deploy/runtime-v2/validate_phase3_status.py --status status.json --status-execution "${status_execution}" --source-revision "${GITHUB_SHA}" --output PHASE3_READY.json
+          REPAIRED_JOBS="$(paste -sd, repaired-jobs.txt)" python - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path('PHASE3_READY.json')
+          receipt = json.loads(path.read_text(encoding='utf-8'))
+          receipt.update({
+              'all_runtime_jobs_private_ip': True,
+              'phase4_producer_jobs_shadow': True,
+              'repaired_jobs': [x for x in os.environ.get('REPAIRED_JOBS', '').split(',') if x],
+              'readiness_receipt_private_gcs': True,
+              'readiness_branch': 'phase3-ready',
+          })
+          path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(receipt, indent=2, sort_keys=True))
+          PY
+
+          receipt_sha="$(sha256sum PHASE3_READY.json | awk '{print $1}')"
+          gcloud storage cp PHASE3_READY.json "${ready_uri}" >/dev/null
+          gcloud storage cp "${ready_uri}" PHASE3_READY.roundtrip.json >/dev/null
+          roundtrip_sha="$(sha256sum PHASE3_READY.roundtrip.json | awk '{print $1}')"
+          [[ "${receipt_sha}" == "${roundtrip_sha}" ]] || { echo "Private readiness receipt round trip changed." >&2; exit 1; }
+          printf '%s\n' "${receipt_sha}" > PHASE3_READY.sha256
+          trap - EXIT
+
+      - name: Publish immutable readiness branch marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt="phase3-final-readiness/PHASE3_READY.json"
+          test -s "${receipt}"
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${READY_BRANCH}" >/dev/null 2>&1; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/heads/${READY_BRANCH}" -f sha="${GITHUB_SHA}" >/dev/null
+          fi
+          existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/docs/runtime-v2/phase3/PHASE3_READY.json?ref=${READY_BRANCH}" --jq .sha 2>/dev/null || true)"
+          content="$(base64 -w0 "${receipt}")"
+          if [[ -n "${existing_sha}" ]]; then
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/docs/runtime-v2/phase3/PHASE3_READY.json" -f message="Record Phase 3 readiness receipt" -f content="${content}" -f branch="${READY_BRANCH}" -f sha="${existing_sha}" >/dev/null
+          else
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/docs/runtime-v2/phase3/PHASE3_READY.json" -f message="Record Phase 3 readiness receipt" -f content="${content}" -f branch="${READY_BRANCH}" >/dev/null
+          fi
+
+      - name: Upload Phase 3 readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-final-readiness
+          path: |
+            phase3-final-readiness/PHASE3_READY.json
+            phase3-final-readiness/PHASE3_READY.sha256
+            phase3-final-readiness/status.json
+            phase3-final-readiness/status-execution.json
+            phase3-final-readiness/status-logs.json
+            phase3-final-readiness/repaired-jobs.txt
+            phase3-final-readiness/claim.txt
+            phase3-final-readiness/execute-error.txt
+          if-no-files-found: warn
+          retention-days: 90
