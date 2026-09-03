@@ -1,0 +1,69 @@
+name: Phase 3 GCS closeout v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_closeout_gcs_v2.yml"
+      - "deploy/runtime-v2/close-phase3-gcs-v2.sh"
+
+concurrency:
+  group: phase3-closeout-gcs-v2
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  close:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Close Phase 3 through private GCS evidence
+        shell: bash
+        run: bash deploy/runtime-v2/close-phase3-gcs-v2.sh
+
+      - name: Upload Phase 3 GCS closeout evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-closeout-gcs-v2
+          path: |
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/probe.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/status.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/status-execution.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/phase3-acceptance.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/phase3-acceptance.sha256
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/execute-error.txt
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/admin-before.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/admin-final.json
+          if-no-files-found: warn
+          retention-days: 90
