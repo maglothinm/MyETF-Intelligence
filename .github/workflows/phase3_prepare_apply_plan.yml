@@ -1,0 +1,345 @@
+name: Phase 3 prepare hash-bound apply plan
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_prepare_apply_plan.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  prepare:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      RECONCILIATION_VARS: ../phase3-reconciliation.tfvars.json
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Verify immutable cloud boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          if [[ "${actual_number}" != "${PROJECT_NUMBER}" ]]; then
+            echo "Project ID no longer maps to the expected immutable project number." >&2
+            exit 1
+          fi
+          echo "Phase 3 apply-plan boundary verified: ${PROJECT_ID}/${PROJECT_NUMBER}"
+
+      - name: Initialize exact Terraform toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform init -reconfigure -lockfile=readonly \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="prefix=runtime-v2"
+
+      - name: Create saved reconciliation plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan_file="${RUNNER_TEMP}/phase3-runtime-v2.tfplan"
+          plan_json="${RUNNER_TEMP}/phase3-runtime-v2-plan.json"
+          set +e
+          terraform -chdir=deploy/runtime-v2/terraform plan \
+            -no-color \
+            -detailed-exitcode \
+            -lock-timeout=5m \
+            -var-file="${RECONCILIATION_VARS}" \
+            -out="${plan_file}" \
+            > phase3-apply-plan-redacted.txt 2>&1
+          status=$?
+          set -e
+          cat phase3-apply-plan-redacted.txt
+          if [[ "$status" -ne 2 ]]; then
+            echo "Expected reviewed Phase 3 reconciliation changes, but Terraform detailed exit code was ${status}." >&2
+            exit 1
+          fi
+          terraform -chdir=deploy/runtime-v2/terraform show -json "${plan_file}" > "${plan_json}"
+          echo "plan_file=${plan_file}" >> "$GITHUB_OUTPUT"
+          echo "plan_json=${plan_json}" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce reviewed machine plan policy
+        id: policy
+        shell: bash
+        env:
+          PLAN_JSON: ${{ steps.plan.outputs.plan_json }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path(os.environ["PLAN_JSON"]).read_text(encoding="utf-8"))
+          changes = data.get("resource_changes", [])
+          by_address = {change["address"]: change for change in changes}
+
+          allowed_delete = {
+              'google_cloud_run_v2_job_iam_member.scheduler["ai"]',
+              'google_cloud_run_v2_job_iam_member.scheduler["dashboard"]',
+              'google_cloud_run_v2_job_iam_member.scheduler["executive"]',
+              'google_cloud_run_v2_job_iam_member.scheduler["legislative"]',
+              'google_cloud_run_v2_job_iam_member.vault_scheduler[0]',
+              'google_cloud_run_v2_service_iam_member.public_dashboard[0]',
+              'google_secret_manager_secret_iam_member.vault_signing_key',
+              'google_storage_bucket_iam_member.migration_runtime',
+              'google_storage_bucket_iam_member.vault_runtime[0]',
+              'google_storage_bucket_iam_member.vault_runtime_metadata[0]',
+          }
+          scheduler_addresses = {
+              'google_cloud_scheduler_job.producer["ai"]',
+              'google_cloud_scheduler_job.producer["dashboard"]',
+              'google_cloud_scheduler_job.producer["executive"]',
+              'google_cloud_scheduler_job.producer["legislative"]',
+              'google_cloud_scheduler_job.vault_lifecycle[0]',
+          }
+          producer_addresses = {
+              'google_cloud_run_v2_job.producer["ai"]',
+              'google_cloud_run_v2_job.producer["dashboard"]',
+              'google_cloud_run_v2_job.producer["executive"]',
+              'google_cloud_run_v2_job.producer["legislative"]',
+          }
+          preserved_runtime_env = {
+              "AI_ANALYSIS_ENABLED": "true",
+              "AI_FETCH_DOCUMENT_TEXT": "true",
+              "AI_MAX_ANALYSES_PER_RUN": "20",
+              "AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS": "65",
+              "AI_PAPER_TRADING_ONLY": "true",
+              "AI_REQUIRE_PUSHOVER": "false",
+              "AI_WEB_SEARCH_ENABLED": "true",
+              "ALLOW_EMPTY_SOURCES": "false",
+              "DISCLOSURE_TERMS_ACKNOWLEDGED": "TRUE",
+              "INVESTOR_EDGE_ENABLED": "true",
+              "NOTIFY_ALL_FILINGS": "true",
+              "NOTIFY_EQUITY_ONLY": "true",
+              "NOTIFY_PENDING_REVIEWS": "true",
+              "OPENAI_MODEL": "gpt-5.6-terra",
+              "OPENAI_REASONING_EFFORT": "medium",
+              "POLITITRACK_MODE": "shadow",
+              "REQUIRE_PUSHOVER": "false",
+              "SOURCE_REVISION": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+          }
+
+          create_count = 0
+          update_count = 0
+          delete_count = 0
+          delete_addresses = set()
+          inventory = []
+          for resource in changes:
+              address = resource["address"]
+              actions = resource.get("change", {}).get("actions", [])
+              inventory.append(f"{address}\t{','.join(actions)}")
+              if "create" in actions:
+                  create_count += 1
+              if actions == ["update"]:
+                  update_count += 1
+              if "delete" in actions:
+                  delete_count += 1
+                  delete_addresses.add(address)
+
+          if (create_count, update_count, delete_count) != (28, 17, 10):
+              raise SystemExit(
+                  f"Unexpected Phase 3 action counts: create={create_count} update={update_count} delete={delete_count}"
+              )
+          if delete_addresses != allowed_delete:
+              unexpected = sorted(delete_addresses - allowed_delete)
+              missing = sorted(allowed_delete - delete_addresses)
+              raise SystemExit(f"Delete allowlist mismatch. unexpected={unexpected} missing={missing}")
+
+          for address in scheduler_addresses:
+              resource = by_address.get(address)
+              if not resource:
+                  raise SystemExit(f"Missing Scheduler resource in saved plan: {address}")
+              after = resource.get("change", {}).get("after") or {}
+              if after.get("paused") is not True:
+                  raise SystemExit(f"Scheduler is not paused in saved plan: {address}")
+
+          sql = by_address.get("google_sql_database_instance.runtime")
+          if not sql:
+              raise SystemExit("Cloud SQL instance is absent from reconciliation plan.")
+          sql_after = sql.get("change", {}).get("after") or {}
+          ip_config = (((sql_after.get("settings") or [{}])[0].get("ip_configuration") or [{}])[0])
+          if ip_config.get("ipv4_enabled") is not False:
+              raise SystemExit("Cloud SQL public IPv4 is not disabled in saved plan.")
+
+          def collect_name_values(value, found):
+              if isinstance(value, dict):
+                  name = value.get("name")
+                  if isinstance(name, str) and "value" in value and isinstance(value.get("value"), str):
+                      found[name] = value["value"]
+                  for child in value.values():
+                      collect_name_values(child, found)
+              elif isinstance(value, list):
+                  for child in value:
+                      collect_name_values(child, found)
+
+          for address in producer_addresses:
+              resource = by_address.get(address)
+              if not resource:
+                  raise SystemExit(f"Missing producer job in saved plan: {address}")
+              env = {}
+              collect_name_values(resource.get("change", {}).get("after"), env)
+              for name, expected in preserved_runtime_env.items():
+                  if env.get(name) != expected:
+                      raise SystemExit(f"Producer environment drift for {address}: {name}")
+              if env.get("PRIVATE_IP") != "true":
+                  raise SystemExit(f"Producer is not private-IP enabled in saved plan: {address}")
+
+          Path("phase3-apply-plan-actions.txt").write_text(
+              "\n".join(sorted(inventory)) + "\n",
+              encoding="utf-8",
+          )
+          Path("phase3-apply-plan-policy.txt").write_text(
+              "policy_version=1\n"
+              f"create_count={create_count}\n"
+              f"update_count={update_count}\n"
+              f"delete_count={delete_count}\n"
+              "delete_allowlist_exact=true\n"
+              "all_schedulers_paused=true\n"
+              "cloud_sql_public_ipv4=false\n"
+              "producer_environment_preserved=true\n"
+              "producer_private_ip=true\n",
+              encoding="utf-8",
+          )
+          PY
+          cat phase3-apply-plan-policy.txt
+
+      - name: Hash and write saved-plan receipt
+        id: receipt
+        shell: bash
+        env:
+          PLAN_FILE: ${{ steps.plan.outputs.plan_file }}
+        run: |
+          set -euo pipefail
+          plan_sha="$(sha256sum "${PLAN_FILE}" | awk '{print $1}')"
+          plan_text_sha="$(sha256sum phase3-apply-plan-redacted.txt | awk '{print $1}')"
+          config_sha="$(sha256sum deploy/runtime-v2/phase3-reconciliation.tfvars.json | awk '{print $1}')"
+          lock_sha="$(sha256sum deploy/runtime-v2/terraform/.terraform.lock.hcl | awk '{print $1}')"
+          moved_sha="$(sha256sum deploy/runtime-v2/terraform/moved.tf | awk '{print $1}')"
+          actions_sha="$(sha256sum phase3-apply-plan-actions.txt | awk '{print $1}')"
+          plan_uri="gs://${STATE_BUCKET}/phase3-plans/${GITHUB_SHA}/phase3-runtime-v2.tfplan"
+          receipt_uri="gs://${STATE_BUCKET}/phase3-plans/${GITHUB_SHA}/phase3-runtime-v2.receipt.json"
+          python - <<PY
+          import json
+          from pathlib import Path
+          receipt = {
+              "schema_version": 1,
+              "repository_id": "${GITHUB_REPOSITORY_ID}",
+              "repository": "${GITHUB_REPOSITORY}",
+              "source_revision": "${GITHUB_SHA}",
+              "project_id": "${PROJECT_ID}",
+              "project_number": "${PROJECT_NUMBER}",
+              "region": "${REGION}",
+              "workload_identity_provider": "${WIF_PROVIDER}",
+              "service_account": "${DEPLOYER_SERVICE_ACCOUNT}",
+              "terraform_version": "1.11.4",
+              "terraform_mode": "saved_plan_only",
+              "plan_result": "changes_present",
+              "mode": "shadow",
+              "schedules_enabled": False,
+              "public_dashboard_enabled": False,
+              "vault_enabled": True,
+              "runtime_job_execution": False,
+              "state_import": False,
+              "terraform_apply": False,
+              "binary_plan_github_uploaded": False,
+              "plan_json_uploaded": False,
+              "create_count": 28,
+              "update_count": 17,
+              "delete_count": 10,
+              "delete_allowlist_exact": True,
+              "all_schedulers_paused": True,
+              "cloud_sql_public_ipv4": False,
+              "producer_environment_preserved": True,
+              "producer_private_ip": True,
+              "plan_sha256": "${plan_sha}",
+              "redacted_plan_sha256": "${plan_text_sha}",
+              "reconciliation_config_sha256": "${config_sha}",
+              "terraform_lock_sha256": "${lock_sha}",
+              "moved_tf_sha256": "${moved_sha}",
+              "action_inventory_sha256": "${actions_sha}",
+              "plan_gcs_uri": "${plan_uri}",
+              "receipt_gcs_uri": "${receipt_uri}",
+          }
+          Path("phase3-runtime-v2.receipt.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          echo "plan_sha=${plan_sha}" >> "$GITHUB_OUTPUT"
+          echo "plan_uri=${plan_uri}" >> "$GITHUB_OUTPUT"
+          echo "receipt_uri=${receipt_uri}" >> "$GITHUB_OUTPUT"
+          cat phase3-runtime-v2.receipt.json
+
+      - name: Store saved plan privately in GCS
+        shell: bash
+        env:
+          PLAN_FILE: ${{ steps.plan.outputs.plan_file }}
+          PLAN_SHA: ${{ steps.receipt.outputs.plan_sha }}
+          PLAN_URI: ${{ steps.receipt.outputs.plan_uri }}
+          RECEIPT_URI: ${{ steps.receipt.outputs.receipt_uri }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp "${PLAN_FILE}" "${PLAN_URI}" --quiet
+          gcloud storage cp phase3-runtime-v2.receipt.json "${RECEIPT_URI}" --quiet
+          roundtrip="${RUNNER_TEMP}/phase3-runtime-v2.roundtrip.tfplan"
+          gcloud storage cp "${PLAN_URI}" "${roundtrip}" --quiet
+          roundtrip_sha="$(sha256sum "${roundtrip}" | awk '{print $1}')"
+          rm -f "${roundtrip}"
+          if [[ "${roundtrip_sha}" != "${PLAN_SHA}" ]]; then
+            echo "Private saved-plan round-trip SHA-256 mismatch." >&2
+            exit 1
+          fi
+          echo "Private GCS saved-plan round-trip verified: ${PLAN_SHA}"
+
+      - name: Delete sensitive local plan JSON and binary after storage
+        if: always()
+        shell: bash
+        env:
+          PLAN_FILE: ${{ steps.plan.outputs.plan_file }}
+          PLAN_JSON: ${{ steps.plan.outputs.plan_json }}
+        run: |
+          rm -f "${PLAN_FILE:-}" "${PLAN_JSON:-}"
+
+      - name: Upload non-sensitive saved-plan evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-saved-apply-plan-${{ github.run_id }}
+          path: |
+            phase3-apply-plan-redacted.txt
+            phase3-apply-plan-actions.txt
+            phase3-apply-plan-policy.txt
+            phase3-runtime-v2.receipt.json
+          if-no-files-found: error
+          retention-days: 30
