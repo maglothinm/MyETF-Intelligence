@@ -1,20 +1,19 @@
 name: Phase 5 Vault admin IAM repair
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/phase5_vault_admin_iam_repair.yml"
-      - "deploy/runtime-v2/terraform/vault_admin_metadata.tf"
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
 jobs:
   repair-and-prove:
-    if: github.repository_id == '1349678672'
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -108,7 +107,10 @@ jobs:
             fi
             sleep 10
           done
-          [[ "${bucket_visible}" == "true" ]] || { echo "Temporary Storage authority did not become effective." >&2; exit 1; }
+          [[ "${bucket_visible}" == "true" ]] || {
+            echo "Temporary Storage authority did not become effective." >&2
+            exit 1
+          }
 
           gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
             --member "${admin_member}" --role roles/storage.bucketViewer --quiet
@@ -135,9 +137,12 @@ jobs:
             --quiet --format=none
           gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
             --wait --format=json > phase5-vault-admin-repair/admin-execute.json
-          execution="$(gcloud run jobs executions describe-latest --job "${ADMIN_JOB}" \
-            --project "${PROJECT_ID}" --region "${REGION}" --format='value(metadata.name)')"
-          [[ -n "${execution}" ]]
+          execution="$(jq -r '.metadata.name // .name // empty' \
+            phase5-vault-admin-repair/admin-execute.json)"
+          [[ "${execution}" == polititrack-admin-* ]] || {
+            echo "Successful admin execution receipt is missing from command output." >&2
+            exit 1
+          }
 
           cleanup
           trap - EXIT
