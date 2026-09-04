@@ -1,0 +1,143 @@
+name: Phase 4/5 promotion control tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v5.yml"
+      - ".github/workflows/phase5_production_promotion.yml"
+      - ".github/workflows/phase5_control_plane_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "deploy/runtime-v2/phase4-approved-image.json"
+      - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+      - "tests/test_validate_runtime_promotion.py"
+      - "docs/runtime-v2/PHASE5_PRODUCTION_PROMOTION.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_control_plane_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "tests/test_validate_runtime_promotion.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-control-plane:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out proposed control revision
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest PyYAML
+
+      - name: Validate evidence logic and negative paths
+        run: |
+          set -euo pipefail
+          python -m py_compile deploy/runtime-v2/validate_runtime_promotion.py
+          python -m pytest -q tests/test_validate_runtime_promotion.py
+
+      - name: Validate shell and workflow syntax
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/runtime_promotion_control.sh
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          expected = {
+              "phase4_live_shadow_validation_v5.yml": "Phase 4 live shadow validation v5",
+              "phase5_production_promotion.yml": "Phase 5 Runtime v2 production promotion",
+          }
+          for filename, name in expected.items():
+              path = Path(".github/workflows") / filename
+              data = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+              if data.get("name") != name:
+                  raise SystemExit(f"{filename} workflow name changed")
+          PY
+
+      - name: Enforce fail-closed promotion invariants
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          phase4 = Path(".github/workflows/phase4_live_shadow_validation_v5.yml").read_text(encoding="utf-8")
+          phase5 = Path(".github/workflows/phase5_production_promotion.yml").read_text(encoding="utf-8")
+          control = Path("deploy/runtime-v2/runtime_promotion_control.sh").read_text(encoding="utf-8")
+          validator = Path("deploy/runtime-v2/validate_runtime_promotion.py").read_text(encoding="utf-8")
+
+          phase4_required = (
+              "group: runtime-v2-live-controller",
+              "for cycle in 1 2",
+              "execute_admin_init",
+              "configure_runtime shadow",
+              "verify_legacy_workflows_state active",
+              "unique_successful_execution_receipts == 8",
+              "phase4_ready_for_phase5",
+          )
+          phase5_required = (
+              'workflows: ["Phase 4 live shadow validation v5"]',
+              "actions: write",
+              "disable_legacy_workflows",
+              "drain_legacy_workflows",
+              "configure_runtime production",
+              "phase5_smoke",
+              "make_web_public",
+              "verify_public_web",
+              "resume_producer_schedulers",
+              "configure_runtime_best_effort shadow",
+              "enable_legacy_workflows",
+              "dispatch_legacy_recovery",
+              "phase5_complete",
+          )
+          control_required = (
+              "roles/run.jobsExecutorWithOverrides",
+              "roles/logging.viewAccessor",
+              "remove_execution_authority",
+              "verify_execution_authority_removed",
+              "verify_service_account_user_removed",
+              "--update-env-vars \"POLITITRACK_TRIGGER_SOURCE=${trigger},SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}\"",
+              "disabled_manually",
+              "Cloud SQL is not private-only",
+          )
+          validator_required = (
+              "duplicate Runtime v2 run receipt",
+              "overlapped the preceding protected writer",
+              "parent digest does not bind the preceding head",
+              "input generation is stale",
+              "phase4_ready_for_phase5",
+              "phase5_complete",
+          )
+          for label, source, required in (
+              ("Phase 4 workflow", phase4, phase4_required),
+              ("Phase 5 workflow", phase5, phase5_required),
+              ("control library", control, control_required),
+              ("validator", validator, validator_required),
+          ):
+              missing = [value for value in required if value not in source]
+              if missing:
+                  raise SystemExit(f"{label} is missing: {', '.join(missing)}")
+
+          phase4_live_step = phase4.split("- name: Execute two serialized, evidence-bound shadow cycles", 1)[1]
+          phase4_live_step = phase4_live_step.split("- name: Fail-closed cleanup and evidence check", 1)[0]
+          forbidden = ("resume_producer_schedulers", "make_web_public", "disable_legacy_workflows")
+          present = [value for value in forbidden if value in phase4_live_step]
+          if present:
+              raise SystemExit("Phase 4 attempts a production mutation: " + ", ".join(present))
+          PY
+
+      - name: Run repository verifier
+        run: bash verify.sh
