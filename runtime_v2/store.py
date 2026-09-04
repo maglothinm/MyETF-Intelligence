@@ -17,6 +17,7 @@ from .database import DatabaseConfigurationError, connect, database_url
 
 NAMESPACES = frozenset({"legislative", "executive", "ai", "dashboard", "simulation"})
 RUNTIME_MODES = frozenset({"shadow", "production"})
+ATTESTED_MODE_EVIDENCE_KINDS = frozenset({"runner_explicit", "snapshot_provenance"})
 
 
 class StateStoreError(RuntimeError):
@@ -42,6 +43,24 @@ def _json(value: Any) -> Any:
     if isinstance(value, str):
         return json.loads(value)
     return value
+
+
+def _runtime_mode_fields(runtime_mode: Any, raw_evidence: Any) -> dict[str, Any]:
+    evidence = dict(_json(raw_evidence) or {})
+    kind = evidence.get("kind")
+    mode = str(runtime_mode) if runtime_mode is not None else None
+    return {
+        "runtime_mode": mode,
+        "runtime_mode_verified": (
+            mode in RUNTIME_MODES and kind in ATTESTED_MODE_EVIDENCE_KINDS
+        ),
+        "observed_runtime_mode": (
+            evidence.get("observed_value")
+            if kind == "legacy_unverified"
+            else None
+        ),
+        "runtime_mode_evidence": evidence,
+    }
 
 
 class LockedNamespace:
@@ -186,16 +205,44 @@ class LockedNamespace:
                     (self.namespace, generation, snapshot_id, packed.sha256),
                 )
                 if successful_run_id is not None:
+                    mode = provenance_payload.get("mode")
+                    if mode not in RUNTIME_MODES:
+                        raise StateStoreError(
+                            f"cannot atomically complete {self.namespace} run without an attested mode"
+                        )
+                    mode_evidence = {
+                        "schema_version": 1,
+                        "kind": "snapshot_provenance",
+                        "mode": mode,
+                        "snapshot_id": snapshot.snapshot_id,
+                        "snapshot_sha256": snapshot.snapshot_sha256,
+                    }
                     cursor.execute(
-                        "UPDATE runtime_job_runs SET status = 'success', finished_at = now(), "
+                        "UPDATE runtime_job_runs AS job_run "
+                        "SET status = 'success', finished_at = now(), "
                         "snapshot_id = %s::uuid, snapshot_sha256 = %s, error_code = '', "
-                        "side_effects_possible = false WHERE run_id = %s::uuid "
-                        "AND namespace = %s AND status = 'running' RETURNING run_id::text",
+                        "side_effects_possible = false, runtime_mode_evidence = %s::jsonb "
+                        "FROM runtime_state_snapshots AS committed_snapshot "
+                        "WHERE job_run.run_id = %s::uuid AND job_run.namespace = %s "
+                        "AND job_run.status = 'running' "
+                        "AND job_run.runtime_mode_evidence ->> 'kind' = 'runner_explicit' "
+                        "AND job_run.runtime_mode_evidence ->> 'mode' = job_run.runtime_mode "
+                        "AND committed_snapshot.snapshot_id = %s::uuid "
+                        "AND committed_snapshot.snapshot_sha256 = %s "
+                        "AND committed_snapshot.namespace = job_run.namespace "
+                        "AND committed_snapshot.source_revision = job_run.source_revision "
+                        "AND committed_snapshot.source_provenance ->> 'authority' = 'runtime_v2' "
+                        "AND committed_snapshot.source_provenance ->> 'job' = job_run.job_name "
+                        "AND committed_snapshot.source_provenance ->> 'mode' = job_run.runtime_mode "
+                        "RETURNING job_run.run_id::text",
                         (
                             snapshot.snapshot_id,
                             snapshot.snapshot_sha256,
+                            json.dumps(mode_evidence, sort_keys=True),
                             successful_run_id,
                             self.namespace,
+                            snapshot.snapshot_id,
+                            snapshot.snapshot_sha256,
                         ),
                     )
                     if cursor.fetchone() is None:
@@ -220,12 +267,17 @@ class LockedNamespace:
         if runtime_mode not in RUNTIME_MODES:
             raise StateStoreError("invalid Runtime v2 mode")
         run_id = str(uuid.uuid4())
+        mode_evidence = {
+            "schema_version": 1,
+            "kind": "runner_explicit",
+            "mode": runtime_mode,
+        }
         with closing(self.connection.cursor()) as cursor:
             cursor.execute(
                 "INSERT INTO runtime_job_runs "
                 "(run_id, job_name, namespace, trigger_source, source_revision, runtime_mode, "
-                "status, started_at) "
-                "VALUES (%s::uuid, %s, %s, %s, %s, %s, 'running', now())",
+                "runtime_mode_evidence, status, started_at) "
+                "VALUES (%s::uuid, %s, %s, %s, %s, %s, %s::jsonb, 'running', now())",
                 (
                     run_id,
                     job_name,
@@ -233,6 +285,7 @@ class LockedNamespace:
                     trigger_source,
                     source_revision,
                     runtime_mode,
+                    json.dumps(mode_evidence, sort_keys=True),
                 ),
             )
         return run_id
@@ -246,8 +299,10 @@ class LockedNamespace:
         error_code: str = "",
         side_effects_possible: bool = False,
     ) -> None:
-        if status not in {"success", "failure", "skipped"}:
-            raise StateStoreError("invalid runtime job conclusion")
+        if status not in {"failure", "skipped"}:
+            raise StateStoreError(
+                "successful runtime jobs must commit their snapshot atomically"
+            )
         with closing(self.connection.cursor()) as cursor:
             cursor.execute(
                 "UPDATE runtime_job_runs SET status = %s, finished_at = now(), "
@@ -296,7 +351,12 @@ class PostgresSnapshotStore:
         return connection
 
     def initialize_schema(self, migration: Path | None = None) -> None:
-        path = migration or Path(__file__).resolve().parents[1] / "migrations" / "20260901_runtime_v2.sql"
+        path = (
+            migration
+            or Path(__file__).resolve().parents[1]
+            / "migrations"
+            / "20260904_runtime_v2_mode_quarantine.sql"
+        )
         sql = path.read_text(encoding="utf-8")
         connection = self._connect()
         try:
@@ -363,9 +423,10 @@ class PostgresSnapshotStore:
                 ]
                 cursor.execute(
                     "SELECT DISTINCT ON (r.job_name) r.run_id::text, r.job_name, r.namespace, "
-                    "r.runtime_mode, r.status, r.trigger_source, r.source_revision, r.started_at, "
-                    "r.finished_at, r.snapshot_id::text, r.snapshot_sha256, s.parent_sha256, "
-                    "s.generation, s.created_at, r.error_code, r.side_effects_possible "
+                    "r.runtime_mode, r.runtime_mode_evidence, r.status, r.trigger_source, "
+                    "r.source_revision, r.started_at, r.finished_at, r.snapshot_id::text, "
+                    "r.snapshot_sha256, s.parent_sha256, s.generation, s.created_at, "
+                    "r.error_code, r.side_effects_possible "
                     "FROM runtime_job_runs r LEFT JOIN runtime_state_snapshots s "
                     "ON s.snapshot_id = r.snapshot_id "
                     "ORDER BY r.job_name, r.started_at DESC, r.run_id DESC"
@@ -375,23 +436,23 @@ class PostgresSnapshotStore:
                         "run_id": row[0],
                         "job_name": row[1],
                         "namespace": row[2],
-                        "runtime_mode": row[3],
-                        "status": row[4],
-                        "trigger_source": row[5],
-                        "source_revision": row[6],
-                        "started_at": row[7].isoformat().replace("+00:00", "Z"),
-                        "finished_at": row[8].isoformat().replace("+00:00", "Z") if row[8] else None,
-                        "snapshot_id": row[9],
-                        "snapshot_sha256": row[10],
-                        "parent_sha256": row[11],
-                        "snapshot_generation": int(row[12]) if row[12] is not None else None,
+                        **_runtime_mode_fields(row[3], row[4]),
+                        "status": row[5],
+                        "trigger_source": row[6],
+                        "source_revision": row[7],
+                        "started_at": row[8].isoformat().replace("+00:00", "Z"),
+                        "finished_at": row[9].isoformat().replace("+00:00", "Z") if row[9] else None,
+                        "snapshot_id": row[10],
+                        "snapshot_sha256": row[11],
+                        "parent_sha256": row[12],
+                        "snapshot_generation": int(row[13]) if row[13] is not None else None,
                         "snapshot_created_at": (
-                            row[13].isoformat().replace("+00:00", "Z")
-                            if row[13]
+                            row[14].isoformat().replace("+00:00", "Z")
+                            if row[14]
                             else None
                         ),
-                        "error_code": row[14] or "",
-                        "side_effects_possible": bool(row[15]),
+                        "error_code": row[15] or "",
+                        "side_effects_possible": bool(row[16]),
                     }
                     for row in cursor.fetchall()
                 ]
@@ -407,8 +468,9 @@ class PostgresSnapshotStore:
                 for branch in ("legislative", "executive", "ai"):
                     cursor.execute(
                         "SELECT r.run_id::text, r.status, r.started_at, r.finished_at, "
-                        "r.trigger_source, r.runtime_mode, r.error_code, r.source_revision, "
-                        "r.snapshot_id::text, r.snapshot_sha256, s.parent_sha256, s.generation, "
+                        "r.trigger_source, r.runtime_mode, r.runtime_mode_evidence, "
+                        "r.error_code, r.source_revision, r.snapshot_id::text, "
+                        "r.snapshot_sha256, s.parent_sha256, s.generation, "
                         "s.created_at "
                         "FROM runtime_job_runs r LEFT JOIN runtime_state_snapshots s "
                         "ON s.snapshot_id = r.snapshot_id "
@@ -425,7 +487,7 @@ class PostgresSnapshotStore:
                                 "branch": branch,
                                 "run_attempt": 1,
                                 "evidence_source": "runtime_v2",
-                                "runtime_mode": row[5],
+                                **_runtime_mode_fields(row[5], row[6]),
                                 "workflow_created_utc": row[2].isoformat().replace("+00:00", "Z"),
                                 "workflow_started_utc": row[2].isoformat().replace("+00:00", "Z"),
                                 "started_utc": row[2].isoformat().replace("+00:00", "Z"),
@@ -435,23 +497,31 @@ class PostgresSnapshotStore:
                                 "conclusion": conclusion,
                                 "success": True if conclusion == "success" else (False if conclusion == "failure" else None),
                                 "error_count": 1 if conclusion == "failure" else 0,
-                                "event_name": "external_scheduler",
+                                "event_name": row[4] or "external_scheduler",
                                 "trigger_source": row[4] or "external_scheduler",
                                 "run_url": "",
-                                "error_code": row[6] or "",
-                                "source_revision": row[7],
-                                "snapshot_id": row[8],
-                                "snapshot_sha256": row[9],
-                                "parent_sha256": row[10],
-                                "snapshot_generation": int(row[11]) if row[11] is not None else None,
+                                "error_code": row[7] or "",
+                                "source_revision": row[8],
+                                "snapshot_id": row[9],
+                                "snapshot_sha256": row[10],
+                                "parent_sha256": row[11],
+                                "snapshot_generation": int(row[12]) if row[12] is not None else None,
                                 "snapshot_created_utc": (
-                                    row[12].isoformat().replace("+00:00", "Z")
-                                    if row[12]
+                                    row[13].isoformat().replace("+00:00", "Z")
+                                    if row[13]
                                     else None
                                 ),
                             }
                         )
-                    branches[branch] = {"available": bool(attempts), "attempts": attempts}
+                    branches[branch] = {
+                        "available": any(
+                            attempt["runtime_mode_verified"]
+                            and attempt["runtime_mode_evidence"].get("kind")
+                            == "snapshot_provenance"
+                            for attempt in attempts
+                        ),
+                        "attempts": attempts,
+                    }
             return {
                 "schema_version": 1,
                 "observed_at_utc": utc_now(),
