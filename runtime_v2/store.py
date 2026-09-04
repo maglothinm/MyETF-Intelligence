@@ -52,7 +52,9 @@ def _runtime_mode_fields(runtime_mode: Any, raw_evidence: Any) -> dict[str, Any]
     return {
         "runtime_mode": mode,
         "runtime_mode_verified": (
-            mode in RUNTIME_MODES and kind in ATTESTED_MODE_EVIDENCE_KINDS
+            mode in RUNTIME_MODES
+            and kind in ATTESTED_MODE_EVIDENCE_KINDS
+            and evidence.get("mode") == mode
         ),
         "observed_runtime_mode": (
             evidence.get("observed_value")
@@ -233,6 +235,7 @@ class LockedNamespace:
                         "AND committed_snapshot.source_revision = job_run.source_revision "
                         "AND committed_snapshot.source_provenance ->> 'authority' = 'runtime_v2' "
                         "AND committed_snapshot.source_provenance ->> 'job' = job_run.job_name "
+                        "AND committed_snapshot.source_provenance ->> 'trigger_source' = job_run.trigger_source "
                         "AND committed_snapshot.source_provenance ->> 'mode' = job_run.runtime_mode "
                         "RETURNING job_run.run_id::text",
                         (
@@ -515,9 +518,14 @@ class PostgresSnapshotStore:
                         )
                     branches[branch] = {
                         "available": any(
-                            attempt["runtime_mode_verified"]
+                            attempt["conclusion"] == "success"
+                            and attempt["runtime_mode_verified"]
                             and attempt["runtime_mode_evidence"].get("kind")
                             == "snapshot_provenance"
+                            and attempt["snapshot_id"]
+                            == attempt["runtime_mode_evidence"].get("snapshot_id")
+                            and attempt["snapshot_sha256"]
+                            == attempt["runtime_mode_evidence"].get("snapshot_sha256")
                             for attempt in attempts
                         ),
                         "attempts": attempts,
