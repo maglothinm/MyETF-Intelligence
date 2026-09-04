@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
+import uuid
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -308,3 +312,315 @@ def test_legacy_insert_omitting_evidence_has_no_default_escape_hatch() -> None:
     store = STORE.read_text(encoding="utf-8")
     assert '"runtime_mode_evidence, status, started_at) "' in store
     assert '"%s::jsonb, \'running\', now())"' in store
+
+
+def _postgres_connection():
+    if os.environ.get("RUNTIME_V2_TEST_POSTGRES") != "1":
+        pytest.skip("PostgreSQL integration service is not enabled")
+    import pg8000.dbapi
+
+    connection = pg8000.dbapi.connect(
+        user="postgres",
+        password="runtime-v2-test",
+        host="127.0.0.1",
+        port=5432,
+        database="postgres",
+    )
+    connection.autocommit = True
+    return connection
+
+
+def _create_predecessor_schema(cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE runtime_state_snapshots (
+            snapshot_id uuid PRIMARY KEY,
+            namespace text NOT NULL,
+            generation bigint NOT NULL,
+            parent_sha256 char(64),
+            snapshot_sha256 char(64) NOT NULL,
+            source_revision text NOT NULL,
+            source_provenance jsonb NOT NULL DEFAULT '{}'::jsonb,
+            manifest jsonb NOT NULL,
+            payload bytea NOT NULL,
+            created_at timestamptz NOT NULL,
+            UNIQUE (namespace, generation),
+            UNIQUE (namespace, snapshot_sha256)
+        );
+        CREATE TABLE runtime_state_heads (
+            namespace text PRIMARY KEY,
+            generation bigint NOT NULL,
+            snapshot_id uuid NOT NULL REFERENCES runtime_state_snapshots(snapshot_id),
+            snapshot_sha256 char(64) NOT NULL,
+            updated_at timestamptz NOT NULL
+        );
+        CREATE TABLE runtime_job_runs (
+            run_id uuid PRIMARY KEY,
+            job_name text NOT NULL,
+            namespace text NOT NULL,
+            trigger_source text NOT NULL,
+            source_revision text NOT NULL,
+            runtime_mode text NOT NULL
+                CONSTRAINT runtime_job_runs_runtime_mode_check
+                CHECK (runtime_mode IN ('shadow', 'production')),
+            status text NOT NULL,
+            started_at timestamptz NOT NULL,
+            finished_at timestamptz,
+            snapshot_id uuid REFERENCES runtime_state_snapshots(snapshot_id),
+            snapshot_sha256 char(64),
+            error_code text NOT NULL DEFAULT '',
+            side_effects_possible boolean NOT NULL DEFAULT false
+        );
+        """
+    )
+
+
+def _seed_recovered_inventory(cursor) -> None:
+    generations = {
+        EXPECTED_ROWS[0]["run_id"]: 1,
+        EXPECTED_ROWS[1]["run_id"]: 2,
+        EXPECTED_ROWS[2]["run_id"]: 2,
+        EXPECTED_ROWS[3]["run_id"]: 2,
+        EXPECTED_ROWS[4]["run_id"]: 3,
+        EXPECTED_ROWS[5]["run_id"]: 2,
+    }
+    snapshot_ids: dict[str, str] = {}
+    for index, row in enumerate(EXPECTED_ROWS, start=1):
+        snapshot_id = str(uuid.UUID(int=index))
+        snapshot_ids[row["snapshot_sha256"]] = snapshot_id
+        provenance = {
+            "authority": "runtime_v2",
+            "job": row["job_name"],
+            "trigger_source": "external_scheduler",
+        }
+        if index == 1:
+            # Proves exact provenance corrects a contradictory non-NULL legacy label.
+            provenance["mode"] = "shadow"
+        started_at = f"2026-09-01 19:{10 + index * 5:02d}:00+00"
+        created_at = f"2026-09-01 19:{10 + index * 5:02d}:30+00"
+        finished_at = f"2026-09-01 19:{10 + index * 5:02d}:59+00"
+        cursor.execute(
+            """
+            INSERT INTO runtime_state_snapshots (
+                snapshot_id, namespace, generation, parent_sha256,
+                snapshot_sha256, source_revision, source_provenance,
+                manifest, payload, created_at
+            ) VALUES (
+                %s::uuid, %s, %s, %s, %s, %s, %s::jsonb,
+                '{}'::jsonb, %s, %s::timestamptz
+            )
+            """,
+            (
+                snapshot_id,
+                row["namespace"],
+                generations[row["run_id"]],
+                None if generations[row["run_id"]] == 1 else "0" * 64,
+                row["snapshot_sha256"],
+                row["source_revision"],
+                json.dumps(provenance, sort_keys=True),
+                ("payload-" + row["run_id"]).encode(),
+                created_at,
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO runtime_job_runs (
+                run_id, job_name, namespace, trigger_source, source_revision,
+                runtime_mode, status, started_at, finished_at, snapshot_id,
+                snapshot_sha256, error_code, side_effects_possible
+            ) VALUES (
+                %s::uuid, %s, %s, 'external_scheduler', %s,
+                'production', 'success', %s::timestamptz, %s::timestamptz,
+                %s::uuid, %s, '', false
+            )
+            """,
+            (
+                row["run_id"],
+                row["job_name"],
+                row["namespace"],
+                row["source_revision"],
+                started_at,
+                finished_at,
+                snapshot_id,
+                row["snapshot_sha256"],
+            ),
+        )
+
+    for namespace, head in EXPECTED_BASELINE_HEADS.items():
+        cursor.execute(
+            """
+            INSERT INTO runtime_state_heads (
+                namespace, generation, snapshot_id, snapshot_sha256, updated_at
+            ) VALUES (%s, %s, %s::uuid, %s, '2026-09-01 20:00:00+00')
+            """,
+            (
+                namespace,
+                head["generation"],
+                snapshot_ids[head["snapshot_sha256"]],
+                head["snapshot_sha256"],
+            ),
+        )
+
+
+def _fetch_all(cursor, query: str):
+    cursor.execute(query)
+    return cursor.fetchall()
+
+
+def test_postgres_quarantine_is_idempotent_and_preserves_state_history() -> None:
+    connection = _postgres_connection()
+    schema = "runtime_mode_quarantine_" + uuid.uuid4().hex
+    quoted_schema = '"' + schema + '"'
+    try:
+        cursor = connection.cursor()
+        cursor.execute(f"CREATE SCHEMA {quoted_schema}")
+        cursor.execute(f"SET search_path TO {quoted_schema}")
+        _create_predecessor_schema(cursor)
+        _seed_recovered_inventory(cursor)
+
+        snapshots_before = _fetch_all(
+            cursor,
+            """
+            SELECT snapshot_id::text, namespace, generation, parent_sha256,
+                   snapshot_sha256, source_revision, source_provenance,
+                   manifest, payload, created_at
+            FROM runtime_state_snapshots
+            ORDER BY namespace, generation
+            """,
+        )
+        heads_before = _fetch_all(
+            cursor,
+            """
+            SELECT namespace, generation, snapshot_id::text, snapshot_sha256, updated_at
+            FROM runtime_state_heads ORDER BY namespace
+            """,
+        )
+
+        cursor.execute(_sql())
+
+        snapshots_after = _fetch_all(
+            cursor,
+            """
+            SELECT snapshot_id::text, namespace, generation, parent_sha256,
+                   snapshot_sha256, source_revision, source_provenance,
+                   manifest, payload, created_at
+            FROM runtime_state_snapshots
+            ORDER BY namespace, generation
+            """,
+        )
+        heads_after = _fetch_all(
+            cursor,
+            """
+            SELECT namespace, generation, snapshot_id::text, snapshot_sha256, updated_at
+            FROM runtime_state_heads ORDER BY namespace
+            """,
+        )
+        assert snapshots_after == snapshots_before
+        assert heads_after == heads_before
+
+        runs_after_first = _fetch_all(
+            cursor,
+            """
+            SELECT run_id::text, runtime_mode, runtime_mode_evidence
+            FROM runtime_job_runs ORDER BY run_id
+            """,
+        )
+        by_run = {row[0]: (row[1], row[2]) for row in runs_after_first}
+        attested_mode, attested_evidence = by_run[EXPECTED_ROWS[0]["run_id"]]
+        assert attested_mode == "shadow"
+        assert attested_evidence["kind"] == "snapshot_provenance"
+        assert attested_evidence["previous_observed_value"] == "production"
+        for row in EXPECTED_ROWS[1:]:
+            mode, evidence = by_run[row["run_id"]]
+            assert mode is None
+            assert evidence["kind"] == "legacy_unverified"
+            assert evidence["observed_value"] == "production"
+
+        cursor.execute(_sql())
+        runs_after_second = _fetch_all(
+            cursor,
+            """
+            SELECT run_id::text, runtime_mode, runtime_mode_evidence
+            FROM runtime_job_runs ORDER BY run_id
+            """,
+        )
+        assert runs_after_second == runs_after_first
+        assert snapshots_after == _fetch_all(
+            cursor,
+            """
+            SELECT snapshot_id::text, namespace, generation, parent_sha256,
+                   snapshot_sha256, source_revision, source_provenance,
+                   manifest, payload, created_at
+            FROM runtime_state_snapshots
+            ORDER BY namespace, generation
+            """,
+        )
+        assert heads_after == _fetch_all(
+            cursor,
+            """
+            SELECT namespace, generation, snapshot_id::text, snapshot_sha256, updated_at
+            FROM runtime_state_heads ORDER BY namespace
+            """,
+        )
+
+        with pytest.raises(Exception):
+            cursor.execute(
+                """
+                INSERT INTO runtime_job_runs (
+                    run_id, job_name, namespace, trigger_source, source_revision,
+                    runtime_mode, status, started_at
+                ) VALUES (
+                    '10000000-0000-0000-0000-000000000001',
+                    'legislative', 'legislative', 'shadow', %s,
+                    'shadow', 'running', now()
+                )
+                """,
+                (REVISION if "REVISION" in globals() else "a" * 40,),
+            )
+        with pytest.raises(Exception):
+            cursor.execute(
+                """
+                INSERT INTO runtime_job_runs (
+                    run_id, job_name, namespace, trigger_source, source_revision,
+                    runtime_mode, runtime_mode_evidence, status, started_at
+                ) VALUES (
+                    '10000000-0000-0000-0000-000000000002',
+                    'legislative', 'legislative', 'shadow', %s,
+                    'shadow', '{}'::jsonb, 'running', now()
+                )
+                """,
+                ("a" * 40,),
+            )
+    finally:
+        cleanup = connection.cursor()
+        cleanup.execute("SET search_path TO public")
+        cleanup.execute(f"DROP SCHEMA IF EXISTS {quoted_schema} CASCADE")
+        connection.close()
+
+
+def test_postgres_empty_initialization_is_repeatable_and_fail_closed() -> None:
+    connection = _postgres_connection()
+    schema = "runtime_mode_empty_" + uuid.uuid4().hex
+    quoted_schema = '"' + schema + '"'
+    try:
+        cursor = connection.cursor()
+        cursor.execute(f"CREATE SCHEMA {quoted_schema}")
+        cursor.execute(f"SET search_path TO {quoted_schema}")
+        cursor.execute(_sql())
+        cursor.execute(_sql())
+        cursor.execute(
+            """
+            SELECT is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = %s
+              AND table_name = 'runtime_job_runs'
+              AND column_name = 'runtime_mode_evidence'
+            """,
+            (schema,),
+        )
+        assert cursor.fetchone() == ["NO", None]
+    finally:
+        cleanup = connection.cursor()
+        cleanup.execute("SET search_path TO public")
+        cleanup.execute(f"DROP SCHEMA IF EXISTS {quoted_schema} CASCADE")
+        connection.close()
