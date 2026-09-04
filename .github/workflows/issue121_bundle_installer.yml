@@ -63,7 +63,7 @@ jobs:
           PY
           (
             cd "$RUNNER_TEMP/issue121-extracted"
-            sha256sum --check --strict BUNDLE_MANIFEST.sha256
+            grep -v 'BUNDLE_MANIFEST.sha256$' BUNDLE_MANIFEST.sha256 | sha256sum --check --strict
           )
 
           test -f scripts/ai_filing_analyst.py
