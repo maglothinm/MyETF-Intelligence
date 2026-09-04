@@ -14,9 +14,11 @@ def _text() -> str:
 
 def test_rollout_is_canonical_self_path_scoped_main_push() -> None:
     text = _text()
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert 'name: Phase 3 rollout current image and accept' in text
-    assert 'branches:' in text and '- main' in text
-    assert '".github/workflows/phase3_rollout_current_image_acceptance.yml"' in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
