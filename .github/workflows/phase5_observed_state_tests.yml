@@ -7,12 +7,16 @@ on:
       - ".github/workflows/phase4_live_shadow_validation_v6.yml"
       - ".github/workflows/phase5_production_promotion_v2.yml"
       - ".github/workflows/phase5_observed_state_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "tests/test_runtime_promotion_control.sh"
   push:
     branches: [main]
     paths:
       - ".github/workflows/phase5_observed_state_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "tests/test_runtime_promotion_control.sh"
   workflow_dispatch:
 
 permissions:
@@ -29,17 +33,19 @@ jobs:
           python-version: "3.12"
       - name: Install test dependencies
         run: python -m pip install --disable-pip-version-check pytest PyYAML
-      - name: Validate syntax and exact-state invariants
+      - name: Validate syntax, receipts, and exact-state invariants
         run: |
           set -euo pipefail
           bash -n deploy/runtime-v2/runtime_promotion_control.sh
           bash -n deploy/runtime-v2/runtime_promotion_observed_state.sh
+          bash -n tests/test_runtime_promotion_control.sh
           python - <<'PY'
           from pathlib import Path
           import yaml
 
           phase4 = Path('.github/workflows/phase4_live_shadow_validation_v6.yml').read_text()
           phase5 = Path('.github/workflows/phase5_production_promotion_v2.yml').read_text()
+          control = Path('deploy/runtime-v2/runtime_promotion_control.sh').read_text()
           overlay = Path('deploy/runtime-v2/runtime_promotion_observed_state.sh').read_text()
           for path in (
               '.github/workflows/phase4_live_shadow_validation_v6.yml',
@@ -52,21 +58,41 @@ jobs:
               'phase5': ('workflows: ["Phase 4 live shadow validation v6"]',
                          'restore_legacy_workflows_observed', 'disable_legacy_workflows',
                          'rollback_restores_exact_observed_state:true'),
+              'control': ('latest_execution_name() {',
+                          '.metadata.name // .name // empty',
+                          'status.latestCreatedExecution.name',
+                          'Execution receipt ${execution} does not belong to ${job}.',
+                          'latest_execution_name "${ADMIN_JOB}" "${result}"',
+                          'latest_execution_name "${ADMIN_JOB}" "${execute_result}"',
+                          'latest_execution_name "${job}" "${execute_result}"',
+                          'local output="$1"\n  local stem="$2"\n  local execute_result=',
+                          'local logical_name="$1"\n  local trigger="$2"\n  local stem="$3"\n  local job='),
               'overlay': ('SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}',
                           'legislative_trade_tracker_v2.yml"] == "active"',
                           'executive_trade_tracker.yml"] == "active"',
-                          'disabled_manually)', 'verify_legacy_workflows_match_observed',
-                          'status.latestCreatedExecution.name',
-                          'Unable to resolve the latest execution for'),
+                          'disabled_manually)', 'verify_legacy_workflows_match_observed'),
           }
-          for label, text in (('phase4', phase4), ('phase5', phase5), ('overlay', overlay)):
+          for label, text in (
+              ('phase4', phase4),
+              ('phase5', phase5),
+              ('control', control),
+              ('overlay', overlay),
+          ):
               missing = [token for token in required[label] if token not in text]
               if missing:
                   raise SystemExit(f'{label} missing: {missing}')
           if 'enable_legacy_workflows\n' in phase5:
               raise SystemExit('Phase 5 v2 still contains blanket legacy enable')
-          if 'gcloud run jobs executions describe-latest' in overlay:
-              raise SystemExit('Observed-state overlay invokes the unavailable execution helper')
+          obsolete = 'gcloud run jobs executions describe-latest'
+          if obsolete in control or obsolete in overlay:
+              raise SystemExit('An unavailable Cloud Run execution helper remains')
+          if 'latest_execution_name() {' in overlay:
+              raise SystemExit('Observed-state overlay still overrides the shared receipt controller')
+          if 'local output="$1" stem="$2" execute_result=' in control:
+              raise SystemExit('capture_status retains a nounset-unsafe local declaration')
+          if 'local logical_name="$1" trigger="$2" stem="$3" job=' in control:
+              raise SystemExit('execute_producer retains a nounset-unsafe local declaration')
           PY
+          bash tests/test_runtime_promotion_control.sh
           python -m pytest -q tests/test_validate_runtime_promotion.py
           bash verify.sh
