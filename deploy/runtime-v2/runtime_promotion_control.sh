@@ -307,9 +307,20 @@ verify_execution_authority_removed() {
 }
 
 latest_execution_name() {
-  local job="$1"
-  gcloud run jobs executions describe-latest --job "${job}" --project "${PROJECT_ID}" --region "${REGION}" \
-    --format='value(metadata.name)'
+  local job="$1" execution=""
+  for attempt in $(seq 1 12); do
+    execution="$(gcloud run jobs describe "${job}" \
+      --project "${PROJECT_ID}" \
+      --region "${REGION}" \
+      --format='value(status.latestCreatedExecution.name)')"
+    if [[ -n "${execution}" ]]; then
+      printf '%s\n' "${execution}"
+      return 0
+    fi
+    sleep 5
+  done
+  echo "Unable to resolve the latest execution for ${job}." >&2
+  return 1
 }
 
 execute_admin_init() {
