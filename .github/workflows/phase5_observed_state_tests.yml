@@ -27,6 +27,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest PyYAML
       - name: Validate syntax and exact-state invariants
         run: |
           set -euo pipefail
