@@ -1,0 +1,186 @@
+name: Phase 4 repair and redispatch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_repair_and_redispatch.yml"
+      - "docs/runtime-v2/PHASE4_LAST_FAILURE.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: phase4-live-shadow-validation
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+    steps:
+      - name: Check out canonical main and tags
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Stop safely when Phase 4 is already accepted
+        id: ready
+        run: |
+          git fetch --tags origin
+          if git rev-parse -q --verify refs/tags/phase4-ready >/dev/null; then
+            echo "value=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "value=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Authenticate as constrained deployer
+        if: steps.ready.outputs.value != 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        if: steps.ready.outputs.value != 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Restore inert private shadow prerequisites without execution
+        if: steps.ready.outputs.value != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project mismatch." >&2; exit 1; }
+
+          producer_jobs=(polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard)
+          import_jobs=(polititrack-import-legislative polititrack-import-executive polititrack-import-ai)
+          all_jobs=(polititrack-admin "${producer_jobs[@]}" "${import_jobs[@]}" polititrack-vault-lifecycle)
+          executable_jobs=(polititrack-admin "${producer_jobs[@]}")
+          schedulers=(polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle)
+
+          # Clean only known temporary Phase 4 grants. No execution follows in this workflow.
+          for job in "${executable_jobs[@]}"; do
+            gcloud run jobs remove-iam-policy-binding "${job}" \
+              --project "${PROJECT_ID}" --region "${REGION}" \
+              --member "${member}" --role roles/run.jobsExecutorWithOverrides \
+              --quiet >/dev/null 2>&1 || true
+          done
+          gcloud logging views remove-iam-policy-binding _Default \
+            --bucket _Default --location global --project "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.viewAccessor \
+            --quiet >/dev/null 2>&1 || true
+          gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.admin \
+            --condition=None --quiet >/dev/null 2>&1 || true
+
+          for scheduler in "${schedulers[@]}"; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            if [[ "${state}" != "PAUSED" ]]; then
+              gcloud scheduler jobs pause "${scheduler}" \
+                --project "${PROJECT_ID}" --location "${REGION}" --quiet
+            fi
+          done
+
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" --role roles/cloudbuild.builds.viewer \
+            --condition=None --quiet --format=none
+
+          mkdir -p phase4-repair/resources
+          for job in "${all_jobs[@]}"; do
+            gcloud run jobs describe "${job}" --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+              > "phase4-repair/resources/${job}.json"
+          done
+          gcloud run services describe polititrack-web --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+            > phase4-repair/resources/polititrack-web.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def walk(value):
+              if isinstance(value, dict):
+                  yield value
+                  for child in value.values(): yield from walk(child)
+              elif isinstance(value, list):
+                  for child in value: yield from walk(child)
+          accounts=set()
+          for path in Path('phase4-repair/resources').glob('*.json'):
+              data=json.loads(path.read_text(encoding='utf-8'))
+              account=''
+              for item in walk(data):
+                  value=item.get('serviceAccount') or item.get('serviceAccountName')
+                  if isinstance(value,str) and value:
+                      account=value; break
+              if not account: raise SystemExit(f'Unable to resolve service account from {path}')
+              accounts.add(account)
+          Path('phase4-repair/service-accounts.txt').write_text('\n'.join(sorted(accounts))+'\n',encoding='utf-8')
+          PY
+
+          while read -r account; do
+            gcloud iam service-accounts add-iam-policy-binding "${account}" \
+              --project "${PROJECT_ID}" --member "${member}" \
+              --role roles/iam.serviceAccountUser --quiet --format=none
+          done < phase4-repair/service-accounts.txt
+
+          gcloud artifacts docker images describe "${APPROVED_IMAGE}" --project "${PROJECT_ID}" --format=none
+
+          gcloud run jobs update polititrack-admin \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --image "${APPROVED_IMAGE}" --update-env-vars PRIVATE_IP=true \
+            --quiet --format=none
+          for job in "${producer_jobs[@]}"; do
+            gcloud run jobs update "${job}" \
+              --project "${PROJECT_ID}" --region "${REGION}" \
+              --image "${APPROVED_IMAGE}" \
+              --update-env-vars PRIVATE_IP=true,POLITITRACK_MODE=shadow \
+              --quiet --format=none
+          done
+          for job in "${import_jobs[@]}" polititrack-vault-lifecycle; do
+            gcloud run jobs update "${job}" \
+              --project "${PROJECT_ID}" --region "${REGION}" \
+              --image "${APPROVED_IMAGE}" --update-env-vars PRIVATE_IP=true \
+              --quiet --format=none
+          done
+          gcloud run services update polititrack-web \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --image "${APPROVED_IMAGE}" --update-env-vars PRIVATE_IP=true \
+            --quiet --format=none
+
+          for scheduler in "${schedulers[@]}"; do
+            [[ "$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')" == "PAUSED" ]] || {
+              echo "Scheduler ${scheduler} is not PAUSED after repair." >&2; exit 1;
+            }
+          done
+
+      - name: Dispatch newest available validated Phase 4 gate
+        if: steps.ready.outputs.value != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=""
+          for candidate in \
+            phase4_live_shadow_validation_v5.yml \
+            phase4_live_shadow_validation_v4.yml \
+            phase4_live_shadow_validation_v3.yml; do
+            if gh workflow view "${candidate}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              target="${candidate}"
+              break
+            fi
+          done
+          [[ -n "${target}" ]] || { echo "No validated Phase 4 workflow is registered." >&2; exit 1; }
+          gh workflow run "${target}" --repo "${GITHUB_REPOSITORY}" --ref main
+          echo "Dispatched ${target}; this repair workflow executed no Runtime job."
