@@ -74,6 +74,27 @@ jobs:
           rm -rf _issue121_bundle
           rm .github/workflows/issue121_bundle_installer.yml
 
+          # Dataclasses created while the retained core is executed require its
+          # temporary module name to resolve through sys.modules. Keep that
+          # alias bound to the shared compatibility module for the process
+          # lifetime so class metadata and imports remain valid.
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/ai_filing_analyst.py')
+          source = path.read_text(encoding='utf-8')
+          needle = 'globals()["__name__"] = "ai_filing_analyst_legacy_embedded"\nglobals()["__file__"] = str(_LEGACY_PATH)\n'
+          replacement = (
+              '_LEGACY_MODULE_NAME = "ai_filing_analyst_legacy_embedded"\n'
+              'sys.modules[_LEGACY_MODULE_NAME] = sys.modules[_MODULE_NAME]\n'
+              'globals()["__name__"] = _LEGACY_MODULE_NAME\n'
+              'globals()["__file__"] = str(_LEGACY_PATH)\n'
+          )
+          if source.count(needle) != 1:
+              raise SystemExit('compatibility facade registration anchor changed')
+          path.write_text(source.replace(needle, replacement), encoding='utf-8')
+          PY
+
           python -m py_compile \
             scripts/ai_filing_analyst.py \
             scripts/ai_filing_analyst_legacy.py \
