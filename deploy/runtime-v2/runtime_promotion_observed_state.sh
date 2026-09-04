@@ -9,6 +9,34 @@
 eval "$(declare -f configure_runtime | sed '1s/configure_runtime/configure_runtime_v1/')"
 eval "$(declare -f verify_runtime_configuration | sed '1s/verify_runtime_configuration/verify_runtime_configuration_v1/')"
 
+# Cloud SDK 568.0.0 on the hosted runner does not expose the formerly used
+# `executions describe-latest` command. Resolve the newest execution through the
+# stable list surface, sorting the complete job-specific result set by creation
+# time before returning the execution name.
+latest_execution_name() {
+  local job="$1" payload execution=""
+  for attempt in $(seq 1 12); do
+    if payload="$(gcloud run jobs executions list \
+      --job "${job}" \
+      --project "${PROJECT_ID}" \
+      --region "${REGION}" \
+      --format=json)"; then
+      execution="$(jq -r \
+        'sort_by(.metadata.creationTimestamp // .createTime // "")
+         | last
+         | (.metadata.name // .name // empty)' \
+        <<<"${payload}")"
+      [[ -n "${execution}" ]] && {
+        printf '%s\n' "${execution}"
+        return 0
+      }
+    fi
+    sleep 5
+  done
+  echo "Unable to resolve the latest execution for ${job}." >&2
+  return 1
+}
+
 configure_runtime() {
   local mode="$1" job status=0
   configure_runtime_v1 "${mode}" || return 1
