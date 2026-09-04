@@ -16,7 +16,8 @@ jobs:
     if: >-
       github.repository_id == '1349678672' &&
       github.ref_name == 'codex/issue-121-ai-analyst-recovery' &&
-      github.run_attempt == 1
+      github.run_attempt == 1 &&
+      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -71,8 +72,10 @@ jobs:
           cp scripts/ai_filing_analyst.py scripts/ai_filing_analyst_legacy.py
           rm "$RUNNER_TEMP/issue121-extracted/BUNDLE_MANIFEST.sha256"
           cp -a "$RUNNER_TEMP/issue121-extracted/." .
+          mkdir -p _issue121_workflows
+          cp .github/workflows/ai_filing_analyst.yml _issue121_workflows/ai_filing_analyst.yml
+          cp .github/workflows/investor_edge_tests.yml _issue121_workflows/investor_edge_tests.yml
           rm -rf _issue121_bundle
-          rm .github/workflows/issue121_bundle_installer.yml
 
           python - <<'PY'
           from pathlib import Path
@@ -112,12 +115,16 @@ jobs:
             tests/test_validate_ai_publication.py
           git diff --check
 
-      - name: Commit exact installed implementation
+      - name: Commit tested source and stage exact workflow blobs
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin codex/issue-121-ai-analyst-recovery
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/codex/issue-121-ai-analyst-recovery)"
+          git checkout HEAD -- \
+            .github/workflows/ai_filing_analyst.yml \
+            .github/workflows/investor_edge_tests.yml \
+            .github/workflows/issue121_bundle_installer.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
