@@ -6,10 +6,11 @@ WORKFLOW = Path('.github/workflows/phase3_current_state_acceptance.yml')
 
 def test_acceptance_is_self_path_scoped_main_one_shot():
     text = WORKFLOW.read_text(encoding='utf-8')
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert 'name: Phase 3 current state acceptance' in text
-    assert 'push:' in text
-    assert '- main' in text
-    assert '".github/workflows/phase3_current_state_acceptance.yml"' in text
     assert "github.repository_id == '1349678672'" in text
     assert 'ONESHOT_MARKER: phase3-acceptance/current-state-v1.claimed' in text
 
