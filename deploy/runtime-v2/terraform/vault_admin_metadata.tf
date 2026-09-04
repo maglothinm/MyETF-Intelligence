@@ -1,10 +1,19 @@
-# The schema-admin job constructs the production Filing Vault service during
-# `runtime_v2 init-db --with-vault`. The service fails closed unless it can read
-# bucket metadata and confirm uniform bucket-level access plus public-access
-# prevention. It never needs evidence-object access.
-resource "google_storage_bucket_iam_member" "vault_admin_metadata_viewer" {
-  count  = var.vault_enabled ? 1 : 0
-  bucket = google_storage_bucket.vault[0].name
-  role   = "roles/storage.bucketViewer"
-  member = "serviceAccount:${google_service_account.admin.email}"
+# Every Runtime v2 Filing Vault consumer constructs the GCS-backed service by
+# reloading bucket metadata and failing closed unless uniform bucket-level
+# access and public-access prevention are enabled. This separate role grants
+# bucket metadata only; evidence-object access remains limited to the existing
+# web and lifecycle object-admin bindings.
+locals {
+  vault_metadata_viewers = var.vault_enabled ? {
+    admin     = google_service_account.admin.email
+    web       = google_service_account.web.email
+    lifecycle = google_service_account.vault.email
+  } : {}
+}
+
+resource "google_storage_bucket_iam_member" "vault_metadata_viewer" {
+  for_each = local.vault_metadata_viewers
+  bucket   = google_storage_bucket.vault[0].name
+  role     = "roles/storage.bucketViewer"
+  member   = "serviceAccount:${each.value}"
 }
