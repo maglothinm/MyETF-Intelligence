@@ -308,23 +308,53 @@ verify_execution_authority_removed() {
 
 latest_execution_name() {
   local job="$1"
-  gcloud run jobs executions describe-latest --job "${job}" --project "${PROJECT_ID}" --region "${REGION}" \
-    --format='value(metadata.name)'
+  local execute_result="${2:-}"
+  local execution=""
+
+  if [[ -n "${execute_result}" && -s "${execute_result}" ]]; then
+    execution="$(jq -r '.metadata.name // .name // empty' "${execute_result}")"
+  fi
+
+  if [[ -z "${execution}" ]]; then
+    for attempt in $(seq 1 12); do
+      execution="$(gcloud run jobs describe "${job}" \
+        --project "${PROJECT_ID}" \
+        --region "${REGION}" \
+        --format='value(status.latestCreatedExecution.name)')"
+      [[ -n "${execution}" ]] && break
+      sleep 5
+    done
+  fi
+
+  [[ -n "${execution}" ]] || {
+    echo "Unable to resolve the latest execution for ${job}." >&2
+    return 1
+  }
+  case "${execution}" in
+    "${job}-"*) ;;
+    *)
+      echo "Execution receipt ${execution} does not belong to ${job}." >&2
+      return 1
+      ;;
+  esac
+  printf '%s\n' "${execution}"
 }
 
 execute_admin_init() {
   local result="${EVIDENCE_DIR}/admin-init-execute.json"
   gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
     --wait --format=json > "${result}"
-  latest_execution_name "${ADMIN_JOB}" > "${EVIDENCE_DIR}/admin-init-execution.txt"
+  latest_execution_name "${ADMIN_JOB}" "${result}" > "${EVIDENCE_DIR}/admin-init-execution.txt"
 }
 
 capture_status() {
-  local output="$1" stem="$2" execute_result="${EVIDENCE_DIR}/${stem}-admin-execute.json"
+  local output="$1"
+  local stem="$2"
+  local execute_result="${EVIDENCE_DIR}/${stem}-admin-execute.json"
   local execution logs payload
   gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
     --args=-m,runtime_v2,status --wait --format=json > "${execute_result}"
-  execution="$(latest_execution_name "${ADMIN_JOB}")"
+  execution="$(latest_execution_name "${ADMIN_JOB}" "${execute_result}")"
   [[ -n "${execution}" ]] || { echo "Unable to resolve admin status execution." >&2; return 1; }
   printf '%s\n' "${execution}" > "${EVIDENCE_DIR}/${stem}-admin-execution.txt"
   logs="${EVIDENCE_DIR}/${stem}-admin-logs.json"
@@ -342,11 +372,15 @@ capture_status() {
 }
 
 execute_producer() {
-  local logical_name="$1" trigger="$2" stem="$3" job="polititrack-${logical_name}"
+  local logical_name="$1"
+  local trigger="$2"
+  local stem="$3"
+  local job="polititrack-${logical_name}"
+  local execute_result="${EVIDENCE_DIR}/${stem}-${logical_name}-execute.json"
   gcloud run jobs execute "${job}" --project "${PROJECT_ID}" --region "${REGION}" \
     --update-env-vars "POLITITRACK_TRIGGER_SOURCE=${trigger},SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}" \
-    --wait --format=json > "${EVIDENCE_DIR}/${stem}-${logical_name}-execute.json"
-  latest_execution_name "${job}" | tee "${EVIDENCE_DIR}/${stem}-${logical_name}-execution.txt"
+    --wait --format=json > "${execute_result}"
+  latest_execution_name "${job}" "${execute_result}" | tee "${EVIDENCE_DIR}/${stem}-${logical_name}-execution.txt"
 }
 
 web_policy_has_public_invoker() {
