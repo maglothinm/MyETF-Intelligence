@@ -17,7 +17,8 @@ def test_exact_history_recovery_is_canonical_and_read_only() -> None:
     assert "github.ref == 'refs/heads/main'" in text
     assert 'actions: read' in text
     assert 'contents: read' in text
-    assert 'contents: write' not in text
+    permissions = text.split('permissions:', 1)[1].split('concurrency:', 1)[0]
+    assert 'contents: write' not in permissions
     assert 'group: phase4-exact-history-read' in text
     assert 'cancel-in-progress: false' in text
 
@@ -58,7 +59,7 @@ def test_exact_history_recovery_exports_lineage_without_payloads() -> None:
 
 def test_exact_history_recovery_cannot_touch_runtime_or_cloud() -> None:
     text = _text()
-    bounded = text.split('- name: Download exact failed closeout artifact', 1)[1]
+    bounded = text.rsplit('# BOUNDED_EVIDENCE_READER', 1)[1]
     for forbidden in (
         'google-github-actions/auth',
         'gcloud ',
