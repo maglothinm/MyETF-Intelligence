@@ -15,9 +15,11 @@ def _script() -> str:
 
 def test_workflow_is_canonical_main_and_self_scoped() -> None:
     text = _workflow()
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert "name: Phase 3 GCS closeout v2" in text
-    assert "branches:\n      - main" in text
-    assert '".github/workflows/phase3_closeout_gcs_v2.yml"' in text
     assert '"deploy/runtime-v2/close-phase3-gcs-v2.sh"' in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
