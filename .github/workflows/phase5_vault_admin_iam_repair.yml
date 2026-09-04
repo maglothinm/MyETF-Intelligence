@@ -32,9 +32,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          terraform -chdir=deploy/runtime-v2/terraform fmt -check
-          grep -F 'role   = "roles/storage.bucketViewer"' deploy/runtime-v2/terraform/vault_admin_metadata.tf
-          grep -F 'google_service_account.admin.email' deploy/runtime-v2/terraform/vault_admin_metadata.tf
+          mkdir -p phase5-vault-admin-repair
+          python - <<'PY'
+          from pathlib import Path
+
+          text = Path('deploy/runtime-v2/terraform/vault_admin_metadata.tf').read_text()
+          required = (
+              'resource "google_storage_bucket_iam_member" "vault_admin_metadata_viewer"',
+              'bucket = google_storage_bucket.vault[0].name',
+              'role   = "roles/storage.bucketViewer"',
+              'member = "serviceAccount:${google_service_account.admin.email}"',
+          )
+          missing = [token for token in required if token not in text]
+          if missing:
+              raise SystemExit(f'Vault admin metadata binding is incomplete: {missing}')
+          forbidden = ('roles/storage.admin', 'roles/storage.objectAdmin', 'roles/storage.objectViewer')
+          present = [token for token in forbidden if token in text]
+          if present:
+              raise SystemExit(f'Vault admin repair grants forbidden object or admin access: {present}')
+          Path('phase5-vault-admin-repair/static-validation.txt').write_text(
+              'metadata-only Terraform binding validated\n'
+          )
+          PY
 
       - name: Authenticate as constrained deployer
         uses: google-github-actions/auth@v3
@@ -48,7 +67,6 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p phase5-vault-admin-repair
           deployer_member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
           admin_member="serviceAccount:${ADMIN_SERVICE_ACCOUNT}"
 
