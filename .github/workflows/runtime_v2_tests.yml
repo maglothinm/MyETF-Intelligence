@@ -5,6 +5,7 @@ on:
     paths:
       - "runtime_v2/**"
       - "migrations/20260901_runtime_v2.sql"
+      - "migrations/20260904_runtime_v2_mode_quarantine.sql"
       - "deploy/runtime-v2/**"
       - "docs/runtime-v2/phase3/**"
       - "requirements-runtime-v2.txt"
@@ -14,6 +15,7 @@ on:
       - "tests/test_runtime_v2_bootstrap_safety.py"
       - "tests/test_runtime_v2_database.py"
       - "tests/test_runtime_v2_provenance.py"
+      - "tests/test_runtime_v2_mode_quarantine.py"
       - "tests/test_runtime_v2_terraform_safety.py"
       - "tests/test_runtime_v2_phase3_receipts.py"
       - "tests/test_phase3_cloud_discovery.py"
@@ -124,6 +126,7 @@ jobs:
             tests/test_runtime_v2.py \
             tests/test_runtime_v2_atomic_commit.py \
             tests/test_runtime_v2_shadow_mode.py \
+            tests/test_runtime_v2_mode_quarantine.py \
             tests/test_runtime_v2_bootstrap_safety.py \
             tests/test_runtime_v2_database.py \
             tests/test_runtime_v2_provenance.py \
