@@ -1,0 +1,171 @@
+name: Phase 5 authorized cutover monitor
+
+on:
+  push:
+    branches:
+      - phase5/cutover-monitor-20260904
+    paths:
+      - ".github/workflows/phase5_cutover_monitor_20260904.yml"
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  monitor:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_PR: "116"
+      PHASE4_WORKFLOW: phase4_live_shadow_validation_v6.yml
+      PHASE5_WORKFLOW: phase5_production_promotion_v2.yml
+    steps:
+      - name: Wait for merge and gated cutover terminal state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p cutover-monitor
+
+          comment_report() {
+            local report="$1"
+            local body
+            body="$(python - "${report}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          lines = [
+              "## Authorized Phase 5 cutover monitor",
+              "",
+              f"- Result: `{data.get('result')}`",
+              f"- Merge revision: `{data.get('merge_revision', '')}`",
+              f"- Phase 4 run: `{data.get('phase4_run_id', '')}` — `{data.get('phase4_conclusion', '')}`",
+              f"- Phase 5 run: `{data.get('phase5_run_id', '')}` — `{data.get('phase5_conclusion', '')}`",
+              f"- Production cutover terminal: `{str(data.get('production_cutover_terminal', False)).lower()}`",
+              f"- Recorded at: `{data.get('recorded_at', '')}`",
+          ]
+          if data.get("phase4_artifacts"):
+              lines.append(f"- Phase 4 artifacts: `{','.join(map(str, data['phase4_artifacts']))}`")
+          if data.get("phase5_artifacts"):
+              lines.append(f"- Phase 5 artifacts: `{','.join(map(str, data['phase5_artifacts']))}`")
+          print("\n".join(lines))
+          PY
+          )"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="${body}" >/dev/null
+          }
+
+          merge_sha=""
+          for attempt in $(seq 1 240); do
+            state="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR}" --jq '.state')"
+            merged="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR}" --jq '.merged')"
+            if [[ "${merged}" == "true" ]]; then
+              merge_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR}" --jq '.merge_commit_sha')"
+              break
+            fi
+            if [[ "${state}" == "closed" ]]; then
+              jq -n --arg result pr_closed_without_merge --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{result:$result,production_cutover_terminal:false,recorded_at:$recorded_at}' \
+                > cutover-monitor/report.json
+              comment_report cutover-monitor/report.json
+              exit 1
+            fi
+            sleep 15
+          done
+          [[ "${merge_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+            jq -n --arg result merge_not_observed --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{result:$result,production_cutover_terminal:false,recorded_at:$recorded_at}' \
+              > cutover-monitor/report.json
+            comment_report cutover-monitor/report.json
+            exit 1
+          }
+
+          phase4_id=""
+          for attempt in $(seq 1 240); do
+            phase4_id="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PHASE4_WORKFLOW}/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs | map(select(.head_sha == \"${merge_sha}\")) | sort_by(.created_at) | last | .id // empty")"
+            [[ -n "${phase4_id}" ]] && break
+            sleep 15
+          done
+          [[ -n "${phase4_id}" ]] || {
+            jq -n --arg result phase4_run_not_observed --arg merge_revision "${merge_sha}" \
+              --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{result:$result,merge_revision:$merge_revision,production_cutover_terminal:false,recorded_at:$recorded_at}' \
+              > cutover-monitor/report.json
+            comment_report cutover-monitor/report.json
+            exit 1
+          }
+
+          phase4_conclusion=""
+          for attempt in $(seq 1 720); do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase4_id}" --jq '.status')"
+            phase4_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase4_id}" --jq '.conclusion // empty')"
+            [[ "${status}" == "completed" ]] && break
+            sleep 15
+          done
+          phase4_artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase4_id}/artifacts" --jq '[.artifacts[].id]')"
+          if [[ "${phase4_conclusion}" != "success" ]]; then
+            jq -n --arg result phase4_failed --arg merge_revision "${merge_sha}" \
+              --argjson phase4_run_id "${phase4_id}" --arg phase4_conclusion "${phase4_conclusion}" \
+              --argjson phase4_artifacts "${phase4_artifacts}" \
+              --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{result:$result,merge_revision:$merge_revision,phase4_run_id:$phase4_run_id,phase4_conclusion:$phase4_conclusion,phase4_artifacts:$phase4_artifacts,production_cutover_terminal:false,recorded_at:$recorded_at}' \
+              > cutover-monitor/report.json
+            comment_report cutover-monitor/report.json
+            exit 1
+          fi
+
+          phase5_id=""
+          for attempt in $(seq 1 240); do
+            phase5_id="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${PHASE5_WORKFLOW}/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs | map(select(.head_sha == \"${merge_sha}\")) | sort_by(.created_at) | last | .id // empty")"
+            [[ -n "${phase5_id}" ]] && break
+            sleep 15
+          done
+          [[ -n "${phase5_id}" ]] || {
+            jq -n --arg result phase5_run_not_observed --arg merge_revision "${merge_sha}" \
+              --argjson phase4_run_id "${phase4_id}" --arg phase4_conclusion "${phase4_conclusion}" \
+              --argjson phase4_artifacts "${phase4_artifacts}" \
+              --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{result:$result,merge_revision:$merge_revision,phase4_run_id:$phase4_run_id,phase4_conclusion:$phase4_conclusion,phase4_artifacts:$phase4_artifacts,production_cutover_terminal:false,recorded_at:$recorded_at}' \
+              > cutover-monitor/report.json
+            comment_report cutover-monitor/report.json
+            exit 1
+          }
+
+          phase5_conclusion=""
+          for attempt in $(seq 1 720); do
+            status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase5_id}" --jq '.status')"
+            phase5_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase5_id}" --jq '.conclusion // empty')"
+            [[ "${status}" == "completed" ]] && break
+            sleep 15
+          done
+          phase5_artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase5_id}/artifacts" --jq '[.artifacts[].id]')"
+          result=phase5_failed
+          terminal=false
+          [[ "${phase5_conclusion}" == "success" ]] && { result=phase5_complete; terminal=true; }
+          jq -n --arg result "${result}" --arg merge_revision "${merge_sha}" \
+            --argjson phase4_run_id "${phase4_id}" --arg phase4_conclusion "${phase4_conclusion}" \
+            --argjson phase4_artifacts "${phase4_artifacts}" \
+            --argjson phase5_run_id "${phase5_id}" --arg phase5_conclusion "${phase5_conclusion}" \
+            --argjson phase5_artifacts "${phase5_artifacts}" --argjson production_cutover_terminal "${terminal}" \
+            --arg recorded_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{result:$result,merge_revision:$merge_revision,phase4_run_id:$phase4_run_id,phase4_conclusion:$phase4_conclusion,phase4_artifacts:$phase4_artifacts,phase5_run_id:$phase5_run_id,phase5_conclusion:$phase5_conclusion,phase5_artifacts:$phase5_artifacts,production_cutover_terminal:$production_cutover_terminal,recorded_at:$recorded_at}' \
+            > cutover-monitor/report.json
+          comment_report cutover-monitor/report.json
+          [[ "${phase5_conclusion}" == "success" ]]
+
+      - name: Upload monitor report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-authorized-cutover-monitor
+          path: cutover-monitor/
+          if-no-files-found: warn
+          retention-days: 90
