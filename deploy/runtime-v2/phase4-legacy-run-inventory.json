@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "repository_id": 1349678672,
+  "repository_full_name": "maglothinm/MyETF-Intelligence",
+  "classification": "legacy_unverified",
+  "reason": "source_snapshot_provenance_has_no_runtime_mode",
+  "source_history": {
+    "recovered_by_workflow_run_id": 33820870942,
+    "source_closeout_run_id": 33819641464,
+    "source_artifact_id": 9917920173,
+    "source_artifact_sha256": "7f0851fa00169ed80e92972a32d2e7abbb2825378469b945959226143a06702d"
+  },
+  "configuration_evidence": {
+    "workflow_run_id": 33749003897,
+    "job_id": 100627994336,
+    "artifact_id": 9890777505,
+    "artifact_sha256": "21b23d8d2f91e8cfe45fb999551f8777fbe3f3fad0c055503bc30fb37431fe51",
+    "delivery_credentials_present": false,
+    "required_delivery": false,
+    "schedulers_state": "PAUSED",
+    "runtime_mode_classifiable": false,
+    "note": "External-delivery credentials were absent and schedulers were paused, but the predecessor had no mode contract and broad external effects were not suppressed."
+  },
+  "rows": [
+    {
+      "run_id": "d09aa601-76e1-4054-9de8-b8f5312ec8ef",
+      "job_name": "dashboard",
+      "namespace": "dashboard",
+      "source_revision": "unknown",
+      "snapshot_sha256": "6f0934eb53af31353ac0e020a1d3ce9778fc20b2368ed62b712adb581f1cb486"
+    },
+    {
+      "run_id": "fcce390c-eab6-4aef-881d-18663288783e",
+      "job_name": "legislative",
+      "namespace": "legislative",
+      "source_revision": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+      "snapshot_sha256": "5ce554435b64213df4fe8dd884003ca23b023aa83176fcfcc7974498c40067ec"
+    },
+    {
+      "run_id": "b94d2649-2cfe-4d4c-a641-22d957e9356b",
+      "job_name": "executive",
+      "namespace": "executive",
+      "source_revision": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+      "snapshot_sha256": "2debbacbd233d9ada0103e710ee50ebd1b3f7eded264ee161d6bb5fa7e9ce054"
+    },
+    {
+      "run_id": "b6165189-5883-4f54-9246-1e061626e116",
+      "job_name": "ai",
+      "namespace": "ai",
+      "source_revision": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+      "snapshot_sha256": "b097144f1dd068aad911ef02801121450a2b8e98f1b3f93a480de3f7bfbbcbf3"
+    },
+    {
+      "run_id": "50dff699-3f17-4069-9368-ab8398d9750d",
+      "job_name": "ai",
+      "namespace": "ai",
+      "source_revision": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+      "snapshot_sha256": "e820c034226b7f76dc1ffff3d5a017e30e6d75abfb6557c848e04130ef4b8b23"
+    },
+    {
+      "run_id": "7d425ad3-7987-43e4-a1d2-528df9cac351",
+      "job_name": "dashboard",
+      "namespace": "dashboard",
+      "source_revision": "c20958f6c22077411d3787bc8aa74c08c0b26fc3",
+      "snapshot_sha256": "f88889f1cc292cf31a6009c87ec91263bbe23a74009620e24048d960bd01e483"
+    }
+  ],
+  "accepted_baseline_heads": {
+    "legislative": {
+      "generation": 2,
+      "snapshot_sha256": "5ce554435b64213df4fe8dd884003ca23b023aa83176fcfcc7974498c40067ec"
+    },
+    "executive": {
+      "generation": 2,
+      "snapshot_sha256": "2debbacbd233d9ada0103e710ee50ebd1b3f7eded264ee161d6bb5fa7e9ce054"
+    },
+    "ai": {
+      "generation": 3,
+      "snapshot_sha256": "e820c034226b7f76dc1ffff3d5a017e30e6d75abfb6557c848e04130ef4b8b23"
+    },
+    "dashboard": {
+      "generation": 2,
+      "snapshot_sha256": "f88889f1cc292cf31a6009c87ec91263bbe23a74009620e24048d960bd01e483"
+    }
+  }
+}
