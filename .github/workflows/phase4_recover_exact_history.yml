@@ -35,7 +35,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           text = Path('.github/workflows/phase4_recover_exact_history.yml').read_text(encoding='utf-8')
-          bounded = text.split('- name: Download exact failed closeout artifact', 1)[1]
+          bounded = text.rsplit('# BOUNDED_EVIDENCE_READER', 1)[1]
           for forbidden in (
               'google-github-actions/auth',
               'gcloud ',
@@ -51,6 +51,7 @@ jobs:
           assert 'SOURCE_ARTIFACT_ID: "9917920173"' in text
           PY
 
+      # BOUNDED_EVIDENCE_READER
       - name: Download exact failed closeout artifact
         shell: bash
         env:
