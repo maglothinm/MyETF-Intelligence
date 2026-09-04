@@ -311,7 +311,7 @@ def test_legacy_insert_omitting_evidence_has_no_default_escape_hatch() -> None:
 
     store = STORE.read_text(encoding="utf-8")
     assert '"runtime_mode_evidence, status, started_at) "' in store
-    assert '"%s::jsonb, \'running\', now())"' in store
+    assert "%s::jsonb, 'running', now())" in store
 
 
 def _postgres_connection():
@@ -618,7 +618,7 @@ def test_postgres_empty_initialization_is_repeatable_and_fail_closed() -> None:
             """,
             (schema,),
         )
-        assert cursor.fetchone() == ["NO", None]
+        assert tuple(cursor.fetchone()) == ("NO", None)
     finally:
         cleanup = connection.cursor()
         cleanup.execute("SET search_path TO public")
