@@ -1,0 +1,348 @@
+name: Phase 5 Runtime v2 production promotion v2
+
+on:
+  workflow_run:
+    workflows: ["Phase 4 live shadow validation v6"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  promote-production-authority:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.id == 1349678672
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: phase5-live
+      PHASE4_RUN_ID: ${{ github.event.workflow_run.id }}
+      CONTROL_REVISION: ${{ github.event.workflow_run.head_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the certified canonical revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CONTROL_REVISION }}
+          fetch-depth: 0
+
+      - name: Verify and bind the Phase 4 readiness certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${CONTROL_REVISION}" ]] || { echo "Certified checkout mismatch." >&2; exit 1; }
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${CONTROL_REVISION}" ]] || { echo "Canonical main advanced after Phase 4 certification." >&2; exit 1; }
+
+          mkdir -p "${EVIDENCE_DIR}/phase4"
+          gh run download "${PHASE4_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name phase4-readiness --dir "${EVIDENCE_DIR}/phase4"
+          (cd "${EVIDENCE_DIR}/phase4" && sha256sum -c phase4-ready.sha256)
+
+          image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+          source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          jq -e \
+            --arg control "${CONTROL_REVISION}" \
+            --arg image "${image}" \
+            --arg source "${source}" \
+            '.repository_id == 1349678672 and
+             .result == "phase4_ready_for_phase5" and
+             .phase5_ready == true and
+             .control_revision == $control and
+             .runtime_source_revision == $source and
+             .immutable_image == $image and
+             .unique_successful_execution_receipts == 8 and
+             .production_authority_transferred == false and
+             .temporary_authority_removed == true' \
+            "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
+          echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
+          echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
+          jq -e '.legacy_state_preserved == true and (.legacy_workflow_states | type == "object")' \
+            "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
+          jq '.legacy_workflow_states' "${EVIDENCE_DIR}/phase4/phase4-ready.json" \
+            > "${EVIDENCE_DIR}/legacy-workflow-states.json"
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Atomically transfer production authority and prove the cutover
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          route_touched=false
+          promotion_complete=false
+
+          rollback() {
+            local code=$?
+            local schedulers_paused=false web_private=false runtime_shadow=false legacy_restored=false
+            trap - EXIT
+            if [[ "${promotion_complete}" != "true" ]]; then
+              set +e
+              pause_producer_schedulers && verify_producer_scheduler_state PAUSED && schedulers_paused=true
+              make_web_private && verify_web_private && web_private=true
+              remove_execution_authority
+              remove_service_account_user
+              if [[ "${route_touched}" == "true" ]]; then
+                configure_runtime_best_effort shadow && verify_runtime_configuration shadow && runtime_shadow=true
+                restore_legacy_workflows_observed && legacy_restored=true
+                dispatch_legacy_recovery
+              else
+                runtime_shadow=true
+                legacy_restored=true
+              fi
+              jq -n \
+                --argjson exit_code "${code}" \
+                --arg route_touched "${route_touched}" \
+                --arg schedulers_paused "${schedulers_paused}" \
+                --arg web_private "${web_private}" \
+                --arg runtime_shadow "${runtime_shadow}" \
+                --arg legacy_restored "${legacy_restored}" \
+                '{result:"phase5_rolled_back", exit_code:$exit_code,
+                  route_touched:($route_touched == "true"),
+                  runtime_schedulers_paused:($schedulers_paused == "true"),
+                  runtime_mode:(if $runtime_shadow == "true" then "shadow" else "unverified" end),
+                  web_public:($web_private != "true"),
+                  legacy_route_restored:($legacy_restored == "true")}' \
+                > "${EVIDENCE_DIR}/rollback.json"
+              if [[ "${schedulers_paused}" == "true" && "${web_private}" == "true" && \
+                    "${runtime_shadow}" == "true" && "${legacy_restored}" == "true" ]]; then
+                touch "${EVIDENCE_DIR}/rollback-complete"
+              fi
+              set -e
+            fi
+            exit "${code}"
+          }
+          trap rollback EXIT
+
+          verify_canonical_context
+          verify_project_boundary
+          pause_producer_schedulers
+          verify_producer_scheduler_state PAUSED
+          verify_vault_scheduler_paused
+          make_web_private
+          verify_web_private
+          verify_cloud_sql_private
+          verify_legacy_workflows_match_observed
+          configure_runtime shadow
+          verify_runtime_configuration shadow
+
+          grant_execution_authority
+          capture_status "${EVIDENCE_DIR}/baseline.json" phase5-baseline
+          python - "${EVIDENCE_DIR}/baseline.json" "${EVIDENCE_DIR}/phase4/phase4-ready.json" <<'PY'
+          import json
+          import sys
+          baseline = json.load(open(sys.argv[1], encoding="utf-8"))
+          certificate = json.load(open(sys.argv[2], encoding="utf-8"))
+          heads = {item["namespace"]: item for item in baseline["heads"]}
+          for name, expected in certificate["final_heads"].items():
+              actual = heads.get(name, {})
+              for key in ("generation", "snapshot_sha256"):
+                  if actual.get(key) != expected.get(key):
+                      raise SystemExit(f"Phase 5 baseline {name} {key} no longer matches the certified Phase 4 head")
+          PY
+
+          route_touched=true
+          touch "${EVIDENCE_DIR}/route-touched"
+          disable_legacy_workflows
+          drain_legacy_workflows
+          verify_legacy_workflows_state disabled_manually
+
+          configure_runtime production
+          verify_runtime_configuration production
+          verify_producer_scheduler_state PAUSED
+
+          : > "${EVIDENCE_DIR}/observations.ndjson"
+          sequence=0
+          for job in legislative executive ai dashboard; do
+            sequence=$((sequence + 1))
+            stem="smoke-sequence-${sequence}"
+            execution="$(execute_producer "${job}" phase5_smoke "${stem}")"
+            status_file="${EVIDENCE_DIR}/${stem}-${job}-status.json"
+            capture_status "${status_file}" "${stem}-${job}-status"
+            jq -cn \
+              --argjson sequence "${sequence}" \
+              --arg job "${job}" \
+              --arg execution "${execution}" \
+              --slurpfile status "${status_file}" \
+              '{cycle:1, sequence:$sequence, job:$job, cloud_run_execution:$execution, status:$status[0]}' \
+              >> "${EVIDENCE_DIR}/observations.ndjson"
+          done
+
+          final_dashboard_digest="$(jq -r '.heads[] | select(.namespace == "dashboard") | .snapshot_sha256' \
+            "${EVIDENCE_DIR}/smoke-sequence-4-dashboard-status.json")"
+          [[ "${final_dashboard_digest}" =~ ^[0-9a-f]{64}$ ]] || { echo "Final dashboard digest is invalid." >&2; exit 1; }
+
+          remove_execution_authority
+          verify_execution_authority_removed
+          verify_service_account_user_removed
+          make_web_public
+          verify_public_web "${final_dashboard_digest}"
+          resume_producer_schedulers
+          verify_producer_scheduler_state ENABLED
+          verify_vault_scheduler_paused
+          verify_runtime_configuration production
+          verify_legacy_workflows_state disabled_manually
+          verify_cloud_sql_private
+          web_policy_has_public_invoker
+
+          python - "${EVIDENCE_DIR}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          executions = [json.loads(line) for line in (root / "observations.ndjson").read_text().splitlines() if line.strip()]
+          ready = json.loads((root / "readyz.json").read_text(encoding="utf-8"))
+          served = (root / "served-dashboard-sha256.txt").read_text(encoding="utf-8").strip()
+          url = (root / "web-url.txt").read_text(encoding="utf-8").strip()
+          manifest = {
+              "schema_version": 1,
+              "phase": "phase5",
+              "preflight": {
+                  "canonical_repository_verified": True,
+                  "canonical_main_verified": True,
+                  "project_boundary_verified": True,
+                  "image_digest_verified": True,
+                  "cloud_sql_private_only": True,
+                  "producer_schedulers_paused": True,
+                  "web_public_invoker_absent": True,
+                  "persistent_job_configuration_verified": True,
+                  "phase4_certificate_verified": True,
+                  "legacy_workflows_disabled": True,
+                  "legacy_runs_drained": True,
+              },
+              "executions": executions,
+              "promotion": {
+                  "production_route": "runtime_v2",
+                  "legacy_workflows_disabled": True,
+                  "legacy_runs_drained": True,
+                  "runtime_jobs_production_mode": True,
+                  "web_public_invoker_present": True,
+                  "healthz_ok": True,
+                  "readyz_ok": True,
+                  "dashboard_ok": True,
+                  "cloud_sql_private_only": True,
+                  "rollback_armed": True,
+                  "enabled_producer_schedulers": [
+                      "polititrack-legislative", "polititrack-executive", "polititrack-ai", "polititrack-dashboard"
+                  ],
+                  "disabled_legacy_workflows": [
+                      "legislative_trade_tracker_v2.yml", "executive_trade_tracker.yml",
+                      "ai_filing_analyst.yml", "publish_trade_dashboard.yml"
+                  ],
+                  "vault_scheduler_state": "PAUSED",
+                  "ready_snapshot_sha256": ready["snapshot_sha256"],
+                  "served_snapshot_sha256": served,
+                  "web_url": url,
+              },
+              "cleanup": {
+                  "temporary_execution_authority_removed": True,
+                  "temporary_logging_authority_removed": True,
+                  "temporary_service_account_user_removed": True,
+                  "legacy_workflows_disabled": True,
+                  "producer_schedulers_enabled": True,
+                  "web_public_invoker_present": True,
+                  "runtime_jobs_production_mode": True,
+                  "cloud_sql_private_only": True,
+              },
+          }
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+          PY
+
+          python deploy/runtime-v2/validate_runtime_promotion.py \
+            --phase phase5 \
+            --baseline "${EVIDENCE_DIR}/baseline.json" \
+            --manifest "${EVIDENCE_DIR}/manifest.json" \
+            --phase4-certificate "${EVIDENCE_DIR}/phase4/phase4-ready.json" \
+            --control-revision "${CONTROL_REVISION}" \
+            --runtime-source-revision "${RUNTIME_SOURCE_REVISION}" \
+            --image "${APPROVED_IMAGE}" \
+            --output "${EVIDENCE_DIR}/phase5-complete.json"
+          jq --slurpfile states "${LEGACY_STATE_FILE}" \
+            '. + {legacy_workflow_states_before:$states[0], rollback_restores_exact_observed_state:true}' \
+            "${EVIDENCE_DIR}/phase5-complete.json" > "${EVIDENCE_DIR}/phase5-complete.tmp"
+          mv "${EVIDENCE_DIR}/phase5-complete.tmp" "${EVIDENCE_DIR}/phase5-complete.json"
+          (cd "${EVIDENCE_DIR}" && sha256sum phase5-complete.json > phase5-complete.sha256)
+          jq -e '.result == "phase5_complete" and .production_authority_transferred == true and .unique_successful_smoke_receipts == 4 and .phase6_started == false' \
+            "${EVIDENCE_DIR}/phase5-complete.json" >/dev/null
+          (cd "${EVIDENCE_DIR}" && sha256sum -c phase5-complete.sha256)
+
+          promotion_complete=true
+          trap - EXIT
+
+      - name: Verify terminal production state
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          verify_project_boundary
+          verify_execution_authority_removed
+          verify_service_account_user_removed
+          verify_producer_scheduler_state ENABLED
+          verify_vault_scheduler_paused
+          verify_runtime_configuration production
+          verify_legacy_workflows_state disabled_manually
+          verify_cloud_sql_private
+          web_policy_has_public_invoker
+          (cd "${EVIDENCE_DIR}" && sha256sum -c phase5-complete.sha256)
+
+      - name: Fail-closed terminal cleanup after unsuccessful promotion
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "${EVIDENCE_DIR}"
+          printf '%s\n' '{"result":"phase5_failed_before_completion"}' > "${EVIDENCE_DIR}/failure.json"
+          if [[ -z "${APPROVED_IMAGE:-}" && -f deploy/runtime-v2/phase4-approved-image.json ]]; then
+            export APPROVED_IMAGE="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+            export RUNTIME_SOURCE_REVISION="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          fi
+          if [[ -z "${APPROVED_IMAGE:-}" || -z "${RUNTIME_SOURCE_REVISION:-}" ]]; then
+            exit 0
+          fi
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          pause_producer_schedulers
+          make_web_private
+          remove_execution_authority
+          remove_service_account_user
+          if [[ -f "${EVIDENCE_DIR}/route-touched" && ! -f "${EVIDENCE_DIR}/rollback-complete" ]]; then
+            configure_runtime_best_effort shadow
+            restore_legacy_workflows_observed
+            dispatch_legacy_recovery
+          fi
+          exit 0
+
+      - name: Upload Phase 5 completion or rollback evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-completion
+          path: phase5-live/
+          if-no-files-found: error
+          retention-days: 90
