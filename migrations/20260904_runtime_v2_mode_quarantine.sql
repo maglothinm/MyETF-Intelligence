@@ -70,7 +70,7 @@ ALTER TABLE runtime_job_runs
 -- If a predecessor population exists, its unclassified inventory must match the
 -- independently recovered incident manifest exactly. A fresh empty database is
 -- allowed; any missing, changed, or additional legacy row fails before mutation.
-DO $
+DO $inventory$
 BEGIN
     IF EXISTS (
         SELECT 1
@@ -173,7 +173,7 @@ BEGIN
             'legacy Runtime run inventory differs from recovered Phase 4 manifest';
     END IF;
 END
-$;
+$inventory$;
 
 -- Exact immutable snapshot provenance is authoritative even when the previous
 -- blanket migration already wrote a contradictory non-NULL value.
