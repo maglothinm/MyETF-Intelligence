@@ -67,6 +67,114 @@ ALTER TABLE runtime_job_runs
         OR runtime_mode IN ('shadow', 'production')
     );
 
+-- If a predecessor population exists, its unclassified inventory must match the
+-- independently recovered incident manifest exactly. A fresh empty database is
+-- allowed; any missing, changed, or additional legacy row fails before mutation.
+DO $
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM runtime_job_runs
+        WHERE runtime_mode_evidence IS NULL
+    ) AND EXISTS (
+        WITH expected(
+            run_id,
+            job_name,
+            namespace,
+            source_revision,
+            snapshot_sha256,
+            observed_runtime_mode,
+            status,
+            trigger_source
+        ) AS (
+            VALUES
+                (
+                    'd09aa601-76e1-4054-9de8-b8f5312ec8ef',
+                    'dashboard',
+                    'dashboard',
+                    'unknown',
+                    '6f0934eb53af31353ac0e020a1d3ce9778fc20b2368ed62b712adb581f1cb486',
+                    'production',
+                    'success',
+                    'external_scheduler'
+                ),
+                (
+                    'fcce390c-eab6-4aef-881d-18663288783e',
+                    'legislative',
+                    'legislative',
+                    'c20958f6c22077411d3787bc8aa74c08c0b26fc3',
+                    '5ce554435b64213df4fe8dd884003ca23b023aa83176fcfcc7974498c40067ec',
+                    'production',
+                    'success',
+                    'external_scheduler'
+                ),
+                (
+                    'b94d2649-2cfe-4d4c-a641-22d957e9356b',
+                    'executive',
+                    'executive',
+                    'c20958f6c22077411d3787bc8aa74c08c0b26fc3',
+                    '2debbacbd233d9ada0103e710ee50ebd1b3f7eded264ee161d6bb5fa7e9ce054',
+                    'production',
+                    'success',
+                    'external_scheduler'
+                ),
+                (
+                    'b6165189-5883-4f54-9246-1e061626e116',
+                    'ai',
+                    'ai',
+                    'c20958f6c22077411d3787bc8aa74c08c0b26fc3',
+                    'b097144f1dd068aad911ef02801121450a2b8e98f1b3f93a480de3f7bfbbcbf3',
+                    'production',
+                    'success',
+                    'external_scheduler'
+                ),
+                (
+                    '50dff699-3f17-4069-9368-ab8398d9750d',
+                    'ai',
+                    'ai',
+                    'c20958f6c22077411d3787bc8aa74c08c0b26fc3',
+                    'e820c034226b7f76dc1ffff3d5a017e30e6d75abfb6557c848e04130ef4b8b23',
+                    'production',
+                    'success',
+                    'external_scheduler'
+                ),
+                (
+                    '7d425ad3-7987-43e4-a1d2-528df9cac351',
+                    'dashboard',
+                    'dashboard',
+                    'c20958f6c22077411d3787bc8aa74c08c0b26fc3',
+                    'f88889f1cc292cf31a6009c87ec91263bbe23a74009620e24048d960bd01e483',
+                    'production',
+                    'success',
+                    'external_scheduler'
+                )
+        ),
+        actual AS (
+            SELECT
+                run_id::text,
+                job_name,
+                namespace,
+                source_revision,
+                snapshot_sha256::text,
+                runtime_mode,
+                status,
+                trigger_source
+            FROM runtime_job_runs
+            WHERE runtime_mode_evidence IS NULL
+        ),
+        differences AS (
+            (SELECT * FROM expected EXCEPT SELECT * FROM actual)
+            UNION ALL
+            (SELECT * FROM actual EXCEPT SELECT * FROM expected)
+        )
+        SELECT 1 FROM differences
+    ) THEN
+        RAISE EXCEPTION
+            'legacy Runtime run inventory differs from recovered Phase 4 manifest';
+    END IF;
+END
+$;
+
 -- Exact immutable snapshot provenance is authoritative even when the previous
 -- blanket migration already wrote a contradictory non-NULL value.
 UPDATE runtime_job_runs AS job_run
