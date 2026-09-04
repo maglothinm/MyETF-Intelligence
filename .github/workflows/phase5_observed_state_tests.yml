@@ -65,8 +65,8 @@ jobs:
                   raise SystemExit(f'{label} missing: {missing}')
           if 'enable_legacy_workflows\n' in phase5:
               raise SystemExit('Phase 5 v2 still contains blanket legacy enable')
-          if 'executions describe-latest' in overlay:
-              raise SystemExit('Observed-state overlay still uses the unavailable execution helper')
+          if 'gcloud run jobs executions describe-latest' in overlay:
+              raise SystemExit('Observed-state overlay still invokes the unavailable execution helper')
           PY
           python -m pytest -q tests/test_validate_runtime_promotion.py
           bash verify.sh
