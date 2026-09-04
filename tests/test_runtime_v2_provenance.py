@@ -12,6 +12,18 @@ REVISION = "f" * 40
 STARTED = datetime(2026, 9, 3, 10, 0, tzinfo=timezone.utc)
 CREATED = datetime(2026, 9, 3, 10, 1, tzinfo=timezone.utc)
 FINISHED = datetime(2026, 9, 3, 10, 2, tzinfo=timezone.utc)
+SNAPSHOT_MODE_EVIDENCE = {
+    "schema_version": 1,
+    "kind": "snapshot_provenance",
+    "mode": "shadow",
+    "snapshot_id": "00000000-0000-0000-0000-000000000012",
+    "snapshot_sha256": "1" * 64,
+}
+LEGACY_MODE_EVIDENCE = {
+    "schema_version": 1,
+    "kind": "legacy_unverified",
+    "observed_value": "production",
+}
 
 
 def _write_success_state(destination: Path) -> None:
@@ -140,6 +152,7 @@ class _ReadConnection:
             "legislative",
             "legislative",
             "shadow",
+            SNAPSHOT_MODE_EVIDENCE,
             "success",
             "shadow",
             REVISION,
@@ -162,6 +175,7 @@ class _ReadConnection:
                     FINISHED,
                     "shadow",
                     "shadow",
+                    SNAPSHOT_MODE_EVIDENCE,
                     "",
                     REVISION,
                     "00000000-0000-0000-0000-000000000012",
@@ -205,6 +219,10 @@ def test_status_exposes_snapshot_and_run_receipt_lineage() -> None:
     }
     run = status["latest_runs"][0]
     assert run["run_id"] == "00000000-0000-0000-0000-000000000099"
+    assert run["runtime_mode"] == "shadow"
+    assert run["runtime_mode_verified"] is True
+    assert run["observed_runtime_mode"] is None
+    assert run["runtime_mode_evidence"] == SNAPSHOT_MODE_EVIDENCE
     assert run["trigger_source"] == "shadow"
     assert run["source_revision"] == REVISION
     assert run["snapshot_id"] == head["snapshot_id"]
@@ -222,8 +240,13 @@ def test_workflow_audit_exposes_the_same_receipt_lineage() -> None:
 
     evidence = _store_with_read_connection(connection).workflow_evidence()
 
+    assert evidence["branches"]["legislative"]["available"] is True
     attempt = evidence["branches"]["legislative"]["attempts"][0]
     assert attempt["run_id"] == attempt["run_key"]
+    assert attempt["runtime_mode"] == "shadow"
+    assert attempt["runtime_mode_verified"] is True
+    assert attempt["observed_runtime_mode"] is None
+    assert attempt["runtime_mode_evidence"] == SNAPSHOT_MODE_EVIDENCE
     assert attempt["trigger_source"] == "shadow"
     assert attempt["source_revision"] == REVISION
     assert attempt["snapshot_id"] == "00000000-0000-0000-0000-000000000012"
@@ -234,3 +257,71 @@ def test_workflow_audit_exposes_the_same_receipt_lineage() -> None:
     assert attempt["snapshot_created_utc"] == "2026-09-03T10:01:00Z"
     assert attempt["finished_utc"] == "2026-09-03T10:02:00Z"
     assert connection.closed is True
+
+
+def _legacy_read_connection() -> _ReadConnection:
+    connection = _ReadConnection()
+    connection.run_row = (
+        "00000000-0000-0000-0000-000000000098",
+        "legislative",
+        "legislative",
+        None,
+        LEGACY_MODE_EVIDENCE,
+        "success",
+        "external_scheduler",
+        REVISION,
+        STARTED,
+        FINISHED,
+        "00000000-0000-0000-0000-000000000012",
+        "1" * 64,
+        "0" * 64,
+        12,
+        CREATED,
+        "",
+        False,
+    )
+    connection.audit_rows["legislative"] = [
+        (
+            "00000000-0000-0000-0000-000000000098",
+            "success",
+            STARTED,
+            FINISHED,
+            "external_scheduler",
+            None,
+            LEGACY_MODE_EVIDENCE,
+            "",
+            REVISION,
+            "00000000-0000-0000-0000-000000000012",
+            "1" * 64,
+            "0" * 64,
+            12,
+            CREATED,
+        )
+    ]
+    return connection
+
+
+def test_status_preserves_but_does_not_attest_legacy_runtime_mode() -> None:
+    connection = _legacy_read_connection()
+
+    status = _store_with_read_connection(connection).status()
+
+    run = status["latest_runs"][0]
+    assert run["runtime_mode"] is None
+    assert run["runtime_mode_verified"] is False
+    assert run["observed_runtime_mode"] == "production"
+    assert run["runtime_mode_evidence"] == LEGACY_MODE_EVIDENCE
+
+
+def test_workflow_audit_excludes_legacy_runtime_mode_from_available_evidence() -> None:
+    connection = _legacy_read_connection()
+
+    evidence = _store_with_read_connection(connection).workflow_evidence()
+
+    branch = evidence["branches"]["legislative"]
+    assert branch["available"] is False
+    attempt = branch["attempts"][0]
+    assert attempt["runtime_mode"] is None
+    assert attempt["runtime_mode_verified"] is False
+    assert attempt["observed_runtime_mode"] == "production"
+    assert attempt["runtime_mode_evidence"] == LEGACY_MODE_EVIDENCE
