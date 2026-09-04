@@ -3,6 +3,10 @@ name: Phase 3 diagnose admin status execution
 on:
   workflow_dispatch:
 
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
