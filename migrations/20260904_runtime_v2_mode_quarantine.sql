@@ -55,6 +55,15 @@ LOCK TABLE runtime_job_runs IN SHARE ROW EXCLUSIVE MODE;
 ALTER TABLE runtime_job_runs
     ALTER COLUMN runtime_mode DROP NOT NULL;
 
+-- Rebuild the mode-domain constraint by name so this migration is self-contained
+-- even when it encounters a partially-created predecessor table.
+ALTER TABLE runtime_job_runs
+    DROP CONSTRAINT IF EXISTS runtime_job_runs_runtime_mode_check;
+
+ALTER TABLE runtime_job_runs
+    ADD CONSTRAINT runtime_job_runs_runtime_mode_check
+    CHECK (runtime_mode IN ('shadow', 'production'));
+
 -- Exact immutable snapshot provenance is authoritative even when the previous
 -- blanket migration already wrote a contradictory non-NULL value.
 UPDATE runtime_job_runs AS job_run
@@ -85,6 +94,8 @@ WHERE job_run.runtime_mode_evidence IS NULL
   AND job_run.source_revision = snapshot.source_revision
   AND snapshot.source_provenance ->> 'authority' = 'runtime_v2'
   AND snapshot.source_provenance ->> 'job' = job_run.job_name
+  AND snapshot.source_provenance ->> 'trigger_source' =
+      job_run.trigger_source
   AND snapshot.source_provenance ->> 'mode' IN ('shadow', 'production');
 
 -- A missing immutable mode is not evidence for either shadow or production.
@@ -109,7 +120,7 @@ ALTER TABLE runtime_job_runs
 
 ALTER TABLE runtime_job_runs
     ADD CONSTRAINT runtime_job_runs_mode_evidence_check
-    CHECK (
+    CHECK ((
         jsonb_typeof(runtime_mode_evidence) = 'object'
         AND runtime_mode_evidence ->> 'schema_version' = '1'
         AND runtime_mode_evidence ->> 'kind' IN (
@@ -146,7 +157,7 @@ ALTER TABLE runtime_job_runs
                     snapshot_sha256
             )
         )
-    );
+    ) IS TRUE);
 
 -- JSON evidence is not allowed to self-attest. Every successful attestation must
 -- remain exactly joined to the immutable snapshot that supplied its mode.
@@ -168,6 +179,8 @@ BEGIN
                     'runtime_v2'
                 AND snapshot.source_provenance ->> 'job' =
                     job_run.job_name
+                AND snapshot.source_provenance ->> 'trigger_source' =
+                    job_run.trigger_source
                 AND snapshot.source_provenance ->> 'mode' =
                     job_run.runtime_mode
                 AND snapshot.source_provenance ->> 'mode'
