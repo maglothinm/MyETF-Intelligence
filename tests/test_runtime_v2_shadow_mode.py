@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -278,13 +279,19 @@ class _CaptureConnection:
         return _CaptureCursor(self)
 
 
-def test_run_row_persists_runtime_mode():
+def test_run_row_persists_explicit_runtime_mode_evidence():
     connection = _CaptureConnection()
     locked = LockedNamespace(connection, "legislative")
     locked.start_run("legislative", "shadow", REVISION, "shadow")
     sql, params = connection.calls[-1]
     assert "runtime_mode" in sql
-    assert params[-1] == "shadow"
+    assert "runtime_mode_evidence" in sql
+    assert params[-2] == "shadow"
+    assert json.loads(params[-1]) == {
+        "schema_version": 1,
+        "kind": "runner_explicit",
+        "mode": "shadow",
+    }
     with pytest.raises(StateStoreError, match="invalid"):
         locked.start_run("legislative", "shadow", REVISION, "unsafe")
 
@@ -301,38 +308,97 @@ def test_terraform_defaults_to_shadow_and_keeps_schedules_gated():
     assert '== "production"' in safety
 
 
-def test_schema_records_runtime_mode_without_state_reset():
-    migration = (ROOT / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
-    assert "ADD COLUMN IF NOT EXISTS runtime_mode" in migration
-    assert "runtime_mode IN ('shadow', 'production')" in migration
-    assert "DROP TABLE" not in migration.upper()
+def test_quarantine_schema_records_mode_evidence_without_state_reset():
+    migration = (
+        ROOT / "migrations/20260904_runtime_v2_mode_quarantine.sql"
+    ).read_text(encoding="utf-8")
+    upper_migration = migration.upper()
 
-
-def test_schema_derives_legacy_mode_from_exact_committed_snapshot_provenance():
-    migration = (ROOT / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
-
-    assert "SET runtime_mode = snapshot.source_provenance ->> 'mode'" in migration
-    assert "job_run.status = 'success'" in migration
-    assert "job_run.snapshot_id = snapshot.snapshot_id" in migration
-    assert "job_run.snapshot_sha256 = snapshot.snapshot_sha256" in migration
-    assert "job_run.namespace = snapshot.namespace" in migration
-    assert "job_run.source_revision = snapshot.source_revision" in migration
-    assert "snapshot.source_provenance ->> 'authority' = 'runtime_v2'" in migration
-    assert "snapshot.source_provenance ->> 'job' = job_run.job_name" in migration
-    assert "snapshot.source_provenance ->> 'mode' IN ('shadow', 'production')" in migration
+    assert migration.startswith("BEGIN;")
+    assert migration.rstrip().endswith("COMMIT;")
+    assert "ADD COLUMN IF NOT EXISTS runtime_mode_evidence jsonb" in migration
+    assert "ALTER COLUMN runtime_mode DROP NOT NULL" in migration
+    assert "ALTER COLUMN runtime_mode_evidence DROP DEFAULT" in migration
+    assert "ALTER COLUMN runtime_mode_evidence SET NOT NULL" in migration
+    assert "ALTER COLUMN runtime_mode SET NOT NULL" not in migration
     assert "SET runtime_mode = 'production'" not in migration
+    assert "DROP TABLE" not in upper_migration
+    assert "DELETE FROM RUNTIME_STATE_HEADS" not in upper_migration
+    assert "DELETE FROM RUNTIME_STATE_SNAPSHOTS" not in upper_migration
+    assert "UPDATE runtime_state_heads" not in migration
+    assert "UPDATE runtime_state_snapshots" not in migration
 
 
-def test_schema_fails_closed_when_a_legacy_mode_has_no_bound_provenance():
-    migration = (ROOT / "migrations/20260901_runtime_v2.sql").read_text(encoding="utf-8")
+def test_quarantine_schema_repairs_only_exact_snapshot_attestations():
+    migration = (
+        ROOT / "migrations/20260904_runtime_v2_mode_quarantine.sql"
+    ).read_text(encoding="utf-8")
+    repair = migration[
+        migration.index("UPDATE runtime_job_runs AS job_run") :
+        migration.index("-- A missing immutable mode")
+    ]
 
-    backfill = migration.index("UPDATE runtime_job_runs AS job_run")
-    unresolved_guard = migration.index("IF EXISTS (", backfill)
-    not_null = migration.index("ALTER COLUMN runtime_mode SET NOT NULL")
+    assert "SET runtime_mode = snapshot.source_provenance ->> 'mode'" in repair
+    assert "'kind', 'snapshot_provenance'" in repair
+    assert "'previous_observed_value'" in repair
+    assert "job_run.runtime_mode_evidence IS NULL" in repair
+    assert "job_run.runtime_mode IS NULL" not in repair
+    assert "job_run.status = 'success'" in repair
+    assert "job_run.snapshot_id = snapshot.snapshot_id" in repair
+    assert "job_run.snapshot_sha256 = snapshot.snapshot_sha256" in repair
+    assert "job_run.namespace = snapshot.namespace" in repair
+    assert "job_run.source_revision = snapshot.source_revision" in repair
+    assert "snapshot.source_provenance ->> 'authority' = 'runtime_v2'" in repair
+    assert "snapshot.source_provenance ->> 'job' = job_run.job_name" in repair
+    assert "snapshot.source_provenance ->> 'mode' IN ('shadow', 'production')" in repair
 
-    assert backfill < unresolved_guard < not_null
-    assert "WHERE runtime_mode IS NULL" in migration[unresolved_guard:not_null]
+
+def test_quarantine_schema_nulls_unverified_legacy_modes_and_preserves_observation():
+    migration = (
+        ROOT / "migrations/20260904_runtime_v2_mode_quarantine.sql"
+    ).read_text(encoding="utf-8")
+    quarantine = migration[
+        migration.index("UPDATE runtime_job_runs\nSET runtime_mode_evidence") :
+        migration.index(
+            "ALTER TABLE runtime_job_runs\n"
+            "    ALTER COLUMN runtime_mode_evidence DROP DEFAULT"
+        )
+    ]
+
+    assert "'kind', 'legacy_unverified'" in quarantine
+    assert "'observed_value', runtime_mode" in quarantine
+    assert "'reason', 'no_exact_linked_snapshot_mode'" in quarantine
+    assert "runtime_mode = NULL" in quarantine
+    assert "WHERE runtime_mode_evidence IS NULL" in quarantine
+
+
+def test_quarantine_schema_rejects_unattested_or_mismatched_effective_modes():
+    migration = (
+        ROOT / "migrations/20260904_runtime_v2_mode_quarantine.sql"
+    ).read_text(encoding="utf-8")
+
+    repair = migration.index("UPDATE runtime_job_runs AS job_run")
+    quarantine = migration.index("UPDATE runtime_job_runs\nSET runtime_mode_evidence")
+    evidence_not_null = migration.index(
+        "ALTER COLUMN runtime_mode_evidence SET NOT NULL"
+    )
+    cross_table_guard = migration.index(
+        "-- JSON evidence is not allowed to self-attest."
+    )
+    commit = migration.rindex("COMMIT;")
+
+    assert repair < quarantine < evidence_not_null < cross_table_guard < commit
+    assert "ADD CONSTRAINT runtime_job_runs_mode_evidence_check" in migration
+    assert "runtime_mode_evidence ->> 'kind' = 'legacy_unverified'" in migration
+    assert "runtime_mode IS NULL" in migration
+    assert "runtime_mode_evidence ->> 'kind' = 'runner_explicit'" in migration
+    assert "runtime_mode_evidence ->> 'mode' = runtime_mode" in migration
+    assert "status IN ('running', 'failure', 'skipped')" in migration
+    assert "runtime_mode_evidence ->> 'kind' = 'snapshot_provenance'" in migration
+    assert "status = 'success'" in migration
+    assert "snapshot_id IS NOT NULL" in migration
+    assert "snapshot_sha256 IS NOT NULL" in migration
     assert (
-        "cannot provenance-derive runtime_job_runs.runtime_mode for every legacy run"
-        in migration[unresolved_guard:not_null]
+        "runtime mode evidence is not exactly linked to snapshot provenance"
+        in migration
     )
