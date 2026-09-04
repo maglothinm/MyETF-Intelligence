@@ -1,0 +1,68 @@
+{
+  "attempt": {
+    "conclusion": "failure",
+    "head_sha": "d603e9b40ffb78c51f635589bc886875f411299b",
+    "run_attempt": 1,
+    "run_id": 33646778055
+  },
+  "decision": "safe_to_replay",
+  "diagnostic": {
+    "artifact_digest": "sha256:f67d8e25ea8bf2e201a20e4006af400bf5fd418d9c970766a6c5bb3eaa8b6b73",
+    "artifact_id": 9854021376,
+    "artifact_name": "ai-analysis-output-33646778055",
+    "result_file": "ai-analysis-result.json",
+    "result_file_sha256": "9429fc3d29c3bfec2c9949d3c294ad9ff98c62b57f787a0bde3b9081cfb00228"
+  },
+  "issue": 121,
+  "predecessor": {
+    "artifact_digest": "sha256:14ec9b28b51b830924bb4252546b0ca65fba7e30f7f1b60003dfd90c838c3193",
+    "artifact_id": 9849967781,
+    "artifact_name": "ai-analysis-state",
+    "head_sha": "d603e9b40ffb78c51f635589bc886875f411299b",
+    "producer_run_attempt": 1,
+    "producer_run_id": 33638794359,
+    "required_state": {
+      "candidate_alert_deliveries": {},
+      "last_success_utc": "2026-09-02T13:57:34Z",
+      "positions": {}
+    }
+  },
+  "reason": "The exact failed attempt completed candidate analysis work but durable evidence proves no candidate-alert delivery or paper-position mutation occurred.",
+  "repository": {
+    "default_branch": "main",
+    "full_name": "maglothinm/MyETF-Intelligence",
+    "id": 1349678672
+  },
+  "required_result": {
+    "alerted_count": 0,
+    "allowed_classifications": [
+      "archive"
+    ],
+    "archive_count": 19,
+    "attempted_count": 20,
+    "completed_count": 19,
+    "errors": [
+      "SOLS / trade:69aca1536296edcfe2d0a17b52b1d579: AnalystError: OpenAI returned invalid JSON: Unterminated string starting at: line 1 column 3296 (char 3295)"
+    ],
+    "high_priority_count": 0,
+    "market_signal_upgrades": 0,
+    "paper_positions_closed": 0,
+    "paper_positions_opened": 0,
+    "paper_positions_updated": 0,
+    "success": false,
+    "watchlist_count": 0,
+    "weak_signal_count": 0
+  },
+  "schema_version": 1,
+  "source_blobs": {
+    ".github/workflows/ai_filing_analyst.yml": "8dc872026de7fda219fca64771d0f009b81cd1ff",
+    "scripts/ai_filing_analyst.py": "c064f0e6e87109e06a1e31dc9d46c907cf1956c0"
+  },
+  "workflow": {
+    "job": "analyze",
+    "name": "AI filing analyst and paper portfolio",
+    "path": ".github/workflows/ai_filing_analyst.yml",
+    "step": "Analyze new filing purchases",
+    "workflow_id": 344663669
+  }
+}

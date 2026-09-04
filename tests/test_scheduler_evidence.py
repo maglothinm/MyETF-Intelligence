@@ -278,9 +278,19 @@ def test_canonical_workflows_keep_single_writer_manual_dispatch_and_retry_guard(
         triggers = workflow.get("on", workflow.get(True))
         assert workflow["concurrency"] == {"group": groups[branch], "cancel-in-progress": False}
         assert "workflow_dispatch" in triggers
-        assert "collect_workflow_evidence.py" in text
-        assert f"--guard-branch {branch}" in text
-        assert text.index("--guard-branch") < text.index(f"- name: {spec['step']}")
+        if branch == "ai":
+            assert "ai_retry_guard.py" in text
+            assert "--producer-run" in text
+            assert "--producer-attempt" in text
+            assert text.index("ai_retry_guard.py") < text.index(
+                f"- name: {spec['step']}"
+            )
+        else:
+            assert "collect_workflow_evidence.py" in text
+            assert f"--guard-branch {branch}" in text
+            assert text.index("--guard-branch") < text.index(
+                f"- name: {spec['step']}"
+            )
         if branch != "ai":
             assert triggers["schedule"][0]["cron"] == schedules[branch]
             assert triggers["workflow_dispatch"]["inputs"]["trigger_source"]["options"] == ["workflow_dispatch", "external_scheduler"]
