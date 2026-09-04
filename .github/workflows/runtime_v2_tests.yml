@@ -58,8 +58,10 @@ on:
       - ".github/workflows/phase3_rollout_current_image_acceptance.yml"
       - ".github/workflows/phase4_recover_exact_history.yml"
       - ".github/workflows/phase4_build_quarantine_image.yml"
+      - ".github/workflows/phase4_harvest_quarantine_image.yml"
       - "tests/test_phase4_recover_exact_history.py"
       - "tests/test_phase4_build_quarantine_image.py"
+      - "tests/test_phase4_harvest_quarantine_image.py"
       - "tests/test_phase4_retired_phase3_controllers.py"
       - ".github/workflows/phase3_diagnostic_pulse.yml"
       - ".github/workflows/runtime_v2_tests.yml"
@@ -169,6 +171,7 @@ jobs:
             tests/test_phase3_rollout_current_image_acceptance.py \
             tests/test_phase4_recover_exact_history.py \
             tests/test_phase4_build_quarantine_image.py \
+            tests/test_phase4_harvest_quarantine_image.py \
             tests/test_phase4_retired_phase3_controllers.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
