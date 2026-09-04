@@ -54,6 +54,7 @@ env:
   SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
   ALPHAVANTAGE_ENTITLEMENT: ${{ vars.ALPHAVANTAGE_ENTITLEMENT }}
   DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  POLITITRACK_REPOSITORY_ID: ${{ github.repository_id }}
 
 jobs:
   analyze:
@@ -73,7 +74,7 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Signal analyst start
@@ -93,6 +94,10 @@ jobs:
 
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Bind immutable source revision
+        shell: bash
+        run: echo "SOURCE_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -301,9 +306,9 @@ jobs:
             fi
 
             if [[ "$access_mode" == "writable" ]]; then
-              # Keep repeated collector triggers from replaying unretained alerts/analysis.
-              GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
-                --guard-branch ai \
+              # Preserve the general fail-closed guard; the AI adapter may alter only
+              # an exact attempt backed by an immutable diagnostic adjudication.
+              GITHUB_SHA="$consumer_sha" python scripts/ai_retry_guard.py \
                 --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
             fi
 
@@ -366,6 +371,9 @@ jobs:
             tests/test_historical_transaction_bootstrap.py \
             tests/test_oge_disclosures.py \
             tests/test_ai_filing_analyst.py \
+            tests/test_ai_filing_analyst_hardened.py \
+            tests/test_ai_retry_guard.py \
+            tests/test_validate_ai_publication.py \
             tests/test_trade_dashboard.py \
             tests/test_investor_edge.py \
             tests/test_investor_edge_core.py \
@@ -407,8 +415,28 @@ jobs:
           fi
           python scripts/ai_filing_analyst.py "${args[@]}"
 
+      - name: Validate analyst publication decision
+        id: publication
+        if: ${{ always() }}
+        shell: bash
+        env:
+          ANALYST_OUTCOME: ${{ steps.analyst.outcome }}
+        run: |
+          python scripts/validate_ai_publication.py \
+            --result ai-analysis-result.json \
+            --state .trade-tracker/ai/state.json \
+            --repository-id "${{ github.repository_id }}" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --source-revision "$SOURCE_REVISION" \
+            --analyst-outcome "$ANALYST_OUTCOME"
+
       - name: Upload durable AI state
-        if: ${{ steps.analyst.outcome == 'success' && hashFiles('.trade-tracker/ai/state.json') != '' }}
+        if: >-
+          steps.analyst.outcome == 'success' &&
+          steps.publication.outcome == 'success' &&
+          steps.publication.outputs.state_publishable == 'true' &&
+          hashFiles('.trade-tracker/ai/state.json') != ''
         uses: actions/upload-artifact@v7
         with:
           name: ai-analysis-state
@@ -419,9 +447,10 @@ jobs:
 
       - name: Upload AI outputs
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: ai-analysis-output-${{ github.run_id }}
+          name: ai-analysis-output-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ai-analysis-result.json
             ai-latest-analyses.csv
@@ -430,7 +459,7 @@ jobs:
           retention-days: 30
 
       - name: Signal analyst success
-        if: ${{ always() && !failure() && steps.analyst.outcome == 'success' }}
+        if: ${{ always() && !failure() && steps.analyst.outcome == 'success' && steps.publication.outputs.state_publishable == 'true' }}
         continue-on-error: true
         shell: bash
         env:
