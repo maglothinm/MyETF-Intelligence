@@ -1,0 +1,176 @@
+name: Phase 5 admin failure diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_admin_failure_diagnostic.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose-failed-admin-execution:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      FAILED_EXECUTION: polititrack-admin-b9nw8
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      EVIDENCE_DIR: phase5-admin-failure
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Recover exact failed execution evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is ${state}, expected PAUSED." >&2; exit 1; }
+          done
+
+          cleanup_logging() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" \
+              --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" \
+              --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+          }
+          trap cleanup_logging EXIT
+
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" \
+            --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null
+
+          gcloud run jobs executions describe "${FAILED_EXECUTION}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+            > "${EVIDENCE_DIR}/execution.json"
+
+          log_read_ok=false
+          for attempt in $(seq 1 18); do
+            if gcloud logging read \
+              "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${FAILED_EXECUTION}\"" \
+              --project "${PROJECT_ID}" --order=asc --limit=1000 --format=json \
+              > "${EVIDENCE_DIR}/logs.json" 2> "${EVIDENCE_DIR}/log-read-error.txt"; then
+              log_read_ok=true
+              break
+            fi
+            sleep 10
+          done
+          [[ "${log_read_ok}" == "true" ]] || { cat "${EVIDENCE_DIR}/log-read-error.txt" >&2 || true; exit 1; }
+
+          cleanup_logging
+          trap - EXIT
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" \
+            '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' \
+            <<<"${project_policy}" >/dev/null; then
+            echo "Temporary logging.admin authority remains." >&2
+            exit 1
+          fi
+          view_policy="$(gcloud logging views get-iam-policy "${LOG_VIEW}" \
+            --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${member}" \
+            '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' \
+            <<<"${view_policy}" >/dev/null; then
+            echo "Temporary logging view authority remains." >&2
+            exit 1
+          fi
+
+          python - "${EVIDENCE_DIR}" "${FAILED_EXECUTION}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          expected = sys.argv[2]
+          execution = json.loads((root / "execution.json").read_text(encoding="utf-8"))
+          logs = json.loads((root / "logs.json").read_text(encoding="utf-8"))
+          actual = execution.get("metadata", {}).get("name") or execution.get("name")
+          if actual != expected:
+              raise SystemExit(f"Execution mismatch: {actual!r} != {expected!r}")
+
+          messages = []
+          for item in logs:
+              candidates = []
+              text = item.get("textPayload")
+              if isinstance(text, str):
+                  candidates.append(text)
+              payload = item.get("jsonPayload")
+              if isinstance(payload, dict):
+                  for key in ("message", "error", "exception", "stack_trace"):
+                      value = payload.get(key)
+                      if isinstance(value, str):
+                          candidates.append(value)
+              proto = item.get("protoPayload")
+              if isinstance(proto, dict):
+                  status = proto.get("status")
+                  if isinstance(status, dict) and isinstance(status.get("message"), str):
+                      candidates.append(status["message"])
+              for value in candidates:
+                  value = value.strip()
+                  if value and value not in messages:
+                      messages.append(value)
+
+          status = execution.get("status", {})
+          summary = {
+              "execution_name": actual,
+              "conditions": status.get("conditions") or execution.get("conditions") or [],
+              "failed_count": status.get("failedCount"),
+              "succeeded_count": status.get("succeededCount"),
+              "log_entry_count": len(logs),
+              "messages": messages,
+          }
+          (root / "diagnostic-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if not messages:
+              raise SystemExit("No diagnostic messages were recovered.")
+          PY
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-admin-failure-diagnostic
+          path: phase5-admin-failure/
+          if-no-files-found: error
+          retention-days: 30
