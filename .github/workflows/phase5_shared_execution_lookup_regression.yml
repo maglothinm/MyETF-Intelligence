@@ -1,0 +1,47 @@
+name: Phase 5 shared execution lookup regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "tests/test_runtime_promotion_execution_lookup.py"
+      - ".github/workflows/phase5_shared_execution_lookup_regression.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "tests/test_runtime_promotion_execution_lookup.py"
+      - ".github/workflows/phase5_shared_execution_lookup_regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-supported-resolver:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify the shared fail-closed resolver
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/runtime_promotion_control.sh
+          python - <<'PY'
+          from pathlib import Path
+
+          controller = Path('deploy/runtime-v2/runtime_promotion_control.sh').read_text(encoding='utf-8')
+          assert 'gcloud run jobs executions describe-latest' not in controller
+          assert 'status.latestCreatedExecution.name' in controller
+          assert 'Unable to resolve the latest execution for' in controller
+          assert 'for attempt in $(seq 1 12)' in controller
+
+          test = Path('tests/test_runtime_promotion_execution_lookup.py').read_text(encoding='utf-8')
+          assert 'gcloud run jobs executions describe-latest' in test
+          assert 'status.latestCreatedExecution.name' in test
+          PY
