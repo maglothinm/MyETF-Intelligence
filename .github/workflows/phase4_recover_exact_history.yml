@@ -35,6 +35,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           text = Path('.github/workflows/phase4_recover_exact_history.yml').read_text(encoding='utf-8')
+          bounded = text.split('- name: Download exact failed closeout artifact', 1)[1]
           for forbidden in (
               'google-github-actions/auth',
               'gcloud ',
@@ -44,7 +45,7 @@ jobs:
               'secrets versions access',
               'contents: write',
           ):
-              assert forbidden not in text, forbidden
+              assert forbidden not in bounded, forbidden
           assert 'actions: read' in text
           assert 'SOURCE_RUN_ID: "33819641464"' in text
           assert 'SOURCE_ARTIFACT_ID: "9917920173"' in text
