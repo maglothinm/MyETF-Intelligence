@@ -62,7 +62,10 @@ ALTER TABLE runtime_job_runs
 
 ALTER TABLE runtime_job_runs
     ADD CONSTRAINT runtime_job_runs_runtime_mode_check
-    CHECK (runtime_mode IN ('shadow', 'production'));
+    CHECK (
+        runtime_mode IS NULL
+        OR runtime_mode IN ('shadow', 'production')
+    );
 
 -- Exact immutable snapshot provenance is authoritative even when the previous
 -- blanket migration already wrote a contradictory non-NULL value.
@@ -88,10 +91,13 @@ SET runtime_mode = snapshot.source_provenance ->> 'mode',
 FROM runtime_state_snapshots AS snapshot
 WHERE job_run.runtime_mode_evidence IS NULL
   AND job_run.status = 'success'
+  AND job_run.finished_at IS NOT NULL
   AND job_run.snapshot_id = snapshot.snapshot_id
   AND job_run.snapshot_sha256 = snapshot.snapshot_sha256
   AND job_run.namespace = snapshot.namespace
   AND job_run.source_revision = snapshot.source_revision
+  AND snapshot.created_at >= job_run.started_at
+  AND snapshot.created_at <= job_run.finished_at
   AND snapshot.source_provenance ->> 'authority' = 'runtime_v2'
   AND snapshot.source_provenance ->> 'job' = job_run.job_name
   AND snapshot.source_provenance ->> 'trigger_source' =
@@ -122,7 +128,7 @@ ALTER TABLE runtime_job_runs
     ADD CONSTRAINT runtime_job_runs_mode_evidence_check
     CHECK ((
         jsonb_typeof(runtime_mode_evidence) = 'object'
-        AND runtime_mode_evidence ->> 'schema_version' = '1'
+        AND runtime_mode_evidence -> 'schema_version' = '1'::jsonb
         AND runtime_mode_evidence ->> 'kind' IN (
             'legacy_unverified',
             'runner_explicit',
@@ -149,6 +155,7 @@ ALTER TABLE runtime_job_runs
                 AND runtime_mode IN ('shadow', 'production')
                 AND runtime_mode_evidence ->> 'mode' = runtime_mode
                 AND status = 'success'
+                AND finished_at IS NOT NULL
                 AND snapshot_id IS NOT NULL
                 AND snapshot_sha256 IS NOT NULL
                 AND runtime_mode_evidence ->> 'snapshot_id' =
@@ -159,8 +166,9 @@ ALTER TABLE runtime_job_runs
         )
     ) IS TRUE);
 
--- JSON evidence is not allowed to self-attest. Every successful attestation must
--- remain exactly joined to the immutable snapshot that supplied its mode.
+-- JSON evidence is not allowed to self-attest during convergence. Re-run the
+-- same exact join in every rollout and acceptance gate; application success
+-- commits enforce it atomically for all new rows.
 DO $$
 BEGIN
     IF EXISTS (
@@ -175,6 +183,8 @@ BEGIN
                 AND job_run.snapshot_sha256 = snapshot.snapshot_sha256
                 AND job_run.namespace = snapshot.namespace
                 AND job_run.source_revision = snapshot.source_revision
+                AND snapshot.created_at >= job_run.started_at
+                AND snapshot.created_at <= job_run.finished_at
                 AND snapshot.source_provenance ->> 'authority' =
                     'runtime_v2'
                 AND snapshot.source_provenance ->> 'job' =
