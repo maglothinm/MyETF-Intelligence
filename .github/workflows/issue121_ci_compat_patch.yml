@@ -1,0 +1,139 @@
+name: Issue 121 CI compatibility patch
+
+on:
+  push:
+    branches:
+      - codex/issue-121-ai-analyst-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref_name == 'codex/issue-121-ai-analyst-recovery' &&
+      github.run_attempt == 1 &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          ref: codex/issue-121-ai-analyst-recovery
+          fetch-depth: 0
+
+      - name: Apply intentional compatibility updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          hardened = Path('scripts/ai_filing_analyst_hardened.py')
+          text = hardened.read_text(encoding='utf-8')
+          old = 'MAX_STRUCTURED_OUTPUT_ATTEMPTS = 2\n'
+          new = 'MAX_STRUCTURED_OUTPUT_ATTEMPTS = 3\n'
+          if text.count(old) != 1:
+              raise SystemExit('structured-output attempt constant changed unexpectedly')
+          hardened.write_text(text.replace(old, new), encoding='utf-8')
+
+          tests = Path('tests/test_ai_filing_analyst.py')
+          lines = tests.read_text(encoding='utf-8').splitlines(keepends=True)
+          insert_after: list[int] = []
+          for index, line in enumerate(lines):
+              if 'return SimpleNamespace(' not in line:
+                  continue
+              window = lines[index:index + 30]
+              if not any('output_text=' in candidate for candidate in window):
+                  continue
+              id_offset = next(
+                  (offset for offset, candidate in enumerate(window) if candidate.lstrip().startswith('id=')),
+                  None,
+              )
+              if id_offset is None:
+                  continue
+              absolute = index + id_offset
+              if absolute + 1 < len(lines) and lines[absolute + 1].lstrip().startswith('status='):
+                  continue
+              insert_after.append(absolute)
+          if len(insert_after) < 5:
+              raise SystemExit(f'expected at least five legacy response fixtures, found {len(insert_after)}')
+          for absolute in reversed(insert_after):
+              indent = lines[absolute][: len(lines[absolute]) - len(lines[absolute].lstrip())]
+              lines.insert(absolute + 1, f'{indent}status="completed",\n')
+          text = ''.join(lines)
+
+          old_quota = '''    assert result.success is False
+    assert result.attempted_count == 1
+    assert calls["count"] == 1
+    assert len(result.errors) == 1
+    assert "quota" in result.errors[0].casefold()
+    assert any(
+        "remaining ai analyses were not attempted"
+        in item.casefold()
+        for item in result.warnings
+    )
+'''
+          new_quota = '''    assert result.success is True
+    assert result.run_status == "degraded"
+    assert result.state_publishable is True
+    assert result.attempted_count == 1
+    assert calls["count"] == 1
+    assert result.errors == []
+    assert len(result.deferred_candidates) == 2
+    assert result.deferred_candidates[0]["reason"] == "openai_quota_unavailable"
+    assert result.deferred_candidates[1]["reason"] == "not_attempted_after_openai_quota"
+    assert any(
+        "remaining ai analyses were deferred"
+        in item.casefold()
+        for item in result.warnings
+    )
+'''
+          if text.count(old_quota) != 1:
+              raise SystemExit('legacy quota expectation block changed unexpectedly')
+          tests.write_text(text.replace(old_quota, new_quota), encoding='utf-8')
+
+          scheduler = Path('tests/test_scheduler_evidence.py')
+          text = scheduler.read_text(encoding='utf-8')
+          old_guard = '        assert "collect_workflow_evidence.py" in text\n'
+          new_guard = '''        if branch == "ai":
+            assert "ai_retry_guard.py" in text
+        else:
+            assert "collect_workflow_evidence.py" in text
+'''
+          if text.count(old_guard) != 1:
+              raise SystemExit('scheduler retry-guard assertion changed unexpectedly')
+          scheduler.write_text(text.replace(old_guard, new_guard), encoding='utf-8')
+          PY
+          python -m py_compile scripts/ai_filing_analyst_hardened.py
+          git diff --check
+
+      - name: Run focused and compatibility tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --requirement requirements-ai.txt pytest==9.0.2
+          python -m pytest -q \
+            tests/test_ai_filing_analyst.py \
+            tests/test_ai_filing_analyst_hardened.py \
+            tests/test_ai_retry_guard.py \
+            tests/test_validate_ai_publication.py \
+            tests/test_scheduler_evidence.py
+
+      - name: Commit patch without mutating this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin codex/issue-121-ai-analyst-recovery
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/codex/issue-121-ai-analyst-recovery)"
+          git checkout HEAD -- .github/workflows/issue121_ci_compat_patch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/ai_filing_analyst_hardened.py \
+            tests/test_ai_filing_analyst.py \
+            tests/test_scheduler_evidence.py
+          git diff --cached --quiet && { echo 'Compatibility patch produced no changes.' >&2; exit 1; }
+          git commit -m 'Align AI hardening with full compatibility suite (#121)'
+          git push origin HEAD:codex/issue-121-ai-analyst-recovery
