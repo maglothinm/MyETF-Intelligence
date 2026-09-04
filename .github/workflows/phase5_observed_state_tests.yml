@@ -1,0 +1,66 @@
+name: Phase 5 observed legacy-state tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
+      - ".github/workflows/phase5_observed_state_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_observed_state_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-observed-state-controller:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Validate syntax and exact-state invariants
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/runtime_promotion_control.sh
+          bash -n deploy/runtime-v2/runtime_promotion_observed_state.sh
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          phase4 = Path('.github/workflows/phase4_live_shadow_validation_v6.yml').read_text()
+          phase5 = Path('.github/workflows/phase5_production_promotion_v2.yml').read_text()
+          overlay = Path('deploy/runtime-v2/runtime_promotion_observed_state.sh').read_text()
+          for path in (
+              '.github/workflows/phase4_live_shadow_validation_v6.yml',
+              '.github/workflows/phase5_production_promotion_v2.yml',
+          ):
+              yaml.load(Path(path).read_text(), Loader=yaml.BaseLoader)
+          required = {
+              'phase4': ('capture_legacy_workflow_states', 'verify_legacy_workflows_match_observed',
+                         'legacy_workflow_states:$states[0]', 'for cycle in 1 2'),
+              'phase5': ('workflows: ["Phase 4 live shadow validation v6"]',
+                         'restore_legacy_workflows_observed', 'disable_legacy_workflows',
+                         'rollback_restores_exact_observed_state:true'),
+              'overlay': ('SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}',
+                          'legislative_trade_tracker_v2.yml"] == "active"',
+                          'executive_trade_tracker.yml"] == "active"',
+                          'disabled_manually)', 'verify_legacy_workflows_match_observed'),
+          }
+          for label, text in (('phase4', phase4), ('phase5', phase5), ('overlay', overlay)):
+              missing = [token for token in required[label] if token not in text]
+              if missing:
+                  raise SystemExit(f'{label} missing: {missing}')
+          if 'enable_legacy_workflows\n' in phase5:
+              raise SystemExit('Phase 5 v2 still contains blanket legacy enable')
+          PY
+          python -m pytest -q tests/test_validate_runtime_promotion.py
+          bash verify.sh
