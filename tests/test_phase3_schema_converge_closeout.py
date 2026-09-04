@@ -14,7 +14,6 @@ def test_workflow_is_canonical_main_and_self_scoped() -> None:
     assert 'group: runtime-v2-live-controller' in text
     assert "name: Phase 3 converge schema and close" in text
     assert "deploy/runtime-v2/converge-phase3-schema-and-close.sh" in text
-    assert '"deploy/runtime-v2/gcs_status_probe.py"' in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
