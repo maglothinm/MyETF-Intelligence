@@ -1,0 +1,230 @@
+name: Phase 4 live shadow validation v6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "deploy/runtime-v2/phase4-approved-image.json"
+      - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  controlled-shadow-acceptance:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: phase4-live
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Pin the approved quarantine-safe image receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || { echo "Checkout drifted from live main." >&2; exit 1; }
+          jq -e '.repository_id == 1349678672 and .result == "phase4_quarantine_runtime_image_approved"' \
+            deploy/runtime-v2/phase4-approved-image.json >/dev/null
+          image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+          source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          [[ "${image}" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "Approved image is not immutable." >&2; exit 1; }
+          [[ "${source}" =~ ^[0-9a-f]{40}$ ]] || { echo "Runtime source revision is invalid." >&2; exit 1; }
+          echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
+          echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Execute two serialized, evidence-bound shadow cycles
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+
+          cleanup() {
+            local code=$?
+            trap - EXIT
+            set +e
+            pause_producer_schedulers
+            make_web_private
+            remove_execution_authority
+            remove_service_account_user
+            set -e
+            exit "${code}"
+          }
+          trap cleanup EXIT
+
+          verify_canonical_context
+          verify_project_boundary
+          pause_producer_schedulers
+          verify_producer_scheduler_state PAUSED
+          verify_vault_scheduler_paused
+          make_web_private
+          verify_web_private
+          verify_cloud_sql_private
+          capture_legacy_workflow_states
+          verify_legacy_workflows_match_observed
+
+          configure_runtime shadow
+          verify_runtime_configuration shadow
+          grant_execution_authority
+
+          # Apply only the additive, provenance-bound schema correction carried by the approved image.
+          execute_admin_init
+          capture_status "${EVIDENCE_DIR}/baseline.json" baseline
+
+          : > "${EVIDENCE_DIR}/observations.ndjson"
+          sequence=0
+          for cycle in 1 2; do
+            for job in legislative executive ai dashboard; do
+              sequence=$((sequence + 1))
+              stem="cycle-${cycle}-sequence-${sequence}"
+              execution="$(execute_producer "${job}" shadow "${stem}")"
+              status_file="${EVIDENCE_DIR}/${stem}-${job}-status.json"
+              capture_status "${status_file}" "${stem}-${job}-status"
+              jq -cn \
+                --argjson cycle "${cycle}" \
+                --argjson sequence "${sequence}" \
+                --arg job "${job}" \
+                --arg execution "${execution}" \
+                --slurpfile status "${status_file}" \
+                '{cycle:$cycle, sequence:$sequence, job:$job, cloud_run_execution:$execution, status:$status[0]}' \
+                >> "${EVIDENCE_DIR}/observations.ndjson"
+            done
+          done
+
+          remove_execution_authority
+          verify_execution_authority_removed
+          verify_service_account_user_removed
+          verify_producer_scheduler_state PAUSED
+          verify_vault_scheduler_paused
+          verify_web_private
+          verify_cloud_sql_private
+          verify_runtime_configuration shadow
+          verify_legacy_workflows_match_observed
+
+          python - "${EVIDENCE_DIR}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          executions = [json.loads(line) for line in (root / "observations.ndjson").read_text().splitlines() if line.strip()]
+          manifest = {
+              "schema_version": 1,
+              "phase": "phase4",
+              "preflight": {
+                  "canonical_repository_verified": True,
+                  "canonical_main_verified": True,
+                  "project_boundary_verified": True,
+                  "image_digest_verified": True,
+                  "cloud_sql_private_only": True,
+                  "producer_schedulers_paused": True,
+                  "web_public_invoker_absent": True,
+                  "persistent_job_configuration_verified": True,
+                  "legacy_production_route_active": True,
+              },
+              "executions": executions,
+              "cleanup": {
+                  "temporary_execution_authority_removed": True,
+                  "temporary_logging_authority_removed": True,
+                  "temporary_service_account_user_removed": True,
+                  "producer_schedulers_paused": True,
+                  "web_public_invoker_absent": True,
+                  "legacy_production_route_active": True,
+                  "cloud_sql_private_only": True,
+              },
+          }
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+          PY
+
+          python deploy/runtime-v2/validate_runtime_promotion.py \
+            --phase phase4 \
+            --baseline "${EVIDENCE_DIR}/baseline.json" \
+            --manifest "${EVIDENCE_DIR}/manifest.json" \
+            --inventory deploy/runtime-v2/phase4-legacy-run-inventory.json \
+            --control-revision "${GITHUB_SHA}" \
+            --runtime-source-revision "${RUNTIME_SOURCE_REVISION}" \
+            --image "${APPROVED_IMAGE}" \
+            --output "${EVIDENCE_DIR}/phase4-ready.json"
+          jq --slurpfile states "${LEGACY_STATE_FILE}" \
+            '. + {legacy_workflow_states:$states[0], legacy_state_preserved:true}' \
+            "${EVIDENCE_DIR}/phase4-ready.json" > "${EVIDENCE_DIR}/phase4-ready.tmp"
+          mv "${EVIDENCE_DIR}/phase4-ready.tmp" "${EVIDENCE_DIR}/phase4-ready.json"
+          (cd "${EVIDENCE_DIR}" && sha256sum phase4-ready.json > phase4-ready.sha256)
+          jq -e '.result == "phase4_ready_for_phase5" and .phase5_ready == true and .unique_successful_execution_receipts == 8' \
+            "${EVIDENCE_DIR}/phase4-ready.json" >/dev/null
+
+          trap - EXIT
+
+      - name: Fail-closed cleanup and evidence check
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          printf '%s\n' '{"result":"phase4_cleanup_started"}' > "${EVIDENCE_DIR}/cleanup.json"
+          if [[ -z "${APPROVED_IMAGE:-}" && -f deploy/runtime-v2/phase4-approved-image.json ]]; then
+            export APPROVED_IMAGE="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+            export RUNTIME_SOURCE_REVISION="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          fi
+          if [[ -z "${APPROVED_IMAGE:-}" || -z "${RUNTIME_SOURCE_REVISION:-}" ]]; then
+            exit 0
+          fi
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          pause_producer_schedulers || true
+          make_web_private || true
+          remove_execution_authority || true
+          remove_service_account_user || true
+          if [[ "${{ job.status }}" == "success" ]]; then
+            verify_execution_authority_removed
+            verify_service_account_user_removed
+            verify_producer_scheduler_state PAUSED
+            verify_vault_scheduler_paused
+            verify_web_private
+            verify_cloud_sql_private
+            verify_runtime_configuration shadow
+            verify_legacy_workflows_match_observed
+            (cd "${EVIDENCE_DIR}" && sha256sum -c phase4-ready.sha256)
+          fi
+
+      - name: Upload Phase 4 readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase4-readiness
+          path: phase4-live/
+          if-no-files-found: error
+          retention-days: 90
