@@ -1,0 +1,265 @@
+name: Phase 4 build quarantine-safe Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_build_quarantine_image.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-image-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      OBSOLETE_HARDENED_DIGEST: sha256:310e1042c7fe3e87a996eb0eaa676b6b3abcae0e909cb5e49f6c638935ac12a7
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 4 recovery deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Grant builder actAs on the resolved default build identity only
+        id: build-identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          default_build_service_account="$(gcloud builds get-default-service-account \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(serviceAccountEmail)')"
+          default_build_service_account="${default_build_service_account##*/}"
+          [[ "${default_build_service_account}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.gserviceaccount\.com$ ]] || {
+            echo "Cloud Build returned an invalid default execution service account." >&2
+            exit 1
+          }
+          [[ "${default_build_service_account}" != "${BUILDER_SERVICE_ACCOUNT}" ]] || {
+            echo "Refusing to collapse the isolated submitter and build-execution identities." >&2
+            exit 1
+          }
+
+          gcloud iam service-accounts add-iam-policy-binding "${default_build_service_account}" \
+            --project "${PROJECT_ID}" \
+            --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+            --role roles/iam.serviceAccountUser \
+            --condition=None \
+            --quiet \
+            --format=none
+
+          build_sa_policy="$(gcloud iam service-accounts get-iam-policy "${default_build_service_account}" \
+            --project "${PROJECT_ID}" \
+            --format=json)"
+          jq -e \
+            --arg member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+            '[.bindings[]? | select(.role == "roles/iam.serviceAccountUser") | .members[]?] | any(. == $member)' \
+            <<<"${build_sa_policy}" >/dev/null || {
+              echo "Builder lacks service-account-level actAs on Cloud Build's resolved default identity." >&2
+              exit 1
+            }
+
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e \
+            --arg member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+            '[.bindings[]? | select(.role == "roles/iam.serviceAccountUser") | .members[]?] | any(. == $member)' \
+            <<<"${project_policy}" >/dev/null; then
+            echo "Builder has an unexpected project-wide Service Account User role." >&2
+            exit 1
+          fi
+
+          echo "default_build_service_account=${default_build_service_account}" >> "${GITHUB_OUTPUT}"
+
+      - name: Authenticate as isolated Phase 4 recovery builder
+        id: builder-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
+
+      - name: Build exact current source into an immutable image
+        shell: bash
+        env:
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.builder-auth.outputs.credentials_file_path }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.builder-auth.outputs.credentials_file_path }}
+          GOOGLE_GHA_CREDS_PATH: ${{ steps.builder-auth.outputs.credentials_file_path }}
+          DEFAULT_BUILD_SERVICE_ACCOUNT: ${{ steps.build-identity.outputs.default_build_service_account }}
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-quarantine-image
+
+          credential_file="${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE}"
+          [[ -n "${credential_file}" && -f "${credential_file}" ]] || {
+            echo "The isolated builder credential file is missing." >&2
+            exit 1
+          }
+          jq -e --arg account "${BUILDER_SERVICE_ACCOUNT}" \
+            '(.service_account_impersonation_url // "") | contains($account)' \
+            "${credential_file}" >/dev/null || {
+              echo "The active credential file does not impersonate the isolated Phase 4 recovery builder." >&2
+              exit 1
+            }
+
+          permission_ready=false
+          for attempt in $(seq 1 18); do
+            if gcloud services list --enabled --project "${PROJECT_ID}" --limit=1 >/dev/null 2>&1 \
+              && gcloud builds list --project "${PROJECT_ID}" --region "${REGION}" --limit=1 >/dev/null 2>&1; then
+              permission_ready=true
+              break
+            fi
+            echo "Builder permissions not effective yet (attempt ${attempt}/18)."
+            sleep 10
+          done
+          [[ "${permission_ready}" == "true" ]] || {
+            echo "Builder permissions did not become effective within the bounded readiness window." >&2
+            exit 1
+          }
+
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('runtime_v2/database.py').read_text(encoding='utf-8')
+          required = (
+              'def _use_private_ip',
+              'IPTypes.PRIVATE if _use_private_ip(config) else IPTypes.PUBLIC',
+          )
+          missing = [value for value in required if value not in source]
+          if missing:
+              raise SystemExit('Current source lacks private Cloud SQL routing: ' + ', '.join(missing))
+          migration = Path('migrations/20260904_runtime_v2_mode_quarantine.sql').read_text(encoding='utf-8')
+          for value in (
+              "runtime_mode_evidence",
+              "legacy_unverified",
+              "runtime_job_runs_success_snapshot",
+              "legacy Runtime run inventory differs from recovered Phase 4 manifest",
+          ):
+              if value not in migration:
+                  raise SystemExit('Quarantine migration is missing ' + value)
+          store = Path('runtime_v2/store.py').read_text(encoding='utf-8')
+          if '20260904_runtime_v2_mode_quarantine.sql' not in store:
+              raise SystemExit('Runtime store does not default to the quarantine migration.')
+          config = Path('deploy/runtime-v2/cloudbuild-no-source.yaml').read_text(encoding='utf-8')
+          for value in ('git clone', '_SOURCE_REVISION', 'checkout --detach FETCH_HEAD'):
+              if value not in config:
+                  raise SystemExit('No-source build config is missing ' + value)
+          PY
+
+          tag="${GITHUB_SHA:0:12}"
+          tagged_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${tag}"
+          gcloud builds submit \
+            --no-source \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --config deploy/runtime-v2/cloudbuild-no-source.yaml \
+            --substitutions "_REGION=${REGION},_REPOSITORY=${REPOSITORY},_IMAGE=${IMAGE_NAME},_TAG=${tag},_SOURCE_REVISION=${GITHUB_SHA},_SOURCE_REPOSITORY=${SOURCE_REPOSITORY}" \
+            --quiet \
+            --format=json > phase4-quarantine-image/cloud-build.json
+
+          digest="$(gcloud artifacts docker images describe "${tagged_image}" \
+            --project "${PROJECT_ID}" \
+            --format='value(image_summary.digest)')"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "Cloud Build did not produce a resolvable immutable digest." >&2
+            exit 1
+          }
+          [[ "${digest}" != "${CURRENT_DEPLOYED_DIGEST}" ]] || {
+            echo "Fresh build unexpectedly resolved to the stale deployed digest." >&2
+            exit 1
+          }
+          [[ "${digest}" != "${OBSOLETE_HARDENED_DIGEST}" ]] || {
+            echo "Fresh build unexpectedly resolved to the obsolete pre-quarantine digest." >&2
+            exit 1
+          }
+
+          immutable_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}@${digest}"
+          build_id="$(jq -r '.id // .metadata.build.id // empty' phase4-quarantine-image/cloud-build.json)"
+          database_sha="$(sha256sum runtime_v2/database.py | awk '{print $1}')"
+          store_sha="$(sha256sum runtime_v2/store.py | awk '{print $1}')"
+          runner_sha="$(sha256sum runtime_v2/runner.py | awk '{print $1}')"
+          migration_sha="$(sha256sum migrations/20260904_runtime_v2_mode_quarantine.sql | awk '{print $1}')"
+          dockerfile_sha="$(sha256sum deploy/runtime-v2/Dockerfile | awk '{print $1}')"
+          requirements_sha="$(sha256sum requirements-runtime-v2.txt | awk '{print $1}')"
+
+          jq -n \
+            --arg repository_id "${GITHUB_REPOSITORY_ID}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg source_revision "${GITHUB_SHA}" \
+            --arg project_id "${PROJECT_ID}" \
+            --arg project_number "${PROJECT_NUMBER}" \
+            --arg image "${immutable_image}" \
+            --arg digest "${digest}" \
+            --arg build_id "${build_id}" \
+            --arg default_build_service_account "${DEFAULT_BUILD_SERVICE_ACCOUNT}" \
+            --arg database_sha256 "${database_sha}" \
+            --arg store_sha256 "${store_sha}" \
+            --arg runner_sha256 "${runner_sha}" \
+            --arg migration_sha256 "${migration_sha}" \
+            --arg dockerfile_sha256 "${dockerfile_sha}" \
+            --arg requirements_sha256 "${requirements_sha}" \
+            '{
+              result: "phase4_quarantine_runtime_image_built",
+              repository_id: ($repository_id | tonumber),
+              repository: $repository,
+              source_revision: $source_revision,
+              project_id: $project_id,
+              project_number: ($project_number | tonumber),
+              cloud_build_id: $build_id,
+              immutable_image: $image,
+              image_digest: $digest,
+              default_build_service_account: $default_build_service_account,
+              builder_actas_scope: "default_build_service_account_only",
+              database_sha256: $database_sha256,
+              store_sha256: $store_sha256,
+              runner_sha256: $runner_sha256,
+              migration_sha256: $migration_sha256,
+              dockerfile_sha256: $dockerfile_sha256,
+              requirements_sha256: $requirements_sha256,
+              builder_credentials_pinned: true,
+              source_staging_used: false,
+              source_fetched_inside_build: true,
+              deployed: false,
+              runtime_job_execution: false,
+              scheduler_execution: false,
+              production_authority_transferred: false,
+              phase4_started: true,
+              phase4_producer_execution: false
+            }' > phase4-quarantine-image/build-receipt.json
+          cat phase4-quarantine-image/build-receipt.json
+
+      - name: Upload immutable image receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase4-quarantine-runtime-image
+          path: phase4-quarantine-image/
+          if-no-files-found: warn
+          retention-days: 90
