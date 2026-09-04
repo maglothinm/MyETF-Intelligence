@@ -10,6 +10,46 @@
 eval "$(declare -f configure_runtime | sed '1s/configure_runtime/configure_runtime_v1/')"
 eval "$(declare -f verify_runtime_configuration | sed '1s/verify_runtime_configuration/verify_runtime_configuration_v1/')"
 
+# Cloud Logging emits structured Python log records as jsonPayload, while older
+# Runtime images and local tests may expose the same JSON through textPayload.
+# Accept either representation, preferring the last complete status record for
+# the exact execution already bound by the shared receipt controller.
+capture_status() {
+  local output="$1"
+  local stem="$2"
+  local execute_result="${EVIDENCE_DIR}/${stem}-admin-execute.json"
+  local execution logs payload
+  gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+    --args=-m,runtime_v2,status --wait --format=json > "${execute_result}"
+  execution="$(latest_execution_name "${ADMIN_JOB}" "${execute_result}")"
+  [[ -n "${execution}" ]] || { echo "Unable to resolve admin status execution." >&2; return 1; }
+  printf '%s\n' "${execution}" > "${EVIDENCE_DIR}/${stem}-admin-execution.txt"
+  logs="${EVIDENCE_DIR}/${stem}-admin-logs.json"
+  payload=""
+  for attempt in $(seq 1 24); do
+    gcloud logging read \
+      "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+      --project "${PROJECT_ID}" --freshness=2h --limit=1000 --order=asc --format=json > "${logs}"
+    payload="$(jq -c '
+      [
+        .[]
+        | (
+            (.jsonPayload?
+             | select(type == "object" and has("heads") and has("latest_runs"))),
+            (.textPayload?
+             | select(type == "string")
+             | fromjson?
+             | select(type == "object" and has("heads") and has("latest_runs")))
+          )
+      ][-1] // empty
+    ' "${logs}")"
+    [[ -n "${payload}" ]] && break
+    sleep 5
+  done
+  [[ -n "${payload}" ]] || { echo "No Runtime v2 status payload was emitted by ${execution}." >&2; return 1; }
+  printf '%s\n' "${payload}" | jq . > "${output}"
+}
+
 configure_runtime() {
   local mode="$1" job status=0
   configure_runtime_v1 "${mode}" || return 1
