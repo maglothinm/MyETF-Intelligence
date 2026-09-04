@@ -24,7 +24,7 @@ jobs:
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_JOB: polititrack-admin
-      VAULT_BUCKET: polititrack-phase2-vault-497412818801
+      VAULT_BUCKET: project-38008d5f-4918-46e6-920-polititrack-vault
     steps:
       - uses: actions/checkout@v7
 
@@ -81,6 +81,17 @@ jobs:
               --condition=None --quiet >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+
+          gcloud run jobs describe "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+            > phase5-vault-admin-repair/admin-job-before.json
+          configured_bucket="$(jq -r \
+            '[.. | objects | select(.name? == "VAULT_GCS_BUCKET") | .value?][0] // empty' \
+            phase5-vault-admin-repair/admin-job-before.json)"
+          [[ "${configured_bucket}" == "${VAULT_BUCKET}" ]] || {
+            echo "Admin job Vault bucket is ${configured_bucket:-missing}, expected ${VAULT_BUCKET}." >&2
+            exit 1
+          }
 
           # The deployer intentionally has no standing Storage access. Give it
           # short-lived policy-mutation authority only long enough to install
