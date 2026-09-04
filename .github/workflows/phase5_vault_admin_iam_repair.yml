@@ -76,22 +76,52 @@ jobs:
               --project "${PROJECT_ID}" --region "${REGION}" \
               --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides \
               --quiet >/dev/null 2>&1 || true
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${deployer_member}" --role roles/storage.admin \
+              --condition=None --quiet >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
+          # The deployer intentionally has no standing Storage access. Give it
+          # short-lived policy-mutation authority only long enough to install
+          # the durable bucket-scoped metadata binding.
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${deployer_member}" --role roles/storage.admin \
+            --condition=None --quiet --format=none
+          bucket_visible=false
+          for attempt in $(seq 1 18); do
+            if gcloud storage buckets describe "gs://${VAULT_BUCKET}" --format=json \
+              > phase5-vault-admin-repair/bucket-before.json 2>/dev/null; then
+              bucket_visible=true
+              break
+            fi
+            sleep 10
+          done
+          [[ "${bucket_visible}" == "true" ]] || { echo "Temporary Storage authority did not become effective." >&2; exit 1; }
+
           gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
             --member "${admin_member}" --role roles/storage.bucketViewer --quiet
-
           policy="$(gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json)"
           jq -e --arg member "${admin_member}" \
             '[.bindings[]? | select(.role == "roles/storage.bucketViewer") | .members[]?] | any(. == $member)' \
             <<<"${policy}" >/dev/null
+          printf '%s\n' "${policy}" > phase5-vault-admin-repair/bucket-policy-after.json
+
+          gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+            --member "${deployer_member}" --role roles/storage.admin \
+            --condition=None --quiet --format=none
+          project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          if jq -e --arg member "${deployer_member}" \
+            '[.bindings[]? | select(.role == "roles/storage.admin") | .members[]?] | any(. == $member)' \
+            <<<"${project_policy}" >/dev/null; then
+            echo "Temporary Storage Admin authority remains." >&2
+            exit 1
+          fi
 
           gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" \
             --project "${PROJECT_ID}" --region "${REGION}" \
             --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides \
             --quiet --format=none
-
           gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
             --wait --format=json > phase5-vault-admin-repair/admin-execute.json
           execution="$(gcloud run jobs executions describe-latest --job "${ADMIN_JOB}" \
@@ -118,7 +148,7 @@ jobs:
             --arg member "${admin_member}" \
             --arg admin_execution "${execution}" \
             --arg applied_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{result:$result,main_revision:$main_revision,bucket:$bucket,role:$role,member:$member,admin_execution:$admin_execution,admin_init_success:true,temporary_execution_authority_removed:true,applied_at:$applied_at}' \
+            '{result:$result,main_revision:$main_revision,bucket:$bucket,role:$role,member:$member,admin_execution:$admin_execution,admin_init_success:true,temporary_storage_admin_removed:true,temporary_execution_authority_removed:true,applied_at:$applied_at}' \
             > phase5-vault-admin-repair/receipt.json
           sha256sum phase5-vault-admin-repair/receipt.json > phase5-vault-admin-repair/SHA256SUMS
 
