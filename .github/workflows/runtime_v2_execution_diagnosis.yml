@@ -1,0 +1,90 @@
+name: Runtime v2 execution diagnosis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/runtime_v2_execution_diagnosis.yml"
+  workflow_dispatch:
+    inputs:
+      execution_name:
+        description: Cloud Run execution name to inspect
+        required: false
+        default: polititrack-admin-b9nw8
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      DEFAULT_EXECUTION_NAME: polititrack-admin-b9nw8
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Capture execution metadata and application logs
+        shell: bash
+        env:
+          REQUESTED_EXECUTION_NAME: ${{ inputs.execution_name }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p runtime-v2-diagnosis
+          execution="${REQUESTED_EXECUTION_NAME:-${DEFAULT_EXECUTION_NAME}}"
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          cleanup() {
+            set +e
+            gcloud logging views remove-iam-policy-binding _Default \
+              --bucket _Default --location global --project "${PROJECT_ID}" \
+              --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          gcloud run jobs executions describe "${execution}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+            > runtime-v2-diagnosis/execution.json
+
+          gcloud logging views add-iam-policy-binding _Default \
+            --bucket _Default --location global --project "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.viewAccessor --quiet --format=none
+
+          gcloud logging read \
+            "resource.type=\"cloud_run_job\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+            --project "${PROJECT_ID}" --freshness=6h --limit=1000 --order=asc --format=json \
+            > runtime-v2-diagnosis/logs.json
+
+          jq '[.[] | {timestamp, severity, textPayload, jsonPayload, labels, resource}]' \
+            runtime-v2-diagnosis/logs.json > runtime-v2-diagnosis/logs-sanitized.json
+          jq '{name:.metadata.name, conditions:.status.conditions, taskCount:.status.taskCount,
+               failedCount:.status.failedCount, completionTime:.status.completionTime,
+               logUri:.status.logUri}' runtime-v2-diagnosis/execution.json \
+            > runtime-v2-diagnosis/summary.json
+
+          cleanup
+          trap - EXIT
+
+      - name: Upload diagnosis
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-v2-execution-diagnosis
+          path: runtime-v2-diagnosis/
+          if-no-files-found: error
+          retention-days: 14
