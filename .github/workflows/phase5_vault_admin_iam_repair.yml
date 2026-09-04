@@ -1,0 +1,114 @@
+name: Phase 5 Vault admin IAM repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_vault_admin_iam_repair.yml"
+      - "deploy/runtime-v2/terraform/vault_admin_metadata.tf"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  repair-and-prove:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      VAULT_BUCKET: polititrack-phase2-vault-497412818801
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate durable Terraform repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform fmt -check
+          grep -F 'role   = "roles/storage.bucketViewer"' deploy/runtime-v2/terraform/vault_admin_metadata.tf
+          grep -F 'google_service_account.admin.email' deploy/runtime-v2/terraform/vault_admin_metadata.tf
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Apply metadata-only binding and prove schema initialization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p phase5-vault-admin-repair
+          deployer_member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          admin_member="serviceAccount:${ADMIN_SERVICE_ACCOUNT}"
+
+          cleanup() {
+            set +e
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+              --project "${PROJECT_ID}" --region "${REGION}" \
+              --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides \
+              --quiet >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
+            --member "${admin_member}" --role roles/storage.bucketViewer --quiet
+
+          policy="$(gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json)"
+          jq -e --arg member "${admin_member}" \
+            '[.bindings[]? | select(.role == "roles/storage.bucketViewer") | .members[]?] | any(. == $member)' \
+            <<<"${policy}" >/dev/null
+
+          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides \
+            --quiet --format=none
+
+          gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --wait --format=json > phase5-vault-admin-repair/admin-execute.json
+          execution="$(gcloud run jobs executions describe-latest --job "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format='value(metadata.name)')"
+          [[ -n "${execution}" ]]
+
+          cleanup
+          trap - EXIT
+
+          remaining="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          if jq -e --arg member "${deployer_member}" \
+            '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' \
+            <<<"${remaining}" >/dev/null; then
+            echo "Temporary admin execution authority remains." >&2
+            exit 1
+          fi
+
+          jq -n \
+            --arg result "vault_admin_metadata_repaired" \
+            --arg main_revision "${GITHUB_SHA}" \
+            --arg bucket "${VAULT_BUCKET}" \
+            --arg role "roles/storage.bucketViewer" \
+            --arg member "${admin_member}" \
+            --arg admin_execution "${execution}" \
+            --arg applied_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{result:$result,main_revision:$main_revision,bucket:$bucket,role:$role,member:$member,admin_execution:$admin_execution,admin_init_success:true,temporary_execution_authority_removed:true,applied_at:$applied_at}' \
+            > phase5-vault-admin-repair/receipt.json
+          sha256sum phase5-vault-admin-repair/receipt.json > phase5-vault-admin-repair/SHA256SUMS
+
+      - name: Upload repair evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-vault-admin-iam-repair
+          path: phase5-vault-admin-repair/
+          if-no-files-found: error
+          retention-days: 30
