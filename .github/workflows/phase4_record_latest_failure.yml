@@ -1,0 +1,119 @@
+name: Phase 4 record latest failure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_record_latest_failure.yml"
+  workflow_run:
+    workflows:
+      - Phase 4 live shadow validation
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: phase4-latest-failure-record
+  cancel-in-progress: true
+
+jobs:
+  record:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Stop when immutable readiness exists
+        id: ready
+        run: |
+          git fetch --tags origin
+          if git rev-parse -q --verify refs/tags/phase5-ready >/dev/null; then
+            echo "value=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "value=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Find and record latest failed Phase 4 run
+        if: steps.ready.outputs.value != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/phase4-failure"
+          rm -rf "${work}"
+          mkdir -p "${work}"
+
+          run_id="$(gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "Phase 4 live shadow validation" and .conclusion == "failure")][0].id // empty' \
+            | sed -n '1p')"
+          [[ -n "${run_id}" ]] || { echo "No failed Phase 4 run is available."; exit 0; }
+
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "${work}/run.json"
+          gh run download "${run_id}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern 'phase4-shadow-validation-*' \
+            --dir "${work}/artifact" >/dev/null 2>&1 || true
+
+          failure="$(find "${work}/artifact" -type f -name failure.json -print -quit 2>/dev/null || true)"
+          manifest="$(find "${work}/artifact" -type f -name execution-manifest.json -print -quit 2>/dev/null || true)"
+          python - "${work}/run.json" "${failure}" "${manifest}" > "${work}/PHASE4_LAST_FAILURE.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          run = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          failure_path = Path(sys.argv[2]) if sys.argv[2] else None
+          manifest_path = Path(sys.argv[3]) if sys.argv[3] else None
+          failure = {}
+          manifest = {}
+          if failure_path and failure_path.is_file():
+              try:
+                  failure = json.loads(failure_path.read_text(encoding='utf-8'))
+              except Exception:
+                  failure = {'error': 'failure artifact was unreadable'}
+          if manifest_path and manifest_path.is_file():
+              try:
+                  manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+              except Exception:
+                  manifest = {}
+          safe = {
+              'result': 'phase4_latest_failure',
+              'workflow_run_id': run.get('id'),
+              'workflow_path': run.get('path'),
+              'head_sha': run.get('head_sha'),
+              'created_at': run.get('created_at'),
+              'updated_at': run.get('updated_at'),
+              'conclusion': run.get('conclusion'),
+              'error_type': failure.get('error_type', 'unavailable'),
+              'error': failure.get('error', 'No structured failure artifact was emitted.'),
+              'phase3_fallback_supplied': failure.get('phase3_fallback_supplied'),
+              'executions_completed': manifest,
+              'phase5_ready': False,
+              'phase5_started': False,
+              'production_authority_transferred': False,
+          }
+          print(json.dumps(safe, indent=2, sort_keys=True))
+          PY
+
+          git fetch origin main
+          git checkout -B phase4-failure-record origin/main
+          mkdir -p docs/runtime-v2
+          cp "${work}/PHASE4_LAST_FAILURE.json" docs/runtime-v2/PHASE4_LAST_FAILURE.json
+          git config user.name "PolitiTrack Phase Gate"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/runtime-v2/PHASE4_LAST_FAILURE.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record latest fail-closed Phase 4 diagnostic"
+            git push origin HEAD:main
+          fi
