@@ -10,8 +10,10 @@ def workflow_text() -> str:
 
 def test_one_shot_main_trigger():
     text = workflow_text()
-    assert 'push:' in text
-    assert 'workflow_dispatch:' not in text
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
 
