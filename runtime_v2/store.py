@@ -233,6 +233,8 @@ class LockedNamespace:
                         "AND committed_snapshot.snapshot_sha256 = %s "
                         "AND committed_snapshot.namespace = job_run.namespace "
                         "AND committed_snapshot.source_revision = job_run.source_revision "
+                        "AND committed_snapshot.created_at >= job_run.started_at "
+                        "AND committed_snapshot.created_at <= now() "
                         "AND committed_snapshot.source_provenance ->> 'authority' = 'runtime_v2' "
                         "AND committed_snapshot.source_provenance ->> 'job' = job_run.job_name "
                         "AND committed_snapshot.source_provenance ->> 'trigger_source' = job_run.trigger_source "
