@@ -383,7 +383,7 @@ def test_quarantine_schema_rejects_unattested_or_mismatched_effective_modes():
         "ALTER COLUMN runtime_mode_evidence SET NOT NULL"
     )
     cross_table_guard = migration.index(
-        "-- JSON evidence is not allowed to self-attest."
+        "-- JSON evidence is not allowed to self-attest during convergence."
     )
     commit = migration.rindex("COMMIT;")
 
