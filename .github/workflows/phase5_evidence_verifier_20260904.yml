@@ -1,0 +1,177 @@
+name: Phase 5 terminal evidence verifier
+
+on:
+  push:
+    branches:
+      - phase5/evidence-verifier-20260904
+    paths:
+      - ".github/workflows/phase5_evidence_verifier_20260904.yml"
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  verify-terminal-evidence:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_PR: "116"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Wait for and verify the terminal certificate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p phase5-terminal-evidence/downloads
+
+          phase5_id=""
+          phase5_sha=""
+          for attempt in $(seq 1 1200); do
+            main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+            candidate="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/phase5_production_promotion_v2.yml/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs | map(select(.head_sha == \"${main_sha}\" and .status == \"completed\")) | sort_by(.created_at) | last | @base64 // empty")"
+            if [[ -n "${candidate}" ]]; then
+              decoded="$(printf '%s' "${candidate}" | base64 --decode)"
+              conclusion="$(jq -r '.conclusion' <<<"${decoded}")"
+              phase5_id="$(jq -r '.id' <<<"${decoded}")"
+              phase5_sha="$(jq -r '.head_sha' <<<"${decoded}")"
+              if [[ "${conclusion}" != "success" ]]; then
+                gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" \
+                  -f body="Phase 5 v2 reached terminal conclusion \`${conclusion}\` in run \`${phase5_id}\`; terminal evidence verification stopped fail-closed." >/dev/null
+                exit 1
+              fi
+              break
+            fi
+            sleep 15
+          done
+          [[ -n "${phase5_id}" && "${phase5_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "A successful Phase 5 run was not observed." >&2
+            exit 1
+          }
+
+          phase4_id="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/phase4_live_shadow_validation_v6.yml/runs?branch=main&per_page=100" \
+            --jq ".workflow_runs | map(select(.head_sha == \"${phase5_sha}\" and .status == \"completed\" and .conclusion == \"success\")) | sort_by(.created_at) | last | .id // empty")"
+          [[ -n "${phase4_id}" ]] || { echo "Matching successful Phase 4 run is absent." >&2; exit 1; }
+
+          gh run download "${phase4_id}" --repo "${GITHUB_REPOSITORY}" \
+            --dir phase5-terminal-evidence/downloads/phase4
+          gh run download "${phase5_id}" --repo "${GITHUB_REPOSITORY}" \
+            --dir phase5-terminal-evidence/downloads/phase5
+
+          PHASE4_ID="${phase4_id}" PHASE5_ID="${phase5_id}" CONTROL_SHA="${phase5_sha}" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("phase5-terminal-evidence")
+          phase4_root = root / "downloads" / "phase4"
+          phase5_root = root / "downloads" / "phase5"
+
+          def candidates(directory, result):
+              found = []
+              for path in directory.rglob("*.json"):
+                  try:
+                      data = json.loads(path.read_text(encoding="utf-8"))
+                  except Exception:
+                      continue
+                  if isinstance(data, dict) and data.get("result") == result:
+                      found.append((path, data))
+              return found
+
+          p4 = candidates(phase4_root, "phase4_ready_for_phase5")
+          p5 = candidates(phase5_root, "phase5_complete")
+          if len(p4) != 1:
+              raise SystemExit(f"Expected one Phase 4 certificate, found {len(p4)}")
+          if len(p5) != 1:
+              raise SystemExit(f"Expected one Phase 5 certificate, found {len(p5)}")
+
+          p4_path, p4_data = p4[0]
+          p5_path, p5_data = p5[0]
+          control = os.environ["CONTROL_SHA"]
+          required_true = {
+              "production_authority_transferred": True,
+              "rollback_restores_exact_observed_state": True,
+          }
+          for key, expected in required_true.items():
+              if p5_data.get(key) is not expected:
+                  raise SystemExit(f"Phase 5 certificate {key} is not {expected}")
+          if p5_data.get("production_route") != "runtime_v2":
+              raise SystemExit("Phase 5 certificate does not bind production to Runtime v2")
+          if p5_data.get("phase6_started") is not False:
+              raise SystemExit("Phase 6 state is not explicitly false")
+
+          control_values = {
+              p5_data.get("control_revision"),
+              p5_data.get("main_revision"),
+              p5_data.get("source_control_revision"),
+          }
+          control_values.discard(None)
+          if control_values and control not in control_values:
+              raise SystemExit(f"Certificate control revision {sorted(control_values)} does not include {control}")
+
+          smoke = p5_data.get("unique_successful_execution_receipts")
+          if smoke is not None and int(smoke) != 4:
+              raise SystemExit(f"Expected four production smoke receipts, found {smoke}")
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          report = {
+              "result": "phase5_terminal_evidence_verified",
+              "repository_id": 1349678672,
+              "control_revision": control,
+              "phase4_run_id": int(os.environ["PHASE4_ID"]),
+              "phase5_run_id": int(os.environ["PHASE5_ID"]),
+              "phase4_certificate": str(p4_path.relative_to(root)),
+              "phase4_certificate_sha256": digest(p4_path),
+              "phase5_certificate": str(p5_path.relative_to(root)),
+              "phase5_certificate_sha256": digest(p5_path),
+              "production_route": p5_data.get("production_route"),
+              "production_authority_transferred": p5_data.get("production_authority_transferred"),
+              "rollback_restores_exact_observed_state": p5_data.get("rollback_restores_exact_observed_state"),
+              "phase6_started": p5_data.get("phase6_started"),
+              "public_runtime_url": p5_data.get("public_runtime_url") or p5_data.get("runtime_url") or p5_data.get("web_url"),
+              "phase5_certificate_data": p5_data,
+          }
+          report_path = root / "verification-report.json"
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          (root / "verification-report.sha256").write_text(
+              f"{digest(report_path)}  verification-report.json\n", encoding="utf-8"
+          )
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+          report="$(cat phase5-terminal-evidence/verification-report.json)"
+          phase4_digest="$(jq -r '.phase4_certificate_sha256' <<<"${report}")"
+          phase5_digest="$(jq -r '.phase5_certificate_sha256' <<<"${report}")"
+          runtime_url="$(jq -r '.public_runtime_url // "not-recorded-at-top-level"' <<<"${report}")"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" \
+            -f body="## Phase 5 terminal evidence verified
+
+- Control revision: \`${phase5_sha}\`
+- Phase 4 v6 run: \`${phase4_id}\`
+- Phase 4 certificate SHA-256: \`${phase4_digest}\`
+- Phase 5 v2 run: \`${phase5_id}\`
+- Phase 5 certificate SHA-256: \`${phase5_digest}\`
+- Production route: \`runtime_v2\`
+- Runtime URL: \`${runtime_url}\`
+- Exact observed-state rollback: \`true\`
+- Phase 6 started: \`false\`" >/dev/null
+
+      - name: Upload verified terminal evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-terminal-evidence-verification
+          path: phase5-terminal-evidence/
+          if-no-files-found: warn
+          retention-days: 90
