@@ -7,9 +7,11 @@ PROBE = Path("deploy/runtime-v2/gcs_status_probe.py")
 
 def test_closeout_is_canonical_and_self_scoped() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert "name: Phase 3 closeout through private GCS evidence" in text
-    assert 'branches:\n      - main' in text
-    assert '".github/workflows/phase3_closeout_gcs.yml"' in text
     assert '"deploy/runtime-v2/gcs_status_probe.py"' in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text

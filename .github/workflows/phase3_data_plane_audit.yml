@@ -1,11 +1,11 @@
 name: Phase 3 data-plane acceptance audit
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/phase3_data_plane_audit.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
 
 permissions:
   contents: read

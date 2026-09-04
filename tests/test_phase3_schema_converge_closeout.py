@@ -8,11 +8,12 @@ PROBE = Path("deploy/runtime-v2/gcs_status_probe.py")
 
 def test_workflow_is_canonical_main_and_self_scoped() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert "name: Phase 3 converge schema and close" in text
-    assert "branches:\n      - main" in text
-    assert '".github/workflows/phase3_converge_schema_and_close.yml"' in text
-    assert '"deploy/runtime-v2/converge-phase3-schema-and-close.sh"' in text
-    assert '"deploy/runtime-v2/gcs_status_probe.py"' in text
+    assert "deploy/runtime-v2/converge-phase3-schema-and-close.sh" in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
