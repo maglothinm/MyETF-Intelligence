@@ -1,0 +1,200 @@
+name: Phase 5 authorized recovery controller
+
+on:
+  push:
+    branches:
+      - phase5/authorized-recovery-controller-20260904
+    paths:
+      - ".github/workflows/phase5_authorized_recovery_controller_20260904.yml"
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  monitor-and-recover-known-defect:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_PR: "116"
+      PHASE4_WORKFLOW: phase4_live_shadow_validation_v6.yml
+      PHASE5_WORKFLOW: phase5_production_promotion_v2.yml
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Monitor and recover only the authorized lookup defect
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p authorized-recovery
+
+          post_comment() {
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR}/comments" -f body="$1" >/dev/null
+          }
+
+          wait_run() {
+            local workflow="$1" sha="$2" run_id=""
+            for attempt in $(seq 1 720); do
+              run_id="$(gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=main&per_page=100" \
+                --jq ".workflow_runs | map(select(.head_sha == \"${sha}\")) | sort_by(.created_at) | last | .id // empty")"
+              [[ -n "${run_id}" ]] && { printf '%s\n' "${run_id}"; return 0; }
+              sleep 15
+            done
+            return 1
+          }
+
+          wait_terminal() {
+            local run_id="$1" status conclusion
+            for attempt in $(seq 1 720); do
+              status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
+              conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion // empty')"
+              if [[ "${status}" == "completed" ]]; then
+                printf '%s\n' "${conclusion}"
+                return 0
+              fi
+              sleep 15
+            done
+            return 1
+          }
+
+          merge_sha=""
+          for attempt in $(seq 1 240); do
+            merged="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR}" --jq '.merged')"
+            if [[ "${merged}" == "true" ]]; then
+              merge_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR}" --jq '.merge_commit_sha')"
+              break
+            fi
+            sleep 15
+          done
+          [[ "${merge_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+            post_comment "Authorized recovery controller did not observe PR #${TARGET_PR} merging; no live action was taken."
+            exit 1
+          }
+
+          recovery_count=0
+          while true; do
+            phase4_id="$(wait_run "${PHASE4_WORKFLOW}" "${merge_sha}")"
+            phase4_conclusion="$(wait_terminal "${phase4_id}")"
+            if [[ "${phase4_conclusion}" == "success" ]]; then
+              break
+            fi
+
+            recovery_count=$((recovery_count + 1))
+            [[ "${recovery_count}" -le 1 ]] || {
+              post_comment "Phase 4 v6 failed again after the single authorized lookup recovery. No further automatic change was made. Run: ${phase4_id}."
+              exit 1
+            }
+
+            gh run view "${phase4_id}" --repo "${GITHUB_REPOSITORY}" --log-failed \
+              > authorized-recovery/phase4-failed.log 2>&1 || true
+            if ! grep -Fq "Invalid choice: 'describe-latest'" authorized-recovery/phase4-failed.log; then
+              post_comment "Phase 4 v6 failed for a reason other than the authorized obsolete lookup defect. No automatic change was made. Run: ${phase4_id}."
+              exit 1
+            fi
+
+            git fetch origin main
+            git checkout -B "phase5/shared-lookup-recovery-${phase4_id}" origin/main
+            python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          path = Path("deploy/runtime-v2/runtime_promotion_control.sh")
+          text = path.read_text(encoding="utf-8")
+          obsolete = "gcloud run jobs executions describe-latest"
+          replacement = '''latest_execution_name() {
+            local job="$1" execution=""
+            for attempt in $(seq 1 12); do
+              execution="$(gcloud run jobs describe "${job}" \\
+                --project "${PROJECT_ID}" \\
+                --region "${REGION}" \\
+                --format='value(status.latestCreatedExecution.name)')"
+              if [[ -n "${execution}" ]]; then
+                printf '%s\\n' "${execution}"
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Unable to resolve the latest execution for ${job}." >&2
+            return 1
+          }'''
+          replacement = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in replacement.splitlines()
+          )
+          if obsolete not in text:
+              raise SystemExit("Failure log reported describe-latest, but canonical controller no longer contains it")
+          pattern = re.compile(
+              r"latest_execution_name\(\) \{.*?\n\}\n\nexecute_admin_init\(\)",
+              re.DOTALL,
+          )
+          match = pattern.search(text)
+          if not match:
+              raise SystemExit("Unable to isolate latest_execution_name")
+          text = text[:match.start()] + replacement + "\n\nexecute_admin_init()" + text[match.end():]
+          if obsolete in text or "status.latestCreatedExecution.name" not in text:
+              raise SystemExit("Execution lookup recovery failed validation")
+          path.write_text(text, encoding="utf-8")
+
+          Path("tests/test_runtime_promotion_execution_lookup.py").write_text(
+              '''from pathlib import Path\n\n\ndef test_shared_controller_uses_supported_cloud_run_execution_lookup():\n    text = Path("deploy/runtime-v2/runtime_promotion_control.sh").read_text(encoding="utf-8")\n    assert "gcloud run jobs executions describe-latest" not in text\n    assert "status.latestCreatedExecution.name" in text\n    assert "Unable to resolve the latest execution for" in text\n''',
+              encoding="utf-8",
+          )
+          receipt_path = Path("deploy/runtime-v2/phase4-approved-image.json")
+          receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+          receipt["final_cutover_authorized"] = True
+          receipt["final_certification_controller"] = "shared_latest_created_execution_status_recovery_v1"
+          receipt["final_certification_trigger"] = "authorized_lookup_recovery"
+          receipt["production_authority_transferred"] = False
+          receipt["phase5_started"] = False
+          receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+            bash -n deploy/runtime-v2/runtime_promotion_control.sh
+            python - <<'PY'
+          from pathlib import Path
+          text = Path("deploy/runtime-v2/runtime_promotion_control.sh").read_text()
+          assert "gcloud run jobs executions describe-latest" not in text
+          assert "status.latestCreatedExecution.name" in text
+          PY
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add deploy/runtime-v2/runtime_promotion_control.sh \
+                    deploy/runtime-v2/phase4-approved-image.json \
+                    tests/test_runtime_promotion_execution_lookup.py
+            git commit -m "Replace obsolete Runtime execution lookup after certified failure"
+            branch="$(git branch --show-current)"
+            git push origin "HEAD:${branch}"
+            recovery_pr_url="$(gh pr create --repo "${GITHUB_REPOSITORY}" --base main --head "${branch}" \
+              --title "Phase 5: recover obsolete shared execution lookup" \
+              --body "Authorized bounded recovery for Phase 4 run ${phase4_id}. The failed log proved the unsupported describe-latest command remained. This replaces only that resolver, adds regression coverage, and preserves every Phase 4/5 fail-closed control.")"
+            recovery_pr="${recovery_pr_url##*/}"
+            gh pr merge "${recovery_pr}" --repo "${GITHUB_REPOSITORY}" --merge --admin \
+              --subject "Phase 5: recover obsolete shared execution lookup (#${recovery_pr})"
+            merge_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${recovery_pr}" --jq '.merge_commit_sha')"
+            [[ "${merge_sha}" =~ ^[0-9a-f]{40}$ ]]
+            post_comment "Applied the single authorized obsolete-lookup recovery in PR #${recovery_pr}; monitoring the replacement Phase 4 v6 run at ${merge_sha}."
+          done
+
+          phase5_id="$(wait_run "${PHASE5_WORKFLOW}" "${merge_sha}")"
+          phase5_conclusion="$(wait_terminal "${phase5_id}")"
+          if [[ "${phase5_conclusion}" != "success" ]]; then
+            post_comment "Phase 4 v6 succeeded, but Phase 5 v2 reached ${phase5_conclusion}. No unapproved recovery was attempted. Phase 4 run: ${phase4_id}; Phase 5 run: ${phase5_id}."
+            exit 1
+          fi
+          post_comment "Authorized cutover reached terminal success. Phase 4 v6 run: ${phase4_id}; Phase 5 v2 run: ${phase5_id}; control revision: ${merge_sha}."
+
+      - name: Upload recovery diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-authorized-recovery-controller
+          path: authorized-recovery/
+          if-no-files-found: warn
+          retention-days: 90
