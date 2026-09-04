@@ -10,10 +10,11 @@ def _text() -> str:
 
 def test_exact_plan_apply_is_one_shot_main_push_only() -> None:
     text = _text()
-    assert "on:\n  push:" in text
-    assert "workflow_dispatch:" not in text
+    trigger = text.split('permissions:', 1)[0]
+    assert 'workflow_dispatch:' in trigger
+    assert 'push:' not in trigger
+    assert 'group: runtime-v2-live-controller' in text
     assert "schedule:" not in text
-    assert '      - ".github/workflows/phase3_apply_saved_plan.yml"' in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
 
