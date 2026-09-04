@@ -29,7 +29,7 @@ LOGGER = logging.getLogger("polititrack-ai-analyst")
 REPOSITORY_ID = 1349678672
 DEFAULT_OUTPUT_TOKENS = 4_000
 ESCALATED_OUTPUT_TOKENS = 8_000
-MAX_STRUCTURED_OUTPUT_ATTEMPTS = 2
+MAX_STRUCTURED_OUTPUT_ATTEMPTS = 3
 
 
 class FatalAnalystConfigurationError(legacy.AnalystError):
@@ -42,6 +42,14 @@ class StructuredOutputDeferred(legacy.AnalystError):
     def __init__(self, message: str, diagnostics: Sequence[Mapping[str, Any]]):
         super().__init__(message)
         self.diagnostics = tuple(dict(item) for item in diagnostics)
+
+
+class CandidateDeliveryRejected(legacy.AnalystError):
+    """The provider definitely did not accept the candidate alert."""
+
+
+class CandidateDeliveryUncertain(legacy.AnalystError):
+    """The provider may have accepted the candidate alert."""
 
 
 @dataclass(frozen=True)
@@ -440,6 +448,43 @@ def _checkpoint_result(
     legacy.write_json(config.result_path, asdict(result))
 
 
+def _send_candidate_email_with_evidence(
+    config: legacy.AnalystConfig, alert: Mapping[str, str]
+) -> bool:
+    """Send Gmail while distinguishing rejection from unknown acceptance."""
+
+    address = config.gmail_address.strip()
+    password = config.gmail_app_password.strip()
+    if not address and not password:
+        return False
+    if not address or not password:
+        raise FatalAnalystConfigurationError(
+            "Gmail candidate alert credentials are incomplete"
+        )
+
+    message = legacy.EmailMessage()
+    message["Subject"] = str(alert.get("title") or "PolitiTrack candidate")[:250]
+    message["From"] = address
+    message["To"] = address
+    message.set_content(str(alert.get("message") or ""))
+    timeout = max(float(item) for item in config.request_timeout)
+    submission_possible = False
+    try:
+        with legacy.smtplib.SMTP_SSL(
+            "smtp.gmail.com", 465, timeout=timeout
+        ) as server:
+            server.login(address, password)
+            submission_possible = True
+            server.send_message(message)
+    except Exception as exc:
+        detail = _safe_error(exc, config)
+        failure = f"Gmail candidate alert failed: {type(exc).__name__}: {detail}"
+        if submission_possible:
+            raise CandidateDeliveryUncertain(failure) from exc
+        raise CandidateDeliveryRejected(failure) from exc
+    return True
+
+
 def _deliver_pending_candidate_alerts(
     config: legacy.AnalystConfig,
     result: AnalystRunResult,
@@ -527,7 +572,32 @@ def _deliver_pending_candidate_alerts(
                         priority=0,
                     )
                 else:
-                    accepted = legacy._send_candidate_email(config, alert)
+                    accepted = _send_candidate_email_with_evidence(config, alert)
+            except CandidateDeliveryRejected as exc:
+                channel_errors[channel] = (
+                    f"{type(exc).__name__}: {_safe_error(exc, config)}"
+                )
+                delivery["channel_errors"] = channel_errors
+                legacy.save_state(state_path, state)
+                result.warnings.append(
+                    f"Candidate alert delivery {delivery_id}/{channel} was "
+                    f"rejected before acceptance and remains pending: "
+                    f"{_safe_error(exc, config)}"
+                )
+                _checkpoint_result(config, result)
+                continue
+            except FatalAnalystConfigurationError as exc:
+                channel_errors[channel] = (
+                    f"{type(exc).__name__}: {_safe_error(exc, config)}"
+                )
+                delivery["channel_errors"] = channel_errors
+                legacy.save_state(state_path, state)
+                result.errors.append(
+                    f"Candidate alert delivery {delivery_id}/{channel}: "
+                    f"{type(exc).__name__}: {_safe_error(exc, config)}"
+                )
+                _checkpoint_result(config, result)
+                return
             except Exception as exc:  # External acceptance is now uncertain.
                 channel_errors[channel] = (
                     f"{type(exc).__name__}: {_safe_error(exc, config)}"

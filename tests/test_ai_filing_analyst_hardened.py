@@ -146,10 +146,10 @@ def test_malformed_json_retries_without_repair(tmp_path: Path) -> None:
 
 def test_repeated_malformed_json_defers_candidate(tmp_path: Path) -> None:
     cfg = _config(tmp_path)
-    factory = _Factory([_response("{"), _response("{")])
+    factory = _Factory([_response("{"), _response("{"), _response("{")])
     with pytest.raises(hardened.StructuredOutputDeferred) as caught:
         hardened.openai_analyze({}, cfg, _schema(cfg), client_factory=factory)
-    assert len(caught.value.diagnostics) == 2
+    assert len(caught.value.diagnostics) == 3
     assert all(item["error_type"] == "JSONDecodeError" for item in caught.value.diagnostics)
 
 

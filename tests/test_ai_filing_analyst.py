@@ -536,6 +536,7 @@ def test_openai_call_uses_responses_structured_output() -> None:
             captured.update(kwargs)
             return SimpleNamespace(
                 id="resp_test",
+                status="completed",
                 output_text=json.dumps(sample_ai_payload()),
                 usage=SimpleNamespace(input_tokens=123, output_tokens=45),
             )
@@ -626,6 +627,7 @@ def test_openai_transient_429_is_retried(
                 )
             return SimpleNamespace(
                 id="resp_retry",
+                status="completed",
                 output_text=json.dumps(
                     sample_ai_payload()
                 ),
@@ -727,13 +729,17 @@ def test_ai_batch_stops_after_first_quota_failure(
         client_factory=FakeClient,
     )
 
-    assert result.success is False
+    assert result.success is True
+    assert result.run_status == "degraded"
+    assert result.state_publishable is True
     assert result.attempted_count == 1
     assert calls["count"] == 1
-    assert len(result.errors) == 1
-    assert "quota" in result.errors[0].casefold()
+    assert result.errors == []
+    assert len(result.deferred_candidates) == 2
+    assert result.deferred_candidates[0]["reason"] == "openai_quota_unavailable"
+    assert result.deferred_candidates[1]["reason"] == "not_attempted_after_openai_quota"
     assert any(
-        "remaining ai analyses were not attempted"
+        "remaining ai analyses were deferred"
         in item.casefold()
         for item in result.warnings
     )
@@ -795,6 +801,7 @@ def test_full_run_is_incremental_and_opens_paper_position(
         def create(self, **kwargs: object) -> object:
             return SimpleNamespace(
                 id="resp_run",
+                status="completed",
                 output_text=json.dumps(sample_ai_payload()),
                 usage=SimpleNamespace(input_tokens=100, output_tokens=50),
             )
@@ -891,6 +898,7 @@ def test_candidate_delivery_retries_only_failed_channel_without_reanalysis(
             openai_calls["count"] += 1
             return SimpleNamespace(
                 id="resp_delivery_retry",
+                status="completed",
                 output_text=json.dumps(sample_ai_payload()),
                 usage=SimpleNamespace(input_tokens=100, output_tokens=50),
             )
@@ -1048,6 +1056,7 @@ def test_market_refresh_reuses_ai_payload_and_can_upgrade_signal(
             openai_calls["count"] += 1
             return SimpleNamespace(
                 id="resp_refresh",
+                status="completed",
                 output_text=json.dumps(sample_ai_payload()),
                 usage=SimpleNamespace(input_tokens=100, output_tokens=50),
             )
