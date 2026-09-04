@@ -65,7 +65,7 @@
       "snapshot_sha256": "f88889f1cc292cf31a6009c87ec91263bbe23a74009620e24048d960bd01e483"
     }
   ],
-  "accepted_baseline_heads": {
+  "observed_baseline_heads": {
     "legislative": {
       "generation": 2,
       "snapshot_sha256": "5ce554435b64213df4fe8dd884003ca23b023aa83176fcfcc7974498c40067ec"
