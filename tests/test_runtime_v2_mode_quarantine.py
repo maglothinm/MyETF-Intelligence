@@ -141,6 +141,20 @@ def test_inventory_pins_exact_six_legacy_rows_and_observed_heads() -> None:
     assert configuration["runtime_mode_classifiable"] is False
 
 
+def test_migration_gates_mutation_on_the_exact_recovered_inventory() -> None:
+    sql = _normalized_sql()
+    assert "legacy runtime run inventory differs from recovered phase 4 manifest" in sql
+    assert "where runtime_mode_evidence is null" in sql
+    assert "select * from expected except select * from actual" in sql
+    assert "select * from actual except select * from expected" in sql
+    for row in EXPECTED_ROWS:
+        for field in row.values():
+            assert str(field).lower() in sql
+    assert sql.index("legacy runtime run inventory differs") < sql.index(
+        "update runtime_job_runs as job_run"
+    )
+
+
 def test_migration_cannot_rewrite_or_destroy_snapshot_history_or_heads() -> None:
     sql = _normalized_sql()
     protected = r"runtime_state_(?:snapshots|heads)"
@@ -190,8 +204,14 @@ def test_exact_snapshot_provenance_repairs_attested_rows_before_quarantine() -> 
     assert "job_run.snapshot_sha256 = snapshot.snapshot_sha256" in repair
     assert "job_run.namespace = snapshot.namespace" in repair
     assert "job_run.source_revision = snapshot.source_revision" in repair
+    assert "snapshot.created_at >= job_run.started_at" in repair
+    assert "snapshot.created_at <= job_run.finished_at" in repair
     assert "snapshot.source_provenance ->> 'authority' = 'runtime_v2'" in repair
     assert "snapshot.source_provenance ->> 'job' = job_run.job_name" in repair
+    assert (
+        "snapshot.source_provenance ->> 'trigger_source' = job_run.trigger_source"
+        in repair
+    )
     assert (
         "snapshot.source_provenance ->> 'mode' in ('shadow', 'production')" in repair
     )
@@ -215,7 +235,11 @@ def test_unattested_rows_are_quarantined_without_inventing_a_mode() -> None:
 
 def test_evidence_lifecycle_and_cross_table_attestation_are_fail_closed() -> None:
     sql = _normalized_sql()
+    assert "runtime_job_runs_runtime_mode_check" in sql
+    assert "runtime_mode is null or runtime_mode in ('shadow', 'production')" in sql
     assert "runtime_job_runs_mode_evidence_check" in sql
+    assert "runtime_mode_evidence -> 'schema_version' = '1'::jsonb" in sql
+    assert ") is true" in sql
     assert "runtime_mode_evidence ->> 'kind' = 'legacy_unverified'" in sql
     assert "runtime_mode is null" in sql
     assert "runtime_mode_evidence ->> 'kind' = 'runner_explicit'" in sql
@@ -223,17 +247,24 @@ def test_evidence_lifecycle_and_cross_table_attestation_are_fail_closed() -> Non
     assert "runtime_mode_evidence ->> 'kind' = 'snapshot_provenance'" in sql
     assert "status = 'success'" in sql
 
-    guard = sql.split("do $$", 1)[1].split("$$;", 1)[0]
+    guard = sql.rsplit("do $", 1)[1].split("$;", 1)[0]
     assert "if exists" in guard
     assert "not exists" in guard
     assert "job_run.snapshot_id = snapshot.snapshot_id" in guard
     assert "job_run.snapshot_sha256 = snapshot.snapshot_sha256" in guard
     assert "job_run.namespace = snapshot.namespace" in guard
     assert "job_run.source_revision = snapshot.source_revision" in guard
+    assert "snapshot.created_at >= job_run.started_at" in guard
+    assert "snapshot.created_at <= job_run.finished_at" in guard
     assert "snapshot.source_provenance ->> 'authority' = 'runtime_v2'" in guard
     assert "snapshot.source_provenance ->> 'job' = job_run.job_name" in guard
+    assert (
+        "snapshot.source_provenance ->> 'trigger_source' = job_run.trigger_source"
+        in guard
+    )
     assert "snapshot.source_provenance ->> 'mode' = job_run.runtime_mode" in guard
     assert "raise exception" in guard
+    assert "create unique index if not exists runtime_job_runs_success_snapshot" in sql
 
 
 def test_quarantine_migration_is_self_contained_and_is_the_default_entrypoint() -> None:
