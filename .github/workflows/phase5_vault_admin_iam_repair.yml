@@ -1,4 +1,4 @@
-name: Phase 5 Vault admin IAM repair
+name: Phase 5 Vault boundary reconciliation
 
 on:
   push:
@@ -13,10 +13,10 @@ permissions:
   id-token: write
 
 jobs:
-  repair-and-prove:
+  reconcile-and-prove:
     if: github.repository_id == '1349678672'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       PROJECT_ID: project-38008d5f-4918-46e6-920
       REGION: us-central1
@@ -24,34 +24,48 @@ jobs:
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_JOB: polititrack-admin
-      VAULT_BUCKET: polititrack-phase2-vault-497412818801
+      VAULT_JOB: polititrack-vault-lifecycle
+      WEB_SERVICE: polititrack-web
+      EXPECTED_VAULT_BUCKET: project-38008d5f-4918-46e6-920-polititrack-vault
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate durable Terraform repair
+      - name: Validate the durable boundary
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p phase5-vault-admin-repair
+          mkdir -p phase5-vault-boundary
           python - <<'PY'
+          import json
           from pathlib import Path
 
-          text = Path('deploy/runtime-v2/terraform/vault_admin_metadata.tf').read_text()
-          required = (
+          tfvars = json.loads(Path('deploy/runtime-v2/phase3-reconciliation.tfvars.json').read_text())
+          if 'vault_bucket_name' in tfvars:
+              raise SystemExit('Phase 3 unexpectedly overrides the Terraform Vault bucket name')
+          main = Path('deploy/runtime-v2/terraform/main.tf').read_text()
+          binding = Path('deploy/runtime-v2/terraform/vault_admin_metadata.tf').read_text()
+          required_main = (
+              'coalesce(var.vault_bucket_name, "${var.project_id}-polititrack-vault")',
+              'uniform_bucket_level_access = true',
+              'public_access_prevention    = "enforced"',
+              'versioning {',
+              'name  = "VAULT_GCS_BUCKET"',
+          )
+          required_binding = (
               'resource "google_storage_bucket_iam_member" "vault_admin_metadata_viewer"',
               'bucket = google_storage_bucket.vault[0].name',
               'role   = "roles/storage.bucketViewer"',
               'member = "serviceAccount:${google_service_account.admin.email}"',
           )
-          missing = [token for token in required if token not in text]
+          missing = [x for x in required_main if x not in main] + [x for x in required_binding if x not in binding]
           if missing:
-              raise SystemExit(f'Vault admin metadata binding is incomplete: {missing}')
+              raise SystemExit(f'Vault boundary definition is incomplete: {missing}')
           forbidden = ('roles/storage.admin', 'roles/storage.objectAdmin', 'roles/storage.objectViewer')
-          present = [token for token in forbidden if token in text]
+          present = [x for x in forbidden if x in binding]
           if present:
-              raise SystemExit(f'Vault admin repair grants forbidden object or admin access: {present}')
-          Path('phase5-vault-admin-repair/static-validation.txt').write_text(
-              'metadata-only Terraform binding validated\n'
+              raise SystemExit(f'Admin metadata binding grants forbidden access: {present}')
+          Path('phase5-vault-boundary/static-validation.txt').write_text(
+              'canonical project-derived Vault boundary validated\n', encoding='utf-8'
           )
           PY
 
@@ -63,7 +77,7 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      - name: Apply metadata-only binding and prove schema initialization
+      - name: Reconcile all Vault consumers and prove initialization
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -82,30 +96,80 @@ jobs:
           }
           trap cleanup EXIT
 
-          # The deployer intentionally has no standing Storage access. Give it
-          # short-lived policy-mutation authority only long enough to install
-          # the durable bucket-scoped metadata binding.
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" \
+              --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} is ${state}, expected PAUSED." >&2; exit 1; }
+          done
+          web_policy="$(gcloud run services get-iam-policy "${WEB_SERVICE}" --project "${PROJECT_ID}" \
+            --region "${REGION}" --format=json)"
+          if jq -e '[.bindings[]?.members[]?] | any(. == "allUsers")' <<<"${web_policy}" >/dev/null; then
+            echo "Runtime v2 web service is unexpectedly public." >&2
+            exit 1
+          fi
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-boundary/admin-before.json
+          gcloud run jobs describe "${VAULT_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-boundary/vault-job-before.json
+          gcloud run services describe "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-boundary/web-before.json
+
+          # The deployer has no standing Storage access. This short-lived grant
+          # is used only to discover the current-project bucket and install the
+          # durable bucket-scoped metadata binding.
           gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
             --member "${deployer_member}" --role roles/storage.admin \
             --condition=None --quiet --format=none
-          bucket_visible=false
+          listed=false
           for attempt in $(seq 1 18); do
-            if gcloud storage buckets describe "gs://${VAULT_BUCKET}" --format=json \
-              > phase5-vault-admin-repair/bucket-before.json 2>/dev/null; then
-              bucket_visible=true
+            if gcloud storage buckets list --project "${PROJECT_ID}" --format=json \
+              > phase5-vault-boundary/project-buckets.json 2> phase5-vault-boundary/project-buckets-error.txt; then
+              listed=true
               break
             fi
             sleep 10
           done
-          [[ "${bucket_visible}" == "true" ]] || { echo "Temporary Storage authority did not become effective." >&2; exit 1; }
+          [[ "${listed}" == "true" ]] || { cat phase5-vault-boundary/project-buckets-error.txt >&2; exit 1; }
+          jq -e --arg name "${EXPECTED_VAULT_BUCKET}" 'any(.[]?; .name == $name)' \
+            phase5-vault-boundary/project-buckets.json >/dev/null || {
+              echo "Canonical Runtime v2 Vault bucket ${EXPECTED_VAULT_BUCKET} is absent from the project." >&2
+              jq -r '.[].name // empty' phase5-vault-boundary/project-buckets.json >&2
+              exit 1
+            }
 
-          gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
+          gcloud storage buckets describe "gs://${EXPECTED_VAULT_BUCKET}" --format=json \
+            > phase5-vault-boundary/vault-bucket.json
+          EXPECTED_VAULT_BUCKET="${EXPECTED_VAULT_BUCKET}" python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          data = json.loads(Path('phase5-vault-boundary/vault-bucket.json').read_text())
+          name = data.get('name')
+          uniform = data.get('uniform_bucket_level_access')
+          if uniform is None:
+              uniform = data.get('iamConfiguration', {}).get('uniformBucketLevelAccess', {}).get('enabled')
+          pap = data.get('public_access_prevention')
+          if pap is None:
+              pap = data.get('iamConfiguration', {}).get('publicAccessPrevention')
+          versioned = data.get('versioning_enabled')
+          if versioned is None:
+              versioned = data.get('versioning', {}).get('enabled')
+          location = str(data.get('location', '')).lower().replace('_', '-')
+          expected = os.environ['EXPECTED_VAULT_BUCKET']
+          if name != expected or uniform is not True or str(pap).lower() != 'enforced' or versioned is not True:
+              raise SystemExit(f'Unsafe Vault bucket: name={name!r} uniform={uniform!r} pap={pap!r} versioned={versioned!r}')
+          if location not in {'us-central1', 'uscentral1'}:
+              raise SystemExit(f'Unexpected Vault bucket location: {location!r}')
+          PY
+
+          gcloud storage buckets add-iam-policy-binding "gs://${EXPECTED_VAULT_BUCKET}" \
             --member "${admin_member}" --role roles/storage.bucketViewer --quiet
-          policy="$(gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json)"
+          gcloud storage buckets get-iam-policy "gs://${EXPECTED_VAULT_BUCKET}" --format=json \
+            > phase5-vault-boundary/vault-policy.json
           jq -e --arg member "${admin_member}" \
             '[.bindings[]? | select(.role == "roles/storage.bucketViewer") | .members[]?] | any(. == $member)' \
-            <<<"${policy}" >/dev/null
-          printf '%s\n' "${policy}" > phase5-vault-admin-repair/bucket-policy-after.json
+            phase5-vault-boundary/vault-policy.json >/dev/null
 
           gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
             --member "${deployer_member}" --role roles/storage.admin \
@@ -118,12 +182,72 @@ jobs:
             exit 1
           fi
 
-          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" \
-            --project "${PROJECT_ID}" --region "${REGION}" \
-            --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides \
-            --quiet --format=none
+          gcloud run jobs update "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --update-env-vars "VAULT_GCS_BUCKET=${EXPECTED_VAULT_BUCKET}" --quiet --format=none
+          gcloud run jobs update "${VAULT_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --update-env-vars "VAULT_GCS_BUCKET=${EXPECTED_VAULT_BUCKET}" --quiet --format=none
+          gcloud run services update "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --update-env-vars "VAULT_GCS_BUCKET=${EXPECTED_VAULT_BUCKET}" --quiet --format=none
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-boundary/admin-after.json
+          gcloud run jobs describe "${VAULT_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-boundary/vault-job-after.json
+          gcloud run services describe "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-boundary/web-after.json
+
+          EXPECTED_VAULT_BUCKET="${EXPECTED_VAULT_BUCKET}" python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          expected = os.environ['EXPECTED_VAULT_BUCKET']
+          pairs = (
+              ('admin', 'admin-before.json', 'admin-after.json'),
+              ('vault_job', 'vault-job-before.json', 'vault-job-after.json'),
+              ('web', 'web-before.json', 'web-after.json'),
+          )
+          def container(obj):
+              if isinstance(obj, dict):
+                  if isinstance(obj.get('containers'), list) and obj['containers']:
+                      return obj['containers'][0]
+                  for value in obj.values():
+                      found = container(value)
+                      if found is not None:
+                          return found
+              elif isinstance(obj, list):
+                  for value in obj:
+                      found = container(value)
+                      if found is not None:
+                          return found
+              return None
+          summary = {}
+          for label, before_name, after_name in pairs:
+              before = container(json.loads((Path('phase5-vault-boundary') / before_name).read_text()))
+              after = container(json.loads((Path('phase5-vault-boundary') / after_name).read_text()))
+              if not before or not after:
+                  raise SystemExit(f'Unable to resolve {label} container')
+              for key in ('image', 'command', 'args'):
+                  if before.get(key) != after.get(key):
+                      raise SystemExit(f'{label} {key} changed during Vault reconciliation')
+              env = {entry.get('name'): entry.get('value') for entry in after.get('env', [])}
+              if env.get('VAULT_GCS_BUCKET') != expected:
+                  raise SystemExit(f'{label} still points to {env.get("VAULT_GCS_BUCKET")!r}')
+              summary[label] = {
+                  'old_bucket': {entry.get('name'): entry.get('value') for entry in before.get('env', [])}.get('VAULT_GCS_BUCKET'),
+                  'new_bucket': env['VAULT_GCS_BUCKET'],
+                  'image': after.get('image'),
+                  'command': after.get('command'),
+                  'args': after.get('args'),
+              }
+          Path('phase5-vault-boundary/consumer-summary.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+          gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides --quiet --format=none
           gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
-            --wait --format=json > phase5-vault-admin-repair/admin-execute.json
+            --wait --format=json > phase5-vault-boundary/admin-execute.json
           execution="$(gcloud run jobs executions describe-latest --job "${ADMIN_JOB}" \
             --project "${PROJECT_ID}" --region "${REGION}" --format='value(metadata.name)')"
           [[ -n "${execution}" ]]
@@ -131,32 +255,41 @@ jobs:
           cleanup
           trap - EXIT
 
-          remaining="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" \
-            --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+          remaining="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" \
+            --region "${REGION}" --format=json)"
           if jq -e --arg member "${deployer_member}" \
             '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' \
             <<<"${remaining}" >/dev/null; then
             echo "Temporary admin execution authority remains." >&2
             exit 1
           fi
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" \
+              --location "${REGION}" --format='value(state)')"
+            [[ "${state}" == "PAUSED" ]] || { echo "Scheduler ${scheduler} changed to ${state}." >&2; exit 1; }
+          done
+          web_policy="$(gcloud run services get-iam-policy "${WEB_SERVICE}" --project "${PROJECT_ID}" \
+            --region "${REGION}" --format=json)"
+          if jq -e '[.bindings[]?.members[]?] | any(. == "allUsers")' <<<"${web_policy}" >/dev/null; then
+            echo "Runtime v2 web service became public." >&2
+            exit 1
+          fi
 
           jq -n \
-            --arg result "vault_admin_metadata_repaired" \
+            --arg result "vault_boundary_reconciled" \
             --arg main_revision "${GITHUB_SHA}" \
-            --arg bucket "${VAULT_BUCKET}" \
-            --arg role "roles/storage.bucketViewer" \
-            --arg member "${admin_member}" \
+            --arg bucket "${EXPECTED_VAULT_BUCKET}" \
             --arg admin_execution "${execution}" \
             --arg applied_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{result:$result,main_revision:$main_revision,bucket:$bucket,role:$role,member:$member,admin_execution:$admin_execution,admin_init_success:true,temporary_storage_admin_removed:true,temporary_execution_authority_removed:true,applied_at:$applied_at}' \
-            > phase5-vault-admin-repair/receipt.json
-          sha256sum phase5-vault-admin-repair/receipt.json > phase5-vault-admin-repair/SHA256SUMS
+            '{result:$result,main_revision:$main_revision,bucket:$bucket,all_vault_consumers_reconciled:true,admin_init_success:true,bucket_private:true,bucket_versioned:true,temporary_storage_admin_removed:true,temporary_execution_authority_removed:true,all_schedulers_paused:true,web_private:true,applied_at:$applied_at}' \
+            > phase5-vault-boundary/receipt.json
+          sha256sum phase5-vault-boundary/receipt.json > phase5-vault-boundary/SHA256SUMS
 
-      - name: Upload repair evidence
+      - name: Upload reconciliation evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: phase5-vault-admin-iam-repair
-          path: phase5-vault-admin-repair/
+          name: phase5-vault-boundary-reconciliation
+          path: phase5-vault-boundary/
           if-no-files-found: error
           retention-days: 30
