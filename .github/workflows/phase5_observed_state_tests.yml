@@ -33,7 +33,7 @@ jobs:
           python-version: "3.12"
       - name: Install test dependencies
         run: python -m pip install --disable-pip-version-check pytest PyYAML
-      - name: Validate syntax, receipts, and exact-state invariants
+      - name: Validate syntax, receipts, status logs, and exact-state invariants
         run: |
           set -euo pipefail
           bash -n deploy/runtime-v2/runtime_promotion_control.sh
@@ -47,6 +47,7 @@ jobs:
           phase5 = Path('.github/workflows/phase5_production_promotion_v2.yml').read_text()
           control = Path('deploy/runtime-v2/runtime_promotion_control.sh').read_text()
           overlay = Path('deploy/runtime-v2/runtime_promotion_observed_state.sh').read_text()
+          shell_test = Path('tests/test_runtime_promotion_control.sh').read_text()
           for path in (
               '.github/workflows/phase4_live_shadow_validation_v6.yml',
               '.github/workflows/phase5_production_promotion_v2.yml',
@@ -67,16 +68,29 @@ jobs:
                           'latest_execution_name "${job}" "${execute_result}"',
                           'local output="$1"\n  local stem="$2"\n  local execute_result=',
                           'local logical_name="$1"\n  local trigger="$2"\n  local stem="$3"\n  local job='),
-              'overlay': ('SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}',
+              'overlay': ('capture_status() {',
+                          '.jsonPayload?',
+                          '.textPayload?',
+                          'fromjson?',
+                          'has("heads") and has("latest_runs")',
+                          'run.googleapis.com/execution_name',
+                          'SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}',
                           'legislative_trade_tracker_v2.yml"] == "active"',
                           'executive_trade_tracker.yml"] == "active"',
-                          'disabled_manually)', 'verify_legacy_workflows_match_observed'),
+                          'disabled_manually)',
+                          'verify_legacy_workflows_match_observed'),
+              'shell_test': ('STATUS_LOG_FORMAT=structured',
+                             '"jsonPayload":{"heads":[],"latest_runs":[]}',
+                             'STATUS_LOG_FORMAT=text',
+                             'structured jsonPayload status was not captured',
+                             'legacy textPayload status was not captured'),
           }
           for label, text in (
               ('phase4', phase4),
               ('phase5', phase5),
               ('control', control),
               ('overlay', overlay),
+              ('shell_test', shell_test),
           ):
               missing = [token for token in required[label] if token not in text]
               if missing:
