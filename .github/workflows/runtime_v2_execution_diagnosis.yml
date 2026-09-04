@@ -54,6 +54,8 @@ jobs:
             gcloud logging views remove-iam-policy-binding _Default \
               --bucket _Default --location global --project "${PROJECT_ID}" \
               --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1 || true
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
@@ -61,14 +63,23 @@ jobs:
             --project "${PROJECT_ID}" --region "${REGION}" --format=json \
             > runtime-v2-diagnosis/execution.json
 
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.admin --condition=None --quiet --format=none
           gcloud logging views add-iam-policy-binding _Default \
             --bucket _Default --location global --project "${PROJECT_ID}" \
             --member "${member}" --role roles/logging.viewAccessor --quiet --format=none
 
-          gcloud logging read \
-            "resource.type=\"cloud_run_job\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
-            --project "${PROJECT_ID}" --freshness=6h --limit=1000 --order=asc --format=json \
-            > runtime-v2-diagnosis/logs.json
+          : > runtime-v2-diagnosis/logs.json
+          for attempt in $(seq 1 18); do
+            if gcloud logging read \
+              "resource.type=\"cloud_run_job\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+              --project "${PROJECT_ID}" --freshness=6h --limit=1000 --order=asc --format=json \
+              > runtime-v2-diagnosis/logs.json; then
+              break
+            fi
+            sleep 10
+          done
+          jq -e 'type == "array" and length > 0' runtime-v2-diagnosis/logs.json >/dev/null
 
           jq '[.[] | {timestamp, severity, textPayload, jsonPayload, labels, resource}]' \
             runtime-v2-diagnosis/logs.json > runtime-v2-diagnosis/logs-sanitized.json
