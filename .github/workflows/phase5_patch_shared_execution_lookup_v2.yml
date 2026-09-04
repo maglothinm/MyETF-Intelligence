@@ -1,0 +1,119 @@
+name: Phase 5 patch shared execution lookup v2
+
+on:
+  push:
+    branches:
+      - phase5/final-cutover-authorized-20260904
+    paths:
+      - ".github/workflows/phase5_patch_shared_execution_lookup_v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-self-remove:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: phase5/final-cutover-authorized-20260904
+          fetch-depth: 0
+
+      - name: Replace obsolete helper and add regression coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          controller_path = Path("deploy/runtime-v2/runtime_promotion_control.sh")
+          controller = controller_path.read_text(encoding="utf-8")
+          obsolete = "gcloud run jobs executions describe-latest"
+          supported = "status.latestCreatedExecution.name"
+
+          replacement = '''latest_execution_name() {
+            local job="$1" execution=""
+            for attempt in $(seq 1 12); do
+              execution="$(gcloud run jobs describe "${job}" \\
+                --project "${PROJECT_ID}" \\
+                --region "${REGION}" \\
+                --format='value(status.latestCreatedExecution.name)')"
+              if [[ -n "${execution}" ]]; then
+                printf '%s\\n' "${execution}"
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Unable to resolve the latest execution for ${job}." >&2
+            return 1
+          }'''
+          replacement = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in replacement.splitlines()
+          )
+
+          if obsolete in controller:
+              pattern = re.compile(
+                  r"latest_execution_name\(\) \{.*?\n\}\n\nexecute_admin_init\(\)",
+                  re.DOTALL,
+              )
+              match = pattern.search(controller)
+              if not match:
+                  raise SystemExit("Unable to isolate obsolete latest_execution_name implementation")
+              controller = (
+                  controller[:match.start()]
+                  + replacement
+                  + "\n\nexecute_admin_init()"
+                  + controller[match.end():]
+              )
+              controller_path.write_text(controller, encoding="utf-8")
+          elif supported not in controller:
+              raise SystemExit("Shared controller has neither the obsolete nor supported execution resolver")
+
+          final_controller = controller_path.read_text(encoding="utf-8")
+          if obsolete in final_controller:
+              raise SystemExit("Obsolete Cloud Run execution lookup remains in the shared controller")
+          if supported not in final_controller:
+              raise SystemExit("Supported Cloud Run Job status lookup is absent")
+
+          Path("tests/test_runtime_promotion_execution_lookup.py").write_text(
+              '''from pathlib import Path\n\n\ndef test_shared_controller_uses_supported_cloud_run_execution_lookup():\n    text = Path("deploy/runtime-v2/runtime_promotion_control.sh").read_text(encoding="utf-8")\n    assert "gcloud run jobs executions describe-latest" not in text\n    assert "status.latestCreatedExecution.name" in text\n    assert "Unable to resolve the latest execution for" in text\n''',
+              encoding="utf-8",
+          )
+
+          receipt_path = Path("deploy/runtime-v2/phase4-approved-image.json")
+          receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+          if receipt.get("repository_id") != 1349678672:
+              raise SystemExit("Approved-image receipt repository boundary mismatch")
+          if receipt.get("result") != "phase4_quarantine_runtime_image_approved":
+              raise SystemExit("Approved-image receipt is not the Phase 4 quarantine approval")
+          receipt["final_cutover_authorized"] = True
+          receipt["final_certification_controller"] = "shared_latest_created_execution_status_v2"
+          receipt["final_certification_trigger"] = "operator_authorized_2026-09-04"
+          receipt["production_authority_transferred"] = False
+          receipt["phase5_started"] = False
+          receipt_path.write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          bash -n deploy/runtime-v2/runtime_promotion_control.sh
+          python -m pytest -q tests/test_runtime_promotion_execution_lookup.py
+          git rm .github/workflows/phase5_patch_shared_execution_lookup_v2.yml
+
+      - name: Commit the reviewed patch to the branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/runtime-v2/runtime_promotion_control.sh \
+                  deploy/runtime-v2/phase4-approved-image.json \
+                  tests/test_runtime_promotion_execution_lookup.py
+          git commit -m "Replace obsolete Runtime execution lookup"
+          git push origin HEAD:phase5/final-cutover-authorized-20260904
