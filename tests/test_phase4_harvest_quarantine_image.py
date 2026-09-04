@@ -4,6 +4,7 @@ from pathlib import Path
 WORKFLOW = Path(".github/workflows/phase4_harvest_quarantine_image.yml")
 SOURCE = "8908f067298078f8c013e90cf6b7ad8ad420285b"
 BUILD_ID = "d2b84173-eafa-4fb6-b9ac-a3e232d273f4"
+BUILD_TAG = "8908f0672980"
 
 
 def _text() -> str:
@@ -26,6 +27,7 @@ def test_harvest_reuses_only_the_submitted_exact_build() -> None:
     text = _text()
     assert f"BUILD_ID: {BUILD_ID}" in text
     assert f"BUILD_SOURCE_REVISION: {SOURCE}" in text
+    assert f"BUILD_TAG: {BUILD_TAG}" in text
     assert 'gcloud builds describe "${BUILD_ID}"' in text
     assert "gcloud builds submit" not in text
     assert "exact_build_reused" in text
