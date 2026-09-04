@@ -1,0 +1,433 @@
+name: Phase 5 repair Vault admin bucket metadata
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_repair_vault_admin_bucket_metadata.yml"
+      - "deploy/runtime-v2/terraform/vault_admin_bucket_metadata.tf"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_repair_vault_admin_bucket_metadata.yml"
+      - "deploy/runtime-v2/terraform/vault_admin_bucket_metadata.tf"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  validate-repair-definition:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out proposed revision
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Validate least-privilege Terraform and workflow boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform fmt -check
+          terraform -chdir=deploy/runtime-v2/terraform init -backend=false -lockfile=readonly
+          terraform -chdir=deploy/runtime-v2/terraform validate
+          python - <<'PY'
+          from pathlib import Path
+
+          terraform = Path("deploy/runtime-v2/terraform/vault_admin_bucket_metadata.tf").read_text()
+          workflow = Path(".github/workflows/phase5_repair_vault_admin_bucket_metadata.yml").read_text()
+
+          required_terraform = (
+              'resource "google_storage_bucket_iam_member" "vault_admin_bucket_metadata"',
+              'bucket = google_storage_bucket.vault[0].name',
+              'role   = "roles/storage.bucketViewer"',
+              'member = "serviceAccount:${google_service_account.admin.email}"',
+          )
+          required_workflow = (
+              "polititrack-filing-vault-497412818801",
+              "polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com",
+              "roles/storage.bucketViewer",
+              "phase4_live_shadow_validation_v6.yml",
+              "runtime-v2-live-controller",
+          )
+          for token in required_terraform:
+              if token not in terraform:
+                  raise SystemExit(f"Terraform repair is missing: {token}")
+          for token in required_workflow:
+              if token not in workflow:
+                  raise SystemExit(f"Workflow repair is missing: {token}")
+
+          forbidden = (
+              "gcloud run jobs execute",
+              "gcloud scheduler jobs resume",
+              "gcloud scheduler jobs run",
+              "make_web_public",
+              "roles/storage.admin",
+              "roles/storage.objectAdmin",
+              "roles/storage.objectUser",
+              "roles/storage.legacyBucketOwner",
+              "roles/storage.legacyBucketWriter",
+          )
+          for token in forbidden:
+              if token in workflow or token in terraform:
+                  raise SystemExit(f"Repair contains forbidden authority or execution: {token}")
+          PY
+
+  apply-bucket-metadata-binding:
+    needs: validate-repair-definition
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      VAULT_BUCKET: polititrack-filing-vault-497412818801
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      REQUIRED_ROLE: roles/storage.bucketViewer
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      EVIDENCE_DIR: phase5-vault-admin-repair
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Apply and independently verify the exact bucket-scoped grant
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || {
+            echo "Checkout drifted from the triggering revision." >&2
+            exit 1
+          }
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${GITHUB_SHA}" ]] || {
+            echo "Canonical main advanced before the IAM repair." >&2
+            exit 1
+          }
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          : > "${EVIDENCE_DIR}/scheduler-states.ndjson"
+          for scheduler in \
+            polititrack-legislative \
+            polititrack-executive \
+            polititrack-ai \
+            polititrack-dashboard \
+            polititrack-vault-lifecycle; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" \
+              --project "${PROJECT_ID}" --location "${REGION}" --format='value(state)')"
+            jq -cn --arg scheduler "${scheduler}" --arg state "${state}" \
+              '{scheduler:$scheduler,state:$state}' >> "${EVIDENCE_DIR}/scheduler-states.ndjson"
+            [[ "${state}" == "PAUSED" ]] || {
+              echo "Scheduler ${scheduler} is ${state}, expected PAUSED." >&2
+              exit 1
+            }
+          done
+
+          gcloud run services get-iam-policy "${WEB_SERVICE}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+            > "${EVIDENCE_DIR}/web-iam.json"
+          if jq -e '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]?] | any(. == "allUsers")' \
+            "${EVIDENCE_DIR}/web-iam.json" >/dev/null; then
+            echo "Runtime v2 web service is public; refusing the repair." >&2
+            exit 1
+          fi
+
+          gcloud sql instances describe "${SQL_INSTANCE}" --project "${PROJECT_ID}" --format=json \
+            > "${EVIDENCE_DIR}/cloud-sql.json"
+          jq -e '(.settings.ipConfiguration.ipv4Enabled // false) == false and
+                 ((.settings.ipConfiguration.privateNetwork // "") | length > 0)' \
+            "${EVIDENCE_DIR}/cloud-sql.json" >/dev/null || {
+              echo "Cloud SQL is not private-only." >&2
+              exit 1
+            }
+
+          : > "${EVIDENCE_DIR}/legacy-workflow-states.ndjson"
+          for workflow in \
+            legislative_trade_tracker_v2.yml \
+            executive_trade_tracker.yml \
+            ai_filing_analyst.yml \
+            publish_trade_dashboard.yml; do
+            state="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')"
+            case "${state}" in
+              active|disabled_manually) ;;
+              *)
+                echo "Unsupported legacy workflow state ${workflow}=${state}." >&2
+                exit 1
+                ;;
+            esac
+            jq -cn --arg key "${workflow}" --arg value "${state}" \
+              '{key:$key,value:$value}' >> "${EVIDENCE_DIR}/legacy-workflow-states.ndjson"
+          done
+          jq -s 'from_entries' "${EVIDENCE_DIR}/legacy-workflow-states.ndjson" \
+            > "${EVIDENCE_DIR}/legacy-workflow-states.json"
+          jq -e '.["legislative_trade_tracker_v2.yml"] == "active" and
+                 .["executive_trade_tracker.yml"] == "active"' \
+            "${EVIDENCE_DIR}/legacy-workflow-states.json" >/dev/null || {
+              echo "The two legacy collectors are not available as the rollback route." >&2
+              exit 1
+            }
+
+          gcloud storage buckets describe "gs://${VAULT_BUCKET}" --format=json \
+            > "${EVIDENCE_DIR}/bucket.json"
+          python - "${EVIDENCE_DIR}/bucket.json" "${VAULT_BUCKET}" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected = sys.argv[2]
+          name = str(data.get("name") or data.get("id") or "").removeprefix("gs://")
+          iam = data.get("iamConfiguration") or data.get("iam_configuration") or {}
+          uniform = iam.get("uniformBucketLevelAccess") or iam.get("uniform_bucket_level_access") or {}
+          if isinstance(uniform, dict):
+              uniform = uniform.get("enabled")
+          prevention = iam.get("publicAccessPrevention") or iam.get("public_access_prevention")
+          if name != expected:
+              raise SystemExit(f"Vault bucket mismatch: {name!r} != {expected!r}")
+          if uniform is not True:
+              raise SystemExit("Vault bucket does not enforce uniform bucket-level access")
+          if str(prevention).lower() != "enforced":
+              raise SystemExit("Vault bucket does not enforce public-access prevention")
+          PY
+
+          gcloud projects get-iam-policy "${PROJECT_ID}" --format=json \
+            > "${EVIDENCE_DIR}/project-iam.json"
+          python - "${EVIDENCE_DIR}/project-iam.json" "serviceAccount:${ADMIN_SERVICE_ACCOUNT}" <<'PY'
+          import json
+          import sys
+
+          policy = json.load(open(sys.argv[1], encoding="utf-8"))
+          member = sys.argv[2]
+          forbidden = []
+          for binding in policy.get("bindings", []):
+              if member not in binding.get("members", []):
+                  continue
+              role = binding.get("role", "")
+              if role.startswith("roles/storage.") or role in {"roles/owner", "roles/editor", "roles/viewer"}:
+                  forbidden.append(role)
+          if forbidden:
+              raise SystemExit(f"Admin service account already has broader project storage access: {sorted(forbidden)}")
+          PY
+
+          gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json \
+            > "${EVIDENCE_DIR}/bucket-iam-before.json"
+          gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
+            --member "serviceAccount:${ADMIN_SERVICE_ACCOUNT}" \
+            --role "${REQUIRED_ROLE}" --quiet --format=none
+          gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json \
+            > "${EVIDENCE_DIR}/bucket-iam-after.json"
+
+          python - \
+            "${EVIDENCE_DIR}/bucket-iam-before.json" \
+            "${EVIDENCE_DIR}/bucket-iam-after.json" \
+            "serviceAccount:${ADMIN_SERVICE_ACCOUNT}" \
+            "${REQUIRED_ROLE}" \
+            "${EVIDENCE_DIR}/policy-change.json" <<'PY'
+          import json
+          import sys
+
+          before_path, after_path, member, role, output_path = sys.argv[1:]
+          before = json.load(open(before_path, encoding="utf-8"))
+          after = json.load(open(after_path, encoding="utf-8"))
+
+          def canonical(policy):
+              result = {}
+              for binding in policy.get("bindings", []):
+                  condition = json.dumps(binding.get("condition") or {}, sort_keys=True, separators=(",", ":"))
+                  key = (binding.get("role", ""), condition)
+                  result.setdefault(key, set()).update(binding.get("members", []))
+              return result
+
+          old = canonical(before)
+          new = canonical(after)
+          keys = set(old) | set(new)
+          added = {(key, value) for key in keys for value in new.get(key, set()) - old.get(key, set())}
+          removed = {(key, value) for key in keys for value in old.get(key, set()) - new.get(key, set())}
+          expected_key = (role, "{}")
+          already_present = member in old.get(expected_key, set())
+          expected_added = set() if already_present else {(expected_key, member)}
+          if added != expected_added or removed:
+              raise SystemExit(f"Unexpected bucket-IAM mutation: added={sorted(added)!r} removed={sorted(removed)!r}")
+          if member not in new.get(expected_key, set()):
+              raise SystemExit("Required direct bucket metadata grant is absent after repair")
+
+          direct_roles = sorted(key[0] for key, members in new.items() if member in members)
+          forbidden_roles = {
+              "roles/storage.admin",
+              "roles/storage.objectAdmin",
+              "roles/storage.objectCreator",
+              "roles/storage.objectUser",
+              "roles/storage.objectViewer",
+              "roles/storage.legacyBucketOwner",
+              "roles/storage.legacyBucketReader",
+              "roles/storage.legacyBucketWriter",
+              "roles/storage.legacyObjectOwner",
+              "roles/storage.legacyObjectReader",
+          }
+          unexpected = sorted(set(direct_roles) & forbidden_roles)
+          if unexpected:
+              raise SystemExit(f"Admin service account has unintended object or legacy access: {unexpected}")
+
+          receipt = {
+              "already_present": already_present,
+              "added_member": None if already_present else member,
+              "role": role,
+              "direct_roles_after": direct_roles,
+              "only_expected_policy_change": True,
+          }
+          with open(output_path, "w", encoding="utf-8") as stream:
+              json.dump(receipt, stream, indent=2, sort_keys=True)
+              stream.write("\n")
+          PY
+
+          python - "${EVIDENCE_DIR}" "${GITHUB_SHA}" "${PROJECT_ID}" "${PROJECT_NUMBER}" \
+            "${VAULT_BUCKET}" "${ADMIN_SERVICE_ACCOUNT}" "${REQUIRED_ROLE}" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          files = [
+              "bucket.json",
+              "bucket-iam-before.json",
+              "bucket-iam-after.json",
+              "project-iam.json",
+              "cloud-sql.json",
+              "web-iam.json",
+              "legacy-workflow-states.json",
+              "scheduler-states.ndjson",
+              "policy-change.json",
+          ]
+          digests = {
+              name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+              for name in files
+          }
+          manifest = {
+              "schema_version": 1,
+              "result": "phase5_vault_admin_bucket_metadata_repaired",
+              "repository_id": 1349678672,
+              "control_revision": sys.argv[2],
+              "project_id": sys.argv[3],
+              "project_number": sys.argv[4],
+              "bucket": sys.argv[5],
+              "principal": "serviceAccount:" + sys.argv[6],
+              "role": sys.argv[7],
+              "scope": "bucket",
+              "object_access_granted": False,
+              "all_runtime_schedulers_paused": True,
+              "vault_scheduler_paused": True,
+              "runtime_web_public": False,
+              "cloud_sql_private_only": True,
+              "legacy_collectors_available": True,
+              "producer_execution_performed": False,
+              "production_authority_transferred": False,
+              "phase4_dispatch_eligible": True,
+              "created_at": datetime.now(timezone.utc).isoformat(),
+              "evidence_sha256": digests,
+          }
+          (root / "manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          (cd "${EVIDENCE_DIR}" && sha256sum manifest.json > manifest.sha256)
+          jq -e '.result == "phase5_vault_admin_bucket_metadata_repaired" and
+                 .role == "roles/storage.bucketViewer" and
+                 .object_access_granted == false and
+                 .phase4_dispatch_eligible == true' \
+            "${EVIDENCE_DIR}/manifest.json" >/dev/null
+          (cd "${EVIDENCE_DIR}" && sha256sum -c manifest.sha256)
+
+      - name: Upload repair evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-vault-admin-bucket-metadata-repair
+          path: phase5-vault-admin-repair/
+          if-no-files-found: error
+          retention-days: 90
+
+  dispatch-phase4-v6:
+    needs:
+      - validate-repair-definition
+      - apply-bucket-metadata-binding
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch the unchanged canonical Phase 4 v6 gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${GITHUB_SHA}" ]] || {
+            echo "Canonical main advanced after the IAM repair; refusing dispatch." >&2
+            exit 1
+          }
+          dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run phase4_live_shadow_validation_v6.yml \
+            --repo "${GITHUB_REPOSITORY}" --ref main
+          run_id=""
+          for attempt in $(seq 1 18); do
+            run_id="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/phase4_live_shadow_validation_v6.yml/runs?event=workflow_dispatch&branch=main&per_page=20" \
+              --jq ".workflow_runs | map(select(.head_sha == \"${GITHUB_SHA}\" and .created_at >= \"${dispatched_at}\")) | sort_by(.created_at) | last | .id // empty")"
+            [[ -n "${run_id}" ]] && break
+            sleep 5
+          done
+          [[ -n "${run_id}" ]] || {
+            echo "Phase 4 v6 dispatch was not independently observed." >&2
+            exit 1
+          }
+          echo "Dispatched Phase 4 v6 run ${run_id} for ${GITHUB_SHA}."
+          {
+            echo "### Phase 4 v6 dispatch"
+            echo "- Canonical revision: \`${GITHUB_SHA}\`"
+            echo "- Run ID: \`${run_id}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
