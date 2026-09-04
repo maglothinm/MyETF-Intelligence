@@ -38,8 +38,8 @@ def test_phase4_build_grants_only_service_account_level_actas() -> None:
 
 def test_phase4_build_keeps_submitter_and_executor_separate() -> None:
     text = _text()
-    assert 'Authenticate as constrained Phase 3 deployer' in text
-    assert 'Authenticate as isolated Phase 3 builder' in text
+    assert 'Authenticate as constrained Phase 4 recovery deployer' in text
+    assert 'Authenticate as isolated Phase 4 recovery builder' in text
     assert 'id: builder-auth' in text
     assert 'Refusing to collapse the isolated submitter and build-execution identities.' in text
     assert 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.builder-auth.outputs.credentials_file_path }}' in text
