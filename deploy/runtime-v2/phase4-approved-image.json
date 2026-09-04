@@ -16,6 +16,7 @@
   "source_fetched_inside_build": true,
   "source_staging_used": false,
   "append_only_history_preserved": true,
+  "final_certification_trigger": "vault_metadata_repair_b19637e84151fa3bd118e9e114b2e849a4f24ad7",
   "production_authority_transferred": false,
   "phase5_started": false
 }
