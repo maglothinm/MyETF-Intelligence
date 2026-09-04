@@ -17,6 +17,8 @@
   "source_staging_used": false,
   "append_only_history_preserved": true,
   "final_certification_trigger": "vault_metadata_repair_b19637e84151fa3bd118e9e114b2e849a4f24ad7",
+  "final_certification_controller": "latest_created_execution_status_v1",
+  "final_certification_relaunch_base": "1a591ee48627adf5dd1821b95755b4bea3d10b47",
   "production_authority_transferred": false,
   "phase5_started": false
 }
