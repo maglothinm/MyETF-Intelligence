@@ -1,0 +1,209 @@
+name: Phase 4 recover exact Runtime history
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_recover_exact_history.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: phase4-exact-history-read
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOURCE_RUN_ID: "33819641464"
+      SOURCE_ARTIFACT_ID: "9917920173"
+      SOURCE_ARTIFACT_SHA256: 7f0851fa00169ed80e92972a32d2e7abbb2825378469b945959226143a06702d
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Verify evidence reader is bounded
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/phase4_recover_exact_history.yml').read_text(encoding='utf-8')
+          for forbidden in (
+              'google-github-actions/auth',
+              'gcloud ',
+              'run jobs execute',
+              'scheduler jobs',
+              'terraform apply',
+              'secrets versions access',
+              'contents: write',
+          ):
+              assert forbidden not in text, forbidden
+          assert 'actions: read' in text
+          assert 'SOURCE_RUN_ID: "33819641464"' in text
+          assert 'SOURCE_ARTIFACT_ID: "9917920173"' in text
+          PY
+
+      - name: Download exact failed closeout artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-history/source
+          curl --fail --location --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" \
+            --output phase4-history/source.zip
+          actual_sha="$(sha256sum phase4-history/source.zip | awk '{print $1}')"
+          [[ "${actual_sha}" == "${SOURCE_ARTIFACT_SHA256}" ]] || {
+            echo "Downloaded evidence artifact digest mismatch." >&2
+            exit 1
+          }
+          unzip -q phase4-history/source.zip -d phase4-history/source
+
+      - name: Extract non-secret append-only history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('phase4-history/source')
+
+          def exact(name: str, directory: str) -> Path:
+              matches = [
+                  path for path in root.rglob(name)
+                  if directory in path.as_posix()
+              ]
+              if len(matches) != 1:
+                  raise SystemExit(
+                      f'Expected one {directory}/{name}, found '
+                      + repr([path.as_posix() for path in matches])
+                  )
+              return matches[0]
+
+          def load(path: Path) -> dict:
+              return json.loads(path.read_text(encoding='utf-8'))
+
+          def digest(path: Path) -> str:
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def heads(items):
+              allowed = {
+                  'namespace', 'generation', 'snapshot_id', 'snapshot_sha256',
+                  'parent_sha256', 'created_at', 'updated_at',
+                  'source_revision', 'provenance',
+              }
+              return [
+                  {key: item.get(key) for key in sorted(allowed) if key in item}
+                  for item in (items or [])
+              ]
+
+          def runs(items):
+              allowed = {
+                  'run_id', 'job_name', 'namespace', 'runtime_mode', 'status',
+                  'trigger_source', 'source_revision', 'started_at',
+                  'finished_at', 'snapshot_id', 'snapshot_sha256',
+                  'snapshot_generation', 'snapshot_created_at',
+                  'parent_sha256', 'error_code', 'side_effects_possible',
+              }
+              return [
+                  {key: item.get(key) for key in sorted(allowed) if key in item}
+                  for item in (items or [])
+              ]
+
+          def snapshots(items):
+              allowed = {
+                  'namespace', 'generation', 'snapshot_id', 'snapshot_sha256',
+                  'parent_sha256', 'created_at', 'source_revision',
+                  'provenance',
+              }
+              return [
+                  {key: item.get(key) for key in sorted(allowed) if key in item}
+                  for item in (items or [])
+              ]
+
+          schema_path = exact('schema-probe.json', 'phase3-schema-converge-')
+          probe_path = exact('probe.json', 'phase3-closeout-gcs-v2-')
+          status_path = exact('status.json', 'phase3-closeout-gcs-v2-')
+          schema = load(schema_path)
+          probe = load(probe_path)
+          status = load(status_path)
+
+          summary = {
+              'result': 'phase4_exact_history_recovered',
+              'source_run_id': int(os.environ['SOURCE_RUN_ID']),
+              'source_artifact_id': int(os.environ['SOURCE_ARTIFACT_ID']),
+              'source_artifact_sha256': os.environ['SOURCE_ARTIFACT_SHA256'],
+              'source_files': {
+                  'schema_probe_sha256': digest(schema_path),
+                  'closeout_probe_sha256': digest(probe_path),
+                  'closeout_status_sha256': digest(status_path),
+              },
+              'schema_probe': {
+                  'observed_at_utc': schema.get('observed_at_utc'),
+                  'ok': schema.get('ok'),
+                  'source_revision': schema.get('source_revision'),
+                  'schema_initialize_requested': schema.get('schema_initialize_requested'),
+                  'schema_initialized': schema.get('schema_initialized'),
+                  'protected_state_changed_by_schema_initialize': schema.get(
+                      'protected_state_changed_by_schema_initialize'
+                  ),
+                  'private_ip_env': schema.get('private_ip_env'),
+                  'database_private_ip_selected': schema.get(
+                      'database_private_ip_selected'
+                  ),
+                  'heads': heads((schema.get('status') or {}).get('heads')),
+                  'latest_runs': runs((schema.get('status') or {}).get('latest_runs')),
+                  'run_history': runs(schema.get('run_history')),
+                  'snapshot_history': snapshots(schema.get('snapshot_history')),
+              },
+              'closeout_probe': {
+                  'observed_at_utc': probe.get('observed_at_utc'),
+                  'ok': probe.get('ok'),
+                  'source_revision': probe.get('source_revision'),
+                  'private_ip_env': probe.get('private_ip_env'),
+                  'database_private_ip_selected': probe.get(
+                      'database_private_ip_selected'
+                  ),
+                  'heads': heads((probe.get('status') or {}).get('heads')),
+                  'latest_runs': runs((probe.get('status') or {}).get('latest_runs')),
+                  'run_history': runs(probe.get('run_history')),
+                  'snapshot_history': snapshots(probe.get('snapshot_history')),
+              },
+              'closeout_status': {
+                  'heads': heads(status.get('heads')),
+                  'latest_runs': runs(status.get('latest_runs')),
+              },
+              'mutation_performed': False,
+              'runtime_job_execution': False,
+              'scheduler_execution': False,
+              'production_authority_transferred': False,
+          }
+          output = Path('phase4-history/exact-history.json')
+          output.write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          print(output.read_text(encoding='utf-8'))
+          PY
+
+      - name: Upload exact history summary
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase4-exact-history
+          path: phase4-history/exact-history.json
+          if-no-files-found: error
+          retention-days: 90
