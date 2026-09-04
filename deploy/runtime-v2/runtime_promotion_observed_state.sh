@@ -9,6 +9,26 @@
 eval "$(declare -f configure_runtime | sed '1s/configure_runtime/configure_runtime_v1/')"
 eval "$(declare -f verify_runtime_configuration | sed '1s/verify_runtime_configuration/verify_runtime_configuration_v1/')"
 
+# Resolve the newest Cloud Run execution through the supported Job status field.
+# All producer schedulers remain paused and the controller executes each job
+# serially, so the latest-created receipt is unambiguous within this gate.
+latest_execution_name() {
+  local job="$1" execution=""
+  for attempt in $(seq 1 12); do
+    execution="$(gcloud run jobs describe "${job}" \
+      --project "${PROJECT_ID}" \
+      --region "${REGION}" \
+      --format='value(status.latestCreatedExecution.name)')"
+    if [[ -n "${execution}" ]]; then
+      printf '%s\n' "${execution}"
+      return 0
+    fi
+    sleep 5
+  done
+  echo "Unable to resolve the latest execution for ${job}." >&2
+  return 1
+}
+
 configure_runtime() {
   local mode="$1" job status=0
   configure_runtime_v1 "${mode}" || return 1
