@@ -20,7 +20,7 @@ def test_workflow_is_canonical_main_and_self_scoped() -> None:
     assert 'push:' not in trigger
     assert 'group: runtime-v2-live-controller' in text
     assert "name: Phase 3 GCS closeout v2" in text
-    assert '"deploy/runtime-v2/close-phase3-gcs-v2.sh"' in text
+    assert "deploy/runtime-v2/close-phase3-gcs-v2.sh" in text
     assert "github.repository_id == '1349678672'" in text
     assert "github.ref == 'refs/heads/main'" in text
     assert 'PROJECT_NUMBER: "497412818801"' in text
