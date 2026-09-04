@@ -1,0 +1,518 @@
+name: AI filing analyst and paper portfolio
+
+on:
+  workflow_dispatch:
+    inputs:
+      reanalyze_existing:
+        description: "Reanalyze the newest already-processed purchases with the current model and rules"
+        required: false
+        default: false
+        type: boolean
+      suppress_alerts:
+        description: "Write analyses and paper positions without sending candidate alerts"
+        required: false
+        default: false
+        type: boolean
+      investor_edge_enabled:
+        description: "Enable Investor Edge for this manual run"
+        required: false
+        default: true
+        type: boolean
+      max_analyses:
+        description: "Maximum purchases to analyze in this run"
+        required: false
+        default: "20"
+        type: string
+  workflow_run:
+    workflows:
+      - Legislative purchase tracker v2
+      - Executive purchase tracker
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  # Redundant successful collectors enqueue this same serialized, deduplicating analyst.
+  group: ai-filing-analyst
+  cancel-in-progress: false
+
+env:
+  AI_DIR: ".trade-tracker/ai"
+  AI_ANALYSIS_ENABLED: ${{ vars.AI_ANALYSIS_ENABLED || 'false' }}
+  AI_PAPER_TRADING_ONLY: "true"
+  AI_WEB_SEARCH_ENABLED: ${{ vars.AI_WEB_SEARCH_ENABLED || 'true' }}
+  AI_FETCH_DOCUMENT_TEXT: ${{ vars.AI_FETCH_DOCUMENT_TEXT || 'true' }}
+  AI_MAX_ANALYSES_PER_RUN: ${{ vars.AI_MAX_ANALYSES_PER_RUN || '20' }}
+  AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS: ${{ vars.AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS || '65' }}
+  AI_REQUIRE_PUSHOVER: ${{ vars.AI_REQUIRE_PUSHOVER || 'false' }}
+  INVESTOR_EDGE_ENABLED: ${{ vars.INVESTOR_EDGE_ENABLED || 'true' }}
+  OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.6-terra' }}
+  OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'medium' }}
+  SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+  ALPHAVANTAGE_ENTITLEMENT: ${{ vars.ALPHAVANTAGE_ENTITLEMENT }}
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  POLITITRACK_REPOSITORY_ID: ${{ github.repository_id }}
+
+jobs:
+  analyze:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref_name == github.event.repository.default_branch &&
+      vars.AI_ANALYSIS_ENABLED == 'true' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+          (
+            github.event.workflow_run.event == 'schedule' ||
+            github.event.workflow_run.event == 'workflow_dispatch'
+          )
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Signal analyst start
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.AI_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "${healthchecks_base}/start" >/dev/null
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Bind immutable source revision
+        shell: bash
+        run: echo "SOURCE_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-ai.txt
+            requirements-tracker.txt
+
+      - name: Install document-processing dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends poppler-utils tesseract-ocr
+
+      - name: Install tracker and analyst dependencies
+        shell: bash
+        run: python -m pip install --requirement requirements-ai.txt pytest==9.0.2
+
+      - name: Restore authoritative protected state artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          restore_state_artifact() {
+            local destination="$1"
+            local artifact_name="$2"
+            local workflow_file="$3"
+            local workflow_name="$4"
+            local authoritative_job="$5"
+            local access_mode="$6"
+            consumer_sha="$(git rev-parse HEAD)"
+            live_default_sha="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${DEFAULT_BRANCH}" \
+                --jq '.object.sha'
+            )"
+            if [[ "$consumer_sha" != "$live_default_sha" ]]; then
+              echo "This queued analyst checked out ${consumer_sha}, but ${DEFAULT_BRANCH} is now ${live_default_sha}; refusing stale-code execution." >&2
+              exit 1
+            fi
+
+            artifact_id=""
+            producer_run_id=""
+            producer_attempt=""
+            producer_workflow_id=""
+            while IFS=$'\t' read -r candidate_artifact_id candidate_run_id candidate_created_at; do
+              [[ -n "$candidate_artifact_id" && -n "$candidate_run_id" && -n "$candidate_created_at" ]] || continue
+              run_payload="$(
+                gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}"
+              )"
+              current_run_attempt="$(jq -r '.run_attempt // 1' <<< "$run_payload")"
+              [[ "$current_run_attempt" =~ ^[1-9][0-9]*$ ]] || continue
+
+              for ((candidate_attempt = current_run_attempt; candidate_attempt >= 1; candidate_attempt--)); do
+                attempt_payload="$run_payload"
+                if (( candidate_attempt != current_run_attempt )); then
+                  attempt_payload="$(
+                    gh api \
+                      -H "Accept: application/vnd.github+json" \
+                      "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${candidate_attempt}"
+                  )"
+                fi
+                run_started_at="$(jq -r '.run_started_at // ""' <<< "$attempt_payload")"
+                next_attempt_started_at=""
+                if (( candidate_attempt < current_run_attempt )); then
+                  next_attempt_started_at="$(
+                    gh api \
+                      -H "Accept: application/vnd.github+json" \
+                      "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/$((candidate_attempt + 1))" \
+                      --jq '.run_started_at // ""'
+                  )"
+                fi
+                if [[ \
+                  -z "$run_started_at" || \
+                  "$candidate_created_at" < "$run_started_at" || \
+                  ( -n "$next_attempt_started_at" && ( "$candidate_created_at" > "$next_attempt_started_at" || "$candidate_created_at" == "$next_attempt_started_at" ) ) \
+                ]]; then
+                  continue
+                fi
+
+                run_name="$(jq -r '.name // ""' <<< "$attempt_payload")"
+                run_path="$(jq -r '.path // ""' <<< "$attempt_payload")"
+                run_path="${run_path%%@*}"
+                run_branch="$(jq -r '.head_branch // ""' <<< "$attempt_payload")"
+                run_conclusion="$(jq -r '.conclusion // ""' <<< "$attempt_payload")"
+                run_repository_id="$(jq -r '.repository.id // ""' <<< "$attempt_payload")"
+                run_head_sha="$(jq -r '.head_sha // ""' <<< "$attempt_payload")"
+                workflow_id="$(jq -r '.workflow_id // ""' <<< "$attempt_payload")"
+                if [[ \
+                  "$run_name" != "$workflow_name" || \
+                  "$run_path" != ".github/workflows/${workflow_file}" || \
+                  "$run_branch" != "$DEFAULT_BRANCH" || \
+                  "$run_conclusion" != "success" || \
+                  "$run_repository_id" != "$GITHUB_REPOSITORY_ID" || \
+                  -z "$run_head_sha" || \
+                  -z "$workflow_id" \
+                ]]; then
+                  continue
+                fi
+                successful_state_jobs="$(
+                  gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${candidate_attempt}/jobs?per_page=100" \
+                    --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
+                )"
+                (( successful_state_jobs > 0 )) || continue
+                compare_status="$(
+                  gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/compare/${run_head_sha}...${consumer_sha}" \
+                    --jq '.status'
+                )"
+                if [[ "$compare_status" == "ahead" || "$compare_status" == "identical" ]]; then
+                  artifact_id="$candidate_artifact_id"
+                  producer_run_id="$candidate_run_id"
+                  producer_attempt="$candidate_attempt"
+                  producer_workflow_id="$workflow_id"
+                  break 2
+                fi
+              done
+            done < <(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${artifact_name}&per_page=100" \
+                --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse[] | [.id, .workflow_run.id, .created_at] | @tsv'
+            )
+            if [[ -z "$artifact_id" ]]; then
+              echo "No authoritative ${artifact_name} artifact is available; refusing to initialize protected state." >&2
+              exit 1
+            fi
+
+            later_writers=""
+            run_page=1
+            while :; do
+              runs_payload="$(
+                gh api --method GET \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/actions/workflows/${producer_workflow_id}/runs" \
+                  -f branch="$DEFAULT_BRANCH" \
+                  -f per_page=100 \
+                  -f page="$run_page"
+              )"
+              page_count="$(jq '.workflow_runs | length' <<< "$runs_payload")"
+              while IFS= read -r later_run_id; do
+                [[ -n "$later_run_id" ]] || continue
+                later_run_payload="$(
+                  gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${later_run_id}"
+                )"
+                later_run_name="$(jq -r '.name // ""' <<< "$later_run_payload")"
+                later_run_path="$(jq -r '.path // ""' <<< "$later_run_payload")"
+                later_run_path="${later_run_path%%@*}"
+                later_run_branch="$(jq -r '.head_branch // ""' <<< "$later_run_payload")"
+                later_repository_id="$(jq -r '.repository.id // ""' <<< "$later_run_payload")"
+                if [[ \
+                  "$later_run_name" != "$workflow_name" || \
+                  "$later_run_path" != ".github/workflows/${workflow_file}" || \
+                  "$later_run_branch" != "$DEFAULT_BRANCH" || \
+                  "$later_repository_id" != "$GITHUB_REPOSITORY_ID" \
+                ]]; then
+                  continue
+                fi
+                later_attempt_count="$(jq -r '.run_attempt // 1' <<< "$later_run_payload")"
+                [[ "$later_attempt_count" =~ ^[1-9][0-9]*$ ]] || continue
+                first_later_attempt=1
+                if (( later_run_id == producer_run_id )); then
+                  first_later_attempt=$((producer_attempt + 1))
+                fi
+                for ((later_attempt = first_later_attempt; later_attempt <= later_attempt_count; later_attempt++)); do
+                  successful_state_jobs="$(
+                    gh api \
+                      -H "Accept: application/vnd.github+json" \
+                      "/repos/${GITHUB_REPOSITORY}/actions/runs/${later_run_id}/attempts/${later_attempt}/jobs?per_page=100" \
+                      --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
+                  )"
+                  if (( successful_state_jobs > 0 )); then
+                    later_writers+="${later_writers:+$'\n'}${later_run_id}.${later_attempt}"
+                  fi
+                done
+              done < <(
+                jq -r --argjson predecessor "$producer_run_id" \
+                  '.workflow_runs[] | select(.id >= $predecessor) | .id' \
+                  <<< "$runs_payload"
+              )
+              if (( page_count == 0 || page_count < 100 )); then
+                break
+              fi
+              oldest_run_id="$(jq '[.workflow_runs[].id] | min' <<< "$runs_payload")"
+              if (( oldest_run_id < producer_run_id )); then
+                break
+              fi
+              ((run_page += 1))
+            done
+            if [[ -n "$later_writers" ]]; then
+              later_writers="$(sort -V -u <<< "$later_writers")"
+              echo "${workflow_name} high-water violation at run attempt(s) ${later_writers//$'\n'/, }; refusing stale protected state." >&2
+              exit 1
+            fi
+
+            if [[ "$access_mode" == "writable" ]]; then
+              # Preserve the general fail-closed guard; the AI adapter may alter only
+              # an exact attempt backed by an immutable diagnostic adjudication.
+              GITHUB_SHA="$consumer_sha" python scripts/ai_retry_guard.py \
+                --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
+            fi
+
+            temp_dir="$(mktemp -d)"
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+              > "$temp_dir/state.zip"
+            mkdir -p "$temp_dir/unpacked"
+            unzip -q "$temp_dir/state.zip" -d "$temp_dir/unpacked"
+            state_file="$(find "$temp_dir/unpacked" -type f -name state.json -print -quit)"
+            if [[ -z "$state_file" ]]; then
+              echo "Artifact ${artifact_id} (${artifact_name}) contains no state.json." >&2
+              exit 1
+            fi
+            if ! jq -e 'type == "object" and (.last_success_utc | type == "string" and length > 0)' "$state_file" >/dev/null; then
+              echo "Artifact ${artifact_id} (${artifact_name}) has no successful-state marker." >&2
+              exit 1
+            fi
+            rm -rf "$destination"
+            mkdir -p "$destination"
+            cp -R "$(dirname "$state_file")/." "$destination/"
+            if [[ "$access_mode" == "read-only" ]]; then
+              chmod -R a-w "$destination"
+            fi
+            echo "Restored authoritative ${artifact_name} from artifact ${artifact_id}, run ${producer_run_id}, attempt ${producer_attempt}."
+          }
+
+          restore_state_artifact \
+            tracker-input/legislative \
+            legislative-tracker-state \
+            legislative_trade_tracker_v2.yml \
+            "Legislative purchase tracker v2" \
+            track \
+            read-only
+          restore_state_artifact \
+            tracker-input/executive \
+            executive-tracker-state \
+            executive_trade_tracker.yml \
+            "Executive purchase tracker" \
+            track \
+            read-only
+          restore_state_artifact \
+            .trade-tracker/ai \
+            ai-analysis-state \
+            ai_filing_analyst.yml \
+            "AI filing analyst and paper portfolio" \
+            analyze \
+            writable
+
+      - name: Run offline tests
+        shell: bash
+        env:
+          AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS: "0"
+        run: |
+          export GITHUB_STEP_SUMMARY=/tmp/polititrack-offline-test-summary
+          python -m pytest -q \
+            tests/test_monitor_disclosures.py \
+            tests/test_government_trade_tracker.py \
+            tests/test_historical_transaction_bootstrap.py \
+            tests/test_oge_disclosures.py \
+            tests/test_ai_filing_analyst.py \
+            tests/test_ai_filing_analyst_hardened.py \
+            tests/test_ai_retry_guard.py \
+            tests/test_validate_ai_publication.py \
+            tests/test_trade_dashboard.py \
+            tests/test_investor_edge.py \
+            tests/test_investor_edge_core.py \
+            tests/test_investor_edge_surfaces.py
+
+      - name: Analyze new filing purchases
+        id: analyst
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REANALYZE_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.reanalyze_existing || false }}
+          SUPPRESS_ALERTS: ${{ github.event_name == 'workflow_dispatch' && inputs.suppress_alerts || false }}
+          INVESTOR_EDGE_MANUAL_INPUT: ${{ inputs.investor_edge_enabled }}
+          MAX_ANALYSES_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.max_analyses || '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            export INVESTOR_EDGE_ENABLED="$INVESTOR_EDGE_MANUAL_INPUT"
+          fi
+          args=(
+            --legislative-dir tracker-input/legislative
+            --executive-dir tracker-input/executive
+            --ai-dir .trade-tracker/ai
+          )
+          if [[ "$REANALYZE_EXISTING" == "true" ]]; then
+            args+=(--reanalyze-existing)
+          fi
+          if [[ "$SUPPRESS_ALERTS" == "true" ]]; then
+            args+=(--suppress-alerts)
+          fi
+          if [[ -n "$MAX_ANALYSES_INPUT" ]]; then
+            args+=(--max-analyses "$MAX_ANALYSES_INPUT")
+          fi
+          python scripts/ai_filing_analyst.py "${args[@]}"
+
+      - name: Validate analyst publication decision
+        id: publication
+        if: ${{ always() }}
+        shell: bash
+        env:
+          ANALYST_OUTCOME: ${{ steps.analyst.outcome }}
+        run: |
+          python scripts/validate_ai_publication.py \
+            --result ai-analysis-result.json \
+            --state .trade-tracker/ai/state.json \
+            --repository-id "${{ github.repository_id }}" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --source-revision "$SOURCE_REVISION" \
+            --analyst-outcome "$ANALYST_OUTCOME"
+
+      - name: Upload durable AI state
+        if: >-
+          steps.analyst.outcome == 'success' &&
+          steps.publication.outcome == 'success' &&
+          steps.publication.outputs.state_publishable == 'true' &&
+          hashFiles('.trade-tracker/ai/state.json') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-analysis-state
+          path: .trade-tracker/ai
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
+
+      - name: Upload AI outputs
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-analysis-output-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ai-analysis-result.json
+            ai-latest-analyses.csv
+            ai-paper-portfolio.csv
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Signal analyst success
+        if: ${{ always() && !failure() && steps.analyst.outcome == 'success' && steps.publication.outputs.state_publishable == 'true' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.AI_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "$healthchecks_base" >/dev/null
+          fi
+
+      - name: Signal analyst failure
+        if: ${{ always() && failure() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.AI_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            if [[ -f ai-analysis-result.json ]]; then
+              curl --fail --silent --show-error --max-time 20 --retry 3 \
+                --data-binary @ai-analysis-result.json \
+                "${healthchecks_base}/fail" >/dev/null || true
+            else
+              curl --fail --silent --show-error --max-time 20 --retry 3 \
+                --data "AI workflow failed before ai-analysis-result.json was created" \
+                "${healthchecks_base}/fail" >/dev/null || true
+            fi
+          fi
+
+      - name: Send Pushover failure notification
+        if: ${{ always() && failure() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+        run: |
+          if [[ -n "$PUSHOVER_API_TOKEN" && -n "$PUSHOVER_USER_KEY" ]]; then
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              --form-string "token=$PUSHOVER_API_TOKEN" \
+              --form-string "user=$PUSHOVER_USER_KEY" \
+              --form-string "title=PolitiTrack AI filing analyst failed" \
+              --form-string "message=The filing collectors remain independent. Open the AI workflow for the failed analysis and retry details." \
+              --form-string "url=$run_url" \
+              --form-string "url_title=Open failed AI workflow" \
+              https://api.pushover.net/1/messages.json >/dev/null
+          fi
