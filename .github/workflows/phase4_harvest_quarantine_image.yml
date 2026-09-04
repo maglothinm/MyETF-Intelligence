@@ -1,0 +1,205 @@
+name: Phase 4 harvest submitted quarantine-safe Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_harvest_quarantine_image.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-image-build
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: d2b84173-eafa-4fb6-b9ac-a3e232d273f4
+      BUILD_SOURCE_REVISION: 8908f067298078f8c013e90cf6b7ad8ad420285b
+      BUILD_TAG: 8908f067298
+      SUBMIT_WORKFLOW_RUN_ID: "33823547823"
+      SUBMIT_ARTIFACT_ID: "9919214769"
+      SUBMIT_ARTIFACT_SHA256: 81d01fd81f1af062a0976a842ccc15dda4eea8241743d6aba838fcdef007c8cb
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      OBSOLETE_HARDENED_DIGEST: sha256:310e1042c7fe3e87a996eb0eaa676b6b3abcae0e909cb5e49f6c638935ac12a7
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main with exact build ancestry
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 4 recovery deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest only the already-submitted exact build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-quarantine-image-harvest
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "${BUILD_SOURCE_REVISION}" "${GITHUB_SHA}" || {
+            echo "The exact build source is not an ancestor of canonical main." >&2
+            exit 1
+          }
+          git diff --quiet "${BUILD_SOURCE_REVISION}" -- \
+            runtime_v2/database.py \
+            runtime_v2/store.py \
+            runtime_v2/runner.py \
+            migrations/20260904_runtime_v2_mode_quarantine.sql \
+            deploy/runtime-v2/Dockerfile \
+            deploy/runtime-v2/cloudbuild-no-source.yaml \
+            requirements-runtime-v2.txt || {
+              echo "Build inputs changed after the submitted exact source." >&2
+              exit 1
+            }
+
+          terminal=false
+          for attempt in $(seq 1 120); do
+            gcloud builds describe "${BUILD_ID}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format=json > phase4-quarantine-image-harvest/cloud-build.json
+            status="$(jq -r '.status // empty' phase4-quarantine-image-harvest/cloud-build.json)"
+            case "${status}" in
+              SUCCESS)
+                terminal=true
+                break
+                ;;
+              QUEUED|PENDING|WORKING)
+                echo "Exact Cloud Build remains ${status} (attempt ${attempt}/120)."
+                sleep 15
+                ;;
+              *)
+                echo "Exact Cloud Build reached terminal non-success state ${status}." >&2
+                exit 1
+                ;;
+            esac
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Exact Cloud Build did not complete inside the bounded harvest window." >&2
+            exit 1
+          }
+
+          jq -e \
+            --arg id "${BUILD_ID}" \
+            --arg source "${BUILD_SOURCE_REVISION}" \
+            --arg tag "${BUILD_TAG}" \
+            '.id == $id and .status == "SUCCESS" and
+             .substitutions._SOURCE_REVISION == $source and
+             .substitutions._TAG == $tag and
+             .substitutions._REGION == "us-central1" and
+             .substitutions._REPOSITORY == "polititrack" and
+             .substitutions._IMAGE == "runtime-v2"' \
+            phase4-quarantine-image-harvest/cloud-build.json >/dev/null || {
+              echo "Cloud Build identity or exact-source substitutions differ." >&2
+              exit 1
+            }
+
+          tagged_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${BUILD_TAG}"
+          digest="$(gcloud artifacts docker images describe "${tagged_image}" \
+            --project "${PROJECT_ID}" \
+            --format='value(image_summary.digest)')"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "Submitted build produced no resolvable immutable digest." >&2
+            exit 1
+          }
+          [[ "${digest}" != "${CURRENT_DEPLOYED_DIGEST}" && "${digest}" != "${OBSOLETE_HARDENED_DIGEST}" ]] || {
+            echo "Submitted build resolved to a rejected predecessor digest." >&2
+            exit 1
+          }
+          immutable_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}@${digest}"
+
+          jq -e --arg digest "${digest}" --arg bare_digest "${digest#sha256:}" \
+            'any(.results.images[]?; .digest == $digest or .digest == $bare_digest)' \
+            phase4-quarantine-image-harvest/cloud-build.json >/dev/null || {
+              echo "Cloud Build result metadata does not attest the resolved digest." >&2
+              exit 1
+            }
+
+          database_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/database.py" | sha256sum | awk '{print $1}')"
+          store_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/store.py" | sha256sum | awk '{print $1}')"
+          runner_sha="$(git show "${BUILD_SOURCE_REVISION}:runtime_v2/runner.py" | sha256sum | awk '{print $1}')"
+          migration_sha="$(git show "${BUILD_SOURCE_REVISION}:migrations/20260904_runtime_v2_mode_quarantine.sql" | sha256sum | awk '{print $1}')"
+          dockerfile_sha="$(git show "${BUILD_SOURCE_REVISION}:deploy/runtime-v2/Dockerfile" | sha256sum | awk '{print $1}')"
+          requirements_sha="$(git show "${BUILD_SOURCE_REVISION}:requirements-runtime-v2.txt" | sha256sum | awk '{print $1}')"
+
+          jq -n \
+            --arg repository_id "${GITHUB_REPOSITORY_ID}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg source_revision "${BUILD_SOURCE_REVISION}" \
+            --arg project_id "${PROJECT_ID}" \
+            --arg project_number "${PROJECT_NUMBER}" \
+            --arg image "${immutable_image}" \
+            --arg digest "${digest}" \
+            --arg build_id "${BUILD_ID}" \
+            --arg submit_run_id "${SUBMIT_WORKFLOW_RUN_ID}" \
+            --arg submit_artifact_id "${SUBMIT_ARTIFACT_ID}" \
+            --arg submit_artifact_sha256 "${SUBMIT_ARTIFACT_SHA256}" \
+            --arg database_sha256 "${database_sha}" \
+            --arg store_sha256 "${store_sha}" \
+            --arg runner_sha256 "${runner_sha}" \
+            --arg migration_sha256 "${migration_sha}" \
+            --arg dockerfile_sha256 "${dockerfile_sha}" \
+            --arg requirements_sha256 "${requirements_sha}" \
+            '{
+              result: "phase4_quarantine_runtime_image_harvested",
+              repository_id: ($repository_id | tonumber),
+              repository: $repository,
+              source_revision: $source_revision,
+              project_id: $project_id,
+              project_number: ($project_number | tonumber),
+              cloud_build_id: $build_id,
+              immutable_image: $image,
+              image_digest: $digest,
+              submit_workflow_run_id: ($submit_run_id | tonumber),
+              submit_artifact_id: ($submit_artifact_id | tonumber),
+              submit_artifact_sha256: $submit_artifact_sha256,
+              database_sha256: $database_sha256,
+              store_sha256: $store_sha256,
+              runner_sha256: $runner_sha256,
+              migration_sha256: $migration_sha256,
+              dockerfile_sha256: $dockerfile_sha256,
+              requirements_sha256: $requirements_sha256,
+              exact_build_reused: true,
+              build_resubmitted: false,
+              deployed: false,
+              runtime_job_execution: false,
+              scheduler_execution: false,
+              production_authority_transferred: false,
+              phase4_producer_execution: false
+            }' > phase4-quarantine-image-harvest/build-receipt.json
+          cat phase4-quarantine-image-harvest/build-receipt.json
+
+      - name: Upload immutable image harvest receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase4-quarantine-runtime-image-harvest
+          path: phase4-quarantine-image-harvest/
+          if-no-files-found: warn
+          retention-days: 90
