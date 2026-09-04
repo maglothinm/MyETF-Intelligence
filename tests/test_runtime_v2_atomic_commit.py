@@ -118,6 +118,13 @@ def test_snapshot_head_and_successful_run_commit_in_one_transaction(tmp_path):
         "committed_snapshot.source_provenance ->> 'job' = job_run.job_name"
         in success[1]
     )
+    assert "committed_snapshot.created_at >= job_run.started_at" in success[1]
+    assert "committed_snapshot.created_at <= now()" in success[1]
+    assert (
+        "committed_snapshot.source_provenance ->> 'trigger_source' = "
+        "job_run.trigger_source"
+        in success[1]
+    )
     assert (
         "committed_snapshot.source_provenance ->> 'mode' = job_run.runtime_mode"
         in success[1]
