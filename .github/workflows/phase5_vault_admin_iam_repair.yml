@@ -1,4 +1,4 @@
-name: Phase 5 Vault admin IAM repair
+name: Phase 5 Vault metadata repair
 
 on:
   push:
@@ -23,36 +23,36 @@ jobs:
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WEB_SERVICE_ACCOUNT: polititrack-web-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      VAULT_SERVICE_ACCOUNT: polititrack-vault-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       ADMIN_JOB: polititrack-admin
+      VAULT_JOB: polititrack-vault-lifecycle
+      WEB_SERVICE: polititrack-web
       VAULT_BUCKET: project-38008d5f-4918-46e6-920-polititrack-vault
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate durable Terraform repair
+      - name: Validate durable Terraform bindings
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p phase5-vault-admin-repair
+          mkdir -p phase5-vault-metadata
           python - <<'PY'
           from pathlib import Path
-
           text = Path('deploy/runtime-v2/terraform/vault_admin_metadata.tf').read_text()
           required = (
               'resource "google_storage_bucket_iam_member" "vault_admin_metadata_viewer"',
-              'bucket = google_storage_bucket.vault[0].name',
-              'role   = "roles/storage.bucketViewer"',
-              'member = "serviceAccount:${google_service_account.admin.email}"',
+              'resource "google_storage_bucket_iam_member" "vault_runtime_metadata_viewer"',
+              'google_service_account.admin.email',
+              'google_service_account.web.email',
+              'google_service_account.vault.email',
+              'roles/storage.bucketViewer',
           )
           missing = [token for token in required if token not in text]
           if missing:
-              raise SystemExit(f'Vault admin metadata binding is incomplete: {missing}')
-          forbidden = ('roles/storage.admin', 'roles/storage.objectAdmin', 'roles/storage.objectViewer')
-          present = [token for token in forbidden if token in text]
-          if present:
-              raise SystemExit(f'Vault admin repair grants forbidden object or admin access: {present}')
-          Path('phase5-vault-admin-repair/static-validation.txt').write_text(
-              'metadata-only Terraform binding validated\n'
-          )
+              raise SystemExit(f'Vault metadata bindings incomplete: {missing}')
+          Path('phase5-vault-metadata/static-validation.txt').write_text(
+              'metadata-only bindings validated\n', encoding='utf-8')
           PY
 
       - name: Authenticate as constrained deployer
@@ -63,12 +63,14 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      - name: Apply metadata-only binding and prove schema initialization
+      - name: Apply bindings and prove schema initialization
         shell: bash
         run: |
           set -Eeuo pipefail
           deployer_member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
           admin_member="serviceAccount:${ADMIN_SERVICE_ACCOUNT}"
+          web_member="serviceAccount:${WEB_SERVICE_ACCOUNT}"
+          vault_member="serviceAccount:${VAULT_SERVICE_ACCOUNT}"
 
           cleanup() {
             set +e
@@ -82,92 +84,96 @@ jobs:
           }
           trap cleanup EXIT
 
-          gcloud run jobs describe "${ADMIN_JOB}" \
-            --project "${PROJECT_ID}" --region "${REGION}" --format=json \
-            > phase5-vault-admin-repair/admin-job-before.json
-          configured_bucket="$(jq -r \
-            '[.. | objects | select(.name? == "VAULT_GCS_BUCKET") | .value?][0] // empty' \
-            phase5-vault-admin-repair/admin-job-before.json)"
-          [[ "${configured_bucket}" == "${VAULT_BUCKET}" ]] || {
-            echo "Admin job Vault bucket is ${configured_bucket:-missing}, expected ${VAULT_BUCKET}." >&2
-            exit 1
-          }
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-metadata/admin.json
+          gcloud run jobs describe "${VAULT_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-metadata/vault-job.json
+          gcloud run services describe "${WEB_SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format=json > phase5-vault-metadata/web.json
+          for file in admin.json vault-job.json web.json; do
+            configured="$(jq -r '[.. | objects | select(.name? == "VAULT_GCS_BUCKET") | .value?][0] // empty' \
+              "phase5-vault-metadata/${file}")"
+            [[ "${configured}" == "${VAULT_BUCKET}" ]] || {
+              echo "${file} Vault bucket is ${configured:-missing}, expected ${VAULT_BUCKET}." >&2
+              exit 1
+            }
+          done
 
-          # The deployer intentionally has no standing Storage access. Give it
-          # short-lived policy-mutation authority only long enough to install
-          # the durable bucket-scoped metadata binding.
           gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
             --member "${deployer_member}" --role roles/storage.admin \
             --condition=None --quiet --format=none
-          bucket_visible=false
+          visible=false
           for attempt in $(seq 1 18); do
             if gcloud storage buckets describe "gs://${VAULT_BUCKET}" --format=json \
-              > phase5-vault-admin-repair/bucket-before.json 2>/dev/null; then
-              bucket_visible=true
+              > phase5-vault-metadata/bucket.json 2>/dev/null; then
+              visible=true
               break
             fi
             sleep 10
           done
-          [[ "${bucket_visible}" == "true" ]] || { echo "Temporary Storage authority did not become effective." >&2; exit 1; }
+          [[ "${visible}" == "true" ]] || { echo "Vault bucket did not become visible." >&2; exit 1; }
 
-          gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
-            --member "${admin_member}" --role roles/storage.bucketViewer --quiet
-          policy="$(gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json)"
-          jq -e --arg member "${admin_member}" \
-            '[.bindings[]? | select(.role == "roles/storage.bucketViewer") | .members[]?] | any(. == $member)' \
-            <<<"${policy}" >/dev/null
-          printf '%s\n' "${policy}" > phase5-vault-admin-repair/bucket-policy-after.json
+          for member in "${admin_member}" "${web_member}" "${vault_member}"; do
+            gcloud storage buckets add-iam-policy-binding "gs://${VAULT_BUCKET}" \
+              --member "${member}" --role roles/storage.bucketViewer --quiet >/dev/null
+          done
+          gcloud storage buckets get-iam-policy "gs://${VAULT_BUCKET}" --format=json \
+            > phase5-vault-metadata/bucket-policy.json
+          for member in "${admin_member}" "${web_member}" "${vault_member}"; do
+            jq -e --arg member "${member}" \
+              '[.bindings[]? | select(.role == "roles/storage.bucketViewer") | .members[]?] | any(. == $member)' \
+              phase5-vault-metadata/bucket-policy.json >/dev/null
+          done
+          ! jq -e --arg member "${admin_member}" \
+            '[.bindings[]? | select(.role == "roles/storage.objectAdmin") | .members[]?] | any(. == $member)' \
+            phase5-vault-metadata/bucket-policy.json >/dev/null || {
+              echo "Admin identity unexpectedly has object access." >&2
+              exit 1
+            }
 
           gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
             --member "${deployer_member}" --role roles/storage.admin \
             --condition=None --quiet --format=none
           project_policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
-          if jq -e --arg member "${deployer_member}" \
+          ! jq -e --arg member "${deployer_member}" \
             '[.bindings[]? | select(.role == "roles/storage.admin") | .members[]?] | any(. == $member)' \
-            <<<"${project_policy}" >/dev/null; then
-            echo "Temporary Storage Admin authority remains." >&2
-            exit 1
-          fi
+            <<<"${project_policy}" >/dev/null || { echo "Temporary Storage Admin remains." >&2; exit 1; }
 
           gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" \
             --project "${PROJECT_ID}" --region "${REGION}" \
             --member "${deployer_member}" --role roles/run.jobsExecutorWithOverrides \
             --quiet --format=none
+          previous="$(gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format='value(status.latestCreatedExecution.name)')"
           gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
-            --wait --format=json > phase5-vault-admin-repair/admin-execute.json
-          execution="$(gcloud run jobs executions describe-latest --job "${ADMIN_JOB}" \
-            --project "${PROJECT_ID}" --region "${REGION}" --format='value(metadata.name)')"
-          [[ -n "${execution}" ]]
+            --wait --format=json > phase5-vault-metadata/admin-execute.json
+          execution="$(gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+            --format='value(status.latestCreatedExecution.name)')"
+          [[ -n "${execution}" && "${execution}" != "${previous}" ]] || {
+            echo "A new successful admin execution was not recorded." >&2
+            exit 1
+          }
 
           cleanup
           trap - EXIT
-
           remaining="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" \
             --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
-          if jq -e --arg member "${deployer_member}" \
+          ! jq -e --arg member "${deployer_member}" \
             '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' \
-            <<<"${remaining}" >/dev/null; then
-            echo "Temporary admin execution authority remains." >&2
-            exit 1
-          fi
+            <<<"${remaining}" >/dev/null || { echo "Temporary execution authority remains." >&2; exit 1; }
 
-          jq -n \
-            --arg result "vault_admin_metadata_repaired" \
-            --arg main_revision "${GITHUB_SHA}" \
-            --arg bucket "${VAULT_BUCKET}" \
-            --arg role "roles/storage.bucketViewer" \
-            --arg member "${admin_member}" \
-            --arg admin_execution "${execution}" \
+          jq -n --arg result vault_metadata_repaired --arg main_revision "${GITHUB_SHA}" \
+            --arg bucket "${VAULT_BUCKET}" --arg admin_execution "${execution}" \
             --arg applied_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{result:$result,main_revision:$main_revision,bucket:$bucket,role:$role,member:$member,admin_execution:$admin_execution,admin_init_success:true,temporary_storage_admin_removed:true,temporary_execution_authority_removed:true,applied_at:$applied_at}' \
-            > phase5-vault-admin-repair/receipt.json
-          sha256sum phase5-vault-admin-repair/receipt.json > phase5-vault-admin-repair/SHA256SUMS
+            '{result:$result,main_revision:$main_revision,bucket:$bucket,admin_web_lifecycle_metadata_access:true,admin_object_access:false,admin_init_success:true,temporary_storage_admin_removed:true,temporary_execution_authority_removed:true,applied_at:$applied_at}' \
+            > phase5-vault-metadata/receipt.json
+          sha256sum phase5-vault-metadata/receipt.json > phase5-vault-metadata/SHA256SUMS
 
       - name: Upload repair evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: phase5-vault-admin-iam-repair
-          path: phase5-vault-admin-repair/
+          name: phase5-vault-metadata-repair
+          path: phase5-vault-metadata/
           if-no-files-found: error
           retention-days: 30
