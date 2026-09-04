@@ -65,32 +65,36 @@ jobs:
               lines.insert(absolute + 1, f'{indent}status="completed",\n')
           text = ''.join(lines)
 
-          old_quota = '''    assert result.success is False
-    assert result.attempted_count == 1
-    assert calls["count"] == 1
-    assert len(result.errors) == 1
-    assert "quota" in result.errors[0].casefold()
-    assert any(
-        "remaining ai analyses were not attempted"
-        in item.casefold()
-        for item in result.warnings
-    )
-'''
-          new_quota = '''    assert result.success is True
-    assert result.run_status == "degraded"
-    assert result.state_publishable is True
-    assert result.attempted_count == 1
-    assert calls["count"] == 1
-    assert result.errors == []
-    assert len(result.deferred_candidates) == 2
-    assert result.deferred_candidates[0]["reason"] == "openai_quota_unavailable"
-    assert result.deferred_candidates[1]["reason"] == "not_attempted_after_openai_quota"
-    assert any(
-        "remaining ai analyses were deferred"
-        in item.casefold()
-        for item in result.warnings
-    )
-'''
+          old_quota = '\n'.join([
+              '    assert result.success is False',
+              '    assert result.attempted_count == 1',
+              '    assert calls["count"] == 1',
+              '    assert len(result.errors) == 1',
+              '    assert "quota" in result.errors[0].casefold()',
+              '    assert any(',
+              '        "remaining ai analyses were not attempted"',
+              '        in item.casefold()',
+              '        for item in result.warnings',
+              '    )',
+              '',
+          ])
+          new_quota = '\n'.join([
+              '    assert result.success is True',
+              '    assert result.run_status == "degraded"',
+              '    assert result.state_publishable is True',
+              '    assert result.attempted_count == 1',
+              '    assert calls["count"] == 1',
+              '    assert result.errors == []',
+              '    assert len(result.deferred_candidates) == 2',
+              '    assert result.deferred_candidates[0]["reason"] == "openai_quota_unavailable"',
+              '    assert result.deferred_candidates[1]["reason"] == "not_attempted_after_openai_quota"',
+              '    assert any(',
+              '        "remaining ai analyses were deferred"',
+              '        in item.casefold()',
+              '        for item in result.warnings',
+              '    )',
+              '',
+          ])
           if text.count(old_quota) != 1:
               raise SystemExit('legacy quota expectation block changed unexpectedly')
           tests.write_text(text.replace(old_quota, new_quota), encoding='utf-8')
@@ -98,11 +102,13 @@ jobs:
           scheduler = Path('tests/test_scheduler_evidence.py')
           text = scheduler.read_text(encoding='utf-8')
           old_guard = '        assert "collect_workflow_evidence.py" in text\n'
-          new_guard = '''        if branch == "ai":
-            assert "ai_retry_guard.py" in text
-        else:
-            assert "collect_workflow_evidence.py" in text
-'''
+          new_guard = '\n'.join([
+              '        if branch == "ai":',
+              '            assert "ai_retry_guard.py" in text',
+              '        else:',
+              '            assert "collect_workflow_evidence.py" in text',
+              '',
+          ])
           if text.count(old_guard) != 1:
               raise SystemExit('scheduler retry-guard assertion changed unexpectedly')
           scheduler.write_text(text.replace(old_guard, new_guard), encoding='utf-8')
