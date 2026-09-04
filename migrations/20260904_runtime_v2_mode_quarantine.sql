@@ -206,4 +206,8 @@ $$;
 CREATE INDEX IF NOT EXISTS runtime_job_runs_namespace_started
     ON runtime_job_runs(namespace, started_at DESC);
 
+CREATE UNIQUE INDEX IF NOT EXISTS runtime_job_runs_success_snapshot
+    ON runtime_job_runs(snapshot_id)
+    WHERE status = 'success' AND snapshot_id IS NOT NULL;
+
 COMMIT;
