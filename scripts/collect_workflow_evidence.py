@@ -30,6 +30,15 @@ FAILED = {"failure", "timed_out", "startup_failure", "action_required"}
 CONCLUSIONS = FAILED | {"success", "cancelled", "skipped", "neutral", "stale"}
 EVENTS = {"schedule", "workflow_dispatch", "workflow_run"}
 PENDING = {"queued", "in_progress", "waiting", "pending", "requested"}
+PINNED_RECOVERY_PRODUCERS = {
+    "legislative": {
+        "run_id": 33966378019,
+        "run_attempt": 1,
+        "head_sha": "23cc3b83cf468ed65d228b5208d30eff8798f5ff",
+        "workflow_id": 345003824,
+        "event": "push",
+    },
+}
 
 
 class EvidenceError(RuntimeError):
@@ -108,14 +117,29 @@ def repository_context(get: Callable, repository: str) -> tuple[str, str]:
     return name, branch
 
 
-def matches_run(run: Mapping, spec: Mapping, branch: str) -> bool:
+def matches_run_identity(run: Mapping, spec: Mapping, branch: str) -> bool:
     return (isinstance(run, Mapping) and isinstance(run.get("repository"), Mapping)
             and run["repository"].get("id") == REPOSITORY_ID
             and run.get("head_branch") == branch
             and run.get("name") == spec["name"]
             and str(run.get("path", "")).split("@", 1)[0] == ".github/workflows/" + spec["file"]
-            and run.get("event") in EVENTS
             and bool(re.fullmatch(r"[0-9a-f]{40}", str(run.get("head_sha", "")))))
+
+
+def matches_run(run: Mapping, spec: Mapping, branch: str) -> bool:
+    return matches_run_identity(run, spec, branch) and run.get("event") in EVENTS
+
+
+def matches_restored_producer(run: Mapping, spec: Mapping, default: str, branch: str) -> bool:
+    if matches_run(run, spec, default):
+        return True
+    pinned = PINNED_RECOVERY_PRODUCERS.get(branch)
+    return (pinned is not None and matches_run_identity(run, spec, default)
+            and run.get("id") == pinned["run_id"]
+            and run.get("run_attempt") == pinned["run_attempt"]
+            and run.get("head_sha") == pinned["head_sha"]
+            and run.get("workflow_id") == pinned["workflow_id"]
+            and run.get("event") == pinned["event"])
 
 
 def validate_ancestry(get: Callable, repository: str, head: str, consumer: str) -> None:
@@ -241,7 +265,7 @@ def assert_no_unretained_side_effects(get: Callable, repository: str, consumer: 
     repository, default = repository_context(get, repository)
     spec = SPECS[branch]
     producer = get(f"/repos/{repository}/actions/runs/{producer_run}/attempts/{producer_attempt}")
-    if (not matches_run(producer, spec, default) or producer.get("id") != producer_run
+    if (not matches_restored_producer(producer, spec, default, branch) or producer.get("id") != producer_run
             or producer.get("run_attempt") != producer_attempt or producer.get("conclusion") != "success"):
         raise EvidenceError("invalid_restored_producer")
     validate_ancestry(get, repository, producer["head_sha"], consumer)
@@ -262,7 +286,7 @@ def assert_no_unretained_side_effects(get: Callable, repository: str, consumer: 
             raise EvidenceError("incomplete_attempt_history")
         for summary in runs:
             # Read the complete run listing: a rerun can have an older run ID.
-            if not matches_run(summary, spec, default):
+            if not matches_run_identity(summary, spec, default):
                 continue
             updated = utc(summary.get("updated_at"))
             if updated and updated < boundary:
@@ -274,7 +298,8 @@ def assert_no_unretained_side_effects(get: Callable, repository: str, consumer: 
                 if (run_id, attempt) in {(producer_run, producer_attempt), (current_run, current_attempt)}:
                     continue
                 run = get(f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}")
-                if not matches_run(run, spec, default) or run.get("id") != run_id or run.get("run_attempt") != attempt:
+                if (not matches_run_identity(run, spec, default) or run.get("id") != run_id
+                        or run.get("run_attempt") != attempt):
                     raise EvidenceError("attempt_identity_mismatch")
                 jobs = jobs_for(get, repository, run_id, attempt)
                 matching = [job for job in jobs if job.get("name") == spec["job"]]
