@@ -4,6 +4,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import subprocess
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -219,7 +220,7 @@ def current_manifest() -> dict:
         {
             "current_status_captured": True,
             "runtime_shadow_mode_verified": True,
-            "evidence_control_files_verified": True,
+            "evidence_control_files_verified": False,
             "legacy_route_source_verified": True,
         }
     )
@@ -300,6 +301,26 @@ def fixture(tmp_path: Path) -> dict:
         control_files[relative] = hashlib.sha256(
             path.read_bytes().replace(b"\r\n", b"\n")
         ).hexdigest()
+    subprocess.run(["git", "init", "--quiet", str(repository_root)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository_root), "config", "user.email", "phase4-test@example.invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repository_root), "config", "user.name", "Phase 4 test"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repository_root), "add", "--all"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository_root), "commit", "--quiet", "-m", "pin evidence controls"],
+        check=True,
+    )
+    evidence_revision = subprocess.run(
+        ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
 
     start = baseline_status()
     run6_observations, run6_final, clock = build_observations(
@@ -347,7 +368,7 @@ def fixture(tmp_path: Path) -> dict:
             run7_archive,
             1007,
             2007,
-            "7" * 40,
+            evidence_revision,
             "workflow_dispatch",
             [],
         ),
@@ -381,7 +402,7 @@ def fixture(tmp_path: Path) -> dict:
             "name": "Phase 4 live shadow validation v6",
             "path": ".github/workflows/phase4_live_shadow_validation_v6.yml",
         },
-        "evidence_control_revision": "7" * 40,
+        "evidence_control_revision": evidence_revision,
         "runtime_source_revision": SOURCE,
         "control_files": control_files,
         "runs": runs,
@@ -460,10 +481,38 @@ def test_reconciliation_rejects_tampered_evidence(tmp_path: Path, mutate, messag
         reconcile.reconcile_phase4(**data)
 
 
-def test_reconciliation_rejects_control_drift(tmp_path: Path) -> None:
+def test_reconciliation_accepts_current_control_successor(tmp_path: Path) -> None:
     data = fixture(tmp_path)
     path = data["repository_root"] / reconcile.CONTROL_FILES[0]
     path.write_text("changed\n", encoding="utf-8")
+
+    receipt = reconcile.reconcile_phase4(**data)
+
+    assert receipt["reconciliation"]["control_files_match_evidence_revision"] is True
+
+
+def test_reconciliation_rejects_evidence_revision_control_drift(tmp_path: Path) -> None:
+    data = fixture(tmp_path)
+    data["descriptor"]["control_files"][reconcile.CONTROL_FILES[0]] = "0" * 64
+    with pytest.raises(reconcile.PromotionValidationError, match="differs from the evidence revision"):
+        reconcile.reconcile_phase4(**data)
+
+
+@pytest.mark.parametrize("relative", reconcile.CURRENT_BOUND_EVIDENCE_FILES)
+def test_reconciliation_rejects_current_evidence_file_drift(tmp_path: Path, relative: str) -> None:
+    data = fixture(tmp_path)
+    path = data["repository_root"] / relative
+    path.write_text("changed\n", encoding="utf-8")
+    with pytest.raises(reconcile.PromotionValidationError, match="differs from the evidence revision"):
+        reconcile.reconcile_phase4(**data)
+
+
+@pytest.mark.parametrize("relative", reconcile.CURRENT_BOUND_EVIDENCE_FILES)
+def test_reconciliation_rejects_relabelled_current_evidence_file(tmp_path: Path, relative: str) -> None:
+    data = fixture(tmp_path)
+    path = data["repository_root"] / relative
+    path.write_text("changed\n", encoding="utf-8")
+    data["descriptor"]["control_files"][relative] = hashlib.sha256(b"changed\n").hexdigest()
     with pytest.raises(reconcile.PromotionValidationError, match="differs from the evidence revision"):
         reconcile.reconcile_phase4(**data)
 
