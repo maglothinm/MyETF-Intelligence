@@ -235,6 +235,8 @@ def test_workflow_keeps_manual_validation_suppressed_and_state_upload_gated():
     assert ".trade-tracker/legislative/restore-receipt.json" in diagnostic["with"]["path"]
     assert ".trade-tracker/legislative/controlled-validation-receipt.json" in diagnostic["with"]["path"]
     workflow_text = (root / ".github/workflows/legislative_trade_tracker_v2.yml").read_text()
+    assert "artifact_unexpired=\"$(jq -r '.expired == false'" in workflow_text
+    assert ".expired // true" not in workflow_text
     assert "LEGISLATIVE_HEALTHCHECKS_PING_URL" not in workflow_text
     assert "PUSHOVER_API_TOKEN" not in workflow_text
     assert "PUSHOVER_USER_KEY" not in workflow_text

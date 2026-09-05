@@ -234,10 +234,11 @@ jobs:
           )"
           artifact_api_digest="$(jq -r '.digest // ""' <<< "$artifact_payload")"
           artifact_created_at="$(jq -r '.created_at // ""' <<< "$artifact_payload")"
+          artifact_unexpired="$(jq -r '.expired == false' <<< "$artifact_payload")"
           if [[ \
             "$(jq -r '.id // ""' <<< "$artifact_payload")" != "$artifact_id" || \
             "$(jq -r '.name // ""' <<< "$artifact_payload")" != "$artifact_name" || \
-            "$(jq -r '.expired // true' <<< "$artifact_payload")" != "false" || \
+            "$artifact_unexpired" != "true" || \
             "$(jq -r '.workflow_run.id // ""' <<< "$artifact_payload")" != "$producer_run_id" || \
             "$(jq -r '.workflow_run.repository_id // ""' <<< "$artifact_payload")" != "$GITHUB_REPOSITORY_ID" || \
             "$(jq -r '.workflow_run.head_branch // ""' <<< "$artifact_payload")" != "$DEFAULT_BRANCH" || \
