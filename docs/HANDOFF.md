@@ -1,11 +1,11 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-05 14:25 UTC**
+Updated: **2026-09-05 14:34 UTC**
 Canonical repository: **ID 1349678672 — `maglothinm/MyETF-Intelligence`**
-Canonical main: **`4e0791f29e09831bfc399d528a8dd66604b1ebf7`**
+Canonical main: **`3737ae25d408a40ef67d1d82cd389c2e1a1123c0`**
 Active issue: **#99 — Phase 4 final live shadow validation gate**
 Authorized successor: **#100 — Phase 5 production promotion**
-Active branch: **`phase4/fix-artifact-expired-metadata-20260905`**
+Active branch: **`phase4/accept-recovery-push-producer-20260905`**
 Certificate state: **not issued**
 Production cutover state: **blocked**
 
@@ -80,12 +80,22 @@ no notification or heartbeat credentials.
 Artifact `9969550055` is still live and reports `expired: false`. The restore
 check used jq's boolean-alternative operator, which substitutes its fallback for
 both null and false, so that explicit false value was incorrectly read as true.
-The active narrow correction requires the exact JSON boolean false and retains
-fail-closed behavior for every other value.
+PR #127 merged the exact-boolean correction as `3737ae25d408a40ef67d1d82cd389c2e1a1123c0`.
+Run `33971975967` then passed the metadata binding and stopped at the retry guard,
+which excludes `push` from its normal producer-event allowlist. The selected
+producer is the intentional recovery-only run `33966378019` attempt 1 at
+`23cc3b83cf468ed65d228b5208d30eff8798f5ff`; its checked-in workflow restored a
+pinned predecessor, had no notification credential or collector step, and
+uploaded the current continuity artifact.
+
+The active correction recognizes only that exact run, attempt, workflow ID,
+event, and commit as a restored producer. It does not add `push` to the general
+allowlist. Later attempts and nonstandard triggers are matched by canonical
+identity and inspected conservatively, so a rerun cannot inherit the exception.
 
 ## Work still required
 
-1. Merge the narrow artifact-expiration parsing correction only from a green,
+1. Merge the pinned recovery-producer correction only from a green,
    reviewed PR head.
 2. After merge, perform one controlled
    no-notify main validation. Verify and pin the exact run, attempt, job, state and

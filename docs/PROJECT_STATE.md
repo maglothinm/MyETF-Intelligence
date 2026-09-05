@@ -1,10 +1,10 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-05 14:25 UTC
+**Current as of:** 2026-09-05 14:34 UTC
 **Canonical repository ID:** `1349678672`
 **Current repository name:** `maglothinm/MyETF-Intelligence`
 **Default branch:** `main`
-**Current main:** `4e0791f29e09831bfc399d528a8dd66604b1ebf7`
+**Current main:** `3737ae25d408a40ef67d1d82cd389c2e1a1123c0`
 **Phase 4 tracking issue:** #99
 **Phase 5 authorization:** #100
 **Phase 4 certificate:** not issued
@@ -123,14 +123,24 @@ heartbeat credential. The live artifact was unexpired; the workflow's jq
 expression used boolean-alternative semantics that converted an explicit
 `expired: false` value to `true`.
 
-The active narrow correction branch is
-`phase4/fix-artifact-expired-metadata-20260905`. It tests for the exact JSON
-boolean `false` and fails closed for a missing, null, true, or malformed value. No
-`phase4-ready.json` completion certificate exists yet.
+PR #127 merged the exact-boolean correction as
+`3737ae25d408a40ef67d1d82cd389c2e1a1123c0`. Controlled run `33971975967`
+then restored the artifact metadata successfully but stopped before download when
+the retry guard rejected the producer's `push` event. That producer is the
+intentional recovery-only run `33966378019` attempt 1 at immutable revision
+`23cc3b83cf468ed65d228b5208d30eff8798f5ff`; it restored a pinned earlier
+artifact, sent no notifications, and uploaded the current continuity boundary.
+
+The active correction branch is
+`phase4/accept-recovery-push-producer-20260905`. It leaves the normal event
+allowlist unchanged, recognizes only that exact run, attempt, workflow ID, event,
+and commit as a restored producer, and uses identity-only matching to ensure any
+later trigger or rerun is still inspected. No `phase4-ready.json` completion
+certificate exists yet.
 
 ## Exact blockers
 
-1. Merge the narrow artifact-expiration parsing correction only after the exact
+1. Merge the pinned recovery-producer correction only after the exact
    PR head is green.
 2. Complete one controlled,
    no-notify main-branch validation. Pin its exact run, job, predecessor, artifacts,

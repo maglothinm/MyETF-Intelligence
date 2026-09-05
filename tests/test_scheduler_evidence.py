@@ -216,6 +216,82 @@ def test_duplicate_after_retained_success_is_safe_to_restore_and_deduplicate():
     guard(FakeAPI())
 
 
+def pinned_recovery(attempt=1, **changes):
+    pinned = evidence.PINNED_RECOVERY_PRODUCERS["legislative"]
+    row = run(pinned["run_id"], attempt=attempt, start="2026-09-05T12:33:30Z")
+    row.update(event=pinned["event"], head_sha=pinned["head_sha"],
+               workflow_id=pinned["workflow_id"])
+    row.update(changes)
+    return row
+
+
+def test_exact_pinned_recovery_push_is_accepted_as_restored_producer_only():
+    producer = pinned_recovery()
+    producer_job = job()
+    producer_job["steps"] = [{"name": "Restore and verify last authoritative state",
+                              "status": "completed", "conclusion": "success"}]
+    api = FakeAPI([producer], {(producer["id"], 1): [producer_job]})
+    evidence.assert_no_unretained_side_effects(
+        api, REPO, SHA, "legislative", producer["id"], 1, 99, 1)
+
+
+def test_pinned_recovery_push_remains_excluded_from_normal_observation():
+    assert "push" not in evidence.EVENTS
+    result = evidence.collect(FakeAPI([pinned_recovery()]), REPO, SHA,
+                              "2026-09-05T12:35:00Z")
+    assert result["branches"]["legislative"]["attempts"] == []
+
+
+@pytest.mark.parametrize("changes", [
+    {"id": 33966378020},
+    {"run_attempt": 2},
+    {"head_sha": "b" * 40},
+    {"workflow_id": 345003825},
+    {"event": "repository_dispatch"},
+])
+def test_recovery_push_exception_rejects_every_unpinned_identity(changes):
+    producer = pinned_recovery(**changes)
+    api = FakeAPI([producer], {(producer["id"], producer["run_attempt"]): [job()]})
+    with pytest.raises(evidence.EvidenceError, match="invalid_restored_producer"):
+        evidence.assert_no_unretained_side_effects(
+            api, REPO, SHA, "legislative", producer["id"], producer["run_attempt"], 99, 1)
+
+
+def test_later_attempt_of_pinned_recovery_run_is_still_scanned_and_blocks():
+    producer = pinned_recovery()
+    rerun = pinned_recovery(attempt=2, conclusion="failure",
+                            start="2026-09-05T12:40:00Z")
+    api = FakeAPI([rerun], {
+        (producer["id"], 1): [job()],
+        (rerun["id"], 2): [job(conclusion="failure", step_conclusion="failure")],
+    })
+    api.attempts[(producer["id"], 1)] = producer
+    with pytest.raises(evidence.EvidenceError, match="unretained_side_effects_possible"):
+        evidence.assert_no_unretained_side_effects(
+            api, REPO, SHA, "legislative", producer["id"], 1, 99, 1)
+
+
+def test_later_canonical_push_with_started_collector_blocks():
+    later = run(11, conclusion="failure", start="2026-08-31T12:15:00Z")
+    later["event"] = "push"
+    api = FakeAPI([run(), later], {
+        (10, 1): [job()],
+        (11, 1): [job(conclusion="failure", step_conclusion="failure")],
+    })
+    with pytest.raises(evidence.EvidenceError, match="unretained_side_effects_possible"):
+        guard(api)
+
+
+def test_later_canonical_push_with_skipped_collector_allows_retry():
+    later = run(11, conclusion="failure", start="2026-08-31T12:15:00Z")
+    later["event"] = "push"
+    api = FakeAPI([run(), later], {
+        (10, 1): [job()],
+        (11, 1): [job(conclusion="failure", step_conclusion="skipped")],
+    })
+    guard(api)
+
+
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "success"])
 def test_started_unretained_producer_blocks_alert_replay(conclusion):
     later = run(11, conclusion=conclusion, start="2026-08-31T12:15:00Z")
