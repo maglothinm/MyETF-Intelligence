@@ -66,6 +66,18 @@ def run_fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failures: str, *, 
     tracker = tmp_path / "fake_tracker.py"
     tracker.write_text(FAKE_TRACKER, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
+    for name in (
+        "GITHUB_EVENT_NAME",
+        "GITHUB_REPOSITORY",
+        "GITHUB_REPOSITORY_ID",
+        "GITHUB_RUN_ATTEMPT",
+        "GITHUB_RUN_ID",
+        "GITHUB_SERVER_URL",
+        "GITHUB_SHA",
+        "POLITITRACK_CONTROLLED_VALIDATION",
+        "POLITITRACK_TRIGGER_SOURCE",
+    ):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("RESULT_FILE", "legislative-result.json")
     monkeypatch.setenv("RUN_HISTORY_FILE", ".trade-tracker/legislative/runs.jsonl")
     monkeypatch.setenv("FAKE_ARGS_LOG", str(tmp_path / "args.jsonl"))
