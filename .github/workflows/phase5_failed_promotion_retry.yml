@@ -101,6 +101,8 @@ jobs:
           PRIVATE_WEB_ID_TOKEN: ${{ steps.google-auth.outputs.id_token }}
         run: |
           set -Eeuo pipefail
+          private_web_id_token="${PRIVATE_WEB_ID_TOKEN:-}"
+          unset PRIVATE_WEB_ID_TOKEN
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
           source deploy/runtime-v2/phase4_reconciliation_control.sh
@@ -112,6 +114,7 @@ jobs:
           rollback() {
             local original_status=$?
             trap - EXIT
+            private_web_id_token=""
             if [[ "${promotion_complete}" != "true" &&
                   -f "${EVIDENCE_DIR}/live-mutation-started" ]]; then
               phase5_retry_rollback || true
@@ -123,6 +126,7 @@ jobs:
           # The retry starts only from the exact, fully verified rollback state.
           verify_project_boundary
           phase5_retry_verify_safe_rollback_state
+          phase5_retry_capture_private_id_token_claims "${private_web_id_token}"
           touch "${EVIDENCE_DIR}/live-mutation-started"
           phase5_retry_capture_current_logging_view_absence_receipt
           grant_execution_authority
@@ -131,8 +135,9 @@ jobs:
             "${PHASE5_RETRY_DESCRIPTOR}")"
           phase5_retry_grant_private_web_invoker
           phase5_retry_capture_private_ai_analyses \
-            "${EVIDENCE_DIR}/current-ai-analyses.json" "${current_dashboard_digest}"
-          phase5_retry_remove_private_web_invoker
+            "${EVIDENCE_DIR}/current-ai-analyses.json" "${current_dashboard_digest}" \
+            "${private_web_id_token}"
+          private_web_id_token=""
           phase5_retry_verify_private_web_invoker_removed
 
           run_failed_phase5_replay() {
@@ -300,6 +305,25 @@ jobs:
           ]
           route = json.loads((root / "public-web-verification.json").read_text(encoding="utf-8"))
           replay = json.loads((root / "failed-prefix-replay.json").read_text(encoding="utf-8"))
+          token_claims = json.loads(
+              (root / "private-web-id-token-claims.json").read_text(encoding="utf-8")
+          )
+          auth_attempt = json.loads(
+              (root / "private-ai-auth-attempts.json").read_text(encoding="utf-8")
+          )
+          revocation = json.loads(
+              (root / "private-web-invoker-revocation.json").read_text(encoding="utf-8")
+          )
+          granted_policy = json.loads(
+              (root / "resources" / "private-web-invoker-granted-policy.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          removed_policy = json.loads(
+              (root / "resources" / "private-web-invoker-removed-policy.json").read_text(
+                  encoding="utf-8"
+              )
+          )
           roles = ("legislative", "executive", "ai", "dashboard")
 
           def sha256(path: Path) -> str:
@@ -307,6 +331,34 @@ jobs:
 
           fresh_started = (root / "fresh-cycle-started-at.txt").read_text(encoding="utf-8").strip()
           fresh_finished = (root / "fresh-cycle-finished-at.txt").read_text(encoding="utf-8").strip()
+          deployer_member = f"serviceAccount:{os.environ['DEPLOYER_SERVICE_ACCOUNT']}"
+
+          def role_members(policy: dict, role: str) -> set[str]:
+              return {
+                  member
+                  for binding in policy.get("bindings", [])
+                  if binding.get("role") == role
+                  for member in binding.get("members", [])
+              }
+
+          if not (
+              token_claims.get("result") == "private_web_id_token_claims_decoded_and_matched"
+              and token_claims.get("audience") == os.environ["PRIVATE_WEB_AUDIENCE"]
+              and token_claims.get("email") == os.environ["DEPLOYER_SERVICE_ACCOUNT"]
+              and token_claims.get("email_verified") is True
+              and auth_attempt.get("result") == "private_web_authenticated_inventory_attempted"
+              and auth_attempt.get("final_http_status") == "200"
+              and auth_attempt.get("authorization_relaxed") is False
+              and revocation.get("result") == "private_web_invocation_revocation_checked"
+              and revocation.get("final_http_status") == "403"
+              and revocation.get("data_plane_invocation_denied") is True
+              and revocation.get("cloud_run_iam_denial_verified") is True
+              and revocation.get("authorization_relaxed") is False
+              and deployer_member in role_members(granted_policy, "roles/run.invoker")
+              and deployer_member not in role_members(removed_policy, "roles/run.invoker")
+          ):
+              raise SystemExit("Temporary private Runtime invocation evidence is incomplete.")
+
           manifest = {
               "schema_version": 1,
               "phase": "phase5_reconciliation_completion",
@@ -343,6 +395,35 @@ jobs:
                   "no_rebaseline_performed": True,
                   "full_snapshot_chain_preserved": True,
                   "temporary_private_web_invoker_removed": True,
+                  "private_web_id_token_claims_matched": True,
+                  "private_web_authenticated_inventory_verified": True,
+                  "private_web_same_token_revocation_verified": True,
+              },
+              "private_web_authentication": {
+                  "id_token_claims_result": token_claims["result"],
+                  "audience": token_claims["audience"],
+                  "deployer_service_account": token_claims["email"],
+                  "temporary_invoker_binding_observed": True,
+                  "authenticated_inventory_http_status": auth_attempt["final_http_status"],
+                  "temporary_invoker_binding_absent": True,
+                  "same_token_cloud_run_iam_denial_verified": True,
+                  "evidence_sha256": {
+                      "id_token_claims": sha256(root / "private-web-id-token-claims.json"),
+                      "authentication_attempts": sha256(root / "private-ai-auth-attempts.ndjson"),
+                      "authentication_summary": sha256(root / "private-ai-auth-attempts.json"),
+                      "invoker_granted_policy": sha256(
+                          root / "resources" / "private-web-invoker-granted-policy.json"
+                      ),
+                      "invoker_removed_policy": sha256(
+                          root / "resources" / "private-web-invoker-removed-policy.json"
+                      ),
+                      "revocation_attempts": sha256(
+                          root / "private-web-invoker-denial-attempts.ndjson"
+                      ),
+                      "revocation_summary": sha256(
+                          root / "private-web-invoker-revocation.json"
+                      ),
+                  },
               },
               "executions": executions,
               "one_writer_evidence": {
@@ -407,6 +488,7 @@ jobs:
                   "temporary_logging_authority_removed": True,
                   "temporary_service_account_user_removed": True,
                   "temporary_private_web_invoker_removed": True,
+                  "private_web_same_token_invocation_denied": True,
                   "legacy_workflows_disabled": True,
                   "producer_schedulers_enabled": True,
                   "web_public_invoker_present": True,

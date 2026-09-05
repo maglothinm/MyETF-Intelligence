@@ -1,5 +1,12 @@
+import base64
+import json
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
+import time
 
 
 WORKFLOW = Path(".github/workflows/phase5_failed_promotion_retry.yml")
@@ -13,6 +20,107 @@ def _workflow() -> str:
 
 def _control() -> str:
     return CONTROL.read_text(encoding="utf-8")
+
+
+def _private_claims_script() -> str:
+    control = _control()
+    marker = '"${PRIVATE_WEB_AUDIENCE}" "${DEPLOYER_SERVICE_ACCOUNT}" "${output}" <<\'PY\'\n'
+    return control.split(marker, 1)[1].split("\nPY\n", 1)[0]
+
+
+def _jwt(claims: dict[str, object]) -> str:
+    def encode(value: dict[str, object]) -> str:
+        raw = json.dumps(value, separators=(",", ":")).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    return f"{encode({'alg': 'RS256', 'typ': 'JWT'})}.{encode(claims)}.signature"
+
+
+def _bash() -> str:
+    discovered = shutil.which("bash")
+    if discovered:
+        return discovered
+    git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
+    if git_bash.is_file():
+        return str(git_bash)
+    raise AssertionError("A Bash runtime is required for retry-loop tests.")
+
+
+def _run_control_shell(script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [_bash(), "-s"],
+        input=script,
+        text=True,
+        capture_output=True,
+        cwd=Path.cwd(),
+        check=False,
+    )
+
+
+def _retry_loop_shell_prelude(mock_codes: str) -> str:
+    return rf'''
+set -Eeuo pipefail
+EVIDENCE_DIR="$(mktemp -d)"
+trap 'rm -rf -- "${{EVIDENCE_DIR}}"' EXIT
+CONTROL_REVISION="$(printf 'a%.0s' {{1..40}})"
+PRIVATE_WEB_AUDIENCE="https://polititrack-web.example.run.app"
+DEPLOYER_SERVICE_ACCOUNT="deployer@example.iam.gserviceaccount.com"
+WEB_SERVICE="polititrack-web"
+PROJECT_ID="polititrack-example"
+REGION="us-central1"
+source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+MOCK_CODES='{mock_codes}'
+MOCK_COUNTER="${{EVIDENCE_DIR}}/mock-counter"
+printf '0\n' > "${{MOCK_COUNTER}}"
+gcloud() {{
+  printf '%s\n' "${{PRIVATE_WEB_AUDIENCE}}"
+}}
+jq() {{
+  printf '{{}}\n'
+}}
+sleep() {{
+  SECONDS=$((SECONDS + $1))
+}}
+curl() {{
+  local headers='' output='' authorization='' max_time='' current code
+  while (($#)); do
+    case "$1" in
+      --dump-header) headers="$2"; shift 2 ;;
+      --output) output="$2"; shift 2 ;;
+      --header) authorization="$2"; shift 2 ;;
+      --max-time) max_time="$2"; shift 2 ;;
+      --location) return 91 ;;
+      *) shift ;;
+    esac
+  done
+  [[ "${{authorization}}" == 'Authorization: Bearer mock-token' ]] || return 92
+  [[ -z "${{PRIVATE_WEB_ID_TOKEN+x}}" ]] || return 93
+  [[ "${{max_time}}" =~ ^[0-9]+$ && "${{max_time}}" -gt 0 && "${{max_time}}" -le 30 ]] || return 94
+  printf '%s\n' "${{max_time}}" >> "${{EVIDENCE_DIR}}/mock-request-timeouts"
+  current="$(<"${{MOCK_COUNTER}}")"
+  current=$((current + 1))
+  printf '%s\n' "${{current}}" > "${{MOCK_COUNTER}}"
+  code="$(printf '%s\n' "${{MOCK_CODES}}" | cut -d, -f"${{current}}")"
+  if [[ -z "${{code}}" ]]; then
+    code="$(printf '%s\n' "${{MOCK_CODES}}" | awk -F, '{{print $NF}}')"
+  fi
+  if [[ "${{code}}" == '200' ]]; then
+    printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nX-PolitiTrack-Snapshot: %s\r\n\r\n' \
+      "${{EXPECTED_DIGEST}}" > "${{headers}}"
+    printf '[]\n' > "${{output}}"
+  elif [[ "${{code}}" == '403' && "${{MOCK_OMIT_IAM_HEADERS:-false}}" != 'true' ]]; then
+    printf 'HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nServer: Google Frontend\r\nWWW-Authenticate: Bearer error="insufficient_scope"\r\n\r\n' \
+      > "${{headers}}"
+    printf 'mock Cloud Run IAM denial\n' > "${{output}}"
+  else
+    printf 'HTTP/1.1 %s Mock\r\nContent-Type: text/plain\r\n\r\n' \
+      "${{code}}" > "${{headers}}"
+    printf 'mock response\n' > "${{output}}"
+  fi
+  printf '%s' "${{code}}"
+}}
+'''
 
 
 def test_retry_is_manual_serialized_and_frozen_to_exact_canonical_main() -> None:
@@ -168,10 +276,53 @@ def test_concurrent_ai_successor_is_proven_duplicate_then_quarantined_never_impo
     assert '"${url}/data/ai-analyses.json"' in control
     assert "X-PolitiTrack-Snapshot" in control
     assert "phase5_retry_grant_private_web_invoker" in workflow
-    assert "phase5_retry_remove_private_web_invoker" in workflow
+    assert "phase5_retry_remove_private_web_invoker" in control
     assert "token_format: id_token" in workflow
     assert "id_token_audience: ${{ env.PRIVATE_WEB_AUDIENCE }}" in workflow
     assert "id_token_include_email: true" in workflow
+    live_step = workflow[
+        workflow.index("- name: Reconcile the failed prefix") :
+        workflow.index("- name: Verify terminal production state")
+    ]
+    copied = live_step.index('private_web_id_token="${PRIVATE_WEB_ID_TOKEN:-}"')
+    unset = live_step.index("unset PRIVATE_WEB_ID_TOKEN")
+    sourced = live_step.index("source deploy/runtime-v2/runtime_promotion_control.sh")
+    assert copied < unset < sourced
+    run_script = live_step[live_step.index("run: |") :]
+    assert run_script.count("PRIVATE_WEB_ID_TOKEN") == 2
+    assert "phase5_retry_capture_private_id_token_claims" in control
+    assert 'PHASE5_RETRY_ID_TOKEN="${identity_token}" python -' in control
+    assert 'issuer not in ("accounts.google.com", "https://accounts.google.com")' in control
+    assert "audience != expected_audience" in control
+    assert "email != expected_email or email_verified is not True" in control
+    assert "not subject.isdecimal()" in control
+    assert "expires_at - now < 1800" in control
+    assert '"result": "private_web_id_token_claims_decoded_and_matched"' in control
+    assert '"minimum_remaining_lifetime_seconds": 1800' in control
+    assert "deadline=$((SECONDS + 600))" in control
+    assert "while ((SECONDS < deadline))" in control
+    assert '--max-time "${request_timeout}"' in control
+    assert 'local deadline attempts=0 delay=5 remaining sleep_for' in control
+    assert "delay=$((delay * 2))" in control
+    assert "delay=30" in control
+    inventory_helper = control[
+        control.index("phase5_retry_capture_private_ai_analyses()") :
+        control.index("phase5_retry_verify_public_web()")
+    ]
+    assert "--location" not in inventory_helper
+    assert 'maximum_propagation_wait_seconds:600' in control
+    assert 'authorization_relaxed:false' in control
+    assert 'final_http_status:$final_http_status' in control
+    assert "phase5_retry_verify_private_web_invocation_denied" in control
+    assert 'data_plane_invocation_denied:($denied == "true")' in control
+    assert "401|403) denied=true" not in control
+    assert "cloud_run_iam_denial_verified" in control
+    assert 'Bearer error="insufficient_scope"' in control
+    assert '"${server,,}" == *"google frontend"*' in control
+    assert "Authorization: Bearer ${identity_token}" in control
+    assert "PRIVATE_WEB_ID_TOKEN" not in control[
+        control.index('> "${EVIDENCE_DIR}/private-ai-auth-attempts.json"') :
+    ]
     assert "--current-ai-analyses" in workflow
     assert ".concurrent_legacy_ai.merge_or_import_authorized == false" in workflow
     assert (
@@ -189,6 +340,194 @@ def test_concurrent_ai_successor_is_proven_duplicate_then_quarantined_never_impo
     ):
         assert forbidden_command not in workflow
         assert forbidden_command not in control
+
+
+def test_private_id_token_claim_verifier_executes_and_writes_only_sanitized_claims(
+    tmp_path: Path,
+) -> None:
+    audience = "https://polititrack-web.example.run.app"
+    email = "deployer@example.iam.gserviceaccount.com"
+    now = int(time.time())
+    claims = {
+        "iss": "https://accounts.google.com",
+        "aud": audience,
+        "sub": "123456789012345678901",
+        "email": email,
+        "email_verified": True,
+        "iat": now - 10,
+        "exp": now + 3600,
+    }
+    token = _jwt(claims)
+    output = tmp_path / "claims.json"
+    env = os.environ.copy()
+    env["PHASE5_RETRY_ID_TOKEN"] = token
+    completed = subprocess.run(
+        [sys.executable, "-", audience, email, str(output)],
+        input=_private_claims_script(),
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    evidence = json.loads(output.read_text(encoding="utf-8"))
+    assert evidence["result"] == "private_web_id_token_claims_decoded_and_matched"
+    assert evidence["audience"] == audience
+    assert evidence["email"] == email
+    assert evidence["email_verified"] is True
+    assert token not in output.read_text(encoding="utf-8")
+
+
+def test_private_id_token_claim_verifier_rejects_wrong_service_account(
+    tmp_path: Path,
+) -> None:
+    audience = "https://polititrack-web.example.run.app"
+    now = int(time.time())
+    token = _jwt(
+        {
+            "iss": "https://accounts.google.com",
+            "aud": audience,
+            "sub": "123456789012345678901",
+            "email": "unexpected@example.iam.gserviceaccount.com",
+            "email_verified": True,
+            "iat": now - 10,
+            "exp": now + 3600,
+        }
+    )
+    output = tmp_path / "claims.json"
+    env = os.environ.copy()
+    env["PHASE5_RETRY_ID_TOKEN"] = token
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-",
+            audience,
+            "deployer@example.iam.gserviceaccount.com",
+            str(output),
+        ],
+        input=_private_claims_script(),
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "verified deployer service-account identity" in completed.stderr
+    assert not output.exists()
+
+
+def test_private_inventory_waits_through_iam_403_then_revokes_and_verifies() -> None:
+    script = _retry_loop_shell_prelude("403,403,200") + r'''
+EXPECTED_DIGEST="$(printf 'b%.0s' {1..64})"
+phase5_retry_capture_private_id_token_claims() {
+  printf '{}\n' > "${EVIDENCE_DIR}/private-web-id-token-claims.json"
+}
+phase5_retry_remove_private_web_invoker() {
+  touch "${EVIDENCE_DIR}/removed"
+}
+phase5_retry_verify_private_web_invoker_removed() {
+  touch "${EVIDENCE_DIR}/policy-absent"
+}
+phase5_retry_verify_private_web_invocation_denied() {
+  [[ "$1" == 'mock-token' && "$2" == "${PRIVATE_WEB_AUDIENCE}" ]]
+  touch "${EVIDENCE_DIR}/data-plane-denied"
+}
+export PRIVATE_WEB_ID_TOKEN='mock-token'
+private_web_id_token="${PRIVATE_WEB_ID_TOKEN}"
+unset PRIVATE_WEB_ID_TOKEN
+phase5_retry_capture_private_ai_analyses \
+  "${EVIDENCE_DIR}/inventory.json" "${EXPECTED_DIGEST}" "${private_web_id_token}"
+[[ "$(<"${MOCK_COUNTER}")" == '3' ]]
+[[ "$(wc -l < "${EVIDENCE_DIR}/private-ai-auth-attempts.ndjson")" == '3' ]]
+[[ -f "${EVIDENCE_DIR}/removed" ]]
+[[ -f "${EVIDENCE_DIR}/policy-absent" ]]
+[[ -f "${EVIDENCE_DIR}/data-plane-denied" ]]
+[[ -z "${PRIVATE_WEB_ID_TOKEN+x}" ]]
+! grep -R -F 'mock-token' "${EVIDENCE_DIR}"
+'''
+    completed = _run_control_shell(script)
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_private_inventory_403_wait_is_bounded_and_fails_closed() -> None:
+    script = _retry_loop_shell_prelude("403") + r'''
+EXPECTED_DIGEST="$(printf 'b%.0s' {1..64})"
+phase5_retry_capture_private_id_token_claims() { return 0; }
+phase5_retry_remove_private_web_invoker() { return 93; }
+phase5_retry_verify_private_web_invoker_removed() { return 94; }
+phase5_retry_verify_private_web_invocation_denied() { return 95; }
+export PRIVATE_WEB_ID_TOKEN='mock-token'
+private_web_id_token="${PRIVATE_WEB_ID_TOKEN}"
+unset PRIVATE_WEB_ID_TOKEN
+if phase5_retry_capture_private_ai_analyses \
+  "${EVIDENCE_DIR}/inventory.json" "${EXPECTED_DIGEST}" "${private_web_id_token}"; then
+  exit 96
+fi
+attempts="$(<"${MOCK_COUNTER}")"
+((attempts >= 20 && attempts <= 30))
+[[ "$(wc -l < "${EVIDENCE_DIR}/private-ai-auth-attempts.ndjson")" == "${attempts}" ]]
+[[ -f "${EVIDENCE_DIR}/private-ai-auth-attempts.json" ]]
+awk '$1 < 30 { shorter = 1 } END { exit !shorter }' \
+  "${EVIDENCE_DIR}/mock-request-timeouts"
+'''
+    completed = _run_control_shell(script)
+    assert completed.returncode == 0, completed.stderr
+    assert "authenticated private AI analysis inventory returned HTTP 403" in (
+        completed.stderr
+    )
+
+
+def test_private_inventory_does_not_retry_an_invalid_token_response() -> None:
+    script = _retry_loop_shell_prelude("401") + r'''
+EXPECTED_DIGEST="$(printf 'b%.0s' {1..64})"
+phase5_retry_capture_private_id_token_claims() { return 0; }
+export PRIVATE_WEB_ID_TOKEN='mock-token'
+private_web_id_token="${PRIVATE_WEB_ID_TOKEN}"
+unset PRIVATE_WEB_ID_TOKEN
+if phase5_retry_capture_private_ai_analyses \
+  "${EVIDENCE_DIR}/inventory.json" "${EXPECTED_DIGEST}" "${private_web_id_token}"; then
+  exit 96
+fi
+[[ "$(<"${MOCK_COUNTER}")" == '1' ]]
+[[ "$(wc -l < "${EVIDENCE_DIR}/private-ai-auth-attempts.ndjson")" == '1' ]]
+'''
+    completed = _run_control_shell(script)
+    assert completed.returncode == 0, completed.stderr
+    assert "authenticated private AI analysis inventory returned HTTP 401" in (
+        completed.stderr
+    )
+
+
+def test_private_invoker_revocation_waits_until_same_token_is_denied() -> None:
+    script = _retry_loop_shell_prelude("200,200,403") + r'''
+EXPECTED_DIGEST="$(printf 'b%.0s' {1..64})"
+phase5_retry_verify_private_web_invocation_denied \
+  'mock-token' "${PRIVATE_WEB_AUDIENCE}"
+[[ "$(<"${MOCK_COUNTER}")" == '3' ]]
+[[ "$(wc -l < "${EVIDENCE_DIR}/private-web-invoker-denial-attempts.ndjson")" == '3' ]]
+[[ -f "${EVIDENCE_DIR}/private-web-invoker-revocation.json" ]]
+'''
+    completed = _run_control_shell(script)
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_private_invoker_revocation_rejects_401_and_application_403() -> None:
+    for code, omit_iam_headers in (("401", False), ("403", True)):
+        script = _retry_loop_shell_prelude(code)
+        if omit_iam_headers:
+            script += "MOCK_OMIT_IAM_HEADERS=true\n"
+        script += r'''
+EXPECTED_DIGEST="$(printf 'b%.0s' {1..64})"
+if phase5_retry_verify_private_web_invocation_denied \
+  'mock-token' "${PRIVATE_WEB_AUDIENCE}"; then
+  exit 96
+fi
+[[ "$(<"${MOCK_COUNTER}")" == '1' ]]
+[[ -f "${EVIDENCE_DIR}/private-web-invoker-revocation.json" ]]
+'''
+        completed = _run_control_shell(script)
+        assert completed.returncode == 0, completed.stderr
+        assert "remained effective or became unverifiable" in completed.stderr
 
 
 def test_public_gate_uses_ready_json_and_dashboard_html_not_api_healthz() -> None:
@@ -349,8 +688,15 @@ def test_exact_four_schedulers_are_the_last_live_mutation() -> None:
     assert workflow.index("phase5_retry_verify_public_web") < enable < complete
     assert workflow.count("phase5_retry_verify_public_web") == 1
     assert "capture_status" not in workflow[enable:]
-    assert workflow.index("phase5_retry_remove_private_web_invoker") < workflow.index(
-        'touch "${EVIDENCE_DIR}/route-touched"'
+    capture = workflow.index("phase5_retry_capture_private_ai_analyses")
+    route_touched = workflow.index('touch "${EVIDENCE_DIR}/route-touched"')
+    assert capture < route_touched
+    inventory_helper = control[
+        control.index("phase5_retry_capture_private_ai_analyses()") :
+        control.index("phase5_retry_verify_public_web()")
+    ]
+    assert inventory_helper.index("phase5_retry_remove_private_web_invoker") < (
+        inventory_helper.index("phase5_retry_verify_private_web_invocation_denied")
     )
     live_step = workflow[
         workflow.index("- name: Reconcile the failed prefix") :
@@ -423,6 +769,16 @@ def test_complete_validator_is_the_only_certificate_path_and_phase6_is_not_start
     assert complete.count("--terminal-legacy-workflow-state") == 4
     assert complete.count("--terminal-runtime-execution-inventory") == 4
     assert '"failed_prefix_replay_sha256": sha256(' in text
+    assert '"private-web-invoker-granted-policy.json"' in text
+    assert '"private-web-invoker-removed-policy.json"' in text
+    assert '"private_web_id_token_claims_matched": True' in text
+    assert '"private_web_authenticated_inventory_verified": True' in text
+    assert '"private_web_same_token_revocation_verified": True' in text
+    assert 'revocation.get("final_http_status") == "403"' in text
+    assert 'revocation.get("cloud_run_iam_denial_verified") is True' in text
+    assert 'deployer_member in role_members(granted_policy, "roles/run.invoker")' in text
+    assert 'deployer_member not in role_members(removed_policy, "roles/run.invoker")' in text
+    assert 'raise SystemExit("Temporary private Runtime invocation evidence is incomplete.")' in text
     assert '.result == "phase5_complete"' in text
     assert '.phase6_started == false' in text
     assert '"phase6_started": False' in text

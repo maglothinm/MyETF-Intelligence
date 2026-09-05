@@ -473,11 +473,18 @@ phase5_retry_private_web_invoker_present() {
 }
 
 phase5_retry_grant_private_web_invoker() {
+  local granted_policy="${RESOURCE_DIR}/private-web-invoker-granted-policy.json"
   gcloud run services add-iam-policy-binding "${WEB_SERVICE}" --project "${PROJECT_ID}" \
     --region "${REGION}" --member "${DEPLOYER_MEMBER}" --role roles/run.invoker \
     --quiet --format=none || return 1
   for attempt in $(seq 1 12); do
-    phase5_retry_private_web_invoker_present && return 0
+    if phase5_retry_private_web_invoker_present; then
+      cp -- "${RESOURCE_DIR}/private-web-invoker-policy.json" "${granted_policy}" || return 1
+      jq -e --arg member "${DEPLOYER_MEMBER}" \
+        '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]?] |
+         any(. == $member)' "${granted_policy}" >/dev/null || return 1
+      return 0
+    fi
     sleep 2
   done
   echo "Temporary private web invocation authority did not become effective." >&2
@@ -485,11 +492,18 @@ phase5_retry_grant_private_web_invoker() {
 }
 
 phase5_retry_remove_private_web_invoker() {
+  local removed_policy="${RESOURCE_DIR}/private-web-invoker-removed-policy.json"
   gcloud run services remove-iam-policy-binding "${WEB_SERVICE}" --project "${PROJECT_ID}" \
     --region "${REGION}" --member "${DEPLOYER_MEMBER}" --role roles/run.invoker \
     --quiet >/dev/null 2>&1 || true
   for attempt in $(seq 1 12); do
-    phase5_retry_verify_private_web_invoker_removed && return 0
+    if phase5_retry_verify_private_web_invoker_removed; then
+      cp -- "${RESOURCE_DIR}/private-web-invoker-policy.json" "${removed_policy}" || return 1
+      jq -e --arg member "${DEPLOYER_MEMBER}" \
+        '[.bindings[]? | select(.role == "roles/run.invoker") | .members[]?] |
+         any(. == $member) | not' "${removed_policy}" >/dev/null || return 1
+      return 0
+    fi
     sleep 2
   done
   return 1
@@ -526,9 +540,177 @@ phase5_retry_header_value() {
   ' "${headers}"
 }
 
+phase5_retry_capture_private_id_token_claims() {
+  local identity_token="$1"
+  local output="${EVIDENCE_DIR}/private-web-id-token-claims.json"
+  [[ -n "${identity_token}" ]] || {
+    echo "The private web ID token is unavailable for claim verification." >&2
+    return 1
+  }
+  PHASE5_RETRY_ID_TOKEN="${identity_token}" python - \
+    "${PRIVATE_WEB_AUDIENCE}" "${DEPLOYER_SERVICE_ACCOUNT}" "${output}" <<'PY'
+import base64
+import binascii
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+
+def fail(message: str) -> None:
+    raise SystemExit(message)
+
+
+token = os.environ.pop("PHASE5_RETRY_ID_TOKEN", "")
+expected_audience, expected_email, output_name = sys.argv[1:]
+parts = token.split(".")
+if len(parts) != 3:
+    fail("The private web ID token is not a three-part JWT.")
+try:
+    payload = parts[1] + "=" * (-len(parts[1]) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+except (binascii.Error, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    fail(f"The private web ID token payload is invalid: {exc}")
+if not isinstance(claims, dict):
+    fail("The private web ID token claims are not an object.")
+
+issuer = claims.get("iss")
+audience = claims.get("aud")
+subject = claims.get("sub")
+email = claims.get("email")
+email_verified = claims.get("email_verified")
+issued_at = claims.get("iat")
+expires_at = claims.get("exp")
+if issuer not in ("accounts.google.com", "https://accounts.google.com"):
+    fail("The private web ID token issuer is not Google.")
+if audience != expected_audience:
+    fail("The private web ID token audience does not match the exact service URL.")
+if email != expected_email or email_verified is not True:
+    fail("The private web ID token is not the verified deployer service-account identity.")
+if not isinstance(subject, str) or not subject.isdecimal():
+    fail("The private web ID token subject is invalid.")
+if (
+    isinstance(issued_at, bool)
+    or not isinstance(issued_at, int)
+    or isinstance(expires_at, bool)
+    or not isinstance(expires_at, int)
+):
+    fail("The private web ID token lifetime claims are invalid.")
+now = int(time.time())
+if issued_at > now + 60 or expires_at - now < 1800:
+    fail("The private web ID token has insufficient verified lifetime remaining.")
+
+evidence = {
+    "schema_version": 1,
+    "result": "private_web_id_token_claims_decoded_and_matched",
+    "issuer": issuer,
+    "audience": audience,
+    "subject": subject,
+    "email": email,
+    "email_verified": True,
+    "issued_at": issued_at,
+    "expires_at": expires_at,
+    "minimum_remaining_lifetime_seconds": 1800,
+}
+Path(output_name).write_text(
+    json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+)
+PY
+}
+
+phase5_retry_verify_private_web_invocation_denied() {
+  local identity_token="$1" url="$2" http_code="000" denied=false retryable=false
+  local deadline attempts=0 delay=5 remaining sleep_for request_timeout attempted_at
+  local started_utc finished_utc www_authenticate server iam_denial=false
+  local headers="${EVIDENCE_DIR}/private-web-invoker-denial.headers"
+  local body="${EVIDENCE_DIR}/private-web-invoker-denial.body"
+  local timeline="${EVIDENCE_DIR}/private-web-invoker-denial-attempts.ndjson"
+  [[ -n "${identity_token}" && "${url}" == "${PRIVATE_WEB_AUDIENCE}" ]] || {
+    echo "The private web revocation probe lacks the exact token or audience." >&2
+    return 1
+  }
+  : > "${timeline}" || return 1
+  started_utc="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
+  deadline=$((SECONDS + 600))
+  while ((SECONDS < deadline)); do
+    ((attempts += 1))
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || break
+    request_timeout=30
+    if ((request_timeout > remaining)); then
+      request_timeout="${remaining}"
+    fi
+    http_code="$(curl --silent --show-error --connect-timeout 10 --max-time "${request_timeout}" \
+      --header "Authorization: Bearer ${identity_token}" \
+      --dump-header "${headers}" --output "${body}" --write-out '%{http_code}' \
+      "${url}/data/ai-analyses.json")" || http_code="000"
+    retryable=false
+    iam_denial=false
+    www_authenticate=""
+    server=""
+    case "${http_code}" in
+      403)
+        www_authenticate="$(phase5_retry_header_value "${headers}" WWW-Authenticate 2>/dev/null || true)"
+        server="$(phase5_retry_header_value "${headers}" Server 2>/dev/null || true)"
+        if [[ "${www_authenticate}" == *'Bearer error="insufficient_scope"'* &&
+              "${server,,}" == *"google frontend"* ]]; then
+          denied=true
+          iam_denial=true
+        fi
+        ;;
+      000|200|429|5??) retryable=true ;;
+    esac
+    attempted_at="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
+    jq -cn --argjson attempt "${attempts}" --arg attempted_at "${attempted_at}" \
+      --arg http_status "${http_code}" --arg retryable "${retryable}" \
+      --arg iam_denial "${iam_denial}" \
+      '{attempt:$attempt,attempted_at:$attempted_at,http_status:$http_status,
+        retryable:($retryable == "true"),
+        cloud_run_iam_denial_verified:($iam_denial == "true")}' \
+      >> "${timeline}" || return 1
+    [[ "${denied}" == "true" ]] && break
+    [[ "${retryable}" == "true" ]] || break
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || break
+    sleep_for="${delay}"
+    if ((sleep_for > remaining)); then
+      sleep_for="${remaining}"
+    fi
+    sleep "${sleep_for}"
+    if ((delay < 30)); then
+      delay=$((delay * 2))
+      if ((delay > 30)); then
+        delay=30
+      fi
+    fi
+  done
+  finished_utc="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
+  jq -n \
+    --arg started_at "${started_utc}" \
+    --arg finished_at "${finished_utc}" \
+    --arg final_http_status "${http_code}" \
+    --arg denied "${denied}" \
+    --argjson attempts "${attempts}" \
+    '{schema_version:1,result:"private_web_invocation_revocation_checked",
+      started_at:$started_at,finished_at:$finished_at,attempts:$attempts,
+      final_http_status:$final_http_status,data_plane_invocation_denied:($denied == "true"),
+      cloud_run_iam_denial_verified:($denied == "true"),
+      authorization_relaxed:false,maximum_propagation_wait_seconds:600}' \
+    > "${EVIDENCE_DIR}/private-web-invoker-revocation.json" || return 1
+  [[ "${denied}" == "true" ]] || {
+    echo "Private web invocation remained effective or became unverifiable after revocation (HTTP ${http_code})." >&2
+    return 1
+  }
+}
+
 phase5_retry_capture_private_ai_analyses() {
-  local output="$1" expected_digest="$2" url identity_token http_code content_type served
+  local output="$1" expected_digest="$2" identity_token="${3:-}"
+  local url http_code content_type served
+  local deadline attempts=0 delay=5 remaining sleep_for request_timeout retryable attempted_at
+  local started_utc finished_utc www_authenticate server iam_denial
   local headers="${EVIDENCE_DIR}/private-ai-analyses.headers"
+  local timeline="${EVIDENCE_DIR}/private-ai-auth-attempts.ndjson"
   [[ "${expected_digest}" =~ ^[0-9a-f]{64}$ ]] || {
     echo "The private dashboard snapshot digest is malformed." >&2
     return 1
@@ -543,22 +725,88 @@ phase5_retry_capture_private_ai_analyses() {
     echo "The live private web URL differs from the ID-token audience." >&2
     return 1
   }
-  identity_token="${PRIVATE_WEB_ID_TOKEN:-}"
-  unset PRIVATE_WEB_ID_TOKEN
   [[ -n "${identity_token}" ]] || {
     echo "The short-lived private web ID token is unavailable." >&2
     return 1
   }
+  if ! phase5_retry_capture_private_id_token_claims "${identity_token}"; then
+    identity_token=""
+    return 1
+  fi
+
+  # A newly added Cloud Run invoker binding can be visible in the IAM policy
+  # before route authorization has propagated.  Retry only authorization-
+  # propagation and transient responses inside a fixed ten-minute wall-clock
+  # budget; a 401, redirect, or deterministic non-authentication 4xx fails
+  # immediately.  Never relax the exact JSON and snapshot checks below.
   http_code="000"
-  for attempt in $(seq 1 12); do
-    http_code="$(curl --silent --show-error --location --connect-timeout 10 --max-time 60 \
+  : > "${timeline}" || return 1
+  started_utc="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
+  deadline=$((SECONDS + 600))
+  while ((SECONDS < deadline)); do
+    ((attempts += 1))
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || break
+    request_timeout=30
+    if ((request_timeout > remaining)); then
+      request_timeout="${remaining}"
+    fi
+    http_code="$(curl --silent --show-error --connect-timeout 10 --max-time "${request_timeout}" \
       --header "Authorization: Bearer ${identity_token}" \
       --dump-header "${headers}" --output "${output}" --write-out '%{http_code}' \
       "${url}/data/ai-analyses.json")" || http_code="000"
+    retryable=false
+    iam_denial=false
+    www_authenticate=""
+    server=""
+    case "${http_code}" in
+      200) ;;
+      403)
+        www_authenticate="$(phase5_retry_header_value "${headers}" WWW-Authenticate 2>/dev/null || true)"
+        server="$(phase5_retry_header_value "${headers}" Server 2>/dev/null || true)"
+        if [[ "${www_authenticate}" == *'Bearer error="insufficient_scope"'* &&
+              "${server,,}" == *"google frontend"* ]]; then
+          retryable=true
+          iam_denial=true
+        fi
+        ;;
+      000|429|5??) retryable=true ;;
+    esac
+    attempted_at="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
+    jq -cn --argjson attempt "${attempts}" --arg attempted_at "${attempted_at}" \
+      --arg http_status "${http_code}" --arg retryable "${retryable}" \
+      --arg iam_denial "${iam_denial}" \
+      '{attempt:$attempt,attempted_at:$attempted_at,http_status:$http_status,
+        retryable:($retryable == "true"),
+        cloud_run_iam_denial_verified:($iam_denial == "true")}' \
+      >> "${timeline}" || return 1
     [[ "${http_code}" == "200" ]] && break
-    sleep 2
+    [[ "${retryable}" == "true" ]] || break
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || break
+    sleep_for="${delay}"
+    if ((sleep_for > remaining)); then
+      sleep_for="${remaining}"
+    fi
+    sleep "${sleep_for}"
+    if ((delay < 30)); then
+      delay=$((delay * 2))
+      if ((delay > 30)); then
+        delay=30
+      fi
+    fi
   done
-  identity_token=""
+  finished_utc="$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')"
+  jq -n \
+    --arg started_at "${started_utc}" \
+    --arg finished_at "${finished_utc}" \
+    --arg final_http_status "${http_code}" \
+    --argjson attempts "${attempts}" \
+    '{schema_version:1,result:"private_web_authenticated_inventory_attempted",
+      started_at:$started_at,finished_at:$finished_at,attempts:$attempts,
+      final_http_status:$final_http_status,authorization_relaxed:false,
+      maximum_propagation_wait_seconds:600}' \
+    > "${EVIDENCE_DIR}/private-ai-auth-attempts.json" || return 1
   [[ "${http_code}" == "200" ]] || {
     echo "The authenticated private AI analysis inventory returned HTTP ${http_code}." >&2
     return 1
@@ -577,6 +825,10 @@ phase5_retry_capture_private_ai_analyses() {
     echo "The private AI analysis inventory is malformed." >&2
     return 1
   }
+  phase5_retry_remove_private_web_invoker || return 1
+  phase5_retry_verify_private_web_invoker_removed || return 1
+  phase5_retry_verify_private_web_invocation_denied "${identity_token}" "${url}" || return 1
+  identity_token=""
 }
 
 phase5_retry_verify_public_web() {
