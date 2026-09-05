@@ -1,10 +1,10 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-05 14:34 UTC
+**Current as of:** 2026-09-05 14:43 UTC
 **Canonical repository ID:** `1349678672`
 **Current repository name:** `maglothinm/MyETF-Intelligence`
 **Default branch:** `main`
-**Current main:** `3737ae25d408a40ef67d1d82cd389c2e1a1123c0`
+**Current main:** `adefe3bad1cf52470bf8eb8e0a71937b70770eec`
 **Phase 4 tracking issue:** #99
 **Phase 5 authorization:** #100
 **Phase 4 certificate:** not issued
@@ -131,16 +131,25 @@ intentional recovery-only run `33966378019` attempt 1 at immutable revision
 `23cc3b83cf468ed65d228b5208d30eff8798f5ff`; it restored a pinned earlier
 artifact, sent no notifications, and uploaded the current continuity boundary.
 
+PR #128 merged the pinned recovery-producer correction as
+`adefe3bad1cf52470bf8eb8e0a71937b70770eec`. Controlled run `33972544005`
+successfully completed the full predecessor restore and retry guard. It then
+stopped at the offline-test gate before the tracker executed because its
+orchestrator fixture inherited the workflow's production source-status path and
+live restore-receipt requirement while reading a fixture-local path and
+intentionally constructing no live receipt. The production implementation did
+not fail, no protected artifact was published, and no outbound credential was
+present.
+
 The active correction branch is
-`phase4/accept-recovery-push-producer-20260905`. It leaves the normal event
-allowlist unchanged, recognizes only that exact run, attempt, workflow ID, event,
-and commit as a restored producer, and uses identity-only matching to ensure any
-later trigger or rerun is still inspected. No `phase4-ready.json` completion
-certificate exists yet.
+`phase4/hermetic-legislative-offline-tests-20260905`. It makes the test fixture's
+source-status destination explicit and clears the live-only receipt requirement
+so the same tests are hermetic under both CI and the Legislative job environment.
+No `phase4-ready.json` completion certificate exists yet.
 
 ## Exact blockers
 
-1. Merge the pinned recovery-producer correction only after the exact
+1. Merge the hermetic offline-test correction only after the exact
    PR head is green.
 2. Complete one controlled,
    no-notify main-branch validation. Pin its exact run, job, predecessor, artifacts,

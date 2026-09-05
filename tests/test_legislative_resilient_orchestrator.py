@@ -75,10 +75,13 @@ def run_fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failures: str, *, 
         "GITHUB_SERVER_URL",
         "GITHUB_SHA",
         "POLITITRACK_CONTROLLED_VALIDATION",
+        "POLITITRACK_REQUIRE_RESTORE_RECEIPT",
         "POLITITRACK_TRIGGER_SOURCE",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("RESULT_FILE", "legislative-result.json")
+    # Keep this unit-test fixture independent of workflow-level output paths.
+    monkeypatch.setenv("SOURCE_STATUS_FILE", "legislative-source-status.json")
     monkeypatch.setenv("RUN_HISTORY_FILE", ".trade-tracker/legislative/runs.jsonl")
     monkeypatch.setenv("FAKE_ARGS_LOG", str(tmp_path / "args.jsonl"))
     monkeypatch.setenv("FAKE_FAIL_SOURCES", failures)

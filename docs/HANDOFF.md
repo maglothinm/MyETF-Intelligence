@@ -1,11 +1,11 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-05 14:34 UTC**
+Updated: **2026-09-05 14:43 UTC**
 Canonical repository: **ID 1349678672 — `maglothinm/MyETF-Intelligence`**
-Canonical main: **`3737ae25d408a40ef67d1d82cd389c2e1a1123c0`**
+Canonical main: **`adefe3bad1cf52470bf8eb8e0a71937b70770eec`**
 Active issue: **#99 — Phase 4 final live shadow validation gate**
 Authorized successor: **#100 — Phase 5 production promotion**
-Active branch: **`phase4/accept-recovery-push-producer-20260905`**
+Active branch: **`phase4/hermetic-legislative-offline-tests-20260905`**
 Certificate state: **not issued**
 Production cutover state: **blocked**
 
@@ -93,9 +93,17 @@ event, and commit as a restored producer. It does not add `push` to the general
 allowlist. Later attempts and nonstandard triggers are matched by canonical
 identity and inspected conservatively, so a rerun cannot inherit the exception.
 
+PR #128 merged that correction as `adefe3bad1cf52470bf8eb8e0a71937b70770eec`.
+Run `33972544005` completed the predecessor restore and retry guard, then failed
+its offline-test gate before tracker execution. The orchestrator fixture inherited
+the job's production source-status destination and live restore-receipt
+requirement while reading a fixture-local output and intentionally constructing
+no live receipt. The active correction makes the fixture path explicit and clears
+that live-only requirement; it changes no production collector behavior.
+
 ## Work still required
 
-1. Merge the pinned recovery-producer correction only from a green,
+1. Merge the hermetic offline-test correction only from a green,
    reviewed PR head.
 2. After merge, perform one controlled
    no-notify main validation. Verify and pin the exact run, attempt, job, state and
