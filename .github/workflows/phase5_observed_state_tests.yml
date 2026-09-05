@@ -130,7 +130,7 @@ jobs:
                                           'execute_producer() {',
                                           'refusing to resolve or accept a receipt',
                                           'dispatch_legacy_recovery() {',
-                                          'legacy_recovery_dispatches_accepted',
+                                          'dispatch_legacy_recovery_tracked',
                                           '"${ADMIN_JOB}"'),
               'route_contract': ('legacy_rollback_route_verified',
                                  'required_triggers',

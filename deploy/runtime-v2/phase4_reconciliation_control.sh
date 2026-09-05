@@ -2,13 +2,14 @@
 # Narrow, sourceable authority helpers for the read-only Phase 4 status capture.
 
 grant_phase4_status_authority() {
+  rm -f "${LOGGING_VIEW_POLICY_RECEIPT}" || return 1
   gcloud run jobs add-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
-    --member "${DEPLOYER_MEMBER}" --role roles/run.jobsExecutorWithOverrides --quiet --format=none
+    --member "${DEPLOYER_MEMBER}" --role roles/run.jobsExecutorWithOverrides --quiet --format=none || return 1
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${DEPLOYER_MEMBER}" \
-    --role roles/logging.admin --condition=None --quiet --format=none
+    --role roles/logging.admin --condition=None --quiet --format=none || return 1
   gcloud logging views add-iam-policy-binding _Default --bucket _Default --location global \
     --project "${PROJECT_ID}" --member "${DEPLOYER_MEMBER}" --role roles/logging.viewAccessor \
-    --quiet --format=none
+    --quiet --format=none || return 1
   for attempt in $(seq 1 18); do
     if gcloud logging read 'resource.type="cloud_run_job"' --project "${PROJECT_ID}" --limit=1 --format=json >/dev/null 2>&1; then
       return 0
@@ -20,38 +21,28 @@ grant_phase4_status_authority() {
 }
 
 remove_phase4_status_authority() {
+  local status=0
   gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
     --member "${DEPLOYER_MEMBER}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null 2>&1 || true
-  gcloud logging views remove-iam-policy-binding _Default --bucket _Default --location global \
-    --project "${PROJECT_ID}" --member "${DEPLOYER_MEMBER}" --role roles/logging.viewAccessor \
-    --quiet >/dev/null 2>&1 || true
-  gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${DEPLOYER_MEMBER}" \
-    --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1 || true
+  remove_logging_authority || status=1
+  verify_phase4_status_authority_removed || status=1
+  return "${status}"
 }
 
 verify_phase4_status_authority_removed() {
   local policy
-  policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
-  if jq -e --arg member "${DEPLOYER_MEMBER}" \
-    '[.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member)' \
-    <<<"${policy}" >/dev/null; then
-    echo "Temporary Phase 4 admin execution authority remains." >&2
+  if ! policy="$(gcloud run jobs get-iam-policy "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"; then
+    echo "Unable to verify Phase 4 admin execution-authority cleanup." >&2
     return 1
   fi
-  policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
-  if jq -e --arg member "${DEPLOYER_MEMBER}" \
-    '[.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] | any(. == $member)' \
+  if ! jq -e --arg member "${DEPLOYER_MEMBER}" \
+    'type == "object" and
+     ([.bindings[]? | select(.role == "roles/run.jobsExecutorWithOverrides") | .members[]?] | any(. == $member) | not)' \
     <<<"${policy}" >/dev/null; then
-    echo "Temporary Phase 4 logging.admin authority remains." >&2
+    echo "Temporary Phase 4 admin execution-authority cleanup is unverified." >&2
     return 1
   fi
-  policy="$(gcloud logging views get-iam-policy _Default --bucket _Default --location global --project "${PROJECT_ID}" --format=json)"
-  if jq -e --arg member "${DEPLOYER_MEMBER}" \
-    '[.bindings[]? | select(.role == "roles/logging.viewAccessor") | .members[]?] | any(. == $member)' \
-    <<<"${policy}" >/dev/null; then
-    echo "Temporary Phase 4 logging-view authority remains." >&2
-    return 1
-  fi
+  verify_logging_authority_removed
 }
 
 # Preserve the shared receipt lookup while making the Phase 5 smoke execution
@@ -77,19 +68,9 @@ execute_producer() {
     | tee "${EVIDENCE_DIR}/${stem}-${logical_name}-execution.txt"
 }
 
-# Rollback is not complete unless both retained collector workflows accepted
-# their recovery dispatches. Keep the reviewed workflow targets but remove the
-# v1 helper's best-effort error swallowing.
+# Rollback is not complete until both exact recovery runs succeed. The shared
+# helper persists per-workflow acceptance before waiting, so a later cleanup step
+# resumes the same runs instead of dispatching either live producer again.
 dispatch_legacy_recovery() {
-  local status=0
-  gh workflow run legislative_trade_tracker_v2.yml \
-    --repo "${GITHUB_REPOSITORY}" --ref main || status=$?
-  gh workflow run executive_trade_tracker.yml \
-    --repo "${GITHUB_REPOSITORY}" --ref main || status=$?
-  if (( status != 0 )); then
-    echo "One or more legacy recovery dispatches failed." >&2
-    return "${status}"
-  fi
-  printf '%s\n' '{"result":"legacy_recovery_dispatches_accepted","workflows":["legislative_trade_tracker_v2.yml","executive_trade_tracker.yml"]}' \
-    > "${EVIDENCE_DIR}/legacy-recovery-dispatch.json"
+  dispatch_legacy_recovery_tracked
 }
