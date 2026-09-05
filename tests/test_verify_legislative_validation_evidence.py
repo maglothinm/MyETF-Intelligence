@@ -425,9 +425,10 @@ def _fixture(tmp_path: Path) -> argparse.Namespace:
         "status": "ahead",
         "ahead_by": 1,
         "behind_by": 0,
+        "total_commits": 1,
         "base_commit": {"sha": validation_sha},
-        "head_commit": {"sha": control_sha},
         "merge_base_commit": {"sha": validation_sha},
+        "commits": [{"sha": control_sha}],
     }
 
     files = {}
@@ -680,8 +681,8 @@ def test_implementation_drift_after_validation_fails_closed(tmp_path: Path) -> N
     _mutate_json(
         arguments.compare_metadata,
         lambda value: (
-            value["head_commit"].update(sha=new_control),
-            value.update(ahead_by=2),
+            value["commits"].append({"sha": new_control}),
+            value.update(ahead_by=2, total_commits=2),
         ),
     )
     with pytest.raises(verifier.LegislativeValidationError, match="implementation changed"):
@@ -703,8 +704,8 @@ def test_tracker_executable_mode_drift_fails_closed(tmp_path: Path) -> None:
     _mutate_json(
         arguments.compare_metadata,
         lambda value: (
-            value["head_commit"].update(sha=new_control),
-            value.update(ahead_by=2),
+            value["commits"].append({"sha": new_control}),
+            value.update(ahead_by=2, total_commits=2),
         ),
     )
     with pytest.raises(verifier.LegislativeValidationError, match="executable mode"):

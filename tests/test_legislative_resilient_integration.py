@@ -261,6 +261,69 @@ def test_degraded_transaction_discards_failed_source_and_binds_artifacts(
     ]) == 0
 
 
+def test_production_degraded_success_advances_durable_state_without_suppression(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = tmp_path / "fake_tracker.py"
+    fake.write_text(FAKE_TRANSACTIONAL_TRACKER, encoding="utf-8")
+    state_paths = _write_initial_state(tmp_path / "protected")
+    result_path = tmp_path / "run" / "legislative-result.json"
+    receipt_path = tmp_path / "protected" / "source-status.json"
+    restore_receipt_path = tmp_path / "protected" / "restore-receipt.json"
+    controlled_receipt_path = tmp_path / "protected" / "controlled-validation-receipt.json"
+    consumer_sha = _set_controlled_environment(
+        monkeypatch,
+        restore_receipt_path=restore_receipt_path,
+        controlled_receipt_path=controlled_receipt_path,
+    )
+    monkeypatch.setenv("POLITITRACK_CONTROLLED_VALIDATION", "false")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    monkeypatch.setenv("POLITITRACK_TRIGGER_SOURCE", "schedule")
+    _write_restore_receipt(restore_receipt_path, state_paths["state"], consumer_sha=consumer_sha)
+    monkeypatch.setenv("FAKE_FAIL_SOURCES", "senate")
+    monkeypatch.setenv("FAKE_INTEGRATION_LOG", str(tmp_path / "children.jsonl"))
+    monkeypatch.setenv("SOURCE_STATUS_FILE", str(receipt_path))
+
+    arguments = [
+        "--branch", "legislative", "--source", "all",
+        "--state-file", str(state_paths["state"]),
+        "--ledger-file", str(state_paths["ledger"]),
+        "--transactions-file", str(state_paths["transactions"]),
+        "--filings-file", str(state_paths["filings"]),
+        "--pending-file", str(state_paths["pending"]),
+        "--run-history-file", str(state_paths["history"]),
+        "--result-file", str(result_path),
+        "--latest-csv", str(tmp_path / "run" / "latest.csv"),
+        "--latest-transactions-csv", str(tmp_path / "run" / "transactions.csv"),
+        "--latest-filings-csv", str(tmp_path / "run" / "filings.csv"),
+    ]
+    assert resilient.run_tracker_arguments(
+        arguments, tracker_script=fake, sources=("senate", "house")
+    ) == 0
+
+    state = json.loads(state_paths["state"].read_text(encoding="utf-8"))
+    assert state["seen_trades"] == {"prior": "retained", "house": "committed"}
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["overall_status"] == "degraded"
+    assert receipt["notifications_suppressed"] is False
+    assert receipt["durable_state_eligible"] is True
+    assert receipt["protected_upload_eligible"] is True
+    assert receipt["protected_state_action"] == "committed"
+    assert receipt["outbound_notifications_attempted"] is None
+    assert receipt["outbound_notifications_sent"] == 0
+    assert legislative_healthcheck.main([
+        "--result", str(result_path), "--state", str(state_paths["state"]),
+        "--source-status", str(receipt_path), "--validate-durable",
+        "--restore-receipt", str(restore_receipt_path), "--require-restore-receipt",
+    ]) == 0
+    assert legislative_healthcheck.main([
+        "--result", str(result_path), "--state", str(state_paths["state"]),
+        "--source-status", str(receipt_path), "--validate-protected-upload",
+        "--restore-receipt", str(restore_receipt_path),
+        "--controlled-validation-receipt", str(controlled_receipt_path),
+    ]) == 1
+
+
 def test_compatibility_entrypoint_retains_executable_git_mode() -> None:
     root = Path(__file__).resolve().parents[1]
     mode = subprocess.run(

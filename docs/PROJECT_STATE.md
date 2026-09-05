@@ -1,68 +1,60 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-05 14:43 UTC
+**Current as of:** 2026-09-05 15:05 UTC
+
 **Canonical repository ID:** `1349678672`
+
 **Current repository name:** `maglothinm/MyETF-Intelligence`
+
 **Default branch:** `main`
-**Current main:** `adefe3bad1cf52470bf8eb8e0a71937b70770eec`
+
+**Current main:** `e160d1783ee93508761e0054b909e29d8b00ef3d`
+
 **Phase 4 tracking issue:** #99
+
 **Phase 5 authorization:** #100
+
 **Phase 4 certificate:** not issued
+
 **Phase 5 production cutover:** blocked
 
 This file records current operational truth. Historical receipts remain in
 GitHub Actions artifacts, the append-only decision log, and Git history.
 
-## Current production authority and incident state
+## Current authority
 
-The retained GitHub Actions workflows remain production authority. Runtime v2
-has completed shadow evidence but has not received production authority.
+GitHub Actions remains production authority. Runtime v2 remains in shadow mode;
+its producer schedulers are paused, its web route is private, and production
+authority has not transferred.
 
-PR #125 merged to `main` as `706873d041f5dfc1c0cc384205ee385413f7a432`
-and restored the Legislative schedule before a safe main-branch production
-validation. Review after merge found that its exactly-one-source degraded result
-is rejected by the next workflow validation step, so a degraded run cannot
-publish a successor `legislative-tracker-state`. The new orchestrator's source
-receipt is also omitted from uploaded artifacts, its run-history record is not in
-the dashboard's canonical schema, and the new integration test was omitted from
-the required CI commands.
-
-To prevent the next schedule from recreating the unretained-side-effect
-continuity incident, workflow ID `345003824` (`Legislative purchase tracker v2`)
-was set to `disabled_manually` at approximately 2026-09-05 13:15 UTC. This is a
-reversible safety pause. Executive tracking remains separate and was not changed.
-
-The newest verified Legislative continuity artifact at the pause boundary is:
-
-| Evidence | Value |
-|---|---|
-| Artifact | `9969550055` (`legislative-tracker-state`) |
-| Producing run | `33966378019`, attempt 1 |
-| Producing revision | `23cc3b83cf468ed65d228b5208d30eff8798f5ff` |
-| Run conclusion | success |
-| Archive SHA-256 | `bd698df04dc12d04a119bd59bc45ba09876dea7cfc108b0c6583dc296d8b413d` |
-| Continuity treatment | preserve; do not rebaseline |
+The Legislative workflow API is active, but the source at current `main` is the
+temporary controlled-validation form: manual dispatch only, explicit
+acknowledgement required, notifications and heartbeat credentials absent, and
+downstream AI/Pages fan-out blocked. It is not yet an operational recurring
+rollback route. The active follow-up branch is
+`phase4/restore-legislative-route-and-pin-evidence-20260905`.
 
 ## Phase 4 execution lookup
 
-The obsolete `gcloud run jobs executions describe-latest` lookup is no longer in
+The obsolete `gcloud run jobs executions describe-latest` lookup is absent from
 `deploy/runtime-v2/runtime_promotion_control.sh`. The shared controller first
-reads the completed `gcloud run jobs execute --format=json` receipt and uses the
-supported Cloud Run Job `status.latestCreatedExecution.name` field only as a
-bounded fallback. Cross-job receipts fail closed.
+uses the exact JSON returned by `gcloud run jobs execute` and only then permits
+the supported Cloud Run Job `status.latestCreatedExecution.name` field as a
+bounded fallback. It verifies that every resolved execution belongs to the
+expected job, so a failed command cannot fall through to a stale receipt.
 
-## Phase 4 two-cycle evidence
+## Completed two-cycle shadow evidence
 
-The immutable recovered anchor remains unchanged. Two failed controller runs
-contain the complete chained shadow history:
+The immutable evidence remains current and requires no additional producer run:
 
-| Role | Run | Head revision | Artifact | Archive SHA-256 | Result used |
-|---|---:|---|---:|---|---|
-| Anchored prefix | `33878297187` | `58503dff1b5b944ba0ee9466c0450f8351499206` | `9942568612` | `9c843a10fe65c40cff2358dcb3557fcb688c282602061abf3e8a63669413a04f` | six successful receipts plus two AI failures that wrote no snapshot |
-| Completed history | `33887857023` | `aedcb2c936a08947b1f38a062b0bee86bf75b0cb` | `9945994606` | `f91bb81e9cec45390064e686220e1262d2df70de9227f4263c595d1b8c5fdad8` | eight ordered, unique, successful receipts across two complete cycles |
+| Role | Run | Head revision | Artifact | Archive SHA-256 |
+|---|---:|---|---:|---|
+| Anchored prefix | `33878297187` | `58503dff1b5b944ba0ee9466c0450f8351499206` | `9942568612` | `9c843a10fe65c40cff2358dcb3557fcb688c282602061abf3e8a63669413a04f` |
+| Completed two cycles | `33887857023` | `aedcb2c936a08947b1f38a062b0bee86bf75b0cb` | `9945994606` | `f91bb81e9cec45390064e686220e1262d2df70de9227f4263c595d1b8c5fdad8` |
 
-The second artifact starts from the exact final heads of the first artifact. Its
-final protected heads are:
+The second artifact chains from the first artifact's final heads and contains
+eight ordered, unique successful receipts across two complete cycles. The final
+heads are:
 
 | Namespace | Generation | Snapshot SHA-256 |
 |---|---:|---|
@@ -71,115 +63,87 @@ final protected heads are:
 | AI | 5 | `39b6408c3922319bafcaf4380df9ac6a7d225eb4590a86937b884b8351cb4007` |
 | Dashboard | 6 | `ee66d67e5f500e721dd2c805f091dc008b41fc12b91721a102691f13009a6f79` |
 
-The producer portion of the required two-cycle shadow acceptance therefore
-completed successfully. The original workflow still concluded `failure` because
-its validator required the later live baseline to equal the immutable recovered
-anchor even after the preceding failed run had legitimately advanced that
-baseline. That failure did not issue a certificate and did not start Phase 5.
+Those producer cycles succeeded. Their controller run ended in failure only
+because the old validator compared the legitimately advanced live baseline to
+the earlier immutable anchor. PR #126 replaced that comparison with pinned,
+hash-verified replay and current-head/current-receipt reconciliation; it did not
+rebaseline or execute another producer.
 
-## Reconciliation implementation
+## Controlled Legislative validation
 
-The active reconciliation branch is
-`phase4/reconcile-failed-shadow-evidence-20260905`. It preserves the anchor and
-performs no additional producer execution. Its replay validator pins the two run
-IDs, attempts, jobs, revisions, artifact IDs, sizes, digests, and expiration;
-checks safe ZIP/JSON handling; proves the cross-artifact chain and two ordered
-cycles; and requires the current Runtime heads and latest receipts to remain
-identical to the replayed result.
+PRs #126 through #129 corrected the Legislative transactional orchestration,
+restore metadata boolean handling, the exact recovery-only predecessor exception,
+and hermetic offline tests. Current main is PR #129's merge revision.
 
-Certification additionally requires the retained rollback workflows' current API
-states and checked-in source contract, including a schedule-capable Legislative
-and Executive collector. The resulting route receipt is included in the Phase 4
-certificate and must match current source again before Phase 5. Failed Phase 5
-smoke commands and failed legacy recovery dispatches cannot fall through to stale
-execution receipts or produce a false rollback-complete marker.
+The required controlled validation completed successfully:
 
-The same candidate now contains the PR #125 correction. The Legislative workflow
-is manual-only and requires an explicit validation acknowledgement. It receives no
-Pushover or Healthchecks credentials, forces `--no-notify`, cannot trigger the AI
-analyst or Pages publisher, isolates each official source transactionally, retains
-restore/source/controlled receipts, preserves the canonical run-history schema,
-and runs the new integration coverage in CI.
+| Evidence | Value |
+|---|---|
+| Workflow run | `33972938031`, attempt 1, run number 56 |
+| Authoritative job | `101324554606` (`track`), success |
+| Validated revision | `e160d1783ee93508761e0054b909e29d8b00ef3d` |
+| Outcome | `zero_change_successor` |
+| Sources | House `ok` (890 catalog records); Senate `ok` (86) |
+| Notification evidence | 0 eligible, 0 attempted, 0 sent, 0 delivered |
+| Protected successor | artifact `9971492043`, SHA-256 `61f2a22f9a06a12c01fb0f1933090ec86b5657122c16cced7080fc5d9a45e46a` |
+| Diagnostic output | artifact `9971492201`, SHA-256 `21af1d80644294d918854f686636e26fe152ecb8891c3c25bee16ca3f1c01668` |
 
-The controlled run has two acceptable evidence outcomes. With zero
-notification-eligible records, one or two validated official sources may publish
-a durable successor. With notification-eligible records, all six protected state,
-ledger, and history files are restored byte-for-byte and only the unchanged
-predecessor boundary is republished with a zero-outbound receipt. A total outage
-may preserve continuity but cannot satisfy Phase 4.
+The protected successor restores from artifact `9969550055`, run
+`33966378019` attempt 1, revision
+`23cc3b83cf468ed65d228b5208d30eff8798f5ff`, and archive SHA-256
+`bd698df04dc12d04a119bd59bc45ba09876dea7cfc108b0c6583dc296d8b413d`.
+The restore, source-status, and controlled-validation receipts agree across both
+successor archives. The protected ledger, transaction, filing, pending-review,
+and alert-delivery state remained continuous; only the run history and state
+success marker advanced.
 
-Phase 4 also requires a later checked-in descriptor for the exact controlled run.
-It verifies the predecessor and both successor artifacts against live GitHub
-metadata and digests, validates all three receipts and archive contents, and proves
-that collector implementation bytes and executable mode did not change before the
-schedule-restoration revision. No placeholder descriptor is present.
+## Schedule restoration candidate
 
-PR #126 merged the reconciliation and controlled Legislative correction to
-`main` as `4e0791f29e09831bfc399d528a8dd66604b1ebf7`. Its exact PR head passed the
-required Python, Node, repository-contract, and observed-state checks. The first
-controlled run, `33971479311` attempt 1, stopped in predecessor restore before
-the tracker executed, before any state upload, and without any notification or
-heartbeat credential. The live artifact was unexpired; the workflow's jq
-expression used boolean-alternative semantics that converted an explicit
-`expired: false` value to `true`.
+The active follow-up pins the exact controlled evidence in
+`deploy/runtime-v2/phase4-legislative-validation-evidence.json` and restores the
+reviewed Legislative cadence (`7,22,37,52 * * * *`, America/New_York), manual
+`trigger_source` dispatch, Pushover inputs, Healthchecks start/terminal signals,
+and normal AI/Pages fan-out. It retains the strengthened exact-attempt restore,
+artifact digest, compatible-ancestry, high-water, and retry guards.
 
-PR #127 merged the exact-boolean correction as
-`3737ae25d408a40ef67d1d82cd389c2e1a1123c0`. Controlled run `33971975967`
-then restored the artifact metadata successfully but stopped before download when
-the retry guard rejected the producer's `push` event. That producer is the
-intentional recovery-only run `33966378019` attempt 1 at immutable revision
-`23cc3b83cf468ed65d228b5208d30eff8798f5ff`; it restored a pinned earlier
-artifact, sent no notifications, and uploaded the current continuity boundary.
+The production tracker no longer uses `--no-notify`. A hard durable-result gate
+and verified restore receipt are required before a protected successor uploads.
+One successful official source may publish a truthful degraded successor; zero
+sources, invalid state, missing restore evidence, or contradictory delivery
+accounting cannot publish state. `REQUIRE_PUSHOVER` remains false, matching the
+pre-incident availability contract; a secret reference is not proof that the
+secret exists or delivery succeeds.
 
-PR #128 merged the pinned recovery-producer correction as
-`adefe3bad1cf52470bf8eb8e0a71937b70770eec`. Controlled run `33972544005`
-successfully completed the full predecessor restore and retry guard. It then
-stopped at the offline-test gate before the tracker executed because its
-orchestrator fixture inherited the workflow's production source-status path and
-live restore-receipt requirement while reading a fixture-local path and
-intentionally constructing no live receipt. The production implementation did
-not fail, no protected artifact was published, and no outbound credential was
-present.
+The legacy-route verifier now rejects cosmetic restoration: a Legislative file
+with a cron still fails if it retains controlled-only acknowledgement,
+notification suppression, protected-upload validation, or controlled mode.
 
-The active correction branch is
-`phase4/hermetic-legislative-offline-tests-20260905`. It makes the test fixture's
-source-status destination explicit and clears the live-only receipt requirement
-so the same tests are hermetic under both CI and the Legislative job environment.
-No `phase4-ready.json` completion certificate exists yet.
+## Exact blockers and earliest certificate
 
-## Exact blockers
+1. The schedule-restoration/evidence-pin branch must pass local verification and
+   exact-head CI, then merge to `main`.
+2. The automatically triggered Phase 4 v6 run must prove the descriptor,
+   unchanged collector implementation bytes, operational legacy route, pinned
+   two-cycle replay, unchanged Runtime heads/latest receipts, and cleanup.
 
-1. Merge the hermetic offline-test correction only after the exact
-   PR head is green.
-2. Complete one controlled,
-   no-notify main-branch validation. Pin its exact run, job, predecessor, artifacts,
-   digests, and receipts in the Phase 4 prerequisite descriptor.
-3. Restore the reviewed recurring schedule in a follow-up change. At the moment
-   Phase 4 runs, the workflow must be API-active and its checked-in source must
-   pass the rollback route contract.
-4. Phase 4 must then replay both pinned Runtime artifacts and verify that live Runtime
-   heads and latest receipts have not drifted. Only that successful run may issue
-   the certificate.
-
-If the Runtime heads and latest receipts remain unchanged, no new shadow producer
-cycles are required. The earliest certificate is immediately after the controlled
-Legislative run is pinned, the reviewed recurring route is restored and active,
-and one Phase 4 reconciliation run succeeds. Any Runtime head or latest-receipt
-drift reopens the evidence gate and requires a separately reviewed continuation;
-it is not permission to rebaseline.
+If those live Runtime receipts remain unchanged, the Phase 4 completion
+certificate can be issued by that first successful reconciliation run. No new
+shadow producer cycle is needed. The certificate is a hash-checked
+`phase4-ready.json` in the `phase4-readiness` Actions artifact; the workflow has
+read-only contents permission and does not commit the certificate to Git.
 
 ## Phase 5 boundary
 
-Issue #100 authorizes Phase 5, not Phase 6. Phase 5 remains blocked until a
-successful Phase 4 run emits the hash-verified certificate on the exact current
-`main` revision. The Phase 5 workflow then rechecks the certificate, route source,
-workflow states, current heads, and latest receipts before it may transfer
-production authority. No Phase 5 production smoke, Runtime scheduler activation,
-public Runtime web cutover, or legacy-writer disablement has been accepted as
-complete.
+Issue #100 authorizes Phase 5, not Phase 6. A successful Phase 4 v6 run
+automatically triggers Phase 5 v2. Phase 5 must bind the exact certificate and
+certified main revision, recheck route source and Runtime heads/latest receipts,
+then atomically transfer one-writer production authority and verify its terminal
+evidence. Until that succeeds, Runtime schedulers, public Runtime web, and
+legacy-writer retirement are not complete. Do not advance `main` while Phase 4
+or Phase 5 is running; both workflows deliberately reject revision drift.
 
 ## Next safe action
 
-Review and merge the narrow expiration-field correction, perform the
-alerts-suppressed main validation, and only then restore the recurring route and
-allow Phase 4 certification to run.
+Finish and merge the single restoration/evidence-pin PR from a green exact head,
+then keep `main` fixed while Phase 4 and the authorized Phase 5 successor run.
+Stop before Phase 6.
