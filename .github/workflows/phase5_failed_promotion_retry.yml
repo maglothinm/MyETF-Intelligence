@@ -143,8 +143,8 @@ jobs:
           phase5_retry_capture_current_logging_view_absence_receipt
           grant_execution_authority
           capture_status "${EVIDENCE_DIR}/current-status.json" retry-current-status
-          current_dashboard_digest="$(jq -er '.concurrent_legacy_ai.conflict.runtime_snapshot_sha256' \
-            "${PHASE5_RETRY_DESCRIPTOR}")"
+          current_dashboard_digest="$(phase5_retry_current_dashboard_digest \
+            "${EVIDENCE_DIR}/current-status.json")"
           phase5_retry_grant_private_web_invoker
           phase5_retry_capture_private_ai_analyses \
             "${EVIDENCE_DIR}/current-ai-analyses.json" "${current_dashboard_digest}" \
