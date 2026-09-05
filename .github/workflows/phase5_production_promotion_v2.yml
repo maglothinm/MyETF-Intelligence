@@ -76,6 +76,20 @@ jobs:
              .reconciliation.current_heads_verified == true and
              .reconciliation.current_latest_receipts_verified == true and
              .reconciliation.additional_producer_execution_performed == false and
+             .legislative_validation_evidence_verified == true and
+             .legislative_validation_receipt.result == "legislative_controlled_validation_verified" and
+             .legislative_validation_receipt.schedule_restoration_revision == $control and
+             .legislative_validation_receipt.implementation_source_continuity_verified == true and
+             .legislative_validation_receipt.artifact_digests_verified == true and
+             .legislative_validation_receipt.safe_archive_contents_verified == true and
+             .legislative_validation_receipt.source_status_receipt_verified == true and
+             .legislative_validation_receipt.controlled_validation_receipt_verified == true and
+             .legislative_validation_receipt.notifications_suppressed == true and
+             .legislative_validation_receipt.no_outbound_notifications_verified == true and
+             (.legislative_validation_receipt.zero_notification_eligible_changes_verified == true or
+              .legislative_validation_receipt.predecessor_state_rollback_verified == true) and
+             .legislative_validation_receipt.additional_validation_run_authorized == false and
+             .legislative_validation_receipt.production_authority_transferred == false and
              .legacy_route_source_verified == true and
              .legacy_route_receipt.result == "legacy_rollback_route_verified" and
              .legacy_route_receipt.legacy_production_route_active == true' \

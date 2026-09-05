@@ -1,6 +1,6 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-05 13:20 UTC**
+Updated: **2026-09-05 14:15 UTC**
 Canonical repository: **ID 1349678672 — `maglothinm/MyETF-Intelligence`**
 Canonical main: **`706873d041f5dfc1c0cc384205ee385413f7a432`**
 Active issue: **#99 — Phase 4 final live shadow validation gate**
@@ -53,32 +53,44 @@ current latest receipts, cleanup, and the source/API contract of the retained
 rollback route. Phase 5 is hardened to recheck those bindings and to fail closed
 on smoke or rollback-dispatch errors.
 
+The candidate branch also contains the controlled Legislative correction. Its
+only trigger is an explicitly acknowledged manual dispatch; it has no notification
+or heartbeat credentials, forces suppression, and cannot fan out to AI or Pages.
+Each source writes through an isolated transaction. A zero-change result may
+publish a durable one- or two-source successor. If alert-worthy records are found,
+all six protected files are restored byte-for-byte and only the unchanged boundary
+is republished with a zero-outbound receipt. The wrapper retains its full CLI and
+executable contract, and canonical run history is preserved.
+
+Phase 4 will not trust that source contract by itself. A follow-up descriptor must
+pin the exact manual run, job, predecessor artifact, protected and diagnostic
+artifacts, API digests, and retained receipts. The verifier also proves unchanged
+implementation bytes through schedule restoration. The descriptor is deliberately
+absent until the live controlled run exists, so the first merged Phase 4 run fails
+closed before cloud authentication.
+
 ## Work still required
 
-1. Correct PR #125's merged implementation in manual-only/no-notify mode:
-   degraded-success validation and upload must agree; source-status evidence must
-   be retained; canonical run-history schema and CLI compatibility must be
-   preserved; and the new integration tests must actually run in CI.
-2. Combine or sequence that correction with the Phase 4 reconciliation on a
-   green, reviewable PR.
-3. After merge, enable only the manual workflow path and perform one controlled
-   no-notify main validation. Verify the exact run, attempt, state artifact,
-   digest, predecessor, and source receipt.
-4. Restore the recurring schedule in a follow-up reviewed change. Ensure the
+1. Merge the combined correction and Phase 4 reconciliation only from a green,
+   reviewed PR head.
+2. After merge, enable only the manual workflow path and perform one controlled
+   no-notify main validation. Verify and pin the exact run, attempt, job, state and
+   diagnostic artifacts, digests, predecessor, and all receipts.
+3. Restore the recurring schedule in a follow-up reviewed change. Ensure the
    workflow API state is active.
-5. Let Phase 4 replay the pinned evidence. It may issue `phase4-ready.json` only
+4. Let Phase 4 replay the pinned evidence. It may issue `phase4-ready.json` only
    if current Runtime heads and latest receipts still match the evidence and the
    rollback route is operational.
-6. Issue #100 may proceed automatically only from that successful certificate.
+5. Issue #100 may proceed automatically only from that successful certificate.
    Stop before Phase 6.
 
 ## Earliest certificate
 
-If current Runtime heads and latest receipts have not changed, the certificate
-can be issued on the first successful Phase 4 reconciliation run after the
-corrected legacy route is validated, scheduled, and active. No additional shadow
-producer cycle is needed. If those live receipts drift, stop and review a new
-continuation record; do not change the immutable inventory.
+If current Runtime heads and latest receipts have not changed, the certificate can
+be issued on the first successful Phase 4 reconciliation run after the controlled
+Legislative evidence is pinned and the corrected route is scheduled and active.
+No additional shadow producer cycle is needed. If those live receipts drift, stop
+and review a new continuation record; do not change the immutable inventory.
 
 ## Prohibited shortcuts
 

@@ -1060,6 +1060,7 @@ def verify(arguments: argparse.Namespace) -> dict[str, Any]:
         "artifact_digests_verified": True,
         "safe_archive_contents_verified": True,
         "source_status_receipt_verified": True,
+        "controlled_validation_receipt_verified": True,
         "controlled_validation_outcome": payload["validation_outcome"],
         "notifications_suppressed": True,
         "no_outbound_notifications_verified": True,

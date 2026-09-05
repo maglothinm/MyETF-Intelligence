@@ -1,6 +1,6 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-05 13:20 UTC
+**Current as of:** 2026-09-05 14:15 UTC
 **Canonical repository ID:** `1349678672`
 **Current repository name:** `maglothinm/MyETF-Intelligence`
 **Default branch:** `main`
@@ -94,31 +94,49 @@ certificate and must match current source again before Phase 5. Failed Phase 5
 smoke commands and failed legacy recovery dispatches cannot fall through to stale
 execution receipts or produce a false rollback-complete marker.
 
+The same candidate now contains the PR #125 correction. The Legislative workflow
+is manual-only and requires an explicit validation acknowledgement. It receives no
+Pushover or Healthchecks credentials, forces `--no-notify`, cannot trigger the AI
+analyst or Pages publisher, isolates each official source transactionally, retains
+restore/source/controlled receipts, preserves the canonical run-history schema,
+and runs the new integration coverage in CI.
+
+The controlled run has two acceptable evidence outcomes. With zero
+notification-eligible records, one or two validated official sources may publish
+a durable successor. With notification-eligible records, all six protected state,
+ledger, and history files are restored byte-for-byte and only the unchanged
+predecessor boundary is republished with a zero-outbound receipt. A total outage
+may preserve continuity but cannot satisfy Phase 4.
+
+Phase 4 also requires a later checked-in descriptor for the exact controlled run.
+It verifies the predecessor and both successor artifacts against live GitHub
+metadata and digests, validates all three receipts and archive contents, and proves
+that collector implementation bytes and executable mode did not change before the
+schedule-restoration revision. No placeholder descriptor is present.
+
 No reconciliation commit is on `main`, no reconciliation Actions run has
 succeeded, and no `phase4-ready.json` completion certificate exists yet.
 
 ## Exact blockers
 
-1. Correct the merged PR #125 workflow/orchestrator contract while keeping the
-   Legislative workflow manual-only and alerts suppressed.
-2. Merge the reconciliation and corrective code only after the exact PR head is
+1. Merge the reconciliation and corrective code only after the exact PR head is
    green.
-3. Re-enable the manual-only Legislative workflow and complete one controlled,
-   no-notify main-branch validation that restores the protected artifact, retains
-   the source receipt, and preserves canonical run history.
-4. Restore the reviewed recurring schedule in a follow-up change. At the moment
+2. Re-enable the manual-only Legislative workflow and complete one controlled,
+   no-notify main-branch validation. Pin its exact run, job, predecessor, artifacts,
+   digests, and receipts in the Phase 4 prerequisite descriptor.
+3. Restore the reviewed recurring schedule in a follow-up change. At the moment
    Phase 4 runs, the workflow must be API-active and its checked-in source must
    pass the rollback route contract.
-5. Phase 4 must then replay both pinned artifacts and verify that live Runtime
+4. Phase 4 must then replay both pinned Runtime artifacts and verify that live Runtime
    heads and latest receipts have not drifted. Only that successful run may issue
    the certificate.
 
 If the Runtime heads and latest receipts remain unchanged, no new shadow producer
-cycles are required. The earliest certificate is immediately after the corrected
-legacy-route validation and schedule restoration, plus one successful Phase 4
-reconciliation run. Any Runtime head or latest-receipt drift reopens the evidence
-gate and requires a separately reviewed continuation; it is not permission to
-rebaseline.
+cycles are required. The earliest certificate is immediately after the controlled
+Legislative run is pinned, the reviewed recurring route is restored and active,
+and one Phase 4 reconciliation run succeeds. Any Runtime head or latest-receipt
+drift reopens the evidence gate and requires a separately reviewed continuation;
+it is not permission to rebaseline.
 
 ## Phase 5 boundary
 

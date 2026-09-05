@@ -467,6 +467,8 @@ def test_valid_pinned_manual_run_issues_prerequisite_receipt(tmp_path: Path) -> 
     assert receipt["notification_eligible_new_records"] == 0
     assert receipt["successful_sources"] == ["house"]
     assert receipt["implementation_source_continuity_verified"] is True
+    assert receipt["source_status_receipt_verified"] is True
+    assert receipt["controlled_validation_receipt_verified"] is True
     assert set(receipt["implementation_sha256"]) == set(verifier.IMPLEMENTATION_PATHS)
 
 

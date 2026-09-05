@@ -12,6 +12,8 @@ on:
       - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
       - "deploy/runtime-v2/phase4_reconciliation_control.sh"
       - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
       - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "deploy/runtime-v2/phase4-approved-image.json"
       - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
@@ -43,6 +45,7 @@ jobs:
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       EVIDENCE_DIR: phase4-live
       RECONCILIATION: deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json
+      LEGISLATIVE_VALIDATION: deploy/runtime-v2/phase4-legislative-validation-evidence.json
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out canonical main
@@ -92,6 +95,76 @@ jobs:
           }
           echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
           echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
+
+      - name: Verify the controlled Legislative validation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f "${LEGISLATIVE_VALIDATION}" ]] || {
+            echo "The controlled Legislative validation evidence descriptor has not been issued." >&2
+            exit 1
+          }
+          root="${EVIDENCE_DIR}/legislative-validation"
+          mkdir -p "${root}"
+          run_id="$(jq -r '.validation.run_id' "${LEGISLATIVE_VALIDATION}")"
+          run_attempt="$(jq -r '.validation.run_attempt' "${LEGISLATIVE_VALIDATION}")"
+          validation_sha="$(jq -r '.validation.head_sha' "${LEGISLATIVE_VALIDATION}")"
+          state_artifact_id="$(jq -r '.artifacts.protected_state.id' "${LEGISLATIVE_VALIDATION}")"
+          output_artifact_id="$(jq -r '.artifacts.diagnostic_output.id' "${LEGISLATIVE_VALIDATION}")"
+          predecessor_artifact_id="$(jq -r '.predecessor.artifact_id' "${LEGISLATIVE_VALIDATION}")"
+          [[ "${run_id}" =~ ^[1-9][0-9]*$ && "${run_attempt}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Controlled validation run coordinates are invalid." >&2
+            exit 1
+          }
+          [[ "${state_artifact_id}" =~ ^[1-9][0-9]*$ && "${output_artifact_id}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Controlled validation artifact coordinates are invalid." >&2
+            exit 1
+          }
+          [[ "${predecessor_artifact_id}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Controlled validation predecessor coordinate is invalid." >&2
+            exit 1
+          }
+          [[ "${validation_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Controlled validation revision is invalid." >&2
+            exit 1
+          }
+          git cat-file -e "${validation_sha}^{commit}" 2>/dev/null || \
+            git fetch --no-tags origin "${validation_sha}"
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "${root}/run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/attempts/${run_attempt}/jobs?per_page=100" \
+            > "${root}/jobs.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" \
+            > "${root}/artifacts.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${predecessor_artifact_id}" \
+            > "${root}/predecessor-artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/compare/${validation_sha}...${GITHUB_SHA}" \
+            > "${root}/compare.json"
+          for coordinate in \
+            "${state_artifact_id}:state.zip" \
+            "${output_artifact_id}:output.zip"; do
+            artifact_id="${coordinate%%:*}"
+            filename="${coordinate#*:}"
+            curl --fail --silent --show-error --location \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+              --output "${root}/${filename}"
+          done
+
+          python deploy/runtime-v2/verify_legislative_validation_evidence.py \
+            --descriptor "${LEGISLATIVE_VALIDATION}" \
+            --run-metadata "${root}/run.json" \
+            --jobs-metadata "${root}/jobs.json" \
+            --artifacts-metadata "${root}/artifacts.json" \
+            --predecessor-artifact-metadata "${root}/predecessor-artifact.json" \
+            --state-archive "${root}/state.zip" \
+            --output-archive "${root}/output.zip" \
+            --compare-metadata "${root}/compare.json" \
+            --repository-root . \
+            --control-revision "${GITHUB_SHA}" \
+            --output "${root}/verified.json"
 
       - name: Download exact failed-run evidence from GitHub
         shell: bash
@@ -256,8 +329,11 @@ jobs:
             --output "${EVIDENCE_DIR}/phase4-ready.json"
           jq --slurpfile states "${LEGACY_STATE_FILE}" \
             --slurpfile route "${EVIDENCE_DIR}/legacy-route-receipt.json" \
+            --slurpfile legislative "${EVIDENCE_DIR}/legislative-validation/verified.json" \
             '. + {legacy_workflow_states:$states[0], legacy_state_preserved:true,
-                  legacy_route_receipt:$route[0], legacy_route_source_verified:true}' \
+                  legacy_route_receipt:$route[0], legacy_route_source_verified:true,
+                  legislative_validation_receipt:$legislative[0],
+                  legislative_validation_evidence_verified:true}' \
             "${EVIDENCE_DIR}/phase4-ready.json" > "${EVIDENCE_DIR}/phase4-ready.tmp"
           mv "${EVIDENCE_DIR}/phase4-ready.tmp" "${EVIDENCE_DIR}/phase4-ready.json"
           (cd "${EVIDENCE_DIR}" && sha256sum phase4-ready.json > phase4-ready.sha256)
@@ -272,6 +348,20 @@ jobs:
              .reconciliation.current_heads_verified == true and
              .reconciliation.current_latest_receipts_verified == true and
              .reconciliation.additional_producer_execution_performed == false and
+             .legislative_validation_evidence_verified == true and
+             .legislative_validation_receipt.result == "legislative_controlled_validation_verified" and
+             .legislative_validation_receipt.schedule_restoration_revision == .control_revision and
+             .legislative_validation_receipt.implementation_source_continuity_verified == true and
+             .legislative_validation_receipt.artifact_digests_verified == true and
+             .legislative_validation_receipt.safe_archive_contents_verified == true and
+             .legislative_validation_receipt.source_status_receipt_verified == true and
+             .legislative_validation_receipt.controlled_validation_receipt_verified == true and
+             .legislative_validation_receipt.notifications_suppressed == true and
+             .legislative_validation_receipt.no_outbound_notifications_verified == true and
+             (.legislative_validation_receipt.zero_notification_eligible_changes_verified == true or
+              .legislative_validation_receipt.predecessor_state_rollback_verified == true) and
+             .legislative_validation_receipt.additional_validation_run_authorized == false and
+             .legislative_validation_receipt.production_authority_transferred == false and
              .legacy_route_source_verified == true and
              .legacy_route_receipt.result == "legacy_rollback_route_verified" and
              .legacy_route_receipt.legacy_production_route_active == true' \

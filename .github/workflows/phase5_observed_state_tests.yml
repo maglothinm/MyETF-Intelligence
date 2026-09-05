@@ -11,11 +11,14 @@ on:
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
       - "deploy/runtime-v2/phase4_reconciliation_control.sh"
       - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
       - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
       - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "tests/test_runtime_promotion_control.sh"
       - "tests/test_reconcile_phase4_shadow_evidence.py"
       - "tests/test_verify_legacy_route_contract.py"
+      - "tests/test_verify_legislative_validation_evidence.py"
   push:
     branches: [main]
     paths:
@@ -26,11 +29,14 @@ on:
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
       - "deploy/runtime-v2/phase4_reconciliation_control.sh"
       - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
       - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
       - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "tests/test_runtime_promotion_control.sh"
       - "tests/test_reconcile_phase4_shadow_evidence.py"
       - "tests/test_verify_legacy_route_contract.py"
+      - "tests/test_verify_legislative_validation_evidence.py"
   workflow_dispatch:
 
 permissions:
@@ -56,6 +62,7 @@ jobs:
           bash -n tests/test_runtime_promotion_control.sh
           python -m py_compile deploy/runtime-v2/reconcile_phase4_shadow_evidence.py
           python -m py_compile deploy/runtime-v2/verify_legacy_route_contract.py
+          python -m py_compile deploy/runtime-v2/verify_legislative_validation_evidence.py
           python - <<'PY'
           from pathlib import Path
           import yaml
@@ -175,5 +182,6 @@ jobs:
           python -m pytest -q \
             tests/test_validate_runtime_promotion.py \
             tests/test_reconcile_phase4_shadow_evidence.py \
-            tests/test_verify_legacy_route_contract.py
+            tests/test_verify_legacy_route_contract.py \
+            tests/test_verify_legislative_validation_evidence.py
           bash verify.sh
