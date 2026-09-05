@@ -1,0 +1,522 @@
+name: Reconcile failed Phase 5 promotion 33979778020
+
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_main_sha:
+        description: Exact 40-character canonical main SHA to freeze for this retry
+        required: true
+        type: string
+      failed_phase5_run_id:
+        description: Exact failed Phase 5 run being reconciled (33979778020)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  reconcile-and-retry:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.failed_phase5_run_id == '33979778020' &&
+      inputs.frozen_main_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      PRIVATE_WEB_AUDIENCE: https://polititrack-web-s6icmprjvq-uc.a.run.app
+      PHASE5_RETRY_DESCRIPTOR: deploy/runtime-v2/phase5-retry-evidence-33979778020.json
+      EVIDENCE_DIR: phase5-retry-live
+      CONTROL_REVISION: ${{ inputs.frozen_main_sha }}
+      RETRY_FAILED_RUN_ID: ${{ inputs.failed_phase5_run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the acknowledged frozen main revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CONTROL_REVISION }}
+          fetch-depth: 0
+
+      - name: Bind the exact incident and download immutable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          export APPROVED_IMAGE="$(jq -er '.immutable_image' "${PHASE5_RETRY_DESCRIPTOR}")"
+          export RUNTIME_SOURCE_REVISION="$(jq -er '.runtime_source_revision' "${PHASE5_RETRY_DESCRIPTOR}")"
+          printf 'APPROVED_IMAGE=%s\n' "${APPROVED_IMAGE}" >> "${GITHUB_ENV}"
+          printf 'RUNTIME_SOURCE_REVISION=%s\n' "${RUNTIME_SOURCE_REVISION}" >> "${GITHUB_ENV}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          phase5_retry_verify_descriptor_identity
+          [[ "${RETRY_FAILED_RUN_ID}" == "$(jq -r '.failed_phase5.run_id | tostring' "${PHASE5_RETRY_DESCRIPTOR}")" ]] || {
+            echo "The acknowledged failed run does not match the checked-in incident descriptor." >&2
+            exit 1
+          }
+          phase5_retry_verify_frozen_context
+          phase5_retry_download_incident_evidence
+
+      - name: Authenticate as constrained deployer
+        id: google-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ env.PRIVATE_WEB_AUDIENCE }}
+          id_token_include_email: true
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Mark authenticated cloud control available
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          touch "${EVIDENCE_DIR}/cloud-control-available"
+
+      - name: Reconcile the failed prefix and execute one fresh serialized smoke cycle
+        # The two tracked rollback recoveries can each wait up to 30 minutes.
+        # Bound live control to two hours and retain nearly two hours of job
+        # budget (less setup) for rollback, verification, and evidence upload.
+        timeout-minutes: 120
+        shell: bash
+        env:
+          PRIVATE_WEB_ID_TOKEN: ${{ steps.google-auth.outputs.id_token }}
+        run: |
+          set -Eeuo pipefail
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+          phase5_retry_write_observed_legacy_states
+          rm -f -- "${EVIDENCE_DIR}/live-mutation-started"
+
+          promotion_complete=false
+          rollback() {
+            local original_status=$?
+            trap - EXIT
+            if [[ "${promotion_complete}" != "true" &&
+                  -f "${EVIDENCE_DIR}/live-mutation-started" ]]; then
+              phase5_retry_rollback || true
+            fi
+            exit "${original_status}"
+          }
+          trap rollback EXIT
+
+          # The retry starts only from the exact, fully verified rollback state.
+          verify_project_boundary
+          phase5_retry_verify_safe_rollback_state
+          touch "${EVIDENCE_DIR}/live-mutation-started"
+          phase5_retry_capture_current_logging_view_absence_receipt
+          grant_execution_authority
+          capture_status "${EVIDENCE_DIR}/current-status.json" retry-current-status
+          current_dashboard_digest="$(jq -er '.concurrent_legacy_ai.conflict.runtime_snapshot_sha256' \
+            "${PHASE5_RETRY_DESCRIPTOR}")"
+          phase5_retry_grant_private_web_invoker
+          phase5_retry_capture_private_ai_analyses \
+            "${EVIDENCE_DIR}/current-ai-analyses.json" "${current_dashboard_digest}"
+          phase5_retry_remove_private_web_invoker
+          phase5_retry_verify_private_web_invoker_removed
+
+          run_failed_phase5_replay() {
+            local inventory_suffix="$1" output="$2"
+            python deploy/runtime-v2/reconcile_phase5_failed_promotion.py replay \
+              --descriptor "${PHASE5_RETRY_DESCRIPTOR}" \
+              --repository-root . \
+              --current-status "${EVIDENCE_DIR}/current-status.json" \
+              --current-ai-analyses "${EVIDENCE_DIR}/current-ai-analyses.json" \
+              --phase4-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/phase4-run.json" \
+              --phase4-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/phase4-artifact.json" \
+              --phase4-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/phase4-jobs.json" \
+              --phase4-archive "${PHASE5_RETRY_INCIDENT_DIR}/phase4.zip" \
+              --failed-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5-run.json" \
+              --failed-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5-artifact.json" \
+              --failed-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5-jobs.json" \
+              --failed-archive "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5.zip" \
+              --legacy-ai-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-run.json" \
+              --legacy-ai-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-jobs.json" \
+              --legacy-ai-predecessor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-predecessor-artifact.json" \
+              --legacy-ai-predecessor-archive "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-predecessor.zip" \
+              --legacy-ai-state-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-state-artifact.json" \
+              --legacy-ai-state-archive "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-state.zip" \
+              --legacy-ai-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-output-artifact.json" \
+              --legacy-ai-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-output.zip" \
+              --recovery-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-run.json" \
+              --recovery-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-run.json" \
+              --recovery-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-jobs.json" \
+              --recovery-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-jobs.json" \
+              --recovery-predecessor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-predecessor-artifact.json" \
+              --recovery-predecessor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-predecessor-artifact.json" \
+              --recovery-predecessor-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-predecessor.zip" \
+              --recovery-predecessor-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-predecessor.zip" \
+              --recovery-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-artifact.json" \
+              --recovery-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-artifact.json" \
+              --recovery-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative.zip" \
+              --recovery-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive.zip" \
+              --recovery-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-output-artifact.json" \
+              --recovery-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-output-artifact.json" \
+              --recovery-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-output.zip" \
+              --recovery-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-output.zip" \
+              --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-runs-${inventory_suffix}.json" \
+              --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-runs-${inventory_suffix}.json" \
+              --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-runs-${inventory_suffix}.json" \
+              --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-dashboard-runs-${inventory_suffix}.json" \
+              --legacy-artifact-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-artifacts-${inventory_suffix}.json" \
+              --legacy-artifact-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-artifacts-${inventory_suffix}.json" \
+              --legacy-artifact-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-artifacts-${inventory_suffix}.json" \
+              --output "${output}"
+          }
+          verify_failed_phase5_replay() {
+            local replay="$1"
+            jq -e \
+              '.result == "phase5_failed_promotion_reconciled" and
+               .certification_eligible == false and
+               (.invalidated_smoke_prefix.executions | length) == 4 and
+               .reconciliation.additional_runtime_producer_execution_performed == false and
+               .concurrent_legacy_ai.merge_or_import_authorized == false and
+               .concurrent_legacy_ai.disposition == "quarantined_separate_legacy_artifact" and
+               .reconciliation.legacy_ai_artifact_quarantined == true and
+               .reconciliation.legacy_high_water_verified == true' \
+              "${replay}" >/dev/null
+          }
+          run_failed_phase5_replay downloaded "${EVIDENCE_DIR}/initial-failed-prefix-replay.json"
+          verify_failed_phase5_replay "${EVIDENCE_DIR}/initial-failed-prefix-replay.json"
+
+          # Recheck the frozen head immediately before touching either route.
+          phase5_retry_verify_frozen_context
+          touch "${EVIDENCE_DIR}/route-touched"
+          disable_legacy_workflows
+          drain_legacy_workflows
+          verify_legacy_workflows_state disabled_manually
+          phase5_retry_verify_legacy_high_water pre-route
+          run_failed_phase5_replay pre-route "${EVIDENCE_DIR}/failed-prefix-replay.json"
+          verify_failed_phase5_replay "${EVIDENCE_DIR}/failed-prefix-replay.json"
+          (cd "${EVIDENCE_DIR}" && sha256sum failed-prefix-replay.json > failed-prefix-replay.sha256)
+          chmod a-w "${EVIDENCE_DIR}/failed-prefix-replay.json" "${EVIDENCE_DIR}/failed-prefix-replay.sha256"
+          configure_runtime production
+          verify_runtime_configuration production
+          verify_producer_scheduler_state PAUSED
+          verify_vault_scheduler_paused
+          date -u +'%Y-%m-%dT%H:%M:%S.%6NZ' > "${EVIDENCE_DIR}/fresh-cycle-started-at.txt"
+
+          # This baseline is the exact continuation point.  The old four smokes
+          # stay in failed-prefix-replay.json and are never copied into the new
+          # observations stream or counted toward certification.
+          capture_status "${EVIDENCE_DIR}/terminal-baseline.json" retry-terminal-baseline
+          : > "${EVIDENCE_DIR}/observations.ndjson"
+
+          legislative_execution="$(execute_producer legislative phase5_smoke retry-smoke-sequence-1)"
+          capture_status "${EVIDENCE_DIR}/retry-smoke-sequence-1-legislative-status.json" \
+            retry-smoke-sequence-1-legislative-status
+          phase5_retry_append_observation 1 legislative "${legislative_execution}" \
+            "${EVIDENCE_DIR}/retry-smoke-sequence-1-legislative-status.json"
+
+          executive_execution="$(execute_producer executive phase5_smoke retry-smoke-sequence-2)"
+          capture_status "${EVIDENCE_DIR}/retry-smoke-sequence-2-executive-status.json" \
+            retry-smoke-sequence-2-executive-status
+          phase5_retry_append_observation 2 executive "${executive_execution}" \
+            "${EVIDENCE_DIR}/retry-smoke-sequence-2-executive-status.json"
+
+          ai_execution="$(execute_producer ai phase5_smoke retry-smoke-sequence-3)"
+          capture_status "${EVIDENCE_DIR}/retry-smoke-sequence-3-ai-status.json" \
+            retry-smoke-sequence-3-ai-status
+          phase5_retry_append_observation 3 ai "${ai_execution}" \
+            "${EVIDENCE_DIR}/retry-smoke-sequence-3-ai-status.json"
+
+          dashboard_execution="$(execute_producer dashboard phase5_smoke retry-smoke-sequence-4)"
+          capture_status "${EVIDENCE_DIR}/retry-smoke-sequence-4-dashboard-status.json" \
+            retry-smoke-sequence-4-dashboard-status
+          phase5_retry_append_observation 4 dashboard "${dashboard_execution}" \
+            "${EVIDENCE_DIR}/retry-smoke-sequence-4-dashboard-status.json"
+          date -u +'%Y-%m-%dT%H:%M:%S.%6NZ' > "${EVIDENCE_DIR}/fresh-cycle-finished-at.txt"
+
+          final_dashboard_digest="$(jq -er \
+            '.heads[] | select(.namespace == "dashboard") | .snapshot_sha256 |
+             select(test("^[0-9a-f]{64}$"))' \
+            "${EVIDENCE_DIR}/retry-smoke-sequence-4-dashboard-status.json")"
+
+          # Preserve raw, read-only proof that no legacy writer or additional
+          # Runtime execution overlapped the fresh serialized cycle.
+          phase5_retry_verify_legacy_high_water terminal
+          phase5_retry_capture_disabled_legacy_workflow_states terminal
+          phase5_retry_capture_runtime_execution_inventories terminal
+          capture_status "${EVIDENCE_DIR}/terminal-confirmation.json" retry-terminal-confirmation
+          jq -e --slurpfile expected \
+            "${EVIDENCE_DIR}/retry-smoke-sequence-4-dashboard-status.json" \
+            '.heads == $expected[0].heads and .latest_runs == $expected[0].latest_runs' \
+            "${EVIDENCE_DIR}/terminal-confirmation.json" >/dev/null
+
+          # Temporary authority is gone before the public route is opened.
+          remove_execution_authority
+          verify_execution_authority_removed
+          collect_service_accounts
+          remove_service_account_user
+          verify_service_account_user_removed
+          phase5_retry_remove_private_web_invoker
+          phase5_retry_verify_private_web_invoker_removed
+          phase5_retry_verify_frozen_context
+          make_web_public
+          phase5_retry_verify_public_web "${final_dashboard_digest}"
+          verify_runtime_configuration production
+          verify_legacy_workflows_state disabled_manually
+          verify_cloud_sql_private
+          verify_vault_scheduler_paused
+          web_policy_has_public_invoker
+
+          # Enabling these exact four schedulers is the final live mutation.
+          phase5_retry_verify_frozen_context
+          phase5_retry_enable_exact_producer_schedulers_last
+
+          python - "${EVIDENCE_DIR}" "${RETRY_FAILED_RUN_ID}" <<'PY'
+          import json
+          import hashlib
+          import os
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          failed_run_id = int(sys.argv[2])
+          executions = [
+              json.loads(line)
+              for line in (root / "observations.ndjson").read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          route = json.loads((root / "public-web-verification.json").read_text(encoding="utf-8"))
+          replay = json.loads((root / "failed-prefix-replay.json").read_text(encoding="utf-8"))
+          roles = ("legislative", "executive", "ai", "dashboard")
+
+          def sha256(path: Path) -> str:
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          fresh_started = (root / "fresh-cycle-started-at.txt").read_text(encoding="utf-8").strip()
+          fresh_finished = (root / "fresh-cycle-finished-at.txt").read_text(encoding="utf-8").strip()
+          manifest = {
+              "schema_version": 1,
+              "phase": "phase5_reconciliation_completion",
+              "control_revision": os.environ["CONTROL_REVISION"],
+              "retry": {
+                  "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
+                  "failed_phase5_run_id": failed_run_id,
+                  "failed_prefix_replay_result": replay["result"],
+                  "failed_prefix_replay_sha256": sha256(root / "failed-prefix-replay.json"),
+                  "invalidated_smoke_prefix_certification_eligible": False,
+                  "concurrent_legacy_ai_successor_quarantined": True,
+                  "merge_or_import_authorized": False,
+              },
+              "preflight": {
+                  "canonical_repository_verified": True,
+                  "canonical_main_verified": True,
+                  "frozen_retry_head_verified": True,
+                  "project_boundary_verified": True,
+                  "image_digest_verified": True,
+                  "cloud_sql_private_only": True,
+                  "producer_schedulers_paused": True,
+                  "web_public_invoker_absent": True,
+                  "persistent_job_configuration_verified": True,
+                  "phase4_certificate_verified": True,
+                  "failed_promotion_replay_verified": True,
+                  "concurrent_writer_incident_acknowledged": True,
+                  "old_smoke_prefix_invalidated": True,
+                  "legacy_ai_artifact_quarantined": True,
+                  "legacy_workflows_disabled": True,
+                  "legacy_runs_drained": True,
+                  "no_concurrent_legacy_runs": True,
+                  "fresh_cycle_global_one_writer_verified": True,
+                  "continuation_heads_verified": True,
+                  "no_rebaseline_performed": True,
+                  "full_snapshot_chain_preserved": True,
+                  "temporary_private_web_invoker_removed": True,
+              },
+              "executions": executions,
+              "one_writer_evidence": {
+                  "fresh_cycle_interval": {
+                      "started_at": fresh_started,
+                      "finished_at": fresh_finished,
+                  },
+                  "legacy_run_inventories_sha256": {
+                      role: sha256(root / "incident" / f"legacy-{role}-runs-terminal.json")
+                      for role in roles
+                  },
+                  "legacy_workflow_states_sha256": {
+                      role: sha256(root / "incident" / f"legacy-{role}-workflow-terminal.json")
+                      for role in roles
+                  },
+                  "runtime_execution_inventories_sha256": {
+                      role: sha256(root / "incident" / f"runtime-{role}-executions-terminal.json")
+                      for role in roles
+                  },
+                  "overlapping_legacy_run_count": 0,
+                  "unexpected_runtime_execution_count": 0,
+                  "expected_runtime_execution_count": 4,
+              },
+              "promotion": {
+                  "production_route": "runtime_v2",
+                  "legacy_workflows_disabled": True,
+                  "legacy_runs_drained": True,
+                  "runtime_jobs_production_mode": True,
+                  "web_public_invoker_present": True,
+                  "healthz_ok": False,
+                  "healthz_platform_diagnostic_only": True,
+                  "api_healthz_accepted": False,
+                  "readyz_ok": True,
+                  "dashboard_ok": True,
+                  "cloud_sql_private_only": True,
+                  "rollback_armed": True,
+                  "fresh_cycle_global_one_writer_verified": True,
+                  "enabled_producer_schedulers": [
+                      "polititrack-legislative", "polititrack-executive",
+                      "polititrack-ai", "polititrack-dashboard",
+                  ],
+                  "disabled_legacy_workflows": [
+                      "legislative_trade_tracker_v2.yml", "executive_trade_tracker.yml",
+                      "ai_filing_analyst.yml", "publish_trade_dashboard.yml",
+                  ],
+                  "vault_scheduler_state": "PAUSED",
+                  "ready_snapshot_sha256": route["expected_snapshot_sha256"],
+                  "served_snapshot_sha256": route["expected_snapshot_sha256"],
+                  "web_url": route["url"],
+                  "public_route": {
+                      "health_gate_paths": ["/readyz", "/"],
+                      "healthz_classification": route["healthz"]["classification"],
+                      "api_healthz_accepted": False,
+                      "readyz_accepted": True,
+                      "root_accepted": True,
+                      "dashboard_snapshot_verified": True,
+                  },
+                  "public_route_verification": route,
+              },
+              "cleanup": {
+                  "temporary_execution_authority_removed": True,
+                  "temporary_logging_authority_removed": True,
+                  "temporary_service_account_user_removed": True,
+                  "temporary_private_web_invoker_removed": True,
+                  "legacy_workflows_disabled": True,
+                  "producer_schedulers_enabled": True,
+                  "web_public_invoker_present": True,
+                  "runtime_jobs_production_mode": True,
+                  "cloud_sql_private_only": True,
+                  "no_rebaseline_performed": True,
+                  "full_snapshot_chain_preserved": True,
+              },
+              "phase6_started": False,
+          }
+          (root / "terminal-manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+
+          python deploy/runtime-v2/reconcile_phase5_failed_promotion.py complete \
+            --descriptor "${PHASE5_RETRY_DESCRIPTOR}" \
+            --replay "${EVIDENCE_DIR}/failed-prefix-replay.json" \
+            --replay-checksum "${EVIDENCE_DIR}/failed-prefix-replay.sha256" \
+            --terminal-baseline "${EVIDENCE_DIR}/terminal-baseline.json" \
+            --terminal-manifest "${EVIDENCE_DIR}/terminal-manifest.json" \
+            --terminal-legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-runs-terminal.json" \
+            --terminal-legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-runs-terminal.json" \
+            --terminal-legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-runs-terminal.json" \
+            --terminal-legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-dashboard-runs-terminal.json" \
+            --terminal-legacy-workflow-state "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-workflow-terminal.json" \
+            --terminal-legacy-workflow-state "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-workflow-terminal.json" \
+            --terminal-legacy-workflow-state "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-workflow-terminal.json" \
+            --terminal-legacy-workflow-state "${PHASE5_RETRY_INCIDENT_DIR}/legacy-dashboard-workflow-terminal.json" \
+            --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-legislative-executions-terminal.json" \
+            --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-executive-executions-terminal.json" \
+            --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-ai-executions-terminal.json" \
+            --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-dashboard-executions-terminal.json" \
+            --control-revision "${CONTROL_REVISION}" \
+            --output "${EVIDENCE_DIR}/phase5-complete.json"
+          jq -e \
+            '.result == "phase5_complete" and
+             .production_authority_transferred == true and
+             .unique_successful_smoke_receipts == 4 and
+             .reconciliation.additional_runtime_producer_execution_performed == true and
+             (.executions | length) == 4 and
+             (.reconciliation.invalidated_smoke_prefix.executions | length) == 4 and
+             .reconciliation.invalidated_smoke_prefix.certification_eligible == false and
+             .phase6_started == false' \
+            "${EVIDENCE_DIR}/phase5-complete.json" >/dev/null
+          (cd "${EVIDENCE_DIR}" && sha256sum phase5-complete.json > phase5-complete.sha256)
+          (cd "${EVIDENCE_DIR}" && sha256sum -c phase5-complete.sha256)
+
+          promotion_complete=true
+          trap - EXIT
+
+      - name: Verify terminal production state without further mutation
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+          phase5_retry_verify_frozen_context
+          verify_execution_authority_removed
+          collect_service_accounts
+          verify_service_account_user_removed
+          phase5_retry_verify_private_web_invoker_removed
+          verify_producer_scheduler_state ENABLED
+          verify_vault_scheduler_paused
+          verify_runtime_configuration production
+          verify_legacy_workflows_state disabled_manually
+          verify_cloud_sql_private
+          web_policy_has_public_invoker
+          (cd "${EVIDENCE_DIR}" && sha256sum -c phase5-complete.sha256)
+
+      - name: Upload successful Phase 5 retry completion evidence
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-failed-promotion-retry-33979778020
+          path: phase5-retry-live/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Fail closed to the verified legacy rollback route
+        if: ${{ failure() || cancelled() }}
+        timeout-minutes: 90
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          if [[ ! -f "${EVIDENCE_DIR}/cloud-control-available" ||
+                ! -f "${EVIDENCE_DIR}/live-mutation-started" ]]; then
+            printf '%s\n' \
+              '{"result":"phase5_retry_failed_before_live_mutation","live_mutation_performed":false}' \
+              > "${EVIDENCE_DIR}/retry-rollback.json"
+            exit 0
+          fi
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+          phase5_retry_write_observed_legacy_states
+          phase5_retry_rollback
+          [[ -f "${EVIDENCE_DIR}/retry-rollback-complete" ]]
+
+      - name: Upload failed retry rollback evidence
+        if: ${{ failure() || cancelled() }}
+        timeout-minutes: 10
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase5-failed-promotion-retry-rollback-33979778020
+          path: phase5-retry-live/
+          if-no-files-found: error
+          retention-days: 90

@@ -969,3 +969,77 @@ receipts, and the legacy route. Phase 6 remains unauthorized.
 
 **Release verification:** Local, exact-head CI, Phase 4 certificate, and Phase 5
 terminal evidence remain pending at the time of this decision entry.
+
+## D-2026-09-05-044 — Quarantine the interrupted cutover and require a clean Phase 5 retry
+
+**Decision:** Accept Phase 4 v6 run `33979432233`, job `101341860865`, at
+revision `48efd8a45bbb51ee89e8b680430e593ac8867046` and its checksummed
+`phase4-readiness` artifact `9973392769` as the Phase 5 entry certificate. The
+certificate proves two complete controlled shadow cycles, eight unique Runtime
+receipts, eight unique Cloud Run executions, current heads and latest receipts,
+an operational retained route, and complete temporary-authority removal.
+
+Phase 5 v2 run `33979778020` is not a successful or resumable promotion. Its
+Legislative, Executive, AI, and dashboard production-smoke prefix is invalidated
+as one unit because legacy AI run `33980946687` overlapped that interval. The
+legacy AI successor artifacts are quarantined as incident evidence. They may not
+be imported, merged into Runtime state, or used to move any baseline. The
+Runtime dashboard already contains the same deterministic trade and analysis
+identity, so replay or rebaseline would risk duplicate or conflicting state.
+
+The failed run's fail-closed rollback is the only accepted continuation point:
+all Runtime producer jobs in `shadow`, all four Runtime producer schedulers and
+the Filing Vault scheduler paused, the Runtime web service private, the retained
+legacy route restored, and all temporary authority absent. Legislative recovery
+run `33981311523` and Executive recovery run `33981312757` are accepted only as
+zero-change rollback receipts. Their newer `main` revision is admissible for
+recovery validation only when Git proves it descends from the certified revision
+and has the exact same tree. It does not change the certified control revision.
+
+A dedicated manual retry must run from an exact frozen canonical `main` revision
+under the existing `runtime-v2-live-controller` concurrency group. Before any
+route mutation, it must bind the Phase 4 certificate, the failed-run evidence,
+the quarantined AI run and artifacts, both recovery runs and artifacts, the
+current Runtime heads, the immutable image, and the complete legacy workflow and
+protected-artifact high-water inventory. It must check that inventory again
+after disabling and draining the retained route. Any delayed or unknown legacy
+run or protected successor fails closed.
+
+The retry must create a new serialized Legislative -> Executive -> AI ->
+dashboard production-smoke cycle and may certify only those four fresh Runtime
+executions. Raw GitHub run inventories, retained workflow states, and Cloud Run
+execution inventories must prove that no other protected writer overlapped the
+clean interval. The invalidated executions remain preserved outside that
+interval. Public route proof requires JSON from `/readyz` plus dashboard HTML and
+the exact accepted snapshot header from `/`. The literal `/healthz` requirement
+in Issue #100 and the Phase 5 promotion note is amended for this deployment
+because Cloud Run reserves some paths ending in `z`: `/healthz` is recorded only
+as a platform-routing diagnostic, and `/api/healthz` is neither queried nor
+accepted as a health gate.
+
+All temporary execution, log-viewing, service-account impersonation, and private
+web invocation grants must be removed before the public route is accepted. The
+four Runtime producer schedulers are enabled only as the final mutation; Filing
+Vault remains paused. A failure pauses Runtime, makes the web service private,
+removes temporary authority, restores the retained route, and permits at most one
+tracked Legislative/Executive zero-change recovery pair. It may not rewind
+Runtime snapshots or begin Phase 6.
+
+**Reason:** The original promotion reached a clean-looking Runtime state but its
+public `/healthz` probe was intercepted by Google Frontend, and a separately
+introduced one-time legacy AI workflow wrote during the same smoke interval.
+Neither condition can be waived after the fact. A fresh, high-water-bound retry
+preserves the immutable Phase 4 certificate while proving a new uncontaminated
+single-writer transfer.
+
+**Consequence:** Phase 4 remains complete and its certificate remains valid, but
+Phase 5 production cutover is blocked until the dedicated retry succeeds and
+emits a checksum-verified `phase5_complete` artifact. The failed run, its
+invalidated smoke prefix, and the quarantined legacy AI artifacts remain retained
+as evidence. Phase 6 remains unauthorized.
+
+**Release verification:** Pending. The retry implementation and pinned incident
+descriptor must pass local tests, independent review, and exact-head CI before
+merge. The merged retry must then succeed from frozen `main`; its completion
+artifact and the final live route, scheduler, workflow, IAM, and one-writer state
+must be independently rebound before this decision is operationally complete.

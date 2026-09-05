@@ -63,6 +63,9 @@ on:
       - "tests/test_phase4_build_quarantine_image.py"
       - "tests/test_phase4_harvest_quarantine_image.py"
       - "tests/test_phase4_retired_phase3_controllers.py"
+      - "tests/test_reconcile_phase5_failed_promotion.py"
+      - "tests/test_phase5_failed_promotion_retry.py"
+      - ".github/workflows/phase5_failed_promotion_retry.yml"
       - ".github/workflows/phase3_diagnostic_pulse.yml"
       - ".github/workflows/runtime_v2_tests.yml"
   workflow_dispatch:
@@ -173,6 +176,8 @@ jobs:
             tests/test_phase4_build_quarantine_image.py \
             tests/test_phase4_harvest_quarantine_image.py \
             tests/test_phase4_retired_phase3_controllers.py \
+            tests/test_reconcile_phase5_failed_promotion.py \
+            tests/test_phase5_failed_promotion_retry.py \
             tests/test_dashboard_insights.py
       - name: Verify repository safety contract
         shell: bash
