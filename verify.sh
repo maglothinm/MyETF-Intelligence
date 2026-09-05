@@ -67,12 +67,21 @@ for filename, expected_name in expected_names.items():
     parsed[filename] = workflow
 
 expected_schedules = {
-    "legislative_trade_tracker_v2.yml": ("7,22,37,52 * * * *", "America/New_York"),
     "executive_trade_tracker.yml": ("13,43 * * * *", "America/New_York"),
 }
 for filename, (cron, timezone) in expected_schedules.items():
     schedules = parsed[filename]["on"]["schedule"]
     assert schedules == [{"cron": cron, "timezone": timezone}], (filename, schedules)
+
+legislative_triggers = parsed["legislative_trade_tracker_v2.yml"]["on"]
+assert set(legislative_triggers) == {"workflow_dispatch"}, legislative_triggers
+validation_input = legislative_triggers["workflow_dispatch"]["inputs"]["validation_acknowledged"]
+assert validation_input == {
+    "description": "Run the notification-suppressed controlled validation",
+    "required": "true",
+    "default": "false",
+    "type": "boolean",
+}
 
 texts = {
     filename: (workflow_dir / filename).read_text(encoding="utf-8")
@@ -84,6 +93,48 @@ analyst = texts["ai_filing_analyst.yml"]
 publisher = texts["publish_trade_dashboard.yml"]
 manual = texts["manual_test.yml"]
 simulator = texts["filing_simulation.yml"]
+
+assert "--branch legislative --source all --no-notify" in legislative
+assert "--validate-durable" in legislative
+assert "--validate-protected-upload" in legislative
+assert "--require-restore-receipt" in legislative
+assert "--require-controlled-validation-receipt" in legislative
+assert "--require-run-provenance" in legislative
+assert "--require-notifications-suppressed" in legislative
+assert "--require-no-notification-eligible-records" in legislative
+assert "github.event_name == 'workflow_dispatch'" in legislative
+assert ".trade-tracker/legislative/source-status.json" in legislative
+assert ".trade-tracker/legislative/restore-receipt.json" in legislative
+assert ".trade-tracker/legislative/controlled-validation-receipt.json" in legislative
+for marker in (
+    "predecessor_artifact_id",
+    "predecessor_artifact_api_digest",
+    "downloaded_zip_sha256",
+    "predecessor_run_id",
+    "predecessor_run_attempt",
+    "predecessor_head_sha",
+    "predecessor_workflow_id",
+    "restored_state_sha256",
+):
+    assert marker in legislative
+assert "LEGISLATIVE_HEALTHCHECKS_PING_URL" not in legislative
+assert "PUSHOVER_API_TOKEN" not in legislative
+assert "PUSHOVER_USER_KEY" not in legislative
+assert "github.event.workflow_run.name != 'Legislative purchase tracker v2'" in analyst
+assert "github.event.workflow_run.name == 'Legislative purchase tracker v2'" in publisher
+assert "github.event.workflow_run.event == 'workflow_dispatch'" in publisher
+
+legislative_steps = parsed["legislative_trade_tracker_v2.yml"]["jobs"]["track"]["steps"]
+durable_step = next(step for step in legislative_steps if step.get("id") == "durable_validation")
+continuity_step = next(step for step in legislative_steps if step.get("id") == "state_validation")
+state_upload = next(step for step in legislative_steps if step.get("name") == "Upload protected tracker state")
+diagnostic_upload = next(step for step in legislative_steps if step.get("name") == "Upload run outputs")
+assert durable_step.get("continue-on-error") == "true"
+assert continuity_step.get("continue-on-error", "false") == "false"
+assert "steps.state_validation.outcome == 'success'" in state_upload["if"]
+assert "hashFiles" not in state_upload["if"]
+assert state_upload["with"]["if-no-files-found"] == "error"
+assert diagnostic_upload.get("continue-on-error") == "true"
 
 # Protected state is artifact-only. Dependency caching configured through setup-python
 # is acceptable; direct Actions cache restoration or promotion is not.

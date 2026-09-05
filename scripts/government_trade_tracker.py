@@ -31,11 +31,20 @@ for _name, _value in vars(_core).items():
 
 
 def _argument_value(arguments: Sequence[str], flag: str) -> str | None:
-    try:
-        index = arguments.index(flag)
-    except ValueError:
-        return None
-    return arguments[index + 1] if index + 1 < len(arguments) else None
+    value: str | None = None
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == flag:
+            if index + 1 < len(arguments):
+                value = arguments[index + 1]
+            index += 2
+            continue
+        prefix = flag + "="
+        if argument.startswith(prefix):
+            value = argument[len(prefix):]
+        index += 1
+    return value
 
 
 def _use_source_isolation(arguments: Sequence[str]) -> bool:
@@ -57,12 +66,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         import run_legislative_sources_resilient as resilient  # type: ignore
 
     core_path = Path(__file__).resolve().with_name("government_trade_tracker_core.py")
-    forwarded = ["--tracker-script", str(core_path)]
-    if "--no-notify" in arguments:
-        forwarded.append("--no-notify")
-    if "--verbose" in arguments:
-        forwarded.append("--verbose")
-    return int(resilient.main(forwarded))
+    return int(
+        resilient.run_tracker_arguments(
+            arguments,
+            tracker_script=core_path,
+        )
+    )
 
 
 class _CoreProxyModule(types.ModuleType):

@@ -1640,15 +1640,15 @@ def _pushover_post(
     message: str,
     url: str,
     url_title: str,
-) -> None:
+) -> bool:
     if config.no_notify:
         LOGGER.warning("Notification suppressed (--no-notify): %s — %s", title, message)
-        return
+        return False
     if not config.pushover_api_token or not config.pushover_user_key:
         if config.require_pushover:
             raise NotificationError("Pushover credentials are required but missing")
         LOGGER.warning("Pushover credentials are absent; notification logged only: %s", title)
-        return
+        return False
     response = session.post(
         PUSHOVER_MESSAGES_URL,
         data={
@@ -1675,6 +1675,7 @@ def _pushover_post(
         raise NotificationError("Pushover returned non-JSON content") from exc
     if body.get("status") != 1:
         raise NotificationError(f"Pushover rejected notification: {body!r}")
+    return True
 
 
 def send_purchase_notification(
@@ -1697,7 +1698,7 @@ def send_purchase_notification(
         )
     if len(selected) > 7:
         lines.append(f"+{len(selected) - 7} more purchase(s)")
-    _pushover_post(
+    return _pushover_post(
         session,
         config,
         title=f"Government purchase disclosure: {filer}",
@@ -1705,7 +1706,6 @@ def send_purchase_notification(
         url=selected[0].source_url,
         url_title=f"Open {filing_label}",
     )
-    return True
 
 
 def send_filing_notification(
@@ -1750,7 +1750,7 @@ def send_filing_notification(
     if len(transactions) > 7:
         lines.append(f"+{len(transactions) - 7} more transaction(s)")
 
-    _pushover_post(
+    return _pushover_post(
         session,
         config,
         title=f"Government filing: {filer}",
@@ -1758,7 +1758,6 @@ def send_filing_notification(
         url=transactions[0].source_url,
         url_title=f"Open {filing_label}",
     )
-    return True
 
 
 def send_pending_notification(
@@ -1769,7 +1768,7 @@ def send_pending_notification(
     if not config.notify_pending_reviews:
         return False
     message = f"{review.filer} • {review.source.title()}\n{review.reason}"
-    _pushover_post(
+    return _pushover_post(
         session,
         config,
         title=f"Government filing needs review: {review.filer}",
@@ -1777,7 +1776,6 @@ def send_pending_notification(
         url=review.source_url,
         url_title="Open filing or request page",
     )
-    return True
 
 
 def commit_filing_outcome(

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from urllib.error import URLError
@@ -11,7 +12,31 @@ from scripts import legislative_healthcheck as hc
 def complete():
     return dict(success=True, discovery_complete=True, overall_status="ok",
                 source_statuses={"house": "ok", "senate": "ok"},
-                source_counts={"house": 883, "senate": 91})
+                source_counts={"house": 883, "senate": 91},
+                transaction_counts={"house": 0, "senate": 0},
+                pending_review_counts={"house": 0, "senate": 0},
+                alerted_filing_counts={"house": 0, "senate": 0})
+
+
+def degraded():
+    return dict(success=True, discovery_complete=False, overall_status="degraded",
+                source_statuses={"house": "ok", "senate": "blocked"},
+                source_counts={"house": 883},
+                transaction_counts={"house": 0},
+                pending_review_counts={"house": 0},
+                alerted_filing_counts={"house": 0},
+                started_utc="2026-09-05T13:00:00Z",
+                finished_utc="2026-09-05T13:01:00Z")
+
+
+def state():
+    return dict(version=1, last_success_utc="2026-09-05T13:01:00Z",
+                seen_filings={"house": {}, "senate": {}, "oge": {}},
+                seen_trades={}, seen_reviews={})
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_terminal_failure_is_one_classified_ping_without_source_material(capsys):
@@ -90,24 +115,126 @@ def test_complete_source_gate_exits_nonzero_for_failure_and_malformed_result(tmp
     assert hc.main(["--result", str(path), "--validate-only"]) == 0
 
 
-def test_workflow_keeps_terminal_failure_nonzero_and_state_upload_gated():
+@pytest.mark.parametrize("result", [complete(), degraded()])
+def test_durable_result_accepts_complete_or_exactly_one_successful_source(result):
+    assert hc.durable_result(result)
+
+
+@pytest.mark.parametrize("alter", [
+    {"success": False},
+    {"source_statuses": {"house": "ok", "senate": "pending"}},
+    {"source_statuses": {"house": "blocked", "senate": "error"}},
+    {"source_counts": {"house": 0}},
+    {"source_counts": {"house": True}},
+    {"overall_status": "ok"},
+    {"discovery_complete": True},
+])
+def test_durable_result_rejects_inconsistent_degraded_evidence(alter):
+    assert not hc.durable_result(degraded() | alter)
+
+
+def test_hashed_suppressed_receipt_binds_degraded_result_and_complete_state(tmp_path):
+    result_path = tmp_path / "result.json"
+    state_path = tmp_path / "state.json"
+    receipt_path = tmp_path / "source-status.json"
+    result_path.write_text(json.dumps(degraded()), encoding="utf-8")
+    state_path.write_text(json.dumps(state()), encoding="utf-8")
+    receipt = {
+        "version": 3,
+        "started_utc": degraded()["started_utc"],
+        "finished_utc": degraded()["finished_utc"],
+        "overall_status": "degraded",
+        "success": True,
+        "durable_state_eligible": True,
+        "protected_upload_eligible": True,
+        "validation_outcome": "zero_change_successor",
+        "protected_state_action": "committed",
+        "rollback_performed": False,
+        "rollback_verified": False,
+        "rollback_reason": "",
+        "notifications_suppressed": True,
+        "outbound_notifications_attempted": 0,
+        "outbound_notifications_sent": 0,
+        "notification_eligible_new_records": 0,
+        "notification_delivery_count": 0,
+        "result_sha256": sha256(result_path),
+        "state_sha256": sha256(state_path),
+        "sources": [
+            {"source": "senate", "returncode": 1, "status": "blocked",
+             "state_candidate_valid": False,
+             "state_committed": False, "result_file": "senate.json",
+             "notification_eligible_new_records": 0,
+             "notification_delivery_count": 0,
+             "notification_delivery_evidence": "unavailable",
+             "reported_outbound_notifications_sent": None},
+            {"source": "house", "returncode": 0, "status": "ok",
+             "state_candidate_valid": True,
+             "state_committed": True, "result_file": "house.json",
+             "notification_eligible_new_records": 0,
+             "notification_delivery_count": 0,
+             "notification_delivery_evidence": "verified_zero",
+             "reported_outbound_notifications_sent": 0},
+        ],
+    }
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert hc.main([
+        "--result", str(result_path), "--state", str(state_path),
+        "--source-status", str(receipt_path), "--validate-durable",
+        "--require-notifications-suppressed",
+        "--require-no-notification-eligible-records",
+    ]) == 0
+
+    receipt["notifications_suppressed"] = False
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert hc.main([
+        "--result", str(result_path), "--state", str(state_path),
+        "--source-status", str(receipt_path), "--validate-durable",
+        "--require-notifications-suppressed",
+    ]) == 1
+
+    receipt["notifications_suppressed"] = True
+    receipt["result_sha256"] = "0" * 64
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    assert hc.main([
+        "--result", str(result_path), "--state", str(state_path),
+        "--source-status", str(receipt_path), "--validate-durable",
+    ]) == 1
+
+
+def test_workflow_keeps_manual_validation_suppressed_and_state_upload_gated():
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.load((root / ".github/workflows/legislative_trade_tracker_v2.yml").read_text(), Loader=yaml.BaseLoader)
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert "github.event_name == 'workflow_dispatch'" in workflow["jobs"]["track"]["if"]
     steps = workflow["jobs"]["track"]["steps"]
     tracker = next(step for step in steps if step.get("id") == "tracker")
-    assert tracker.get("continue-on-error", "false") == "false"
-    gate = next(step for step in steps if step.get("id") == "discovery_validation")
+    assert tracker["continue-on-error"] == "true"
+    assert "--no-notify" in tracker["run"]
+    assert "PUSHOVER_API_TOKEN" not in tracker.get("env", {})
+    assert "PUSHOVER_USER_KEY" not in tracker.get("env", {})
+    durable = next(step for step in steps if step.get("id") == "durable_validation")
+    assert durable["continue-on-error"] == "true"
+    assert "--validate-durable" in durable["run"]
+    assert "--require-restore-receipt" in durable["run"]
+    assert "--require-controlled-validation-receipt" in durable["run"]
+    assert "--require-notifications-suppressed" in durable["run"]
+    assert "--require-no-notification-eligible-records" in durable["run"]
+    assert "--require-run-provenance" in durable["run"]
+    gate = next(step for step in steps if step.get("id") == "state_validation")
     assert gate.get("continue-on-error", "false") == "false"
-    upload = next(step for step in steps if step["name"] == "Upload durable tracker state")
+    assert "--validate-protected-upload" in gate["run"]
+    assert "--require-run-provenance" in gate["run"]
+    upload = next(step for step in steps if step["name"] == "Upload protected tracker state")
     assert "success()" in upload["if"]
-    assert "steps.tracker.outcome == 'success'" in upload["if"]
-    assert "steps.discovery_validation.outcome == 'success'" in upload["if"]
+    assert "steps.state_validation.outcome == 'success'" in upload["if"]
+    assert "hashFiles" not in upload["if"]
     diagnostic = next(step for step in steps if step["name"] == "Upload run outputs")
     assert "always()" in diagnostic["if"]
-    terminals = [step for step in steps if "scripts/legislative_healthcheck.py" in step.get("run", "") and "--validate-only" not in step["run"] and "--discovery-only" not in step["run"]]
-    assert len(terminals) == 1
-    assert "always()" in terminals[0]["if"]
-    assert "--retry" not in terminals[0]["run"]
-    assert "--data-binary" not in terminals[0]["run"]
-    failure_notice = next(step for step in steps if step["name"] == "Send Pushover failure notification")
-    assert "--discovery-only; then\n  exit 0" in failure_notice["run"]
+    assert diagnostic["continue-on-error"] == "true"
+    assert ".trade-tracker/legislative/source-status.json" in diagnostic["with"]["path"]
+    assert ".trade-tracker/legislative/restore-receipt.json" in diagnostic["with"]["path"]
+    assert ".trade-tracker/legislative/controlled-validation-receipt.json" in diagnostic["with"]["path"]
+    workflow_text = (root / ".github/workflows/legislative_trade_tracker_v2.yml").read_text()
+    assert "LEGISLATIVE_HEALTHCHECKS_PING_URL" not in workflow_text
+    assert "PUSHOVER_API_TOKEN" not in workflow_text
+    assert "PUSHOVER_USER_KEY" not in workflow_text

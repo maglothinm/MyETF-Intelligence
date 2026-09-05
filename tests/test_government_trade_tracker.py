@@ -496,6 +496,55 @@ def test_commit_records_all_transactions_but_purchase_ledger_stays_purchase_only
     assert filings[-1]["sale_count"] == 1
     assert result.transaction_counts["house"] == 2
     assert result.purchase_counts["house"] == 1
+    assert result.alerted_filing_counts["house"] == 0
+
+
+def test_no_notify_with_populated_credentials_never_calls_network_or_claims_delivery(
+    tmp_path: Path,
+) -> None:
+    config = replace(
+        _tracker_config(tmp_path, initialize=True),
+        branch="legislative",
+        no_notify=True,
+        require_pushover=True,
+        pushover_api_token="configured-token",
+        pushover_user_key="configured-user",
+    )
+    state = TrackerState()
+    state.mark_filing_seen("house", "house:prior", "2026-08-25T10:00:00Z")
+    result = TrackerResult(branch="legislative", started_utc="2026-09-05T00:00:00Z")
+    result.transaction_counts["house"] = 0
+    result.purchase_counts["house"] = 0
+    result.pending_review_counts["house"] = 0
+    result.alerted_filing_counts["house"] = 0
+    report = house_report("20049999")
+    purchase = make_trade(
+        branch="legislative", source="house", report=report, owner="SELF",
+        asset="TEST Example Stock (TEST)", ticker="TEST", asset_type="ST",
+        transaction_type="P", transaction_date="09/04/2026",
+        notification_date="09/05/2026", amount="$1,001 - $15,000",
+        raw_row="notification suppression fixture", confidence="high",
+    )
+    session = Mock(spec=Session)
+    session.post.side_effect = AssertionError("suppressed validation attempted network delivery")
+
+    commit_filing_outcome(
+        session=session,
+        config=config,
+        state=state,
+        result=result,
+        source="house",
+        filing=report,
+        filing_id=report.report_id,
+        filing_label="House PTR",
+        trades=[purchase],
+        review=None,
+        filing_index={},
+    )
+
+    session.post.assert_not_called()
+    assert result.transaction_counts["house"] == 1
+    assert result.alerted_filing_counts["house"] == 0
 
 def test_parse_house_morrison_spinoff_tickers_and_owners() -> None:
     text = """
