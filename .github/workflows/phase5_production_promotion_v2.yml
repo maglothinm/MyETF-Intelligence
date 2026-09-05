@@ -67,7 +67,15 @@ jobs:
              .immutable_image == $image and
              .unique_successful_execution_receipts == 8 and
              .production_authority_transferred == false and
-             .temporary_authority_removed == true' \
+             .temporary_authority_removed == true and
+             .reconciliation.kind == "artifact_pinned_failed_run_replay" and
+             .reconciliation.control_files_match_evidence_revision == true and
+             .reconciliation.immutable_inventory_preserved == true and
+             .reconciliation.cross_artifact_chain_verified == true and
+             .reconciliation.completed_two_cycle_history_verified == true and
+             .reconciliation.current_heads_verified == true and
+             .reconciliation.current_latest_receipts_verified == true and
+             .reconciliation.additional_producer_execution_performed == false' \
             "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
           echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
           echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
