@@ -26,6 +26,8 @@ on:
       - "scripts/create_manual_test_filing.py"
       - "scripts/run_investor_edge_simulation.py"
       - "scripts/government_trade_tracker.py"
+      - "scripts/government_trade_tracker_core.py"
+      - "scripts/run_legislative_sources_resilient.py"
       - "scripts/historical_transaction_bootstrap.py"
       - "scripts/monitor_disclosures.py"
       - "scripts/legislative_healthcheck.py"
@@ -34,6 +36,8 @@ on:
       - "tests/test_historical_transaction_bootstrap.py"
       - "tests/test_senate_client.py"
       - "tests/test_legislative_healthcheck.py"
+      - "tests/test_legislative_resilient_orchestrator.py"
+      - "tests/test_legislative_resilient_integration.py"
       - ".github/workflows/legislative_trade_tracker_v2.yml"
       - "config/investor_edge.yml"
       - "config/signal_rules.yml"
@@ -94,6 +98,8 @@ on:
       - "scripts/create_manual_test_filing.py"
       - "scripts/run_investor_edge_simulation.py"
       - "scripts/government_trade_tracker.py"
+      - "scripts/government_trade_tracker_core.py"
+      - "scripts/run_legislative_sources_resilient.py"
       - "scripts/historical_transaction_bootstrap.py"
       - "scripts/monitor_disclosures.py"
       - "scripts/legislative_healthcheck.py"
@@ -102,6 +108,8 @@ on:
       - "tests/test_historical_transaction_bootstrap.py"
       - "tests/test_senate_client.py"
       - "tests/test_legislative_healthcheck.py"
+      - "tests/test_legislative_resilient_orchestrator.py"
+      - "tests/test_legislative_resilient_integration.py"
       - ".github/workflows/legislative_trade_tracker_v2.yml"
       - "config/investor_edge.yml"
       - "config/signal_rules.yml"
@@ -177,6 +185,8 @@ jobs:
             tests/test_historical_transaction_bootstrap.py \
             tests/test_senate_client.py \
             tests/test_legislative_healthcheck.py \
+            tests/test_legislative_resilient_orchestrator.py \
+            tests/test_legislative_resilient_integration.py \
             tests/test_oge_disclosures.py \
             tests/test_investor_edge.py \
             tests/test_investor_edge_core.py \

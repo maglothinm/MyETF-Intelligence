@@ -858,3 +858,75 @@ artifacts. Fresh provenance, isolated or live shadow acceptance, production
 promotion, single-writer transfer, schedule activation, rollback drills, and
 retirement of the GitHub production path require a later explicit release and
 acceptance receipt.
+
+## D-2026-09-05-042 — Reconcile immutable failed-run shadow evidence without rebaselining
+
+**Decision:** Preserve the original Phase 4 legacy inventory and recognize the
+complete chained history recorded by failed controller runs `33878297187` and
+`33887857023`. Certification may replay only their pinned run attempts, jobs,
+control revisions, artifacts, archive metadata, and SHA-256 digests. It may not
+execute another producer, alter the recovered anchor, or infer success from a
+workflow conclusion alone.
+
+The replay must prove that the first artifact's partial history is ordered and
+non-overlapping, that its two AI failures wrote no snapshot, that the second
+artifact starts at the first artifact's exact final heads, and that the second
+artifact contains two complete ordered shadow cycles with eight unique successful
+execution and Runtime receipts. It must also bind the result to unchanged current
+heads and latest receipts.
+
+This decision narrowly amends D-2026-08-31-022 for the retained Legislative
+collector. Exactly one successful official source may now produce a truthful
+`degraded` successor only when the failed source's writes are discarded, the
+successful source returns a fresh validated non-empty catalog, all protected
+append-only prefixes are preserved, the source receipt is retained, and the
+canonical run-history schema is used. Zero successful sources remain a hard
+failure. No unofficial or substitute source is authorized.
+
+A Phase 4 certificate additionally requires an operational retained rollback
+route. GitHub's workflow API state is insufficient by itself: the checked-in
+Legislative and Executive source must contain the reviewed schedule, manual
+dispatch, producer job, protected artifact, and producer entry contract. The
+certificate records hashes of that route and Phase 5 must compare them with its
+own checkout before transferring authority.
+
+**Reason:** The old validator correctly protected the immutable anchor but
+compared it directly to a baseline legitimately advanced by an earlier failed
+controller run. Discarding that completed evidence would repeat already successful
+shadow writes, while changing the anchor would erase the audit boundary. Pinned
+artifact replay proves the intervening history without either shortcut.
+
+PR #125 then demonstrated why a workflow's `active` label or presence of a cron is
+not operational proof. Its merged degraded-success path was incompatible with the
+following validation/upload gate and could recreate an unretained-side-effect
+continuity failure. The Legislative workflow was therefore reversibly disabled
+before the next scheduled start. Correction must be validated in manual-only,
+no-notify mode before recurring production is restored. That controlled run has
+no notification credentials, heartbeat calls, or downstream AI/Pages trigger.
+If it discovers notification-eligible records, it must restore all protected
+delivery and history files byte-for-byte, attest zero outbound delivery, and
+republish only that unchanged continuity boundary. Such a rollback validates
+containment but is not a durable successor. A total source outage is likewise
+continuity-only and cannot satisfy the certification prerequisite.
+
+**Consequence:** Phase 4 can issue a completion certificate without new producer
+cycles only while the replayed heads and latest receipts remain current. Failed
+producer commands, failed rollback dispatches, missing authority cleanup, route
+source drift, disabled collectors, or continuity drift fail closed. Phase 5
+remains blocked until the certificate exists on the exact current `main` revision;
+Phase 6 remains outside this authorization.
+
+The certificate must also replay the exact controlled Legislative run from a
+checked-in descriptor. It verifies the run, job, predecessor artifact, protected
+and diagnostic artifact IDs/digests, safe archives, restore/source/controlled
+receipts, zero-outbound claim, and unchanged implementation bytes through the
+later schedule-restoration revision. Source markers or workflow API state alone
+cannot satisfy this gate.
+
+**Release verification:** Pending. The reconciliation and Legislative correction
+must pass review and CI. The acknowledged no-notify main validation must then
+produce either a zero-change durable successor or a byte-exact
+notification-eligible rollback artifact, and that exact evidence must be pinned.
+The schedule-capable route must then be restored and active. The resulting Phase 4
+run and certificate artifact must be recorded before this decision is classified
+as operationally complete.

@@ -1,20 +1,16 @@
 name: Legislative purchase tracker v2
 
+# CONTROLLED VALIDATION MODE — recurring and external schedules remain paused.
+# The only permitted invocation is a deliberately acknowledged manual run, and
+# every producer subprocess is forced into notification-suppressed mode.
 on:
-  schedule:
-    # Poll four times per hour, offset from :00 to reduce scheduler congestion.
-    - cron: "7,22,37,52 * * * *"
-      timezone: "America/New_York"
   workflow_dispatch:
     inputs:
-      trigger_source:
-        description: "Non-secret dispatch label (does not bypass production safeguards)"
-        required: false
-        default: workflow_dispatch
-        type: choice
-        options:
-          - workflow_dispatch
-          - external_scheduler
+      validation_acknowledged:
+        description: "Run the notification-suppressed controlled validation"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -26,7 +22,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
+  POLITITRACK_TRIGGER_SOURCE: workflow_dispatch
+  POLITITRACK_CONTROLLED_VALIDATION: "true"
   STATE_FILE: ".trade-tracker/legislative/state.json"
   LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
   TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
@@ -34,6 +31,10 @@ env:
   RUN_HISTORY_FILE: ".trade-tracker/legislative/runs.jsonl"
   PENDING_FILE: ".trade-tracker/legislative/pending-review.jsonl"
   RESULT_FILE: "legislative-result.json"
+  SOURCE_STATUS_FILE: ".trade-tracker/legislative/source-status.json"
+  RESTORE_RECEIPT_FILE: ".trade-tracker/legislative/restore-receipt.json"
+  CONTROLLED_VALIDATION_RECEIPT_FILE: ".trade-tracker/legislative/controlled-validation-receipt.json"
+  POLITITRACK_REQUIRE_RESTORE_RECEIPT: "true"
   LATEST_CSV: "legislative-latest-purchases.csv"
   LATEST_TRANSACTIONS_CSV: "legislative-latest-transactions.csv"
   LATEST_FILINGS_CSV: "legislative-latest-filings.csv"
@@ -48,26 +49,15 @@ env:
 
 jobs:
   track:
-    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref_name == github.event.repository.default_branch &&
+      inputs.validation_acknowledged == true
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
     steps:
-      - name: Signal tracker start
-        continue-on-error: true
-        shell: bash
-        env:
-          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
-        run: |
-          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
-            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
-            healthchecks_base="${healthchecks_base%/start}"
-            healthchecks_base="${healthchecks_base%/fail}"
-            healthchecks_base="${healthchecks_base%/}"
-            curl --fail --silent --show-error --max-time 20 --retry 3 \
-              "${healthchecks_base}/start" >/dev/null
-          fi
-
       - name: Check out repository
         uses: actions/checkout@v6
 
@@ -136,6 +126,7 @@ jobs:
           producer_run_id=""
           producer_attempt=""
           producer_workflow_id=""
+          producer_head_sha=""
           while IFS=$'\t' read -r candidate_artifact_id candidate_run_id candidate_created_at; do
             [[ -n "$candidate_artifact_id" && -n "$candidate_run_id" && -n "$candidate_created_at" ]] || continue
             run_payload="$(
@@ -210,6 +201,7 @@ jobs:
                 producer_run_id="$candidate_run_id"
                 producer_attempt="$candidate_attempt"
                 producer_workflow_id="$workflow_id"
+                producer_head_sha="$run_head_sha"
                 break 2
               fi
             done
@@ -221,6 +213,40 @@ jobs:
           )
           if [[ -z "$artifact_id" ]]; then
             echo "No authoritative ${artifact_name} artifact is available; refusing to initialize protected state." >&2
+            exit 1
+          fi
+          if [[ \
+            ! "$artifact_id" =~ ^[1-9][0-9]*$ || \
+            ! "$producer_run_id" =~ ^[1-9][0-9]*$ || \
+            ! "$producer_attempt" =~ ^[1-9][0-9]*$ || \
+            ! "$producer_workflow_id" =~ ^[1-9][0-9]*$ || \
+            ! "$producer_head_sha" =~ ^[0-9a-f]{40}$ || \
+            ! "$GITHUB_REPOSITORY_ID" =~ ^[1-9][0-9]*$ \
+          ]]; then
+            echo "Selected predecessor identity is incomplete or malformed." >&2
+            exit 1
+          fi
+
+          artifact_payload="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+          )"
+          artifact_api_digest="$(jq -r '.digest // ""' <<< "$artifact_payload")"
+          artifact_created_at="$(jq -r '.created_at // ""' <<< "$artifact_payload")"
+          if [[ \
+            "$(jq -r '.id // ""' <<< "$artifact_payload")" != "$artifact_id" || \
+            "$(jq -r '.name // ""' <<< "$artifact_payload")" != "$artifact_name" || \
+            "$(jq -r '.expired // true' <<< "$artifact_payload")" != "false" || \
+            "$(jq -r '.workflow_run.id // ""' <<< "$artifact_payload")" != "$producer_run_id" || \
+            "$(jq -r '.workflow_run.repository_id // ""' <<< "$artifact_payload")" != "$GITHUB_REPOSITORY_ID" || \
+            "$(jq -r '.workflow_run.head_branch // ""' <<< "$artifact_payload")" != "$DEFAULT_BRANCH" || \
+            "$(jq -r '.workflow_run.head_sha // ""' <<< "$artifact_payload")" != "$producer_head_sha" || \
+            "$artifact_api_digest" != sha256:* || \
+            ! "${artifact_api_digest#sha256:}" =~ ^[0-9a-f]{64}$ || \
+            -z "$artifact_created_at" \
+          ]]; then
+            echo "Artifact ${artifact_id} metadata does not preserve the selected predecessor binding." >&2
             exit 1
           fi
 
@@ -304,6 +330,11 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
             > "$temp_dir/state.zip"
+          downloaded_zip_sha256="$(sha256sum "$temp_dir/state.zip" | cut -d ' ' -f 1)"
+          if [[ "$downloaded_zip_sha256" != "${artifact_api_digest#sha256:}" ]]; then
+            echo "Artifact ${artifact_id} download digest does not match its API digest." >&2
+            exit 1
+          fi
           mkdir -p "$temp_dir/unpacked"
           unzip -q "$temp_dir/state.zip" -d "$temp_dir/unpacked"
           state_file="$(find "$temp_dir/unpacked" -type f -name state.json -print -quit)"
@@ -311,13 +342,55 @@ jobs:
             echo "Artifact ${artifact_id} (${artifact_name}) contains no state.json." >&2
             exit 1
           fi
-          if ! jq -e 'type == "object" and (.last_success_utc | type == "string" and length > 0)' "$state_file" >/dev/null; then
-            echo "Artifact ${artifact_id} (${artifact_name}) has no successful-state marker." >&2
+          if ! jq -e '
+            type == "object" and
+            .version == 1 and
+            (.last_success_utc | type == "string" and length > 0) and
+            (.seen_filings | type == "object") and
+            (.seen_trades | type == "object") and
+            (.seen_reviews | type == "object")
+          ' "$state_file" >/dev/null; then
+            echo "Artifact ${artifact_id} (${artifact_name}) is not a complete supported state." >&2
             exit 1
           fi
           rm -rf "$destination"
           mkdir -p "$destination"
           cp -R "$(dirname "$state_file")/." "$destination/"
+          restored_state_sha256="$(sha256sum "$destination/state.json" | cut -d ' ' -f 1)"
+          jq -n \
+            --arg restored_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson repository_id "$GITHUB_REPOSITORY_ID" \
+            --arg consumer_sha "$consumer_sha" \
+            --argjson predecessor_artifact_id "$artifact_id" \
+            --arg predecessor_artifact_name "$artifact_name" \
+            --arg predecessor_artifact_created_at "$artifact_created_at" \
+            --arg predecessor_artifact_api_digest "$artifact_api_digest" \
+            --arg downloaded_zip_sha256 "$downloaded_zip_sha256" \
+            --argjson predecessor_run_id "$producer_run_id" \
+            --argjson predecessor_run_attempt "$producer_attempt" \
+            --arg predecessor_head_sha "$producer_head_sha" \
+            --argjson predecessor_workflow_id "$producer_workflow_id" \
+            --arg predecessor_workflow_file "$workflow_file" \
+            --arg predecessor_workflow_name "$workflow_name" \
+            --arg restored_state_sha256 "$restored_state_sha256" \
+            '{
+              version: 1,
+              restored_at_utc: $restored_at_utc,
+              repository_id: $repository_id,
+              consumer_sha: $consumer_sha,
+              predecessor_artifact_id: $predecessor_artifact_id,
+              predecessor_artifact_name: $predecessor_artifact_name,
+              predecessor_artifact_created_at: $predecessor_artifact_created_at,
+              predecessor_artifact_api_digest: $predecessor_artifact_api_digest,
+              downloaded_zip_sha256: $downloaded_zip_sha256,
+              predecessor_run_id: $predecessor_run_id,
+              predecessor_run_attempt: $predecessor_run_attempt,
+              predecessor_head_sha: $predecessor_head_sha,
+              predecessor_workflow_id: $predecessor_workflow_id,
+              predecessor_workflow_file: $predecessor_workflow_file,
+              predecessor_workflow_name: $predecessor_workflow_name,
+              restored_state_sha256: $restored_state_sha256
+            }' > "$RESTORE_RECEIPT_FILE"
           echo "Restored authoritative Legislative state from artifact ${artifact_id}, run ${producer_run_id}, attempt ${producer_attempt}."
 
       - name: Run offline tests
@@ -328,6 +401,8 @@ jobs:
             tests/test_monitor_disclosures.py \
             tests/test_senate_client.py \
             tests/test_legislative_healthcheck.py \
+            tests/test_legislative_resilient_orchestrator.py \
+            tests/test_legislative_resilient_integration.py \
             tests/test_government_trade_tracker.py \
             tests/test_historical_transaction_bootstrap.py \
             tests/test_oge_disclosures.py \
@@ -335,21 +410,47 @@ jobs:
 
       - name: Track House and Senate purchases
         id: tracker
+        continue-on-error: true
         shell: bash
         env:
           BOOTSTRAP_ALERTS: "false"
           ALLOW_STATE_INITIALIZATION: "false"
-          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
-          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
-        run: python scripts/government_trade_tracker.py --branch legislative --source all
+        run: >-
+          python scripts/government_trade_tracker.py
+          --branch legislative --source all --no-notify
 
-      - name: Validate complete Legislative result
-        id: discovery_validation
+      - name: Classify durable Legislative result
+        id: durable_validation
+        continue-on-error: true
         shell: bash
-        run: python scripts/legislative_healthcheck.py --validate-only
+        run: >-
+          python scripts/legislative_healthcheck.py
+          --validate-durable
+          --state "$STATE_FILE"
+          --source-status "$SOURCE_STATUS_FILE"
+          --restore-receipt "$RESTORE_RECEIPT_FILE"
+          --controlled-validation-receipt "$CONTROLLED_VALIDATION_RECEIPT_FILE"
+          --require-restore-receipt
+          --require-controlled-validation-receipt
+          --require-notifications-suppressed
+          --require-no-notification-eligible-records
+          --require-run-provenance
 
-      - name: Upload durable tracker state
-        if: ${{ success() && steps.tracker.outcome == 'success' && steps.discovery_validation.outcome == 'success' && hashFiles('.trade-tracker/legislative/state.json') != '' }}
+      - name: Validate protected Legislative state for upload
+        id: state_validation
+        if: ${{ always() && steps.tracker.outcome != 'skipped' }}
+        shell: bash
+        run: >-
+          python scripts/legislative_healthcheck.py
+          --validate-protected-upload
+          --state "$STATE_FILE"
+          --source-status "$SOURCE_STATUS_FILE"
+          --restore-receipt "$RESTORE_RECEIPT_FILE"
+          --controlled-validation-receipt "$CONTROLLED_VALIDATION_RECEIPT_FILE"
+          --require-run-provenance
+
+      - name: Upload protected tracker state
+        if: ${{ success() && steps.state_validation.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: legislative-tracker-state
@@ -360,6 +461,7 @@ jobs:
 
       - name: Upload run outputs
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: legislative-purchase-output-${{ github.run_id }}-${{ github.run_attempt }}
@@ -368,50 +470,8 @@ jobs:
             legislative-latest-purchases.csv
             legislative-latest-transactions.csv
             legislative-latest-filings.csv
+            .trade-tracker/legislative/source-status.json
+            .trade-tracker/legislative/restore-receipt.json
+            .trade-tracker/legislative/controlled-validation-receipt.json
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Signal tracker terminal result
-        if: ${{ always() }}
-        continue-on-error: true
-        shell: bash
-        env:
-          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
-          JOB_STATUS: ${{ job.status }}
-          TRACKER_OUTCOME: ${{ steps.tracker.outcome }}
-        run: |
-          if [[ -f scripts/legislative_healthcheck.py ]]; then
-            python3 scripts/legislative_healthcheck.py
-          elif [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
-            # Checkout failed: retain the one classified terminal failure ping.
-            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
-            healthchecks_base="${healthchecks_base%/start}"
-            healthchecks_base="${healthchecks_base%/fail}"
-            healthchecks_base="${healthchecks_base%/}"
-            curl --fail --silent --max-time 20 \
-              --data "legislative_workflow_failed" "${healthchecks_base}/fail" >/dev/null
-          fi
-
-      - name: Send Pushover failure notification
-        # No source/filing notifications before both discovery phases succeed.
-        if: ${{ always() && failure() }}
-        continue-on-error: true
-        shell: bash
-        env:
-          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
-          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
-        run: |
-          if ! python3 scripts/legislative_healthcheck.py --discovery-only; then
-            exit 0
-          fi
-          if [[ -n "$PUSHOVER_API_TOKEN" && -n "$PUSHOVER_USER_KEY" ]]; then
-            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            curl --fail --silent --show-error --max-time 20 --retry 3 \
-              --form-string "token=$PUSHOVER_API_TOKEN" \
-              --form-string "user=$PUSHOVER_USER_KEY" \
-              --form-string "title=Legislative purchase tracker failed" \
-              --form-string "message=Open the GitHub Actions run for logs and the result artifact." \
-              --form-string "url=$run_url" \
-              --form-string "url_title=Open failed workflow" \
-              https://api.pushover.net/1/messages.json >/dev/null
-          fi

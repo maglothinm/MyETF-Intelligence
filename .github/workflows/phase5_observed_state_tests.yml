@@ -9,14 +9,34 @@ on:
       - ".github/workflows/phase5_observed_state_tests.yml"
       - "deploy/runtime-v2/runtime_promotion_control.sh"
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
+      - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
+      - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "tests/test_runtime_promotion_control.sh"
+      - "tests/test_reconcile_phase4_shadow_evidence.py"
+      - "tests/test_verify_legacy_route_contract.py"
+      - "tests/test_verify_legislative_validation_evidence.py"
   push:
     branches: [main]
     paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
       - ".github/workflows/phase5_observed_state_tests.yml"
       - "deploy/runtime-v2/runtime_promotion_control.sh"
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
+      - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
+      - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "tests/test_runtime_promotion_control.sh"
+      - "tests/test_reconcile_phase4_shadow_evidence.py"
+      - "tests/test_verify_legacy_route_contract.py"
+      - "tests/test_verify_legislative_validation_evidence.py"
   workflow_dispatch:
 
 permissions:
@@ -38,7 +58,11 @@ jobs:
           set -euo pipefail
           bash -n deploy/runtime-v2/runtime_promotion_control.sh
           bash -n deploy/runtime-v2/runtime_promotion_observed_state.sh
+          bash -n deploy/runtime-v2/phase4_reconciliation_control.sh
           bash -n tests/test_runtime_promotion_control.sh
+          python -m py_compile deploy/runtime-v2/reconcile_phase4_shadow_evidence.py
+          python -m py_compile deploy/runtime-v2/verify_legacy_route_contract.py
+          python -m py_compile deploy/runtime-v2/verify_legislative_validation_evidence.py
           python - <<'PY'
           from pathlib import Path
           import yaml
@@ -47,6 +71,9 @@ jobs:
           phase5 = Path('.github/workflows/phase5_production_promotion_v2.yml').read_text()
           control = Path('deploy/runtime-v2/runtime_promotion_control.sh').read_text()
           overlay = Path('deploy/runtime-v2/runtime_promotion_observed_state.sh').read_text()
+          reconciliation = Path('deploy/runtime-v2/reconcile_phase4_shadow_evidence.py').read_text()
+          reconciliation_control = Path('deploy/runtime-v2/phase4_reconciliation_control.sh').read_text()
+          route_contract = Path('deploy/runtime-v2/verify_legacy_route_contract.py').read_text()
           shell_test = Path('tests/test_runtime_promotion_control.sh').read_text()
           for path in (
               '.github/workflows/phase4_live_shadow_validation_v6.yml',
@@ -55,10 +82,23 @@ jobs:
               yaml.load(Path(path).read_text(), Loader=yaml.BaseLoader)
           required = {
               'phase4': ('capture_legacy_workflow_states', 'verify_legacy_workflows_match_observed',
-                         'legacy_workflow_states:$states[0]', 'for cycle in 1 2'),
+                         'legacy_workflow_states:$states[0]',
+                         'reconcile_phase4_shadow_evidence.py',
+                         'verify_legacy_route_contract.py',
+                         'legacy_route_source_verified:true',
+                         'artifact_pinned_failed_run_replay',
+                         'no_producer_execution_performed'),
               'phase5': ('workflows: ["Phase 4 live shadow validation v6"]',
                          'restore_legacy_workflows_observed', 'disable_legacy_workflows',
-                         'rollback_restores_exact_observed_state:true'),
+                         'rollback_restores_exact_observed_state:true',
+                         'artifact_pinned_failed_run_replay',
+                         'legacy-route-current.json',
+                         'source deploy/runtime-v2/phase4_reconciliation_control.sh',
+                         'latest receipt {key} no longer matches Phase 4',
+                         'legacy_recovery_dispatched',
+                         'temporary_execution_authority_removed',
+                         'temporary_service_account_user_removed',
+                         'phase5_terminal_cleanup'),
               'control': ('latest_execution_name() {',
                           '.metadata.name // .name // empty',
                           'status.latestCreatedExecution.name',
@@ -79,17 +119,40 @@ jobs:
                           'executive_trade_tracker.yml"] == "active"',
                           'disabled_manually)',
                           'verify_legacy_workflows_match_observed'),
+              'reconciliation': ('artifact_pinned_failed_run_replay',
+                                 'immutable_inventory_preserved',
+                                 'cross_artifact_chain_verified',
+                                 'current_latest_receipts_verified',
+                                 'additional_producer_execution_performed'),
+              'reconciliation_control': ('grant_phase4_status_authority() {',
+                                          'remove_phase4_status_authority() {',
+                                          'verify_phase4_status_authority_removed() {',
+                                          'execute_producer() {',
+                                          'refusing to resolve or accept a receipt',
+                                          'dispatch_legacy_recovery() {',
+                                          'legacy_recovery_dispatches_accepted',
+                                          '"${ADMIN_JOB}"'),
+              'route_contract': ('legacy_rollback_route_verified',
+                                 'required_triggers',
+                                 'schedule',
+                                 'workflow_dispatch',
+                                 'legacy_production_route_active'),
               'shell_test': ('STATUS_LOG_FORMAT=structured',
                              '"jsonPayload":{"heads":[],"latest_runs":[]}',
                              'STATUS_LOG_FORMAT=text',
-                             'structured jsonPayload status was not captured',
-                             'legacy textPayload status was not captured'),
+                              'structured jsonPayload status was not captured',
+                              'legacy textPayload status was not captured',
+                              'PRODUCER_EXECUTION_STATUS=42',
+                              'failed producer command was accepted'),
           }
           for label, text in (
               ('phase4', phase4),
               ('phase5', phase5),
               ('control', control),
               ('overlay', overlay),
+              ('reconciliation', reconciliation),
+              ('reconciliation_control', reconciliation_control),
+              ('route_contract', route_contract),
               ('shell_test', shell_test),
           ):
               missing = [token for token in required[label] if token not in text]
@@ -106,7 +169,19 @@ jobs:
               raise SystemExit('capture_status retains a nounset-unsafe local declaration')
           if 'local logical_name="$1" trigger="$2" stem="$3" job=' in control:
               raise SystemExit('execute_producer retains a nounset-unsafe local declaration')
+          live_step = phase4.split('- name: Reconcile pinned shadow history and current heads', 1)[1]
+          live_step = live_step.split('- name: Fail-closed cleanup and evidence check', 1)[0]
+          forbidden = ('execute_producer', 'execute_admin_init', 'configure_runtime ',
+                       'grant_execution_authority', 'resume_producer_schedulers',
+                       'make_web_public', 'disable_legacy_workflows')
+          present = [token for token in forbidden if token in live_step]
+          if present:
+              raise SystemExit('Phase 4 reconciliation attempts a forbidden mutation: ' + ', '.join(present))
           PY
           bash tests/test_runtime_promotion_control.sh
-          python -m pytest -q tests/test_validate_runtime_promotion.py
+          python -m pytest -q \
+            tests/test_validate_runtime_promotion.py \
+            tests/test_reconcile_phase4_shadow_evidence.py \
+            tests/test_verify_legacy_route_contract.py \
+            tests/test_verify_legislative_validation_evidence.py
           bash verify.sh

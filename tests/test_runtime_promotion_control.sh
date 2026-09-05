@@ -17,6 +17,8 @@ export EVIDENCE_DIR="${WORK}/evidence"
 source "${ROOT}/deploy/runtime-v2/runtime_promotion_control.sh"
 # shellcheck source=../deploy/runtime-v2/runtime_promotion_observed_state.sh
 source "${ROOT}/deploy/runtime-v2/runtime_promotion_observed_state.sh"
+# shellcheck source=../deploy/runtime-v2/phase4_reconciliation_control.sh
+source "${ROOT}/deploy/runtime-v2/phase4_reconciliation_control.sh"
 
 fail() {
   echo "runtime promotion controller regression: $*" >&2
@@ -39,6 +41,7 @@ if latest_execution_name polititrack-admin "${WORK}/wrong-job.json" >/dev/null 2
 fi
 
 STATUS_LOG_FORMAT=structured
+PRODUCER_EXECUTION_STATUS=0
 
 # Stub only the Cloud SDK surfaces exercised by the receipt and status helpers.
 gcloud() {
@@ -48,6 +51,9 @@ gcloud() {
   fi
   if [[ "${1:-}" == "run" && "${2:-}" == "jobs" && "${3:-}" == "execute" ]]; then
     printf '{"metadata":{"name":"%s-test123"}}\n' "${4:?job name is required}"
+    if [[ "${4}" != "polititrack-admin" && "${PRODUCER_EXECUTION_STATUS}" != "0" ]]; then
+      return "${PRODUCER_EXECUTION_STATUS}"
+    fi
     return 0
   fi
   if [[ "${1:-}" == "logging" && "${2:-}" == "read" ]]; then
@@ -102,6 +108,13 @@ producer_execution="$(execute_producer legislative shadow cycle-1-sequence-1)"
   || fail "producer execution receipt was not returned"
 [[ -s "${EVIDENCE_DIR}/cycle-1-sequence-1-legislative-execute.json" ]] \
   || fail "producer command response was not retained"
+
+PRODUCER_EXECUTION_STATUS=42
+if execute_producer executive phase5_smoke smoke-failure >/dev/null 2>&1; then
+  fail "failed producer command was accepted"
+fi
+[[ ! -e "${EVIDENCE_DIR}/smoke-failure-executive-execution.txt" ]] \
+  || fail "failed producer command emitted an accepted execution receipt"
 
 if grep -Fq 'gcloud run jobs executions describe-latest' \
   "${ROOT}/deploy/runtime-v2/runtime_promotion_control.sh"; then

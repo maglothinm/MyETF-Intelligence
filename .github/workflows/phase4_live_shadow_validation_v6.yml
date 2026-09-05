@@ -9,8 +9,18 @@ on:
       - "deploy/runtime-v2/runtime_promotion_control.sh"
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
       - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
+      - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
+      - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "deploy/runtime-v2/phase4-approved-image.json"
       - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+      - ".github/workflows/legislative_trade_tracker_v2.yml"
+      - ".github/workflows/executive_trade_tracker.yml"
+      - ".github/workflows/ai_filing_analyst.yml"
+      - ".github/workflows/publish_trade_dashboard.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,7 +36,7 @@ jobs:
   controlled-shadow-acceptance:
     if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 60
     env:
       PROJECT_ID: project-38008d5f-4918-46e6-920
       PROJECT_NUMBER: "497412818801"
@@ -34,26 +44,169 @@ jobs:
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       EVIDENCE_DIR: phase4-live
+      RECONCILIATION: deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json
+      LEGISLATIVE_VALIDATION: deploy/runtime-v2/phase4-legislative-validation-evidence.json
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out canonical main
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
 
-      - name: Pin the approved quarantine-safe image receipt
+      - name: Pin the approved image and immutable reconciliation record
         shell: bash
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || { echo "Checkout drifted from live main." >&2; exit 1; }
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${GITHUB_SHA}" ]] || { echo "Canonical main advanced before reconciliation." >&2; exit 1; }
+          jq -e \
+            '.repository_id == 1349678672 and
+             .result == "phase4_shadow_evidence_reconciliation_authorized" and
+             .immutable_inventory_preserved == true and
+             .additional_producer_execution_authorized == false and
+             (.runs | length) == 2' \
+            "${RECONCILIATION}" >/dev/null
           jq -e '.repository_id == 1349678672 and .result == "phase4_quarantine_runtime_image_approved"' \
             deploy/runtime-v2/phase4-approved-image.json >/dev/null
           image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
           source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
           [[ "${image}" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "Approved image is not immutable." >&2; exit 1; }
           [[ "${source}" =~ ^[0-9a-f]{40}$ ]] || { echo "Runtime source revision is invalid." >&2; exit 1; }
+          [[ "$(jq -r '.runtime_source_revision' "${RECONCILIATION}")" == "${source}" ]] || {
+            echo "Reconciliation source revision differs from the approved image." >&2
+            exit 1
+          }
+          partial_revision="$(jq -r '.runs[] | select(.role == "anchored_partial_history") | .head_sha' "${RECONCILIATION}")"
+          evidence_revision="$(jq -r '.evidence_control_revision' "${RECONCILIATION}")"
+          completed_revision="$(jq -r '.runs[] | select(.role == "completed_two_cycle_history") | .head_sha' "${RECONCILIATION}")"
+          [[ "${evidence_revision}" == "${completed_revision}" ]] || {
+            echo "Completed evidence is not bound to the pinned evidence-control revision." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "${partial_revision}" "${evidence_revision}" || {
+            echo "Pinned source runs are not in canonical history order." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "${evidence_revision}" "${GITHUB_SHA}" || {
+            echo "Current main does not descend from the evidence-control revision." >&2
+            exit 1
+          }
           echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
           echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
+
+      - name: Verify the controlled Legislative validation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f "${LEGISLATIVE_VALIDATION}" ]] || {
+            echo "The controlled Legislative validation evidence descriptor has not been issued." >&2
+            exit 1
+          }
+          root="${EVIDENCE_DIR}/legislative-validation"
+          mkdir -p "${root}"
+          run_id="$(jq -r '.validation.run_id' "${LEGISLATIVE_VALIDATION}")"
+          run_attempt="$(jq -r '.validation.run_attempt' "${LEGISLATIVE_VALIDATION}")"
+          validation_sha="$(jq -r '.validation.head_sha' "${LEGISLATIVE_VALIDATION}")"
+          state_artifact_id="$(jq -r '.artifacts.protected_state.id' "${LEGISLATIVE_VALIDATION}")"
+          output_artifact_id="$(jq -r '.artifacts.diagnostic_output.id' "${LEGISLATIVE_VALIDATION}")"
+          predecessor_artifact_id="$(jq -r '.predecessor.artifact_id' "${LEGISLATIVE_VALIDATION}")"
+          [[ "${run_id}" =~ ^[1-9][0-9]*$ && "${run_attempt}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Controlled validation run coordinates are invalid." >&2
+            exit 1
+          }
+          [[ "${state_artifact_id}" =~ ^[1-9][0-9]*$ && "${output_artifact_id}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Controlled validation artifact coordinates are invalid." >&2
+            exit 1
+          }
+          [[ "${predecessor_artifact_id}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Controlled validation predecessor coordinate is invalid." >&2
+            exit 1
+          }
+          [[ "${validation_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Controlled validation revision is invalid." >&2
+            exit 1
+          }
+          git cat-file -e "${validation_sha}^{commit}" 2>/dev/null || \
+            git fetch --no-tags origin "${validation_sha}"
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "${root}/run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/attempts/${run_attempt}/jobs?per_page=100" \
+            > "${root}/jobs.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" \
+            > "${root}/artifacts.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${predecessor_artifact_id}" \
+            > "${root}/predecessor-artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/compare/${validation_sha}...${GITHUB_SHA}" \
+            > "${root}/compare.json"
+          for coordinate in \
+            "${state_artifact_id}:state.zip" \
+            "${output_artifact_id}:output.zip"; do
+            artifact_id="${coordinate%%:*}"
+            filename="${coordinate#*:}"
+            curl --fail --silent --show-error --location \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+              --output "${root}/${filename}"
+          done
+
+          python deploy/runtime-v2/verify_legislative_validation_evidence.py \
+            --descriptor "${LEGISLATIVE_VALIDATION}" \
+            --run-metadata "${root}/run.json" \
+            --jobs-metadata "${root}/jobs.json" \
+            --artifacts-metadata "${root}/artifacts.json" \
+            --predecessor-artifact-metadata "${root}/predecessor-artifact.json" \
+            --state-archive "${root}/state.zip" \
+            --output-archive "${root}/output.zip" \
+            --compare-metadata "${root}/compare.json" \
+            --repository-root . \
+            --control-revision "${GITHUB_SHA}" \
+            --output "${root}/verified.json"
+
+      - name: Download exact failed-run evidence from GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}/sources"
+          while read -r prefix role; do
+            root="${EVIDENCE_DIR}/sources/${prefix}"
+            mkdir -p "${root}"
+            run_id="$(jq -r --arg role "${role}" '.runs[] | select(.role == $role) | .run_id' "${RECONCILIATION}")"
+            artifact_id="$(jq -r --arg role "${role}" '.runs[] | select(.role == $role) | .artifact_id' "${RECONCILIATION}")"
+            [[ "${run_id}" =~ ^[0-9]+$ && "${artifact_id}" =~ ^[0-9]+$ ]] || {
+              echo "Pinned source identifiers are invalid." >&2
+              exit 1
+            }
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "${root}/run.json"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?filter=all&per_page=100" > "${root}/jobs.json"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}" > "${root}/artifact.json"
+            curl --fail --silent --show-error --location \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+              --output "${root}/artifact.zip"
+          done <<'EOF'
+          run6 anchored_partial_history
+          run7 completed_two_cycle_history
+          EOF
+
+      - name: Verify the live legacy rollback route contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          capture_legacy_workflow_states
+          verify_legacy_workflows_match_observed
+          python deploy/runtime-v2/verify_legacy_route_contract.py \
+            --root . \
+            --workflow-states "${LEGACY_STATE_FILE}" \
+            --output "${EVIDENCE_DIR}/legacy-route-receipt.json"
 
       - name: Authenticate as constrained deployer
         uses: google-github-actions/auth@v3
@@ -64,13 +217,18 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Execute two serialized, evidence-bound shadow cycles
+      - name: Mark authenticated cloud control ready
+        shell: bash
+        run: echo "CLOUD_CONTROL_READY=true" >> "${GITHUB_ENV}"
+
+      - name: Reconcile pinned shadow history and current heads
         shell: bash
         run: |
           set -Eeuo pipefail
           mkdir -p "${EVIDENCE_DIR}"
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
 
           cleanup() {
             local code=$?
@@ -78,6 +236,7 @@ jobs:
             set +e
             pause_producer_schedulers
             make_web_private
+            remove_phase4_status_authority
             remove_execution_authority
             remove_service_account_user
             set -e
@@ -93,38 +252,16 @@ jobs:
           make_web_private
           verify_web_private
           verify_cloud_sql_private
-          capture_legacy_workflow_states
           verify_legacy_workflows_match_observed
-
-          configure_runtime shadow
           verify_runtime_configuration shadow
-          grant_execution_authority
+          collect_service_accounts
+          remove_service_account_user
+          verify_service_account_user_removed
 
-          # Apply only the additive, provenance-bound schema correction carried by the approved image.
-          execute_admin_init
-          capture_status "${EVIDENCE_DIR}/baseline.json" baseline
-
-          : > "${EVIDENCE_DIR}/observations.ndjson"
-          sequence=0
-          for cycle in 1 2; do
-            for job in legislative executive ai dashboard; do
-              sequence=$((sequence + 1))
-              stem="cycle-${cycle}-sequence-${sequence}"
-              execution="$(execute_producer "${job}" shadow "${stem}")"
-              status_file="${EVIDENCE_DIR}/${stem}-${job}-status.json"
-              capture_status "${status_file}" "${stem}-${job}-status"
-              jq -cn \
-                --argjson cycle "${cycle}" \
-                --argjson sequence "${sequence}" \
-                --arg job "${job}" \
-                --arg execution "${execution}" \
-                --slurpfile status "${status_file}" \
-                '{cycle:$cycle, sequence:$sequence, job:$job, cloud_run_execution:$execution, status:$status[0]}' \
-                >> "${EVIDENCE_DIR}/observations.ndjson"
-            done
-          done
-
-          remove_execution_authority
+          grant_phase4_status_authority
+          capture_status "${EVIDENCE_DIR}/current-status.json" current-status
+          remove_phase4_status_authority
+          verify_phase4_status_authority_removed
           verify_execution_authority_removed
           verify_service_account_user_removed
           verify_producer_scheduler_state PAUSED
@@ -134,16 +271,14 @@ jobs:
           verify_runtime_configuration shadow
           verify_legacy_workflows_match_observed
 
-          python - "${EVIDENCE_DIR}" <<'PY'
+          python - "${EVIDENCE_DIR}/current-manifest.json" <<'PY'
           import json
           import sys
           from pathlib import Path
 
-          root = Path(sys.argv[1])
-          executions = [json.loads(line) for line in (root / "observations.ndjson").read_text().splitlines() if line.strip()]
           manifest = {
               "schema_version": 1,
-              "phase": "phase4",
+              "phase": "phase4_reconciliation",
               "preflight": {
                   "canonical_repository_verified": True,
                   "canonical_main_verified": True,
@@ -154,36 +289,82 @@ jobs:
                   "web_public_invoker_absent": True,
                   "persistent_job_configuration_verified": True,
                   "legacy_production_route_active": True,
+                  "legacy_route_source_verified": True,
+                  "current_status_captured": True,
+                  "runtime_shadow_mode_verified": True,
+                  "evidence_control_files_verified": True,
               },
-              "executions": executions,
               "cleanup": {
                   "temporary_execution_authority_removed": True,
                   "temporary_logging_authority_removed": True,
                   "temporary_service_account_user_removed": True,
+                  "cloud_sql_private_only": True,
                   "producer_schedulers_paused": True,
                   "web_public_invoker_absent": True,
                   "legacy_production_route_active": True,
-                  "cloud_sql_private_only": True,
+                  "runtime_shadow_mode_verified": True,
+                  "no_producer_execution_performed": True,
               },
           }
-          (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+          Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
           PY
 
-          python deploy/runtime-v2/validate_runtime_promotion.py \
-            --phase phase4 \
-            --baseline "${EVIDENCE_DIR}/baseline.json" \
-            --manifest "${EVIDENCE_DIR}/manifest.json" \
+          python deploy/runtime-v2/reconcile_phase4_shadow_evidence.py \
+            --descriptor "${RECONCILIATION}" \
             --inventory deploy/runtime-v2/phase4-legacy-run-inventory.json \
+            --repository-root . \
+            --current-status "${EVIDENCE_DIR}/current-status.json" \
+            --current-manifest "${EVIDENCE_DIR}/current-manifest.json" \
             --control-revision "${GITHUB_SHA}" \
             --runtime-source-revision "${RUNTIME_SOURCE_REVISION}" \
             --image "${APPROVED_IMAGE}" \
+            --run6-run-metadata "${EVIDENCE_DIR}/sources/run6/run.json" \
+            --run6-artifact-metadata "${EVIDENCE_DIR}/sources/run6/artifact.json" \
+            --run6-jobs-metadata "${EVIDENCE_DIR}/sources/run6/jobs.json" \
+            --run6-archive "${EVIDENCE_DIR}/sources/run6/artifact.zip" \
+            --run7-run-metadata "${EVIDENCE_DIR}/sources/run7/run.json" \
+            --run7-artifact-metadata "${EVIDENCE_DIR}/sources/run7/artifact.json" \
+            --run7-jobs-metadata "${EVIDENCE_DIR}/sources/run7/jobs.json" \
+            --run7-archive "${EVIDENCE_DIR}/sources/run7/artifact.zip" \
             --output "${EVIDENCE_DIR}/phase4-ready.json"
           jq --slurpfile states "${LEGACY_STATE_FILE}" \
-            '. + {legacy_workflow_states:$states[0], legacy_state_preserved:true}' \
+            --slurpfile route "${EVIDENCE_DIR}/legacy-route-receipt.json" \
+            --slurpfile legislative "${EVIDENCE_DIR}/legislative-validation/verified.json" \
+            '. + {legacy_workflow_states:$states[0], legacy_state_preserved:true,
+                  legacy_route_receipt:$route[0], legacy_route_source_verified:true,
+                  legislative_validation_receipt:$legislative[0],
+                  legislative_validation_evidence_verified:true}' \
             "${EVIDENCE_DIR}/phase4-ready.json" > "${EVIDENCE_DIR}/phase4-ready.tmp"
           mv "${EVIDENCE_DIR}/phase4-ready.tmp" "${EVIDENCE_DIR}/phase4-ready.json"
           (cd "${EVIDENCE_DIR}" && sha256sum phase4-ready.json > phase4-ready.sha256)
-          jq -e '.result == "phase4_ready_for_phase5" and .phase5_ready == true and .unique_successful_execution_receipts == 8' \
+          jq -e \
+            '.result == "phase4_ready_for_phase5" and
+             .phase5_ready == true and
+             .unique_successful_execution_receipts == 8 and
+             .reconciliation.kind == "artifact_pinned_failed_run_replay" and
+             .reconciliation.immutable_inventory_preserved == true and
+             .reconciliation.cross_artifact_chain_verified == true and
+             .reconciliation.completed_two_cycle_history_verified == true and
+             .reconciliation.current_heads_verified == true and
+             .reconciliation.current_latest_receipts_verified == true and
+             .reconciliation.additional_producer_execution_performed == false and
+             .legislative_validation_evidence_verified == true and
+             .legislative_validation_receipt.result == "legislative_controlled_validation_verified" and
+             .legislative_validation_receipt.schedule_restoration_revision == .control_revision and
+             .legislative_validation_receipt.implementation_source_continuity_verified == true and
+             .legislative_validation_receipt.artifact_digests_verified == true and
+             .legislative_validation_receipt.safe_archive_contents_verified == true and
+             .legislative_validation_receipt.source_status_receipt_verified == true and
+             .legislative_validation_receipt.controlled_validation_receipt_verified == true and
+             .legislative_validation_receipt.notifications_suppressed == true and
+             .legislative_validation_receipt.no_outbound_notifications_verified == true and
+             (.legislative_validation_receipt.zero_notification_eligible_changes_verified == true or
+              .legislative_validation_receipt.predecessor_state_rollback_verified == true) and
+             .legislative_validation_receipt.additional_validation_run_authorized == false and
+             .legislative_validation_receipt.production_authority_transferred == false and
+             .legacy_route_source_verified == true and
+             .legacy_route_receipt.result == "legacy_rollback_route_verified" and
+             .legacy_route_receipt.legacy_production_route_active == true' \
             "${EVIDENCE_DIR}/phase4-ready.json" >/dev/null
 
           trap - EXIT
@@ -194,7 +375,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${EVIDENCE_DIR}"
-          printf '%s\n' '{"result":"phase4_cleanup_started"}' > "${EVIDENCE_DIR}/cleanup.json"
+          printf '%s\n' '{"result":"phase4_reconciliation_cleanup_started"}' > "${EVIDENCE_DIR}/cleanup.json"
           if [[ -z "${APPROVED_IMAGE:-}" && -f deploy/runtime-v2/phase4-approved-image.json ]]; then
             export APPROVED_IMAGE="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
             export RUNTIME_SOURCE_REVISION="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
@@ -202,21 +383,28 @@ jobs:
           if [[ -z "${APPROVED_IMAGE:-}" || -z "${RUNTIME_SOURCE_REVISION:-}" ]]; then
             exit 0
           fi
+          if [[ "${CLOUD_CONTROL_READY:-}" != "true" ]]; then
+            exit 0
+          fi
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
           pause_producer_schedulers || true
           make_web_private || true
+          remove_phase4_status_authority || true
           remove_execution_authority || true
+          collect_service_accounts
           remove_service_account_user || true
+          verify_phase4_status_authority_removed
+          verify_execution_authority_removed
+          verify_service_account_user_removed
+          verify_producer_scheduler_state PAUSED
+          verify_vault_scheduler_paused
+          verify_web_private
+          verify_cloud_sql_private
+          verify_runtime_configuration shadow
+          verify_legacy_workflows_match_observed
           if [[ "${{ job.status }}" == "success" ]]; then
-            verify_execution_authority_removed
-            verify_service_account_user_removed
-            verify_producer_scheduler_state PAUSED
-            verify_vault_scheduler_paused
-            verify_web_private
-            verify_cloud_sql_private
-            verify_runtime_configuration shadow
-            verify_legacy_workflows_match_observed
             (cd "${EVIDENCE_DIR}" && sha256sum -c phase4-ready.sha256)
           fi
 

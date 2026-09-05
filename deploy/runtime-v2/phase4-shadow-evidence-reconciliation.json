@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "result": "phase4_shadow_evidence_reconciliation_authorized",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "workflow": {
+    "id": 350129720,
+    "name": "Phase 4 live shadow validation v6",
+    "path": ".github/workflows/phase4_live_shadow_validation_v6.yml"
+  },
+  "evidence_control_revision": "aedcb2c936a08947b1f38a062b0bee86bf75b0cb",
+  "runtime_source_revision": "8908f067298078f8c013e90cf6b7ad8ad420285b",
+  "control_files": {
+    "deploy/runtime-v2/runtime_promotion_control.sh": "8df47efba1b2f86eb174f71eef5c1d638d5596a35c8907f8870324c5edb6cb39",
+    "deploy/runtime-v2/runtime_promotion_observed_state.sh": "14505512af0da25c357830e7936d8b4511bcc5c2fc68862da3ec57b98d91441b",
+    "deploy/runtime-v2/validate_runtime_promotion.py": "ebb4b4268806250624c8603437d494321e2f49ff3cc5f262ec40ae34289d1507",
+    "deploy/runtime-v2/phase4-approved-image.json": "1851fad20f437fb56c7ba722f173531a20036d40ac364fb8cfe99fc3d3b07df9",
+    "deploy/runtime-v2/phase4-legacy-run-inventory.json": "f5a1d6ccf5995798ca234b10c45320dcacb33869f7cbee8ca0f3be38df1a0a32"
+  },
+  "runs": [
+    {
+      "role": "anchored_partial_history",
+      "run_id": 33878297187,
+      "run_number": 6,
+      "run_attempt": 1,
+      "head_sha": "58503dff1b5b944ba0ee9466c0450f8351499206",
+      "event": "push",
+      "conclusion": "failure",
+      "job_id": 101040474823,
+      "artifact_id": 9942568612,
+      "artifact_name": "phase4-readiness",
+      "artifact_size_in_bytes": 113346,
+      "artifact_digest": "sha256:9c843a10fe65c40cff2358dcb3557fcb688c282602061abf3e8a63669413a04f",
+      "artifact_expires_at": "2026-12-03T13:28:55Z",
+      "expected_successful_receipts": 6,
+      "expected_failed_receipts": [
+        {
+          "sequence": 3,
+          "job": "ai",
+          "cloud_run_execution": "polititrack-ai-tx4xt",
+          "run_id": "576d72e7-8191-4b27-b5c3-b41dae58d446"
+        },
+        {
+          "sequence": 7,
+          "job": "ai",
+          "cloud_run_execution": "polititrack-ai-7nvxl",
+          "run_id": "14358df3-d524-45ae-91de-aef4ff79a1da"
+        }
+      ]
+    },
+    {
+      "role": "completed_two_cycle_history",
+      "run_id": 33887857023,
+      "run_number": 7,
+      "run_attempt": 1,
+      "head_sha": "aedcb2c936a08947b1f38a062b0bee86bf75b0cb",
+      "event": "workflow_dispatch",
+      "conclusion": "failure",
+      "job_id": 101071983174,
+      "artifact_id": 9945994606,
+      "artifact_name": "phase4-readiness",
+      "artifact_size_in_bytes": 116604,
+      "artifact_digest": "sha256:f91bb81e9cec45390064e686220e1262d2df70de9227f4263c595d1b8c5fdad8",
+      "artifact_expires_at": "2026-12-03T15:09:26Z",
+      "expected_successful_receipts": 8,
+      "expected_failed_receipts": []
+    }
+  ],
+  "expected_final_heads": {
+    "legislative": {
+      "generation": 6,
+      "snapshot_sha256": "aa929115f31cd7cfb3ed2fc35a9a86e13b98750d4994d81148392081fcf446f7"
+    },
+    "executive": {
+      "generation": 6,
+      "snapshot_sha256": "a53d91ea377ba60a2a209be6f413b001019904993371f2cbde91b1af68c1090d"
+    },
+    "ai": {
+      "generation": 5,
+      "snapshot_sha256": "39b6408c3922319bafcaf4380df9ac6a7d225eb4590a86937b884b8351cb4007"
+    },
+    "dashboard": {
+      "generation": 6,
+      "snapshot_sha256": "ee66d67e5f500e721dd2c805f091dc008b41fc12b91721a102691f13009a6f79"
+    }
+  },
+  "immutable_inventory_preserved": true,
+  "additional_producer_execution_authorized": false,
+  "production_authority_transferred": false
+}

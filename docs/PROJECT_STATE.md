@@ -1,190 +1,156 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-02 UTC  
-**Canonical repository ID:** `1349678672`  
-**Current repository name:** `maglothinm/MyETF-Intelligence`  
-**Default branch:** `main`  
-**Active controlled work:** issue #36 / PR #38  
-**Active branch:** `codex/runtime-v2-shadow-review`  
-**Target endpoint:** open for review, unmerged, undeployed
+**Current as of:** 2026-09-05 14:15 UTC
+**Canonical repository ID:** `1349678672`
+**Current repository name:** `maglothinm/MyETF-Intelligence`
+**Default branch:** `main`
+**Current main:** `706873d041f5dfc1c0cc384205ee385413f7a432`
+**Phase 4 tracking issue:** #99
+**Phase 5 authorization:** #100
+**Phase 4 certificate:** not issued
+**Phase 5 production cutover:** blocked
 
 This file records current operational truth. Historical receipts remain in
-`validation/`, incident records, the append-only decision log, and Git history.
+GitHub Actions artifacts, the append-only decision log, and Git history.
 
-## Operational authority
+## Current production authority and incident state
 
-Canonical `main`, its existing GitHub Actions production writers, and its retained
-protected-state contracts remain operational authority. The published dashboard
-and production Legislative, Executive, AI, simulation, and Filing Vault behavior
-on `main` were not redeployed or replaced by issue #36.
+The retained GitHub Actions workflows remain production authority. Runtime v2
+has completed shadow evidence but has not received production authority.
 
-Runtime v2 is not production authority. It has not been merged, deployed,
-initialized against a live database, populated through a state import, scheduled,
-used for a live collector/AI/dashboard/simulation cycle, promoted to production
-mode, or used to publish Pages.
+PR #125 merged to `main` as `706873d041f5dfc1c0cc384205ee385413f7a432`
+and restored the Legislative schedule before a safe main-branch production
+validation. Review after merge found that its exactly-one-source degraded result
+is rejected by the next workflow validation step, so a degraded run cannot
+publish a successor `legislative-tracker-state`. The new orchestrator's source
+receipt is also omitted from uploaded artifacts, its run-history record is not in
+the dashboard's canonical schema, and the new integration test was omitted from
+the required CI commands.
 
-Issue #36 did not inspect or change any external cloud project, account, billing,
-credential, database, bucket, service, job, or scheduler. Legacy
-`maglothinm/MyETF` remains excluded.
+To prevent the next schedule from recreating the unretained-side-effect
+continuity incident, workflow ID `345003824` (`Legislative purchase tracker v2`)
+was set to `disabled_manually` at approximately 2026-09-05 13:15 UTC. This is a
+reversible safety pause. Executive tracking remains separate and was not changed.
 
-## Active review transition
-
-Draft PR #37 reached exact green, mergeable head
-`8b16436e14862ad7abcdf94dc7272f437f88b091`. The GitHub connector's
-ready-for-review mutation failed because its GraphQL response requested an
-unsupported repository field. PR #37 was closed without merge.
-
-PR #38 was opened non-draft from the same exact tree on
-`codex/runtime-v2-shadow-review`. It is the active review. The transition did not
-change executable source or operational state; the continuity updates following
-the branch copy are documentation-only.
-
-## Beast Runtime v2 Phases 1–2
-
-### Verified source and base
+The newest verified Legislative continuity artifact at the pause boundary is:
 
 | Evidence | Value |
 |---|---|
-| Intake `main` | `d603e9b40ffb78c51f635589bc886875f411299b` |
-| Runtime v2 source branch | `codex/runtime-v2-cutover` |
-| Runtime v2 source head | `62a13eaa8ae5ac46046c992aedd42bc4816e2ce6` |
-| Source merge base | `e6d7ba5f88ec5886ae4d4bf108a5edcc4e370515` |
-| Intake divergence | 7 commits ahead, 2 commits behind `main` |
-| Preserved source-tree checkpoint | `7cceb9694ef7b50f71494f7c5b6baabe57520aa5` |
-| Active review branch | `codex/runtime-v2-shadow-review` |
-| Active review | PR #38, non-draft |
+| Artifact | `9969550055` (`legislative-tracker-state`) |
+| Producing run | `33966378019`, attempt 1 |
+| Producing revision | `23cc3b83cf468ed65d228b5208d30eff8798f5ff` |
+| Run conclusion | success |
+| Archive SHA-256 | `bd698df04dc12d04a119bd59bc45ba09876dea7cfc108b0c6583dc296d8b413d` |
+| Continuity treatment | preserve; do not rebaseline |
 
-The source branch remains unchanged. Its 29 committed Runtime v2 paths were copied
-by exact blob identity onto fresh verified `main` ancestry, avoiding a merge or
-rebase of divergent history.
+## Phase 4 execution lookup
 
-The original ChatGPT Work filesystem is unavailable. Local-only worktrees,
-stashes, reflogs, staged/unstaged patches, ignored files, and untracked files from
-that session are **unverified**. That limitation is not permission to deploy,
-initialize, or rebaseline. The remote inventory is in
-`docs/CONSOLIDATION_INVENTORY.md`.
+The obsolete `gcloud run jobs executions describe-latest` lookup is no longer in
+`deploy/runtime-v2/runtime_promotion_control.sh`. The shared controller first
+reads the completed `gcloud run jobs execute --format=json` receipt and uses the
+supported Cloud Run Job `status.latestCreatedExecution.name` field only as a
+bounded fallback. Cross-job receipts fail closed.
 
-### Explicit mode contract
+## Phase 4 two-cycle evidence
 
-Producer execution requires:
+The immutable recovered anchor remains unchanged. Two failed controller runs
+contain the complete chained shadow history:
 
-```text
-POLITITRACK_MODE=shadow|production
-```
+| Role | Run | Head revision | Artifact | Archive SHA-256 | Result used |
+|---|---:|---|---:|---|---|
+| Anchored prefix | `33878297187` | `58503dff1b5b944ba0ee9466c0450f8351499206` | `9942568612` | `9c843a10fe65c40cff2358dcb3557fcb688c282602061abf3e8a63669413a04f` | six successful receipts plus two AI failures that wrote no snapshot |
+| Completed history | `33887857023` | `aedcb2c936a08947b1f38a062b0bee86bf75b0cb` | `9945994606` | `f91bb81e9cec45390064e686220e1262d2df70de9227f4263c595d1b8c5fdad8` | eight ordered, unique, successful receipts across two complete cycles |
 
-Missing, blank, unknown, or conflicting values fail closed. The CLI resolves mode
-before constructing its PostgreSQL store, and `JobRunner` validates it again.
+The second artifact starts from the exact final heads of the first artifact. Its
+final protected heads are:
 
-In shadow mode:
-
-- Legislative and Executive commands always include `--no-notify`.
-- AI commands always include `--suppress-alerts`.
-- legacy suppression configuration cannot opt out.
-- trigger evidence is `shadow`.
-- notification, callback, Healthchecks, mail, webhook, Pushover, Slack, Discord,
-  Twilio, SendGrid, Mailgun, SMTP, and GitHub Actions artifact credentials/context
-  are removed from subprocess environments.
-- read-only analysis credentials are retained unless independently absent.
-- mode is recorded in run rows, status, workflow evidence, and snapshot provenance.
-- failed shadow runs are not classified as possibly having emitted external
-  effects.
-
-Explicit production mode retains intended producer command behavior and existing
-explicit suppression settings. No production-mode process ran during this task.
-
-### Durable state
-
-The Runtime v2 migration is additive. It adds and validates `runtime_mode`,
-backfills any earlier Runtime v2 run rows as production, and does not drop,
-recreate, initialize, import, replace, or advance a snapshot table or head.
-Database behavior in this phase is tested with source inspection and test doubles,
-not a live database.
-
-### Infrastructure source
-
-Terraform defaults producer environment to shadow and schedules to disabled. A
-Terraform check rejects enabled schedules unless mode is explicitly production.
-The mode is a non-secret control and cannot be supplied through the secret map.
-No Terraform, image build, cloud API, runtime, scheduler, or import action was
-executed.
-
-### Filing Vault reconciliation
-
-The preserved source imported `GoogleCloudObjectStore` but did not include that
-class. This caused focused Runtime v2 and standard repository CI to fail at
-collection. The active review implements the missing adapter with lazy Google
-Cloud imports, bounded object operations, content-addressed same-key verification,
-safe classified errors, and required uniform bucket-level access plus enforced
-public-access prevention. No external bucket was contacted.
-
-## CI and review evidence
-
-PR #38 contains the read-only `Runtime v2 safety tests` workflow. It installs
-`requirements-runtime-v2.txt`, compiles the package, runs focused Runtime v2,
-shadow-mode, and dashboard-insight tests, and runs `verify.sh`. It invokes no
-producer and receives read-only repository permissions.
-
-The standard `Investor Edge tests` workflow provides broader integration coverage.
-The initial failure exposed the missing GCS adapter and was corrected rather than
-retried unchanged.
-
-Executable-tree checkpoint `8b16436e14862ad7abcdf94dc7272f437f88b091`
-passed:
-
-| Workflow | Run | Conclusion |
+| Namespace | Generation | Snapshot SHA-256 |
 |---|---:|---|
-| Runtime v2 safety tests | `33639231223` | success |
-| Investor Edge tests | `33639231236` | success |
+| Legislative | 6 | `aa929115f31cd7cfb3ed2fc35a9a86e13b98750d4994d81148392081fcf446f7` |
+| Executive | 6 | `a53d91ea377ba60a2a209be6f413b001019904993371f2cbde91b1af68c1090d` |
+| AI | 5 | `39b6408c3922319bafcaf4380df9ac6a7d225eb4590a86937b884b8351cb4007` |
+| Dashboard | 6 | `ee66d67e5f500e721dd2c805f091dc008b41fc12b91721a102691f13009a6f79` |
 
-GitHub reported that exact tree mergeable against `main`. PR #37 retained those
-results and was closed unmerged solely because the connector could not clear its
-draft flag. PR #38 began from the identical head.
+The producer portion of the required two-cycle shadow acceptance therefore
+completed successfully. The original workflow still concluded `failure` because
+its validator required the later live baseline to equal the immutable recovered
+anchor even after the preceding failed run had legitimately advanced that
+baseline. That failure did not issue a certificate and did not start Phase 5.
 
-The active continuity updates are documentation-only successors and require both
-workflows on the exact final PR #38 head. PR checks and metadata identify that
-future final SHA because a tracked file cannot contain its own commit ID.
+## Reconciliation implementation
 
-## Protected-state continuity
+The active reconciliation branch is
+`phase4/reconcile-failed-shadow-evidence-20260905`. It preserves the anchor and
+performs no additional producer execution. Its replay validator pins the two run
+IDs, attempts, jobs, revisions, artifact IDs, sizes, digests, and expiration;
+checks safe ZIP/JSON handling; proves the cross-artifact chain and two ordered
+cycles; and requires the current Runtime heads and latest receipts to remain
+identical to the replayed result.
 
-Issue #36 did not read, download, upload, replace, or advance:
+Certification additionally requires the retained rollback workflows' current API
+states and checked-in source contract, including a schedule-capable Legislative
+and Executive collector. The resulting route receipt is included in the Phase 4
+certificate and must match current source again before Phase 5. Failed Phase 5
+smoke commands and failed legacy recovery dispatches cannot fall through to stale
+execution receipts or produce a false rollback-complete marker.
 
-- `legislative-tracker-state`;
-- `executive-tracker-state`;
-- `ai-analysis-state`.
+The same candidate now contains the PR #125 correction. The Legislative workflow
+is manual-only and requires an explicit validation acknowledgement. It receives no
+Pushover or Healthchecks credentials, forces `--no-notify`, cannot trigger the AI
+analyst or Pages publisher, isolates each official source transactionally, retains
+restore/source/controlled receipts, preserves the canonical run-history schema,
+and runs the new integration coverage in CI.
 
-It did not change seen IDs, ledgers, analyses, paper positions, alerts, Investor
-Edge history, health callbacks, or a production dashboard. Historical artifact
-identifiers in the original source runbook were not revalidated and are not future
-migration authority. A later import requires fresh canonical provenance and the
-then-current one-writer/high-water-mark gates.
+The controlled run has two acceptable evidence outcomes. With zero
+notification-eligible records, one or two validated official sources may publish
+a durable successor. With notification-eligible records, all six protected state,
+ledger, and history files are restored byte-for-byte and only the unchanged
+predecessor boundary is republished with a zero-outbound receipt. A total outage
+may preserve continuity but cannot satisfy Phase 4.
 
-## Parallel and retained work
+Phase 4 also requires a later checked-in descriptor for the exact controlled run.
+It verifies the predecessor and both successor artifacts against live GitHub
+metadata and digests, validates all three receipts and archive contents, and proves
+that collector implementation bytes and executable mode did not change before the
+schedule-restoration revision. No placeholder descriptor is present.
 
-| Work | State | Treatment in issue #36 |
-|---|---|---|
-| PR #3 / `codex/production-remediation` | Draft | No merge or cherry-pick |
-| PR #33 / `codex/score-receipts-data-quality` | Draft | No merge or cherry-pick |
-| PR #35 / `codex/chatgpt-codex-phase-1-2` | Open | Separate continuity task |
-| PR #37 / `codex/runtime-v2-shadow-integration` | Closed, unmerged | Green predecessor retained as evidence |
-| PR #38 / `codex/runtime-v2-shadow-review` | Open, non-draft | Active review; do not merge in this phase |
-| `codex/runtime-v2-integration` | Temporary staging ref | Non-authoritative; preserved only |
-| `codex/runtime-v2-cutover` | Original source | Preserved unchanged |
+No reconciliation commit is on `main`, no reconciliation Actions run has
+succeeded, and no `phase4-ready.json` completion certificate exists yet.
 
-All other branches listed in `docs/CONSOLIDATION_INVENTORY.md` remain untouched.
+## Exact blockers
 
-## Completion gate
+1. Merge the reconciliation and corrective code only after the exact PR head is
+   green.
+2. Re-enable the manual-only Legislative workflow and complete one controlled,
+   no-notify main-branch validation. Pin its exact run, job, predecessor, artifacts,
+   digests, and receipts in the Phase 4 prerequisite descriptor.
+3. Restore the reviewed recurring schedule in a follow-up change. At the moment
+   Phase 4 runs, the workflow must be API-active and its checked-in source must
+   pass the rollback route contract.
+4. Phase 4 must then replay both pinned Runtime artifacts and verify that live Runtime
+   heads and latest receipts have not drifted. Only that successful run may issue
+   the certificate.
 
-Phases 1–2 end only when both workflows succeed on the final PR #38 head, GitHub
-reports it mergeable, and PR #38 remains open, non-draft, unmerged, and undeployed.
-No production, cloud, state, credential, schedule, settings, or Pages action may
-occur.
+If the Runtime heads and latest receipts remain unchanged, no new shadow producer
+cycles are required. The earliest certificate is immediately after the controlled
+Legislative run is pinned, the reviewed recurring route is restored and active,
+and one Phase 4 reconciliation run succeeds. Any Runtime head or latest-receipt
+drift reopens the evidence gate and requires a separately reviewed continuation;
+it is not permission to rebaseline.
+
+## Phase 5 boundary
+
+Issue #100 authorizes Phase 5, not Phase 6. Phase 5 remains blocked until a
+successful Phase 4 run emits the hash-verified certificate on the exact current
+`main` revision. The Phase 5 workflow then rechecks the certificate, route source,
+workflow states, current heads, and latest receipts before it may transfer
+production authority. No Phase 5 production smoke, Runtime scheduler activation,
+public Runtime web cutover, or legacy-writer disablement has been accepted as
+complete.
 
 ## Next safe action
 
-Validate the final documentation-only PR #38 head, record its exact SHA and run
-IDs in issue/PR metadata, reconfirm mergeability, and stop.
-
-Fresh state provenance, isolated or live shadow acceptance, runtime/browser
-acceptance, production promotion, schedule activation, one-writer transfer,
-rollback drills, and retirement of the current GitHub production path require a
-later explicitly authorized release phase.
+Finish and review the manual-only Legislative correction and Phase 4
+reconciliation, run the full required test set on their exact PR head, merge,
+perform the alerts-suppressed main validation, and only then restore the recurring
+route and allow Phase 4 certification to run.
