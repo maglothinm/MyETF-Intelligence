@@ -299,11 +299,11 @@ jobs:
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
           source deploy/runtime-v2/phase4_reconciliation_control.sh
-          collect_service_accounts
           pause_producer_schedulers || true
           make_web_private || true
           remove_phase4_status_authority || true
           remove_execution_authority || true
+          collect_service_accounts
           remove_service_account_user || true
           verify_phase4_status_authority_removed
           verify_execution_authority_removed

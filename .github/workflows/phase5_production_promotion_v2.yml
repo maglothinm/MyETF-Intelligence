@@ -414,7 +414,8 @@ jobs:
           remove_service_account_user
           if verify_execution_authority_removed && verify_service_account_user_removed && \
              verify_producer_scheduler_state PAUSED && verify_web_private && \
-             verify_runtime_configuration shadow && [[ "${recovery_safe}" == "true" ]]; then
+             verify_runtime_configuration shadow && verify_legacy_workflows_match_observed && \
+             [[ "${recovery_safe}" == "true" ]]; then
             cleanup_safe=true
           fi
           jq -n \
