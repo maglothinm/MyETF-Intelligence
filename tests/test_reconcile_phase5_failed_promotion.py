@@ -309,6 +309,9 @@ class Evidence:
 @pytest.fixture
 def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     monkeypatch.setattr(validator, "_verify_tree_equal_descendant", lambda *_args: None)
+    monkeypatch.setattr(
+        validator, "_verify_frozen_legacy_successor_revision", lambda *_args: None
+    )
     item = Evidence()
     base = _base_status()
     cert = _certificate(base)
@@ -622,6 +625,110 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         item.recovery_predecessor_artifact_metadatas.append(predecessor_metadata)
         item.recovery_artifact_metadatas.append(artifact_metadata)
         item.recovery_output_artifact_metadatas.append(output_metadata)
+
+    frozen_successor_pins = []
+    item.frozen_successor_archives = []
+    item.frozen_successor_output_archives = []
+    item.frozen_successor_artifact_metadatas = []
+    item.frozen_successor_output_artifact_metadatas = []
+    for index, (role, run_id, recovery_pin) in enumerate(
+        zip(
+            ("legislative", "executive"),
+            validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS,
+            recovery_pins,
+        )
+    ):
+        successor_pin = _run_pin(
+            run_id,
+            validator.RECOVERY_PATHS[role],
+            "success",
+            head=validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
+            job_id=800 + index,
+            job_name="track",
+            start=f"2026-09-05T18:1{index}:00Z",
+            finish=f"2026-09-05T18:1{index}:30Z",
+            run_number=200 + index,
+        ) | {"role": role}
+        successor_pin["event"] = "schedule"
+        with zipfile.ZipFile(item.recovery_archives[index]) as bundle:
+            successor_members = {name: bundle.read(name) for name in bundle.namelist()}
+        with zipfile.ZipFile(item.recovery_output_archives[index]) as bundle:
+            successor_result = json.loads(bundle.read(validator.RECOVERY_RESULT_MEMBERS[role]))
+        successor_result["started_utc"] = f"2026-09-05T18:1{index}:05Z"
+        successor_result["finished_utc"] = f"2026-09-05T18:1{index}:20Z"
+        state = json.loads(successor_members["state.json"])
+        state["last_attempt_utc"] = successor_result["started_utc"]
+        state["last_success_utc"] = successor_result["finished_utc"]
+        successor_members["state.json"] = _json_bytes(state)
+        successor_receipt = {
+            key: copy.deepcopy(successor_result[key])
+            for key in (
+                "branch",
+                "success",
+                "overall_status",
+                "started_utc",
+                "finished_utc",
+                "errors",
+                "baseline_counts",
+                "new_filing_counts",
+                "cataloged_filing_counts",
+                "transaction_counts",
+                "purchase_counts",
+                "pending_review_counts",
+                "source_counts",
+                "historical_backfill",
+            )
+        }
+        successor_receipt.update(
+            run_key=f"{run_id}:1",
+            event_name="schedule",
+            trigger_source="schedule",
+        )
+        successor_members["runs.jsonl"] += _jsonl([successor_receipt])
+        successor_archive = tmp_path / f"frozen-successor-{role}-state.zip"
+        _zip(successor_archive, successor_members)
+        successor_output_archive = tmp_path / f"frozen-successor-{role}-output.zip"
+        _zip(
+            successor_output_archive,
+            {validator.RECOVERY_RESULT_MEMBERS[role]: _json_bytes(successor_result)},
+        )
+        artifact_pin, artifact_metadata = _artifact_pin(
+            successor_archive,
+            7300 + index,
+            validator.RECOVERY_ARTIFACT_NAMES[role],
+            run_id,
+            validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
+            created_at="2026-09-05T18:20:00Z",
+        )
+        output_name = (
+            f"legislative-purchase-output-{run_id}-1"
+            if role == "legislative"
+            else f"executive-purchase-output-{run_id}"
+        )
+        output_pin, output_metadata = _artifact_pin(
+            successor_output_archive,
+            7400 + index,
+            output_name,
+            run_id,
+            validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
+            created_at="2026-09-05T18:20:00Z",
+        )
+        predecessor_pin = copy.deepcopy(recovery_pin["artifact"])
+        predecessor_pin.update(
+            producer_run_id=recovery_pin["run_id"],
+            producer_head_sha=recovery_pin["head_sha"],
+        )
+        successor_pin.update(
+            predecessor_artifact=predecessor_pin,
+            artifact=artifact_pin,
+            output_artifact=output_pin,
+        )
+        frozen_successor_pins.append(successor_pin)
+        item.frozen_successor_archives.append(successor_archive)
+        item.frozen_successor_output_archives.append(successor_output_archive)
+        item.frozen_successor_artifact_metadatas.append(artifact_metadata)
+        item.frozen_successor_output_artifact_metadatas.append(output_metadata)
+
     phase4_artifact, item.phase4_artifact_metadata = _artifact_pin(
         item.phase4_archive, 7001, "phase4-readiness", validator.PHASE4_RUN_ID, validator.CERTIFIED_CONTROL_REVISION
     )
@@ -694,6 +801,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "failed_phase5": failed_pin,
         "concurrent_legacy_ai": legacy_pin,
         "recovery_runs": recovery_pins,
+        "frozen_legacy_successors": frozen_successor_pins,
         "legacy_dashboard": dashboard_pin,
     }
     item.phase4_source = {
@@ -720,15 +828,26 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     }
     item.recovery_run_metadatas = [_run_api(pin) for pin in recovery_pins]
     item.recovery_jobs_metadatas = [_jobs_api(pin) for pin in recovery_pins]
+    item.frozen_successor_run_metadatas = [
+        _run_api(pin) for pin in frozen_successor_pins
+    ]
+    item.frozen_successor_jobs_metadatas = [
+        _jobs_api(pin) for pin in frozen_successor_pins
+    ]
     item.legacy_run_inventories = [
         {"total_count": 1, "workflow_runs": [_run_api(pin)]}
-        for pin in (recovery_pins[0], recovery_pins[1], legacy_pin, dashboard_pin)
+        for pin in (
+            frozen_successor_pins[0],
+            frozen_successor_pins[1],
+            legacy_pin,
+            dashboard_pin,
+        )
     ]
     item.legacy_artifact_inventories = [
         {"total_count": 1, "artifacts": [metadata]}
         for metadata in (
-            item.recovery_artifact_metadatas[0],
-            item.recovery_artifact_metadatas[1],
+            item.frozen_successor_artifact_metadatas[0],
+            item.frozen_successor_artifact_metadatas[1],
             item.state_artifact_metadata,
         )
     ]
@@ -758,6 +877,14 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "recovery_archives": item.recovery_archives,
         "recovery_output_artifact_metadatas": item.recovery_output_artifact_metadatas,
         "recovery_output_archives": item.recovery_output_archives,
+        "frozen_successor_run_metadatas": item.frozen_successor_run_metadatas,
+        "frozen_successor_jobs_metadatas": item.frozen_successor_jobs_metadatas,
+        "frozen_successor_artifact_metadatas": item.frozen_successor_artifact_metadatas,
+        "frozen_successor_archives": item.frozen_successor_archives,
+        "frozen_successor_output_artifact_metadatas": (
+            item.frozen_successor_output_artifact_metadatas
+        ),
+        "frozen_successor_output_archives": item.frozen_successor_output_archives,
         "legacy_run_inventories": item.legacy_run_inventories,
         "legacy_artifact_inventories": item.legacy_artifact_inventories,
     }
@@ -876,8 +1003,8 @@ def _terminal(
             "state": "disabled_manually",
         }
         for pin in (
-            evidence.descriptor["recovery_runs"][0],
-            evidence.descriptor["recovery_runs"][1],
+            evidence.descriptor["frozen_legacy_successors"][0],
+            evidence.descriptor["frozen_legacy_successors"][1],
             evidence.descriptor["concurrent_legacy_ai"],
             evidence.descriptor["legacy_dashboard"],
         )
@@ -919,6 +1046,7 @@ def _terminal(
             "concurrent_writer_incident_acknowledged": True,
             "old_smoke_prefix_invalidated": True,
             "legacy_ai_artifact_quarantined": True,
+            "frozen_legacy_successors_verified": True,
             "legacy_runs_drained": True,
             "legacy_workflows_disabled": True,
             "continuation_heads_verified": True,
@@ -1064,6 +1192,22 @@ def test_replay_is_forensic_and_invalidates_old_four(evidence: Evidence) -> None
     assert receipt["reconciliation"]["fresh_clean_smoke_cycle_required"] is True
     assert receipt["reconciliation"]["rebaseline_performed"] is False
     assert receipt["reconciliation"]["full_snapshot_chain_preserved"] is True
+    assert receipt["reconciliation"]["frozen_legacy_successors_verified"] is True
+    assert [item["run_id"] for item in receipt["recovery_runs"]] == list(
+        validator.RECOVERY_RUN_IDS
+    )
+    assert [item["run_id"] for item in receipt["frozen_legacy_successors"]] == list(
+        validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS
+    )
+    assert all(
+        item["incident_only_revision_allowlist_verified"]
+        and item["protected_domain_data_unchanged"]
+        and item["run_receipt_appended_count"] == 1
+        for item in receipt["frozen_legacy_successors"]
+    )
+    assert [item["run_id"] for item in receipt["legacy_high_water"]["runs"][:2]] == list(
+        validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS
+    )
 
 
 def test_completion_certifies_only_a_fresh_clean_cycle(evidence: Evidence) -> None:
@@ -1087,6 +1231,9 @@ def test_completion_certifies_only_a_fresh_clean_cycle(evidence: Evidence) -> No
     assert receipt["reconciliation"]["additional_runtime_producer_execution_count"] == 4
     assert receipt["reconciliation"]["rebaseline_performed"] is False
     assert receipt["reconciliation"]["full_snapshot_chain_preserved"] is True
+    assert [
+        item["run_id"] for item in receipt["reconciliation"]["frozen_legacy_successors"]
+    ] == list(validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
     assert receipt["production_authority_transferred"] is True
     assert receipt["phase6_started"] is False
 
@@ -1426,6 +1573,97 @@ def test_recovery_predecessor_artifact_is_exactly_pinned(evidence: Evidence) -> 
         validator.reconcile_failed_phase5(**bad)
 
 
+def test_frozen_successor_run_and_artifact_metadata_are_exact(evidence: Evidence) -> None:
+    bad = copy.deepcopy(evidence.replay_kwargs)
+    bad["frozen_successor_run_metadatas"] = list(bad["frozen_successor_run_metadatas"])
+    bad["frozen_successor_run_metadatas"][0] = copy.deepcopy(
+        bad["frozen_successor_run_metadatas"][0]
+    )
+    bad["frozen_successor_run_metadatas"][0]["id"] += 1
+    with pytest.raises(validator.PromotionValidationError, match="API id mismatch"):
+        validator.reconcile_failed_phase5(**bad)
+
+    bad = copy.deepcopy(evidence.replay_kwargs)
+    bad["frozen_successor_artifact_metadatas"] = list(
+        bad["frozen_successor_artifact_metadatas"]
+    )
+    bad["frozen_successor_artifact_metadatas"][1] = copy.deepcopy(
+        bad["frozen_successor_artifact_metadatas"][1]
+    )
+    bad["frozen_successor_artifact_metadatas"][1]["id"] += 1
+    with pytest.raises(validator.PromotionValidationError, match="API id mismatch"):
+        validator.reconcile_failed_phase5(**bad)
+
+    bad = copy.deepcopy(evidence.replay_kwargs)
+    bad["descriptor"] = copy.deepcopy(bad["descriptor"])
+    bad["descriptor"]["frozen_legacy_successors"][0]["predecessor_artifact"]["id"] += 1
+    with pytest.raises(validator.PromotionValidationError, match="successor predecessor id mismatch"):
+        validator.reconcile_failed_phase5(**bad)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("domain", "protected domain member filings.jsonl changed"),
+        ("state", "recovery state non-marker content mismatch"),
+        ("receipt", "protected run receipt run_key mismatch"),
+    ],
+)
+def test_frozen_successor_requires_exact_zero_change_lineage(
+    evidence: Evidence, tmp_path: Path, mutation: str, message: str
+) -> None:
+    with zipfile.ZipFile(evidence.frozen_successor_archives[0]) as bundle:
+        members = {name: bundle.read(name) for name in bundle.namelist()}
+    if mutation == "domain":
+        members["filings.jsonl"] += b'{"unexpected":"successor-business-change"}\n'
+    elif mutation == "state":
+        state = json.loads(members["state.json"])
+        state["unexpected_null"] = None
+        members["state.json"] = _json_bytes(state)
+    else:
+        rows = members["runs.jsonl"].splitlines(keepends=True)
+        latest = json.loads(rows[-1])
+        latest["run_key"] = "wrong-successor:1"
+        rows[-1] = _json_bytes(latest)
+        members["runs.jsonl"] = b"".join(rows)
+
+    changed = tmp_path / f"changed-frozen-successor-{mutation}.zip"
+    _zip(changed, members)
+    bad = copy.deepcopy(evidence.replay_kwargs)
+    bad["descriptor"] = copy.deepcopy(bad["descriptor"])
+    pin, metadata = _artifact_pin(
+        changed,
+        7300,
+        validator.RECOVERY_ARTIFACT_NAMES["legislative"],
+        validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS[0],
+        validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
+        created_at="2026-09-05T18:20:00Z",
+    )
+    bad["descriptor"]["frozen_legacy_successors"][0]["artifact"] = pin
+    bad["frozen_successor_artifact_metadatas"] = list(
+        bad["frozen_successor_artifact_metadatas"]
+    )
+    bad["frozen_successor_artifact_metadatas"][0] = metadata
+    bad["frozen_successor_archives"] = list(bad["frozen_successor_archives"])
+    bad["frozen_successor_archives"][0] = changed
+    with pytest.raises(validator.PromotionValidationError, match=message):
+        validator.reconcile_failed_phase5(**bad)
+
+
+def test_frozen_successor_revision_has_only_incident_control_paths() -> None:
+    validator._verify_frozen_legacy_successor_revision(MODULE_PATH.parents[2])
+    assert validator.FROZEN_LEGACY_SUCCESSOR_DIFF == {
+        ".github/workflows/phase5_failed_promotion_retry.yml": "A",
+        ".github/workflows/runtime_v2_tests.yml": "M",
+        "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "A",
+        "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "A",
+        "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "A",
+        "docs/DECISIONS.md": "M",
+        "tests/test_phase5_failed_promotion_retry.py": "A",
+        "tests/test_reconcile_phase5_failed_promotion.py": "A",
+    }
+
+
 def test_replay_rejects_later_legacy_run_and_newer_protected_artifact(
     evidence: Evidence,
 ) -> None:
@@ -1443,7 +1681,7 @@ def test_replay_rejects_later_legacy_run_and_newer_protected_artifact(
     bad = copy.deepcopy(evidence.replay_kwargs)
     newer = copy.deepcopy(bad["legacy_artifact_inventories"][0]["artifacts"][0])
     newer["id"] += 999
-    newer["created_at"] = "2026-09-05T18:00:00Z"
+    newer["created_at"] = "2026-09-05T19:00:00Z"
     bad["legacy_artifact_inventories"][0]["artifacts"].append(newer)
     bad["legacy_artifact_inventories"][0]["total_count"] = 2
     with pytest.raises(
@@ -1573,7 +1811,10 @@ def test_completion_rejects_baseline_drift_and_old_receipt_reuse(evidence: Evide
         )
 
 
-@pytest.mark.parametrize("missing", ["phase4_certificate", "failed_phase5", "recovery_runs"])
+@pytest.mark.parametrize(
+    "missing",
+    ["phase4_certificate", "failed_phase5", "recovery_runs", "frozen_legacy_successors"],
+)
 def test_completion_requires_full_semantic_replay(
     evidence: Evidence, missing: str
 ) -> None:
@@ -1841,6 +2082,28 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         recovery_predecessor_artifacts.append(predecessor_artifact_path)
         recovery_artifacts.append(artifact_path)
         recovery_output_artifacts.append(output_artifact_path)
+    frozen_successor_runs = []
+    frozen_successor_jobs = []
+    frozen_successor_artifacts = []
+    frozen_successor_output_artifacts = []
+    for index, (run, jobs) in enumerate(
+        zip(evidence.frozen_successor_run_metadatas, evidence.frozen_successor_jobs_metadatas)
+    ):
+        run_path = tmp_path / f"frozen-successor-run-{index}.json"
+        jobs_path = tmp_path / f"frozen-successor-jobs-{index}.json"
+        artifact_path = tmp_path / f"frozen-successor-artifact-{index}.json"
+        output_artifact_path = tmp_path / f"frozen-successor-output-artifact-{index}.json"
+        _write_json(run_path, run)
+        _write_json(jobs_path, jobs)
+        _write_json(artifact_path, evidence.frozen_successor_artifact_metadatas[index])
+        _write_json(
+            output_artifact_path,
+            evidence.frozen_successor_output_artifact_metadatas[index],
+        )
+        frozen_successor_runs.append(run_path)
+        frozen_successor_jobs.append(jobs_path)
+        frozen_successor_artifacts.append(artifact_path)
+        frozen_successor_output_artifacts.append(output_artifact_path)
     legacy_run_inventory_paths = []
     for index, value in enumerate(evidence.legacy_run_inventories):
         path = tmp_path / f"legacy-run-inventory-{index}.json"
@@ -1891,6 +2154,18 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         args += ["--recovery-output-artifact-metadata", str(path)]
     for path in evidence.recovery_output_archives:
         args += ["--recovery-output-archive", str(path)]
+    for path in frozen_successor_runs:
+        args += ["--frozen-successor-run-metadata", str(path)]
+    for path in frozen_successor_jobs:
+        args += ["--frozen-successor-jobs-metadata", str(path)]
+    for path in frozen_successor_artifacts:
+        args += ["--frozen-successor-artifact-metadata", str(path)]
+    for path in evidence.frozen_successor_archives:
+        args += ["--frozen-successor-archive", str(path)]
+    for path in frozen_successor_output_artifacts:
+        args += ["--frozen-successor-output-artifact-metadata", str(path)]
+    for path in evidence.frozen_successor_output_archives:
+        args += ["--frozen-successor-output-archive", str(path)]
     for path in legacy_run_inventory_paths:
         args += ["--legacy-run-inventory", str(path)]
     for path in legacy_artifact_inventory_paths:

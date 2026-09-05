@@ -244,6 +244,100 @@
       }
     }
   ],
+  "frozen_legacy_successors": [
+    {
+      "role": "legislative",
+      "run_id": 33987160591,
+      "run_number": 59,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_sha": "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2",
+      "conclusion": "success",
+      "created_at": "2026-09-05T19:27:28Z",
+      "run_started_at": "2026-09-05T19:27:28Z",
+      "updated_at": "2026-09-05T19:29:36Z",
+      "workflow": {
+        "id": 345003824,
+        "name": "Legislative purchase tracker v2",
+        "path": ".github/workflows/legislative_trade_tracker_v2.yml"
+      },
+      "job": {
+        "id": 101362770866,
+        "name": "track",
+        "started_at": "2026-09-05T19:27:30Z",
+        "completed_at": "2026-09-05T19:29:35Z"
+      },
+      "predecessor_artifact": {
+        "id": 9973858440,
+        "name": "legislative-tracker-state",
+        "size_in_bytes": 759113,
+        "digest": "sha256:2b80d235e7cfc74cde59c47bdb4fcecd4f80ab7a420dc31462baf83db1f72d4e",
+        "expires_at": "2026-12-04T17:33:07Z",
+        "producer_run_id": 33981311523,
+        "producer_head_sha": "042f22e0a08f1f3ea69f62a0842a4cefdea6230c"
+      },
+      "artifact": {
+        "id": 9975534045,
+        "name": "legislative-tracker-state",
+        "size_in_bytes": 759138,
+        "digest": "sha256:49b12457193ec72629ec4afea38acdb0074c49687354993842c7495a3919c951",
+        "expires_at": "2026-12-04T19:27:28Z"
+      },
+      "output_artifact": {
+        "id": 9975534339,
+        "name": "legislative-purchase-output-33987160591-1",
+        "size_in_bytes": 149716,
+        "digest": "sha256:882d587ba282d8bc1801f76e2ad85cf69508c9d61ac2b7925a1a683426ded497",
+        "expires_at": "2026-10-05T19:29:31Z"
+      }
+    },
+    {
+      "role": "executive",
+      "run_id": 33987130349,
+      "run_number": 50,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_sha": "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2",
+      "conclusion": "success",
+      "created_at": "2026-09-05T19:26:49Z",
+      "run_started_at": "2026-09-05T19:26:49Z",
+      "updated_at": "2026-09-05T19:29:17Z",
+      "workflow": {
+        "id": 344663671,
+        "name": "Executive purchase tracker",
+        "path": ".github/workflows/executive_trade_tracker.yml"
+      },
+      "job": {
+        "id": 101362685264,
+        "name": "track",
+        "started_at": "2026-09-05T19:26:51Z",
+        "completed_at": "2026-09-05T19:29:17Z"
+      },
+      "predecessor_artifact": {
+        "id": 9973859530,
+        "name": "executive-tracker-state",
+        "size_in_bytes": 512016,
+        "digest": "sha256:f86fe1b4c8dd832aefe71c0385d848add243820a8a7158342ba4e2448349e0e1",
+        "expires_at": "2026-12-04T17:33:09Z",
+        "producer_run_id": 33981312757,
+        "producer_head_sha": "042f22e0a08f1f3ea69f62a0842a4cefdea6230c"
+      },
+      "artifact": {
+        "id": 9975529940,
+        "name": "executive-tracker-state",
+        "size_in_bytes": 512042,
+        "digest": "sha256:0f0cd0e3fb30a43e32d50bd684b5bfb143343460c69bcb54b590ebd0d687c67f",
+        "expires_at": "2026-12-04T19:26:49Z"
+      },
+      "output_artifact": {
+        "id": 9975530113,
+        "name": "executive-purchase-output-33987130349",
+        "size_in_bytes": 495654,
+        "digest": "sha256:c947b27b4a006efa074db1295753a0d4d215c3857acd942d634026a8a9355d4d",
+        "expires_at": "2026-10-05T19:29:14Z"
+      }
+    }
+  ],
   "legacy_dashboard": {
     "role": "dashboard",
     "run_id": 33974683885,

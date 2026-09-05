@@ -37,6 +37,8 @@ jobs:
       WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
       DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
       PRIVATE_WEB_AUDIENCE: https://polititrack-web-s6icmprjvq-uc.a.run.app
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:420670e057036ebd78527aefdadaae30eeb360fcbe82865173861b19b303dc21
+      RUNTIME_SOURCE_REVISION: 8908f067298078f8c013e90cf6b7ad8ad420285b
       PHASE5_RETRY_DESCRIPTOR: deploy/runtime-v2/phase5-retry-evidence-33979778020.json
       EVIDENCE_DIR: phase5-retry-live
       CONTROL_REVISION: ${{ inputs.frozen_main_sha }}
@@ -54,15 +56,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${EVIDENCE_DIR}"
-          export APPROVED_IMAGE="$(jq -er '.immutable_image' "${PHASE5_RETRY_DESCRIPTOR}")"
-          export RUNTIME_SOURCE_REVISION="$(jq -er '.runtime_source_revision' "${PHASE5_RETRY_DESCRIPTOR}")"
-          printf 'APPROVED_IMAGE=%s\n' "${APPROVED_IMAGE}" >> "${GITHUB_ENV}"
-          printf 'RUNTIME_SOURCE_REVISION=%s\n' "${RUNTIME_SOURCE_REVISION}" >> "${GITHUB_ENV}"
+          [[ "${APPROVED_IMAGE}" == "$(jq -er '.immutable_image' "${PHASE5_RETRY_DESCRIPTOR}")" ]]
+          [[ "${RUNTIME_SOURCE_REVISION}" == "$(jq -er '.runtime_source_revision' "${PHASE5_RETRY_DESCRIPTOR}")" ]]
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
           source deploy/runtime-v2/phase4_reconciliation_control.sh
           source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
 
+          # These exact workflows are manually frozen before dispatch so the
+          # protected-artifact high-water cannot move while it is downloaded.
+          phase5_retry_write_frozen_legacy_states
+          verify_legacy_workflows_match_observed
+          drain_legacy_workflows
           phase5_retry_verify_descriptor_identity
           [[ "${RETRY_FAILED_RUN_ID}" == "$(jq -r '.failed_phase5.run_id | tostring' "${PHASE5_RETRY_DESCRIPTOR}")" ]] || {
             echo "The acknowledged failed run does not match the checked-in incident descriptor." >&2
@@ -107,7 +112,7 @@ jobs:
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
           source deploy/runtime-v2/phase4_reconciliation_control.sh
           source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
-          phase5_retry_write_observed_legacy_states
+          phase5_retry_write_frozen_legacy_states
           rm -f -- "${EVIDENCE_DIR}/live-mutation-started"
 
           promotion_complete=false
@@ -127,6 +132,12 @@ jobs:
           verify_project_boundary
           phase5_retry_verify_safe_rollback_state
           phase5_retry_capture_private_id_token_claims "${private_web_id_token}"
+
+          # The workflows remain physically frozen.  This atomic file records
+          # the exact service-bearing route that rollback must restore if any
+          # subsequent cloud mutation fails.
+          phase5_retry_write_observed_legacy_states
+          [[ "$(phase5_retry_observed_legacy_route_kind)" == "historic_active" ]]
           touch "${EVIDENCE_DIR}/live-mutation-started"
           phase5_retry_capture_current_logging_view_absence_receipt
           grant_execution_authority
@@ -179,6 +190,18 @@ jobs:
               --recovery-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-output-artifact.json" \
               --recovery-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-legislative-output.zip" \
               --recovery-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-output.zip" \
+              --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-run.json" \
+              --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-run.json" \
+              --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-jobs.json" \
+              --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-jobs.json" \
+              --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-artifact.json" \
+              --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-artifact.json" \
+              --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative.zip" \
+              --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive.zip" \
+              --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-output-artifact.json" \
+              --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-output-artifact.json" \
+              --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-output.zip" \
+              --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-output.zip" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-runs-${inventory_suffix}.json" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-runs-${inventory_suffix}.json" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-runs-${inventory_suffix}.json" \
@@ -198,6 +221,7 @@ jobs:
                .concurrent_legacy_ai.merge_or_import_authorized == false and
                .concurrent_legacy_ai.disposition == "quarantined_separate_legacy_artifact" and
                .reconciliation.legacy_ai_artifact_quarantined == true and
+               .reconciliation.frozen_legacy_successors_verified == true and
                .reconciliation.legacy_high_water_verified == true' \
               "${replay}" >/dev/null
           }
@@ -206,7 +230,6 @@ jobs:
 
           # Recheck the frozen head immediately before touching either route.
           phase5_retry_verify_frozen_context
-          touch "${EVIDENCE_DIR}/route-touched"
           disable_legacy_workflows
           drain_legacy_workflows
           verify_legacy_workflows_state disabled_manually
@@ -215,6 +238,7 @@ jobs:
           verify_failed_phase5_replay "${EVIDENCE_DIR}/failed-prefix-replay.json"
           (cd "${EVIDENCE_DIR}" && sha256sum failed-prefix-replay.json > failed-prefix-replay.sha256)
           chmod a-w "${EVIDENCE_DIR}/failed-prefix-replay.json" "${EVIDENCE_DIR}/failed-prefix-replay.sha256"
+          touch "${EVIDENCE_DIR}/route-touched"
           configure_runtime production
           verify_runtime_configuration production
           verify_producer_scheduler_state PAUSED
@@ -387,6 +411,7 @@ jobs:
                   "concurrent_writer_incident_acknowledged": True,
                   "old_smoke_prefix_invalidated": True,
                   "legacy_ai_artifact_quarantined": True,
+                  "frozen_legacy_successors_verified": True,
                   "legacy_workflows_disabled": True,
                   "legacy_runs_drained": True,
                   "no_concurrent_legacy_runs": True,
@@ -531,6 +556,7 @@ jobs:
              .reconciliation.additional_runtime_producer_execution_performed == true and
              (.executions | length) == 4 and
              (.reconciliation.invalidated_smoke_prefix.executions | length) == 4 and
+             (.reconciliation.frozen_legacy_successors | length) == 2 and
              .reconciliation.invalidated_smoke_prefix.certification_eligible == false and
              .phase6_started == false' \
             "${EVIDENCE_DIR}/phase5-complete.json" >/dev/null
@@ -578,10 +604,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${EVIDENCE_DIR}"
-          if [[ ! -f "${EVIDENCE_DIR}/cloud-control-available" ||
-                ! -f "${EVIDENCE_DIR}/live-mutation-started" ]]; then
+          if [[ ! -f "${EVIDENCE_DIR}/live-mutation-started" ]]; then
+            source deploy/runtime-v2/runtime_promotion_control.sh
+            source deploy/runtime-v2/runtime_promotion_observed_state.sh
+            source deploy/runtime-v2/phase4_reconciliation_control.sh
+            source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+            phase5_retry_restore_pre_live_legacy_route
             printf '%s\n' \
-              '{"result":"phase5_retry_failed_before_live_mutation","live_mutation_performed":false}' \
+              '{"result":"phase5_retry_failed_before_live_mutation","live_mutation_performed":false,"legacy_route_restored":true,"observed_legacy_route_kind":"historic_active"}' \
               > "${EVIDENCE_DIR}/retry-rollback.json"
             exit 0
           fi
@@ -589,7 +619,6 @@ jobs:
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
           source deploy/runtime-v2/phase4_reconciliation_control.sh
           source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
-          phase5_retry_write_observed_legacy_states
           phase5_retry_rollback
           [[ -f "${EVIDENCE_DIR}/retry-rollback-complete" ]]
 

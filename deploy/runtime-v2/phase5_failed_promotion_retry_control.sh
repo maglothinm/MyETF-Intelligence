@@ -15,6 +15,7 @@ PHASE5_RETRY_PHASE4_RUN_ID="33979432233"
 PHASE5_RETRY_LEGACY_AI_RUN_ID="33980946687"
 PHASE5_RETRY_DASHBOARD_RUN_ID="33974683885"
 PHASE5_RETRY_RECOVERY_RUN_IDS=(33981311523 33981312757)
+PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS=(33987160591 33987130349)
 
 phase5_retry_descriptor_value() {
   local expression="$1"
@@ -32,6 +33,8 @@ phase5_retry_verify_descriptor_identity() {
     --arg legacy_ai_run "${PHASE5_RETRY_LEGACY_AI_RUN_ID}" \
     --arg recovery_legislative "${PHASE5_RETRY_RECOVERY_RUN_IDS[0]}" \
     --arg recovery_executive "${PHASE5_RETRY_RECOVERY_RUN_IDS[1]}" \
+    --argjson successor_legislative "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[0]}" \
+    --argjson successor_executive "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[1]}" \
     --arg dashboard_run "${PHASE5_RETRY_DASHBOARD_RUN_ID}" \
     'type == "object" and .schema_version == 1 and
      .result == "phase5_failed_promotion_reconciliation_authorized" and
@@ -63,6 +66,64 @@ phase5_retry_verify_descriptor_identity() {
      .recovery_runs[1].artifact.id > 0 and
      (.recovery_runs[1].output_artifact.id | type) == "number" and
      .recovery_runs[1].output_artifact.id > 0 and
+     .frozen_legacy_successors == [
+       {
+         role:"legislative",run_id:$successor_legislative,run_number:59,run_attempt:1,
+         event:"schedule",head_sha:"40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2",
+         conclusion:"success",created_at:"2026-09-05T19:27:28Z",
+         run_started_at:"2026-09-05T19:27:28Z",updated_at:"2026-09-05T19:29:36Z",
+         workflow:{id:345003824,name:"Legislative purchase tracker v2",
+                   path:".github/workflows/legislative_trade_tracker_v2.yml"},
+         job:{id:101362770866,name:"track",started_at:"2026-09-05T19:27:30Z",
+              completed_at:"2026-09-05T19:29:35Z"},
+         predecessor_artifact:{
+           id:9973858440,name:"legislative-tracker-state",size_in_bytes:759113,
+           digest:"sha256:2b80d235e7cfc74cde59c47bdb4fcecd4f80ab7a420dc31462baf83db1f72d4e",
+           expires_at:"2026-12-04T17:33:07Z",producer_run_id:33981311523,
+           producer_head_sha:"042f22e0a08f1f3ea69f62a0842a4cefdea6230c"},
+         artifact:{
+           id:9975534045,name:"legislative-tracker-state",size_in_bytes:759138,
+           digest:"sha256:49b12457193ec72629ec4afea38acdb0074c49687354993842c7495a3919c951",
+           expires_at:"2026-12-04T19:27:28Z"},
+         output_artifact:{
+           id:9975534339,name:"legislative-purchase-output-33987160591-1",
+           size_in_bytes:149716,
+           digest:"sha256:882d587ba282d8bc1801f76e2ad85cf69508c9d61ac2b7925a1a683426ded497",
+           expires_at:"2026-10-05T19:29:31Z"}
+       },
+       {
+         role:"executive",run_id:$successor_executive,run_number:50,run_attempt:1,
+         event:"schedule",head_sha:"40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2",
+         conclusion:"success",created_at:"2026-09-05T19:26:49Z",
+         run_started_at:"2026-09-05T19:26:49Z",updated_at:"2026-09-05T19:29:17Z",
+         workflow:{id:344663671,name:"Executive purchase tracker",
+                   path:".github/workflows/executive_trade_tracker.yml"},
+         job:{id:101362685264,name:"track",started_at:"2026-09-05T19:26:51Z",
+              completed_at:"2026-09-05T19:29:17Z"},
+         predecessor_artifact:{
+           id:9973859530,name:"executive-tracker-state",size_in_bytes:512016,
+           digest:"sha256:f86fe1b4c8dd832aefe71c0385d848add243820a8a7158342ba4e2448349e0e1",
+           expires_at:"2026-12-04T17:33:09Z",producer_run_id:33981312757,
+           producer_head_sha:"042f22e0a08f1f3ea69f62a0842a4cefdea6230c"},
+         artifact:{
+           id:9975529940,name:"executive-tracker-state",size_in_bytes:512042,
+           digest:"sha256:0f0cd0e3fb30a43e32d50bd684b5bfb143343460c69bcb54b590ebd0d687c67f",
+           expires_at:"2026-12-04T19:26:49Z"},
+         output_artifact:{
+           id:9975530113,name:"executive-purchase-output-33987130349",
+           size_in_bytes:495654,
+           digest:"sha256:c947b27b4a006efa074db1295753a0d4d215c3857acd942d634026a8a9355d4d",
+           expires_at:"2026-10-05T19:29:14Z"}
+       }
+     ] and
+     .frozen_legacy_successors[0].predecessor_artifact ==
+       (.recovery_runs[0].artifact + {
+         producer_run_id:.recovery_runs[0].run_id,
+         producer_head_sha:.recovery_runs[0].head_sha}) and
+     .frozen_legacy_successors[1].predecessor_artifact ==
+       (.recovery_runs[1].artifact + {
+         producer_run_id:.recovery_runs[1].run_id,
+         producer_head_sha:.recovery_runs[1].head_sha}) and
      (.expected_continuation_heads | type) == "object" and
      (.expected_continuation_heads | keys | sort) == (["ai","dashboard","executive","legislative"] | sort) and
      all(.expected_continuation_heads[];
@@ -167,6 +228,19 @@ phase5_retry_download_incident_evidence() {
   phase5_retry_capture_artifact '.recovery_runs[1].artifact' recovery-executive || return 1
   phase5_retry_capture_artifact \
     '.recovery_runs[1].output_artifact' recovery-executive-output || return 1
+
+  phase5_retry_capture_run \
+    '.frozen_legacy_successors[0]' frozen-successor-legislative || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[0].artifact' frozen-successor-legislative || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[0].output_artifact' frozen-successor-legislative-output || return 1
+  phase5_retry_capture_run \
+    '.frozen_legacy_successors[1]' frozen-successor-executive || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[1].artifact' frozen-successor-executive || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[1].output_artifact' frozen-successor-executive-output || return 1
   phase5_retry_verify_legacy_high_water downloaded || return 1
 }
 
@@ -230,15 +304,39 @@ phase5_retry_capture_artifact_inventory() {
     }
 }
 
+phase5_retry_verify_no_active_legacy_runs() {
+  local suffix="${1:-current}" workflow
+  local active_file="${PHASE5_RETRY_INCIDENT_DIR}/legacy-active-run-ids-${suffix}.txt"
+  : > "${active_file}" || return 1
+  for workflow in "${LEGACY_WORKFLOWS[@]}"; do
+    if ! gh api --paginate \
+      "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?per_page=100" \
+      --jq '.workflow_runs[] | select(.status != "completed") | .id' \
+      >> "${active_file}"; then
+      echo "Unable to verify the post-capture active-run inventory for ${workflow}." >&2
+      return 1
+    fi
+  done
+  sort -u -o "${active_file}" "${active_file}" || return 1
+  if [[ -s "${active_file}" ]]; then
+    echo "A legacy workflow run became active during high-water capture." >&2
+    return 1
+  fi
+}
+
 phase5_retry_verify_legacy_high_water() {
   local suffix="${1:-current}" role run_path artifact_path workflow artifact_name
   local expected_run_id expected_run_created_at expected_artifact_id runs_file artifacts_file
   local specifications=(
-    'legislative|.recovery_runs[0]|.recovery_runs[0].artifact|legislative_trade_tracker_v2.yml'
-    'executive|.recovery_runs[1]|.recovery_runs[1].artifact|executive_trade_tracker.yml'
+    'legislative|.frozen_legacy_successors[0]|.frozen_legacy_successors[0].artifact|legislative_trade_tracker_v2.yml'
+    'executive|.frozen_legacy_successors[1]|.frozen_legacy_successors[1].artifact|executive_trade_tracker.yml'
     'ai|.concurrent_legacy_ai|.concurrent_legacy_ai.state_artifact|ai_filing_analyst.yml'
   )
   mkdir -p "${PHASE5_RETRY_INCIDENT_DIR}" || return 1
+  verify_legacy_workflows_state disabled_manually || {
+    echo "The legacy writer fence was not closed before high-water capture." >&2
+    return 1
+  }
   for specification in "${specifications[@]}"; do
     IFS='|' read -r role run_path artifact_path workflow <<<"${specification}"
     expected_run_id="$(phase5_retry_descriptor_value "${run_path}.run_id")" || return 1
@@ -254,6 +352,7 @@ phase5_retry_verify_legacy_high_water() {
     jq -e --argjson expected_run_id "${expected_run_id}" \
       --arg expected_run_created_at "${expected_run_created_at}" \
       '.workflow_runs | type == "array" and length > 0 and
+       all(.[]; .status == "completed") and
        .[0].id == $expected_run_id and
        any(.[]; .id == $expected_run_id and .status == "completed" and
          .conclusion == "success" and .created_at == $expected_run_created_at and
@@ -284,6 +383,7 @@ phase5_retry_verify_legacy_high_water() {
   jq -e --argjson expected_run_id "${expected_run_id}" \
     --arg expected_run_created_at "${expected_run_created_at}" \
     '.workflow_runs | type == "array" and length > 0 and
+     all(.[]; .status == "completed") and
      .[0].id == $expected_run_id and .[0].status == "completed" and
      .[0].created_at == $expected_run_created_at and
      .[0].conclusion == "success" and .[0].head_branch == "main" and
@@ -291,6 +391,15 @@ phase5_retry_verify_legacy_high_water() {
       echo "The dashboard legacy workflow no longer has the pinned completed run at its high-water." >&2
       return 1
     }
+  verify_legacy_workflows_state disabled_manually || {
+    echo "The legacy writer fence opened during high-water capture." >&2
+    return 1
+  }
+  phase5_retry_verify_no_active_legacy_runs "${suffix}" || return 1
+  verify_legacy_workflows_state disabled_manually || {
+    echo "The legacy writer fence opened during the post-capture active-run check." >&2
+    return 1
+  }
 }
 
 phase5_retry_capture_runtime_execution_inventories() {
@@ -341,12 +450,70 @@ phase5_retry_capture_disabled_legacy_workflow_states() {
 }
 
 phase5_retry_write_observed_legacy_states() {
+  local temporary="${LEGACY_STATE_FILE}.tmp"
   mkdir -p "$(dirname "${LEGACY_STATE_FILE}")" || return 1
   jq -n \
     '{"legislative_trade_tracker_v2.yml":"active",
       "executive_trade_tracker.yml":"active",
       "ai_filing_analyst.yml":"disabled_manually",
-      "publish_trade_dashboard.yml":"active"}' > "${LEGACY_STATE_FILE}" || return 1
+      "publish_trade_dashboard.yml":"active"}' > "${temporary}" || return 1
+  mv "${temporary}" "${LEGACY_STATE_FILE}" || return 1
+}
+
+phase5_retry_write_frozen_legacy_states() {
+  local temporary="${LEGACY_STATE_FILE}.tmp"
+  mkdir -p "$(dirname "${LEGACY_STATE_FILE}")" || return 1
+  jq -n \
+    '{"legislative_trade_tracker_v2.yml":"disabled_manually",
+      "executive_trade_tracker.yml":"disabled_manually",
+      "ai_filing_analyst.yml":"disabled_manually",
+      "publish_trade_dashboard.yml":"disabled_manually"}' > "${temporary}" || return 1
+  mv "${temporary}" "${LEGACY_STATE_FILE}" || return 1
+}
+
+phase5_retry_observed_legacy_route_kind() {
+  [[ -f "${LEGACY_STATE_FILE}" ]] || {
+    echo "Observed legacy workflow state is missing." >&2
+    return 1
+  }
+  if jq -e \
+    '. == {"legislative_trade_tracker_v2.yml":"disabled_manually",
+            "executive_trade_tracker.yml":"disabled_manually",
+            "ai_filing_analyst.yml":"disabled_manually",
+            "publish_trade_dashboard.yml":"disabled_manually"}' \
+    "${LEGACY_STATE_FILE}" >/dev/null; then
+    printf '%s\n' frozen_disabled
+    return 0
+  fi
+  if jq -e \
+    '. == {"legislative_trade_tracker_v2.yml":"active",
+            "executive_trade_tracker.yml":"active",
+            "ai_filing_analyst.yml":"disabled_manually",
+            "publish_trade_dashboard.yml":"active"}' \
+    "${LEGACY_STATE_FILE}" >/dev/null; then
+    printf '%s\n' historic_active
+    return 0
+  fi
+  echo "Observed legacy workflow state is neither the exact frozen nor historic rollback route." >&2
+  return 1
+}
+
+phase5_retry_restore_pre_live_legacy_route() {
+  # Before cloud mutation the only authorized starting routes are the temporary
+  # all-disabled maintenance fence and the exact historical rollback route.  A
+  # mixed state is never normalized automatically.
+  if verify_legacy_workflows_state disabled_manually >/dev/null 2>&1; then
+    phase5_retry_write_observed_legacy_states || return 1
+    restore_legacy_workflows_observed || return 1
+  else
+    phase5_retry_write_observed_legacy_states || return 1
+    verify_legacy_workflows_match_observed || {
+      echo "Pre-live failure found neither the frozen maintenance fence nor the historical rollback route." >&2
+      return 1
+    }
+  fi
+  [[ "$(phase5_retry_observed_legacy_route_kind)" == "historic_active" ]] || return 1
+  verify_legacy_workflows_match_observed
 }
 
 phase5_retry_verify_current_base_authority_absent() {
@@ -969,7 +1136,7 @@ phase5_retry_rollback() {
   local schedulers_paused=false web_private=false runtime_shadow=false legacy_restored=false
   local recovery_required=false recovery_complete=false execution_authority_removed=false
   local service_account_user_removed=false private_web_invoker_removed=false
-  local cloud_sql_private=false vault_scheduler_paused=false
+  local cloud_sql_private=false vault_scheduler_paused=false legacy_route_kind=invalid
   set +e
 
   [[ -f "${EVIDENCE_DIR}/live-mutation-started" ]] || {
@@ -977,6 +1144,10 @@ phase5_retry_rollback() {
     set -e
     return 0
   }
+
+  if ! legacy_route_kind="$(phase5_retry_observed_legacy_route_kind)"; then
+    legacy_route_kind=invalid
+  fi
 
   pause_producer_schedulers && verify_producer_scheduler_state PAUSED && schedulers_paused=true
   make_web_private
@@ -988,16 +1159,22 @@ phase5_retry_rollback() {
   remove_service_account_user
 
   if [[ -f "${EVIDENCE_DIR}/route-touched" ]]; then
-    recovery_required=true
     configure_runtime_best_effort shadow && verify_runtime_configuration shadow && runtime_shadow=true
-    restore_legacy_workflows_observed && legacy_restored=true
-    if [[ "${legacy_restored}" == "true" ]] && phase5_retry_dispatch_legacy_recovery_once; then
-      recovery_complete=true
+    if [[ "${legacy_route_kind}" == "historic_active" ]] &&
+       restore_legacy_workflows_observed; then
+      legacy_restored=true
+      recovery_required=true
+      if phase5_retry_dispatch_legacy_recovery_once; then
+        recovery_complete=true
+      fi
     fi
   else
     verify_runtime_configuration shadow && runtime_shadow=true
-    verify_legacy_workflows_match_observed && legacy_restored=true
-    recovery_complete=true
+    if [[ "${legacy_route_kind}" == "historic_active" ]] &&
+       restore_legacy_workflows_observed; then
+      legacy_restored=true
+      recovery_complete=true
+    fi
   fi
 
   remove_execution_authority
@@ -1022,10 +1199,12 @@ phase5_retry_rollback() {
     --arg private_web_invoker_removed "${private_web_invoker_removed}" \
     --arg cloud_sql_private "${cloud_sql_private}" \
     --arg vault_scheduler_paused "${vault_scheduler_paused}" \
+    --arg legacy_route_kind "${legacy_route_kind}" \
     '{schema_version:1,result:"phase5_failed_promotion_retry_rolled_back",
       runtime_schedulers_paused:($schedulers_paused == "true"),
       web_public:($web_private != "true"),
       runtime_mode:(if $runtime_shadow == "true" then "shadow" else "unverified" end),
+      observed_legacy_route_kind:$legacy_route_kind,
       legacy_route_restored:($legacy_restored == "true"),
       legacy_recovery_required:($recovery_required == "true"),
       legacy_recovery_action_complete:($recovery_complete == "true"),
