@@ -1651,6 +1651,11 @@ def test_frozen_successor_requires_exact_zero_change_lineage(
 
 
 def test_frozen_successor_revision_has_only_incident_control_paths() -> None:
+    workflow = Path(".github/workflows/runtime_v2_tests.yml").read_text(encoding="utf-8")
+    checkout = workflow[
+        workflow.index("- name: Check out repository") : workflow.index("- name: Set up Python")
+    ]
+    assert "fetch-depth: 0" in checkout
     validator._verify_frozen_legacy_successor_revision(MODULE_PATH.parents[2])
     assert validator.FROZEN_LEGACY_SUCCESSOR_DIFF == {
         ".github/workflows/phase5_failed_promotion_retry.yml": "A",
