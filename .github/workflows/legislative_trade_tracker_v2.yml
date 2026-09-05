@@ -1,8 +1,12 @@
 name: Legislative purchase tracker v2
 
-# Validation mode: recurring schedule remains paused until this workflow proves
-# source-isolated collection and durable-state publication on main.
+# The canonical cron remains declared for repository-contract verification, but
+# scheduled jobs stay skipped until the validation gate is removed after a
+# successful notification-suppressed run on main.
 on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+      timezone: "America/New_York"
   push:
     branches:
       - main
@@ -11,6 +15,15 @@ on:
       - "scripts/run_legislative_sources_resilient.py"
       - "tests/test_legislative_resilient_orchestrator.py"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
@@ -21,7 +34,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name }}
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
   STATE_FILE: .trade-tracker/legislative/state.json
   LEDGER_FILE: .trade-tracker/legislative/purchases.jsonl
   TRANSACTIONS_FILE: .trade-tracker/legislative/transactions.jsonl
@@ -38,30 +51,33 @@ env:
   NOTIFY_EQUITY_ONLY: "true"
   NOTIFY_PENDING_REVIEWS: "true"
   NOTIFY_ALL_FILINGS: "true"
-  DASHBOARD_URL: https://maglothinm.github.io/MyETF-Intelligence/
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
   ALLOW_EMPTY_SOURCES: "false"
   ALLOW_STATE_INITIALIZATION: "false"
-  DISCLOSURE_TERMS_ACKNOWLEDGED: "TRUE"
+  DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
 
 jobs:
   track:
-    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
+    # Keep cron executions skipped until the post-merge validation proves the
+    # replacement. Push and manual validation still run normally.
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       - name: Signal tracker start
-        if: env.HEALTHCHECKS_PING_URL != ''
+        continue-on-error: true
         shell: bash
         env:
           HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
         run: |
-          set -euo pipefail
-          healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
-          healthchecks_base="${healthchecks_base%/start}"
-          healthchecks_base="${healthchecks_base%/fail}"
-          curl --fail --silent --show-error --max-time 20 --retry 3 \
-            "${healthchecks_base%/}/start" >/dev/null
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "${healthchecks_base%/}/start" >/dev/null
+          fi
 
       - name: Check out repository
         uses: actions/checkout@v6
@@ -74,14 +90,17 @@ jobs:
           cache-dependency-path: requirements-tracker.txt
 
       - name: Install PDF and OCR system dependencies
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends poppler-utils tesseract-ocr
 
       - name: Install tracker dependencies
+        shell: bash
         run: python -m pip install --requirement requirements-tracker.txt pytest==9.0.2
 
       - name: Restore newest authoritative Legislative state
+        id: restore
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,6 +113,7 @@ jobs:
           artifact_id=""
           artifact_digest=""
           producer_run_id=""
+          producer_attempt=""
 
           while IFS=$'\t' read -r candidate_id candidate_run candidate_digest candidate_created; do
             [[ -n "$candidate_id" && -n "$candidate_run" ]] || continue
@@ -105,22 +125,25 @@ jobs:
             run_branch="$(jq -r '.head_branch // ""' <<< "$run_payload")"
             run_conclusion="$(jq -r '.conclusion // ""' <<< "$run_payload")"
             run_repository_id="$(jq -r '.repository.id // ""' <<< "$run_payload")"
+            run_attempt="$(jq -r '.run_attempt // 1' <<< "$run_payload")"
             if [[ \
               "$run_name" != "$workflow_name" || \
               "$run_path" != "$workflow_path" || \
               "$run_branch" != "$DEFAULT_BRANCH" || \
               "$run_conclusion" != "success" || \
-              "$run_repository_id" != "$GITHUB_REPOSITORY_ID" \
+              "$run_repository_id" != "$GITHUB_REPOSITORY_ID" || \
+              ! "$run_attempt" =~ ^[1-9][0-9]*$ \
             ]]; then
               continue
             fi
             successful_track_jobs="$(gh api -H 'Accept: application/vnd.github+json' \
-              "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run}/jobs?per_page=100" \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run}/attempts/${run_attempt}/jobs?per_page=100" \
               --jq '[.jobs[] | select(.name == "track" and .conclusion == "success")] | length')"
             (( successful_track_jobs > 0 )) || continue
             artifact_id="$candidate_id"
             artifact_digest="${candidate_digest#sha256:}"
             producer_run_id="$candidate_run"
+            producer_attempt="$run_attempt"
             break
           done < <(
             gh api -H 'Accept: application/vnd.github+json' \
@@ -158,7 +181,22 @@ jobs:
           rm -rf .trade-tracker/legislative
           mkdir -p .trade-tracker/legislative
           cp -R "$(dirname "$state_file")/." .trade-tracker/legislative/
-          echo "Restored authoritative Legislative state from artifact ${artifact_id}, run ${producer_run_id}."
+          echo "producer_run_id=${producer_run_id}" >> "$GITHUB_OUTPUT"
+          echo "producer_attempt=${producer_attempt}" >> "$GITHUB_OUTPUT"
+          echo "Restored authoritative Legislative state from artifact ${artifact_id}, run ${producer_run_id}, attempt ${producer_attempt}."
+
+      - name: Enforce protected-state retry guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN: ${{ steps.restore.outputs.producer_run_id }}
+          PRODUCER_ATTEMPT: ${{ steps.restore.outputs.producer_attempt }}
+        run: |
+          set -euo pipefail
+          python scripts/collect_workflow_evidence.py \
+            --guard-branch legislative \
+            --producer-run "$PRODUCER_RUN" \
+            --producer-attempt "$PRODUCER_ATTEMPT"
 
       - name: Run offline continuity tests
         shell: bash
@@ -170,20 +208,25 @@ jobs:
             tests/test_senate_client.py \
             tests/test_legislative_healthcheck.py \
             tests/test_government_trade_tracker.py \
-            tests/test_historical_transaction_bootstrap.py
+            tests/test_historical_transaction_bootstrap.py \
+            tests/test_oge_disclosures.py \
+            tests/test_trade_dashboard.py
 
-      - name: Run source-isolated Legislative validation
-        id: collect
+      - name: Track House and Senate purchases
+        id: tracker
         shell: bash
         env:
+          BOOTSTRAP_ALERTS: "false"
+          ALLOW_STATE_INITIALIZATION: "false"
           PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
           PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
         run: |
           set -euo pipefail
-          # Every push/manual validation is deliberately notification-suppressed.
+          # Push/manual validation is deliberately notification-suppressed.
           python scripts/run_legislative_sources_resilient.py --no-notify
 
-      - name: Validate combined Legislative result
+      - name: Validate complete Legislative result
+        id: discovery_validation
         shell: bash
         run: |
           set -euo pipefail
@@ -199,16 +242,17 @@ jobs:
             "$STATE_FILE" >/dev/null
 
       - name: Upload durable tracker state
+        if: ${{ success() && steps.tracker.outcome == 'success' && steps.discovery_validation.outcome == 'success' && hashFiles('.trade-tracker/legislative/state.json') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: legislative-tracker-state
-          path: .trade-tracker/legislative/
+          path: .trade-tracker/legislative
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 90
 
       - name: Upload run outputs
-        if: always()
+        if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
           name: legislative-purchase-output-${{ github.run_id }}-${{ github.run_attempt }}
@@ -224,14 +268,43 @@ jobs:
           retention-days: 30
 
       - name: Signal tracker terminal result
-        if: always()
+        if: ${{ always() }}
+        continue-on-error: true
         shell: bash
         env:
           HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
           JOB_STATUS: ${{ job.status }}
-          TRACKER_OUTCOME: ${{ steps.collect.outcome }}
+          TRACKER_OUTCOME: ${{ steps.tracker.outcome }}
         run: |
-          if [[ -z "$HEALTHCHECKS_PING_URL" ]]; then
+          if [[ -f scripts/legislative_healthcheck.py ]]; then
+            python3 scripts/legislative_healthcheck.py
+          elif [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            curl --fail --silent --max-time 20 \
+              --data "legislative_workflow_failed" "${healthchecks_base%/}/fail" >/dev/null
+          fi
+
+      - name: Send Pushover failure notification
+        if: ${{ always() && failure() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+        run: |
+          if ! python3 scripts/legislative_healthcheck.py --discovery-only; then
             exit 0
           fi
-          python3 scripts/legislative_healthcheck.py
+          if [[ -n "$PUSHOVER_API_TOKEN" && -n "$PUSHOVER_USER_KEY" ]]; then
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              --form-string "token=$PUSHOVER_API_TOKEN" \
+              --form-string "user=$PUSHOVER_USER_KEY" \
+              --form-string "title=Legislative purchase tracker failed" \
+              --form-string "message=Open the GitHub Actions run for logs and the result artifact." \
+              --form-string "url=$run_url" \
+              --form-string "url_title=Open failed workflow" \
+              https://api.pushover.net/1/messages.json >/dev/null
+          fi
