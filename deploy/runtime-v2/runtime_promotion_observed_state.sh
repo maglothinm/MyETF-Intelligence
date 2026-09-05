@@ -19,18 +19,26 @@ capture_status() {
   local stem="$2"
   local execute_result="${EVIDENCE_DIR}/${stem}-admin-execute.json"
   local execution logs payload
-  gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
-    --args=-m,runtime_v2,status --wait --format=json > "${execute_result}"
-  execution="$(latest_execution_name "${ADMIN_JOB}" "${execute_result}")"
+  if ! gcloud run jobs execute "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" \
+    --args=-m,runtime_v2,status --wait --format=json > "${execute_result}"; then
+    echo "Runtime v2 status execution failed." >&2
+    return 1
+  fi
+  if ! execution="$(latest_execution_name "${ADMIN_JOB}" "${execute_result}")"; then
+    return 1
+  fi
   [[ -n "${execution}" ]] || { echo "Unable to resolve admin status execution." >&2; return 1; }
   printf '%s\n' "${execution}" > "${EVIDENCE_DIR}/${stem}-admin-execution.txt"
   logs="${EVIDENCE_DIR}/${stem}-admin-logs.json"
   payload=""
   for attempt in $(seq 1 24); do
-    gcloud logging read \
+    if ! gcloud logging read \
       "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
-      --project "${PROJECT_ID}" --freshness=2h --limit=1000 --order=asc --format=json > "${logs}"
-    payload="$(jq -c '
+      --project "${PROJECT_ID}" --freshness=2h --limit=1000 --order=asc --format=json > "${logs}"; then
+      sleep 5
+      continue
+    fi
+    if ! payload="$(jq -c '
       [
         .[]
         | (
@@ -42,7 +50,9 @@ capture_status() {
              | select(type == "object" and has("heads") and has("latest_runs")))
           )
       ][-1] // empty
-    ' "${logs}")"
+    ' "${logs}")"; then
+      payload=""
+    fi
     [[ -n "${payload}" ]] && break
     sleep 5
   done
@@ -51,10 +61,12 @@ capture_status() {
 }
 
 configure_runtime() {
-  local mode="$1" job status=0
+  local mode="$1" job status=0 cleanup_status=0
   configure_runtime_v1 "${mode}" || return 1
   if ! grant_service_account_user; then
     remove_service_account_user
+    verify_service_account_user_removed || cleanup_status=1
+    (( cleanup_status == 0 )) || echo "Temporary actAs cleanup could not be verified after source-pin grant failure." >&2
     return 1
   fi
   for job in "${PRODUCER_JOBS[@]}"; do
@@ -65,16 +77,23 @@ configure_runtime() {
     fi
   done
   remove_service_account_user
+  verify_service_account_user_removed || cleanup_status=1
   (( status == 0 )) || return "${status}"
-  verify_service_account_user_removed
+  if (( cleanup_status != 0 )); then
+    echo "Runtime source pinning completed but temporary actAs cleanup is unverified." >&2
+    return 1
+  fi
 }
 
 verify_runtime_configuration() {
   local mode="$1" job
-  verify_runtime_configuration_v1 "${mode}"
+  verify_runtime_configuration_v1 "${mode}" || return 1
   for job in "${PRODUCER_JOBS[@]}"; do
-    gcloud run jobs describe "${job}" --project "${PROJECT_ID}" --region "${REGION}" --format=json \
-      > "${RESOURCE_DIR}/source-${job}.json"
+    if ! gcloud run jobs describe "${job}" --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+      > "${RESOURCE_DIR}/source-${job}.json"; then
+      echo "Unable to verify approved source revision on ${job}." >&2
+      return 1
+    fi
     jq -e --arg source "${RUNTIME_SOURCE_REVISION}" \
       '[.. | objects | select(.name? == "SOURCE_REVISION") | .value?] | any(. == $source)' \
       "${RESOURCE_DIR}/source-${job}.json" >/dev/null || {
@@ -86,16 +105,20 @@ verify_runtime_configuration() {
 
 capture_legacy_workflow_states() {
   local workflow state ndjson="${EVIDENCE_DIR}/legacy-workflow-states.ndjson"
-  : > "${ndjson}"
+  : > "${ndjson}" || return 1
   for workflow in "${LEGACY_WORKFLOWS[@]}"; do
-    state="$(legacy_workflow_state "${workflow}")"
+    if ! state="$(legacy_workflow_state "${workflow}")"; then
+      echo "Unable to capture legacy workflow ${workflow}." >&2
+      return 1
+    fi
     [[ "${state}" == "active" || "${state}" == "disabled_manually" ]] || {
       echo "Unsupported legacy workflow state ${workflow}=${state}." >&2
       return 1
     }
-    jq -cn --arg workflow "${workflow}" --arg state "${state}" '{key:$workflow,value:$state}' >> "${ndjson}"
+    jq -cn --arg workflow "${workflow}" --arg state "${state}" \
+      '{key:$workflow,value:$state}' >> "${ndjson}" || return 1
   done
-  jq -s 'from_entries' "${ndjson}" > "${LEGACY_STATE_FILE}"
+  jq -s 'from_entries' "${ndjson}" > "${LEGACY_STATE_FILE}" || return 1
   jq -e \
     '.["legislative_trade_tracker_v2.yml"] == "active" and
      .["executive_trade_tracker.yml"] == "active" and
@@ -110,8 +133,14 @@ verify_legacy_workflows_match_observed() {
   [[ -f "${LEGACY_STATE_FILE}" ]] || { echo "Observed legacy workflow state is missing." >&2; return 1; }
   local workflow expected actual
   for workflow in "${LEGACY_WORKFLOWS[@]}"; do
-    expected="$(jq -r --arg workflow "${workflow}" '.[$workflow] // empty' "${LEGACY_STATE_FILE}")"
-    actual="$(legacy_workflow_state "${workflow}")"
+    if ! expected="$(jq -r --arg workflow "${workflow}" '.[$workflow] // empty' "${LEGACY_STATE_FILE}")"; then
+      echo "Unable to read observed state for ${workflow}." >&2
+      return 1
+    fi
+    if ! actual="$(legacy_workflow_state "${workflow}")"; then
+      echo "Unable to verify current state for ${workflow}." >&2
+      return 1
+    fi
     [[ -n "${expected}" && "${actual}" == "${expected}" ]] || {
       echo "Legacy workflow ${workflow} is ${actual}, expected observed state ${expected}." >&2
       return 1
@@ -122,20 +151,31 @@ verify_legacy_workflows_match_observed() {
 restore_legacy_workflows_observed() {
   [[ -f "${LEGACY_STATE_FILE}" ]] || { echo "Observed legacy workflow state is missing." >&2; return 1; }
   local workflow expected
+  if ! jq -e \
+    '(keys | sort) ==
+       (["legislative_trade_tracker_v2.yml", "executive_trade_tracker.yml",
+         "ai_filing_analyst.yml", "publish_trade_dashboard.yml"] | sort) and
+     all(.[]; . == "active" or . == "disabled_manually")' \
+    "${LEGACY_STATE_FILE}" >/dev/null; then
+    echo "Observed legacy workflow inventory is not exact." >&2
+    return 1
+  fi
   for workflow in "${LEGACY_WORKFLOWS[@]}"; do
-    expected="$(jq -r --arg workflow "${workflow}" '.[$workflow] // empty' "${LEGACY_STATE_FILE}")"
+    if ! expected="$(jq -r --arg workflow "${workflow}" '.[$workflow] // empty' "${LEGACY_STATE_FILE}")"; then
+      echo "Unable to read observed state for ${workflow}." >&2
+      return 1
+    fi
     case "${expected}" in
-      active)
-        gh api --method PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/enable" >/dev/null
-        ;;
-      disabled_manually)
-        gh api --method PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/disable" >/dev/null
-        ;;
+      active|disabled_manually) ;;
       *)
         echo "Cannot restore unsupported legacy workflow state ${workflow}=${expected}." >&2
         return 1
         ;;
     esac
+  done
+  for workflow in "${LEGACY_WORKFLOWS[@]}"; do
+    expected="$(jq -r --arg workflow "${workflow}" '.[$workflow]' "${LEGACY_STATE_FILE}")" || return 1
+    ensure_legacy_workflow_state "${workflow}" "${expected}" || return 1
   done
   verify_legacy_workflows_match_observed
 }
