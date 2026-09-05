@@ -313,6 +313,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         validator, "_verify_frozen_legacy_successor_revision", lambda *_args: None
     )
     item = Evidence()
+    item.tmp_path = tmp_path
     base = _base_status()
     cert = _certificate(base)
     cert_bytes = _json_bytes(cert)
@@ -631,34 +632,55 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     item.frozen_successor_output_archives = []
     item.frozen_successor_artifact_metadatas = []
     item.frozen_successor_output_artifact_metadatas = []
-    for index, (role, run_id, recovery_pin) in enumerate(
-        zip(
-            ("legislative", "executive"),
-            validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS,
-            recovery_pins,
-        )
+    successor_roles = ("legislative", "executive", "legislative", "executive")
+    for index, (role, run_id) in enumerate(
+        zip(successor_roles, validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
     ):
+        layer_index = index // 2
+        predecessor_index = index % 2 if layer_index == 0 else index - 2
+        predecessor_pin_source = (
+            recovery_pins[predecessor_index]
+            if layer_index == 0
+            else frozen_successor_pins[predecessor_index]
+        )
+        predecessor_archive_source = (
+            item.recovery_archives[predecessor_index]
+            if layer_index == 0
+            else item.frozen_successor_archives[predecessor_index]
+        )
+        predecessor_output_source = (
+            item.recovery_output_archives[predecessor_index]
+            if layer_index == 0
+            else item.frozen_successor_output_archives[predecessor_index]
+        )
+        revision = validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[layer_index]
+        event = "schedule" if layer_index == 0 else "workflow_dispatch"
+        hour = 18 if layer_index == 0 else 20
         successor_pin = _run_pin(
             run_id,
             validator.RECOVERY_PATHS[role],
             "success",
-            head=validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
+            head=revision,
             job_id=800 + index,
             job_name="track",
-            start=f"2026-09-05T18:1{index}:00Z",
-            finish=f"2026-09-05T18:1{index}:30Z",
+            start=f"2026-09-05T{hour}:1{index % 2}:00Z",
+            finish=f"2026-09-05T{hour}:1{index % 2}:30Z",
             run_number=200 + index,
         ) | {"role": role}
-        successor_pin["event"] = "schedule"
-        with zipfile.ZipFile(item.recovery_archives[index]) as bundle:
+        successor_pin["event"] = event
+        with zipfile.ZipFile(predecessor_archive_source) as bundle:
             successor_members = {name: bundle.read(name) for name in bundle.namelist()}
-        with zipfile.ZipFile(item.recovery_output_archives[index]) as bundle:
+        with zipfile.ZipFile(predecessor_output_source) as bundle:
             successor_result = json.loads(bundle.read(validator.RECOVERY_RESULT_MEMBERS[role]))
-        successor_result["started_utc"] = f"2026-09-05T18:1{index}:05Z"
-        successor_result["finished_utc"] = f"2026-09-05T18:1{index}:20Z"
+        successor_result["started_utc"] = f"2026-09-05T{hour}:1{index % 2}:05Z"
+        successor_result["finished_utc"] = f"2026-09-05T{hour}:1{index % 2}:20Z"
         state = json.loads(successor_members["state.json"])
         state["last_attempt_utc"] = successor_result["started_utc"]
-        state["last_success_utc"] = successor_result["finished_utc"]
+        state["last_success_utc"] = (
+            f"2026-09-05T{hour}:1{index % 2}:19Z"
+            if layer_index == 1 and role == "legislative"
+            else successor_result["finished_utc"]
+        )
         successor_members["state.json"] = _json_bytes(state)
         successor_receipt = {
             key: copy.deepcopy(successor_result[key])
@@ -681,13 +703,13 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         }
         successor_receipt.update(
             run_key=f"{run_id}:1",
-            event_name="schedule",
-            trigger_source="schedule",
+            event_name=event,
+            trigger_source=event,
         )
         successor_members["runs.jsonl"] += _jsonl([successor_receipt])
-        successor_archive = tmp_path / f"frozen-successor-{role}-state.zip"
+        successor_archive = tmp_path / f"frozen-successor-{layer_index + 1}-{role}-state.zip"
         _zip(successor_archive, successor_members)
-        successor_output_archive = tmp_path / f"frozen-successor-{role}-output.zip"
+        successor_output_archive = tmp_path / f"frozen-successor-{layer_index + 1}-{role}-output.zip"
         _zip(
             successor_output_archive,
             {validator.RECOVERY_RESULT_MEMBERS[role]: _json_bytes(successor_result)},
@@ -697,8 +719,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             7300 + index,
             validator.RECOVERY_ARTIFACT_NAMES[role],
             run_id,
-            validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
-            created_at="2026-09-05T18:20:00Z",
+            revision,
+            created_at=f"2026-09-05T{hour}:20:00Z",
         )
         output_name = (
             f"legislative-purchase-output-{run_id}-1"
@@ -710,13 +732,13 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             7400 + index,
             output_name,
             run_id,
-            validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
-            created_at="2026-09-05T18:20:00Z",
+            revision,
+            created_at=f"2026-09-05T{hour}:20:00Z",
         )
-        predecessor_pin = copy.deepcopy(recovery_pin["artifact"])
+        predecessor_pin = copy.deepcopy(predecessor_pin_source["artifact"])
         predecessor_pin.update(
-            producer_run_id=recovery_pin["run_id"],
-            producer_head_sha=recovery_pin["head_sha"],
+            producer_run_id=predecessor_pin_source["run_id"],
+            producer_head_sha=predecessor_pin_source["head_sha"],
         )
         successor_pin.update(
             predecessor_artifact=predecessor_pin,
@@ -779,6 +801,254 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         finish="2026-09-05T09:01:00Z",
         run_number=90,
     ) | {"role": "dashboard"}
+
+    failed_retry_baseline = copy.deepcopy(item.current_status)
+    retry_observations, retry_terminal_status = _observations(
+        failed_retry_baseline,
+        clock=datetime(2026, 9, 5, 19, 0, tzinfo=timezone.utc),
+        run_prefix="retry3",
+    )
+    item.current_status = retry_terminal_status
+    failed_retry_pin = _run_pin(
+        validator.FAILED_PHASE5_RETRY_RUN_ID,
+        validator.PHASE5_RETRY_WORKFLOW_PATH,
+        "failure",
+        head=validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        job_id=505,
+        job_name="reconcile-and-retry",
+        start="2026-09-05T18:50:00Z",
+        finish="2026-09-05T20:05:00Z",
+        run_number=3,
+    )
+    layer_one_high_water_pins = [
+        frozen_successor_pins[0],
+        frozen_successor_pins[1],
+        legacy_pin,
+        dashboard_pin,
+    ]
+    retry_legacy_run_inventories = [
+        {"total_count": 1, "workflow_runs": [_run_api(pin)]}
+        for pin in layer_one_high_water_pins
+    ]
+    retry_legacy_artifact_inventories = [
+        {"total_count": 1, "artifacts": [metadata]}
+        for metadata in (
+            item.frozen_successor_artifact_metadatas[0],
+            item.frozen_successor_artifact_metadatas[1],
+            item.state_artifact_metadata if hasattr(item, "state_artifact_metadata") else None,
+        )
+    ]
+    retry_workflow_states = [
+        {
+            "id": pin["workflow"]["id"],
+            "name": pin["workflow"]["name"],
+            "path": pin["workflow"]["path"],
+            "state": "disabled_manually",
+        }
+        for pin in layer_one_high_water_pins
+    ]
+    retry_runtime_inventories: list[dict[str, Any]] = []
+    for observation in retry_observations:
+        role = observation["job"]
+        latest = next(
+            row
+            for row in observation["status"]["latest_runs"]
+            if row["job_name"] == role
+        )
+        app_start = datetime.fromisoformat(latest["started_at"].replace("Z", "+00:00"))
+        app_finish = datetime.fromisoformat(latest["finished_at"].replace("Z", "+00:00"))
+        job_name = f"polititrack-{role}"
+        retry_runtime_inventories.append(
+            {
+                "job": role,
+                "capture_limit": 1000,
+                "returned_count": 1,
+                "executions": [
+                    {
+                        "metadata": {
+                            "name": observation["cloud_run_execution"],
+                            "creationTimestamp": (app_start - timedelta(seconds=5))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                            "labels": {"run.googleapis.com/job": job_name},
+                            "ownerReferences": [{"kind": "Job", "name": job_name}],
+                        },
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "containers": [
+                                        {
+                                            "image": IMAGE,
+                                            "env": [
+                                                {
+                                                    "name": "POLITITRACK_TRIGGER_SOURCE",
+                                                    "value": "phase5_smoke",
+                                                },
+                                                {
+                                                    "name": "SOURCE_REVISION",
+                                                    "value": validator.RUNTIME_SOURCE_REVISION,
+                                                },
+                                                {
+                                                    "name": "POLITITRACK_MODE",
+                                                    "value": "production",
+                                                },
+                                            ],
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "status": {
+                            "startTime": (app_start - timedelta(seconds=5))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                            "completionTime": (app_finish + timedelta(seconds=5))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                            "conditions": [{"type": "Completed", "status": "True"}],
+                            "succeededCount": 1,
+                        },
+                    }
+                ],
+            }
+        )
+    embedded_replay = {
+        "result": "phase5_failed_promotion_reconciled",
+        "certification_eligible": False,
+        "descriptor_sha256": _digest("pre-retry-descriptor"),
+        "frozen_legacy_successors": [
+            {"run_id": pin["run_id"]} for pin in frozen_successor_pins[:2]
+        ],
+        "legacy_high_water": {
+            "runs": [
+                {
+                    "role": role,
+                    "run_id": pin["run_id"],
+                    "workflow_id": pin["workflow"]["id"],
+                    "workflow_name": pin["workflow"]["name"],
+                    "workflow_path": pin["workflow"]["path"],
+                    "created_at": pin["created_at"],
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+                for role, pin in zip(validator.LEGACY_HIGH_WATER_ROLES, layer_one_high_water_pins)
+            ]
+        },
+        "reconciliation": {
+            "additional_runtime_producer_execution_performed": False,
+            "production_authority_transferred": False,
+            "phase6_started": False,
+        },
+    }
+    embedded_replay_bytes = _json_bytes(embedded_replay)
+    embedded_replay_sha = hashlib.sha256(embedded_replay_bytes).hexdigest()
+    retry_members: dict[str, bytes | str] = {
+        "failed-prefix-replay.json": embedded_replay_bytes,
+        "failed-prefix-replay.sha256": f"{embedded_replay_sha}  failed-prefix-replay.json\n",
+        "terminal-baseline.json": _json_bytes(failed_retry_baseline),
+        "terminal-confirmation.json": _json_bytes(retry_terminal_status),
+        "observations.ndjson": _jsonl(retry_observations),
+        "fresh-cycle-started-at.txt": "2026-09-05T18:59:50Z\n",
+        "fresh-cycle-finished-at.txt": "2026-09-05T19:02:00Z\n",
+        "live-mutation-started": "\n",
+        "route-touched": "\n",
+        "retry-rollback-complete": "\n",
+        "retry-rollback.json": _json_bytes(
+            {
+                "schema_version": 1,
+                "result": "phase5_failed_promotion_retry_rolled_back",
+                "runtime_schedulers_paused": True,
+                "web_public": False,
+                "runtime_mode": "shadow",
+                "observed_legacy_route_kind": "historic_active",
+                "legacy_route_restored": True,
+                "legacy_recovery_required": True,
+                "legacy_recovery_action_complete": True,
+                "temporary_execution_authority_removed": True,
+                "temporary_service_account_user_removed": True,
+                "temporary_private_web_invoker_removed": True,
+                "cloud_sql_private_only": True,
+                "vault_scheduler_state": "PAUSED",
+            }
+        ),
+        "legacy-recovery-dispatch.json": _json_bytes(
+            {
+                "result": "legacy_recovery_runs_succeeded",
+                "workflows": [
+                    {
+                        "result": "legacy_recovery_run_succeeded",
+                        "workflow": Path(validator.RECOVERY_PATHS[role]).name,
+                        "workflow_id": pin["workflow"]["id"],
+                        "control_revision": validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+                        "dispatch_attempted": True,
+                        "run_id": pin["run_id"],
+                        "status": "completed",
+                        "conclusion": "success",
+                        "run_attempt": 1,
+                    }
+                    for role, pin in zip(("legislative", "executive"), frozen_successor_pins[2:])
+                ],
+            }
+        ),
+    }
+    for index, (role, observation) in enumerate(
+        zip(validator.NAMESPACES, retry_observations), start=1
+    ):
+        retry_members[f"retry-smoke-sequence-{index}-{role}-status.json"] = _json_bytes(
+            observation["status"]
+        )
+    for role, inventory, workflow_state, runtime_inventory in zip(
+        validator.LEGACY_HIGH_WATER_ROLES,
+        retry_legacy_run_inventories,
+        retry_workflow_states,
+        retry_runtime_inventories,
+    ):
+        retry_members[f"incident/legacy-{role}-runs-terminal.json"] = _json_bytes(inventory)
+        retry_members[f"incident/legacy-{role}-workflow-terminal.json"] = _json_bytes(
+            workflow_state
+        )
+        retry_members[f"incident/runtime-{role}-executions-terminal.json"] = _json_bytes(
+            runtime_inventory
+        )
+    for role, inventory in zip(
+        validator.LEGACY_HIGH_WATER_ROLES[:3], retry_legacy_artifact_inventories
+    ):
+        retry_members[f"incident/legacy-{role}-artifacts-terminal.json"] = _json_bytes(
+            inventory
+        )
+    item.failed_retry_archive = tmp_path / "failed-retry.zip"
+    _zip(item.failed_retry_archive, retry_members)
+    failed_retry_artifact, item.failed_retry_artifact_metadata = _artifact_pin(
+        item.failed_retry_archive,
+        7006,
+        f"phase5-failed-promotion-retry-rollback-{validator.FAILED_PHASE5_RUN_ID}",
+        validator.FAILED_PHASE5_RETRY_RUN_ID,
+        validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        created_at="2026-09-05T20:04:00Z",
+    )
+    failed_retry_pin.update(
+        artifact=failed_retry_artifact,
+        predecessor_replay_sha256=embedded_replay_sha,
+        predecessor_descriptor_sha256=embedded_replay["descriptor_sha256"],
+        status_members=[
+            f"retry-smoke-sequence-{index}-{role}-status.json"
+            for index, role in enumerate(validator.NAMESPACES, start=1)
+        ],
+        baseline_heads={
+            head["namespace"]: {
+                "generation": head["generation"],
+                "snapshot_sha256": head["snapshot_sha256"],
+            }
+            for head in failed_retry_baseline["heads"]
+        },
+        terminal_heads={
+            head["namespace"]: {
+                "generation": head["generation"],
+                "snapshot_sha256": head["snapshot_sha256"],
+            }
+            for head in retry_terminal_status["heads"]
+        },
+    )
     item.descriptor = {
         "schema_version": 1,
         "result": "phase5_failed_promotion_reconciliation_authorized",
@@ -795,10 +1065,11 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
                 "generation": head["generation"],
                 "snapshot_sha256": head["snapshot_sha256"],
             }
-            for head in current_status["heads"]
+            for head in item.current_status["heads"]
         },
         "phase4": phase4_pin,
         "failed_phase5": failed_pin,
+        "failed_phase5_retry": failed_retry_pin,
         "concurrent_legacy_ai": legacy_pin,
         "recovery_runs": recovery_pins,
         "frozen_legacy_successors": frozen_successor_pins,
@@ -815,6 +1086,12 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "jobs": _jobs_api(failed_pin),
         "artifact": item.failed_artifact_metadata,
         "archive": item.failed_archive,
+    }
+    item.failed_retry_source = {
+        "run": _run_api(failed_retry_pin),
+        "jobs": _jobs_api(failed_retry_pin),
+        "artifact": item.failed_retry_artifact_metadata,
+        "archive": item.failed_retry_archive,
     }
     item.legacy_source = {
         "run": _run_api(legacy_pin),
@@ -837,8 +1114,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     item.legacy_run_inventories = [
         {"total_count": 1, "workflow_runs": [_run_api(pin)]}
         for pin in (
-            frozen_successor_pins[0],
-            frozen_successor_pins[1],
+            frozen_successor_pins[2],
+            frozen_successor_pins[3],
             legacy_pin,
             dashboard_pin,
         )
@@ -846,8 +1123,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     item.legacy_artifact_inventories = [
         {"total_count": 1, "artifacts": [metadata]}
         for metadata in (
-            item.frozen_successor_artifact_metadatas[0],
-            item.frozen_successor_artifact_metadatas[1],
+            item.frozen_successor_artifact_metadatas[2],
+            item.frozen_successor_artifact_metadatas[3],
             item.state_artifact_metadata,
         )
     ]
@@ -868,6 +1145,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "current_ai_analyses": item.current_ai_analyses,
         "phase4_source": item.phase4_source,
         "failed_source": item.failed_source,
+        "failed_retry_source": item.failed_retry_source,
         "legacy_ai_source": item.legacy_source,
         "recovery_run_metadatas": item.recovery_run_metadatas,
         "recovery_jobs_metadatas": item.recovery_jobs_metadatas,
@@ -898,8 +1176,8 @@ def _replay(evidence: Evidence) -> dict[str, Any]:
 def _terminal(
     replay: dict[str, Any], evidence: Evidence
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    baseline = copy.deepcopy(replay["invalidated_smoke_prefix"]["final_heads"])
-    old_by_job = {item["job"]: item for item in replay["invalidated_smoke_prefix"]["executions"]}
+    baseline = copy.deepcopy(replay["failed_phase5_retry"]["final_heads"])
+    old_by_job = {item["job"]: item for item in replay["failed_phase5_retry"]["executions"]}
     baseline_status = {
         "heads": [
             {
@@ -932,12 +1210,12 @@ def _terminal(
     }
     observations, _final = _observations(
         baseline_status,
-        clock=datetime(2026, 9, 5, 14, 0, tzinfo=timezone.utc),
+        clock=datetime(2026, 9, 5, 21, 0, tzinfo=timezone.utc),
         run_prefix="fresh",
     )
     dashboard = observations[-1]["status"]["heads"][-1]["snapshot_sha256"]
-    interval_start = datetime(2026, 9, 5, 13, 59, 50, tzinfo=timezone.utc)
-    interval_finish = datetime(2026, 9, 5, 14, 2, 0, tzinfo=timezone.utc)
+    interval_start = datetime(2026, 9, 5, 20, 59, 50, tzinfo=timezone.utc)
+    interval_finish = datetime(2026, 9, 5, 21, 2, 0, tzinfo=timezone.utc)
     runtime_inventories = []
     for observation in observations:
         role = observation["job"]
@@ -1003,8 +1281,8 @@ def _terminal(
             "state": "disabled_manually",
         }
         for pin in (
-            evidence.descriptor["frozen_legacy_successors"][0],
-            evidence.descriptor["frozen_legacy_successors"][1],
+            evidence.descriptor["frozen_legacy_successors"][2],
+            evidence.descriptor["frozen_legacy_successors"][3],
             evidence.descriptor["concurrent_legacy_ai"],
             evidence.descriptor["legacy_dashboard"],
         )
@@ -1047,12 +1325,15 @@ def _terminal(
             "old_smoke_prefix_invalidated": True,
             "legacy_ai_artifact_quarantined": True,
             "frozen_legacy_successors_verified": True,
+            "failed_retry_intervening_attempt_verified": True,
             "legacy_runs_drained": True,
             "legacy_workflows_disabled": True,
             "continuation_heads_verified": True,
             "no_rebaseline_performed": True,
             "full_snapshot_chain_preserved": True,
             "temporary_private_web_invoker_removed": True,
+            "scheduler_activation_authority_absent_before_grant": True,
+            "temporary_role_inspection_authority_removed": True,
             "no_concurrent_legacy_runs": True,
             "fresh_cycle_global_one_writer_verified": True,
         }
@@ -1125,8 +1406,295 @@ def _terminal(
         "no_rebaseline_performed": True,
         "full_snapshot_chain_preserved": True,
         "temporary_private_web_invoker_removed": True,
+        "temporary_scheduler_activation_authority_removed": True,
+        "temporary_role_inspection_authority_removed": True,
     }
     replay_sha256 = validator._canonical_sha256(replay)
+    scheduler_dir = evidence.tmp_path / "scheduler-evidence"
+    scheduler_dir.mkdir(exist_ok=True)
+
+    def write_json(name: str, value: Any) -> Path:
+        path = scheduler_dir / name
+        path.write_bytes(_json_bytes(value))
+        return path
+
+    scheduler_names = list(validator.PRODUCER_SCHEDULERS)
+    all_scheduler_names = [*scheduler_names, validator.VAULT_SCHEDULER]
+    resources = [
+        f"projects/{validator.PROJECT_ID}/locations/{validator.REGION}/jobs/{name}"
+        for name in scheduler_names
+    ]
+    condition = {
+        "title": "phase5-retry-123456789-1-scheduler-activation",
+        "description": "JIT activation of the exact four Phase 5 producer schedules",
+        "expression": 'request.time < timestamp("2026-09-05T21:22:10Z")',
+    }
+    grant = {
+        "schema_version": 1,
+        "result": "scheduler_activation_authority_requested",
+        "project_id": validator.PROJECT_ID,
+        "location": validator.REGION,
+        "member": validator.DEPLOYER_MEMBER,
+        "role": "roles/cloudscheduler.admin",
+        "issued_at": "2026-09-05T21:02:10Z",
+        "expires_at": "2026-09-05T21:22:10Z",
+        "propagation_deadline_at": "2026-09-05T21:12:10Z",
+        "condition": condition,
+        "condition_scope": "request_time_only",
+        "authorized_scheduler_short_names": scheduler_names,
+        "exact_authorized_resource_names": resources,
+    }
+    permanent_binding = {
+        "role": validator.PERMANENT_CONTROL_ROLE,
+        "members": [validator.DEPLOYER_MEMBER],
+    }
+    before_policy = {"bindings": [permanent_binding]}
+    granted_policy = {
+        "bindings": [
+            permanent_binding,
+            {
+                "role": "roles/cloudscheduler.admin",
+                "members": [validator.DEPLOYER_MEMBER],
+                "condition": condition,
+            },
+        ]
+    }
+    removed_policy = copy.deepcopy(before_policy)
+    role_viewer_condition = {
+        "title": "phase5-retry-123456789-1-role-viewer",
+        "description": "JIT read of the exact permanent Phase 3 custom role",
+        "expression": 'request.time < timestamp("2026-09-05T21:00:00Z")',
+    }
+    role_viewer_grant = {
+        "schema_version": 1,
+        "result": "role_viewer_live_role_capture_requested",
+        "project_id": validator.PROJECT_ID,
+        "member": validator.DEPLOYER_MEMBER,
+        "role": "roles/iam.roleViewer",
+        "target_role_name": validator.PERMANENT_CONTROL_ROLE,
+        "authorized_operation": "iam.roles.get",
+        "issued_at": "2026-09-05T20:45:00Z",
+        "expires_at": "2026-09-05T21:00:00Z",
+        "propagation_deadline_at": "2026-09-05T20:55:00Z",
+        "condition": role_viewer_condition,
+        "condition_scope": "request_time_only",
+    }
+    role_viewer_before_policy = copy.deepcopy(before_policy)
+    role_viewer_granted_policy = {
+        "bindings": [
+            permanent_binding,
+            {
+                "role": "roles/iam.roleViewer",
+                "members": [validator.DEPLOYER_MEMBER],
+                "condition": role_viewer_condition,
+            },
+        ]
+    }
+    role_viewer_removed_policy = copy.deepcopy(before_policy)
+    role_viewer_condition_path = write_json("role-viewer-condition.json", role_viewer_condition)
+    role_viewer_grant_path = write_json("role-viewer-grant.json", role_viewer_grant)
+    role_viewer_before_policy_path = write_json(
+        "role-viewer-before-policy.json", role_viewer_before_policy
+    )
+    role_viewer_granted_policy_path = write_json(
+        "role-viewer-granted-policy.json", role_viewer_granted_policy
+    )
+    role_viewer_removed_policy_path = write_json(
+        "role-viewer-removed-policy.json", role_viewer_removed_policy
+    )
+    permanent_role = {
+        "name": validator.PERMANENT_CONTROL_ROLE,
+        "stage": "GA",
+        "deleted": False,
+        "includedPermissions": [
+            "cloudscheduler.jobs.get",
+            "cloudscheduler.jobs.list",
+            "cloudscheduler.jobs.pause",
+        ],
+        "temporary_role_viewer_evidence": {
+            "result": "jit_role_viewer_removed",
+            "grant": role_viewer_grant,
+            "absent_before_grant": True,
+            "grant_observed": True,
+            "live_role_described": True,
+            "physically_absent_after_removal": True,
+            "evidence_sha256": {
+                "before_policy": validator._sha256_file(role_viewer_before_policy_path),
+                "granted_policy": validator._sha256_file(role_viewer_granted_policy_path),
+                "removed_policy": validator._sha256_file(role_viewer_removed_policy_path),
+                "condition": validator._sha256_file(role_viewer_condition_path),
+                "grant_request": validator._sha256_file(role_viewer_grant_path),
+            },
+        },
+    }
+    condition_path = write_json("scheduler-control-condition.json", condition)
+    grant_path = write_json("scheduler-control-grant.json", grant)
+    before_policy_path = write_json("scheduler-control-before-policy.json", before_policy)
+    granted_policy_path = write_json("scheduler-control-granted-policy.json", granted_policy)
+    removed_policy_path = write_json("scheduler-control-removed-policy.json", removed_policy)
+    permanent_role_path = write_json("permanent-control-role.json", permanent_role)
+
+    before_job_paths: list[Path] = []
+    after_job_paths: list[Path] = []
+    before_rows = []
+    after_rows = []
+    before_inventory = []
+    after_inventory = []
+    for name in all_scheduler_names:
+        resource = f"projects/{validator.PROJECT_ID}/locations/{validator.REGION}/jobs/{name}"
+        before_job = {
+            "name": resource,
+            "state": "PAUSED",
+            "schedule": "0 * * * *",
+            "timeZone": "UTC",
+            "httpTarget": {"uri": f"https://example.invalid/{name}"},
+        }
+        after_state = "PAUSED" if name == validator.VAULT_SCHEDULER else "ENABLED"
+        after_job = copy.deepcopy(before_job)
+        after_job["state"] = after_state
+        before_path = write_json(f"scheduler-before-{name}.json", before_job)
+        after_path = write_json(f"scheduler-after-{name}.json", after_job)
+        before_job_paths.append(before_path)
+        after_job_paths.append(after_path)
+        before_rows.append(
+            {
+                "name": name,
+                "resource_name": resource,
+                "state": "PAUSED",
+                "raw_sha256": validator._sha256_file(before_path),
+                "canonical_spec_sha256": validator._scheduler_spec_sha256(before_job),
+            }
+        )
+        after_rows.append(
+            {
+                "name": name,
+                "resource_name": resource,
+                "state": after_state,
+                "raw_sha256": validator._sha256_file(after_path),
+                "canonical_spec_sha256": validator._scheduler_spec_sha256(after_job),
+            }
+        )
+        before_inventory.append(copy.deepcopy(before_job))
+        after_inventory.append(copy.deepcopy(after_job))
+    before_summary = {
+        "schema_version": 1,
+        "phase": "before",
+        "project_id": validator.PROJECT_ID,
+        "location": validator.REGION,
+        "schedulers": before_rows,
+    }
+    after_summary = {
+        "schema_version": 1,
+        "phase": "after",
+        "project_id": validator.PROJECT_ID,
+        "location": validator.REGION,
+        "schedulers": after_rows,
+    }
+    before_summary_path = write_json("scheduler-before-summary.json", before_summary)
+    after_summary_path = write_json("scheduler-after-summary.json", after_summary)
+    before_inventory_path = write_json("scheduler-before-inventory.json", before_inventory)
+    after_inventory_path = write_json("scheduler-after-inventory.json", after_inventory)
+    transition = {
+        "schema_version": 1,
+        "result": "exact_four_producer_schedulers_enabled_vault_unchanged",
+        "project_id": validator.PROJECT_ID,
+        "location": validator.REGION,
+        "authorized_transitions": [
+            {
+                "name": name,
+                "before_state": "PAUSED",
+                "after_state": "ENABLED",
+                "before_spec_sha256": before_rows[index]["canonical_spec_sha256"],
+                "after_spec_sha256": after_rows[index]["canonical_spec_sha256"],
+                "spec_unchanged": True,
+            }
+            for index, name in enumerate(scheduler_names)
+        ],
+        "vault": {
+            "name": validator.VAULT_SCHEDULER,
+            "before_state": "PAUSED",
+            "after_state": "PAUSED",
+            "before_spec_sha256": before_rows[-1]["canonical_spec_sha256"],
+            "after_spec_sha256": after_rows[-1]["canonical_spec_sha256"],
+            "spec_unchanged": True,
+        },
+        "before_summary_sha256": validator._sha256_file(before_summary_path),
+        "after_summary_sha256": validator._sha256_file(after_summary_path),
+        "before": before_summary,
+        "after": after_summary,
+    }
+    transition_path = write_json("scheduler-transition.json", transition)
+
+    receipt_paths: list[Path] = []
+    receipt_summaries = []
+    attempts = []
+    for index, name in enumerate(scheduler_names, start=1):
+        receipt_path = write_json(
+            f"scheduler-resume-{name}.json",
+            {"name": resources[index - 1], "state": "ENABLED"},
+        )
+        receipt_paths.append(receipt_path)
+        digest = validator._sha256_file(receipt_path)
+        receipt_summaries.append({"scheduler": name, "sha256": digest})
+        attempts.append(
+            {
+                "scheduler": name,
+                "attempt": 1,
+                "outcome": "resumed",
+                "observed_at": f"2026-09-05T21:02:{19 + index:02d}Z",
+                "evidence_file": receipt_path.name,
+                "evidence_sha256": digest,
+            }
+        )
+    attempts_path = scheduler_dir / "scheduler-resume-attempts.ndjson"
+    attempts_path.write_bytes(_jsonl(attempts))
+    summary = {
+        "schema_version": 1,
+        "result": "jit_scheduler_activation_authority_removed",
+        "grant": grant,
+        "absent_before_grant": True,
+        "grant_observed": True,
+        "physically_absent_after_removal": True,
+        "propagation_probe_scheduler": scheduler_names[0],
+        "propagation_deadline_seconds": 600,
+        "attempts": attempts,
+        "resume_receipts": receipt_summaries,
+        "scheduler_transition_result": "exact_four_producer_schedulers_enabled_vault_unchanged",
+        "evidence_sha256": {
+            "before_policy": validator._sha256_file(before_policy_path),
+            "granted_policy": validator._sha256_file(granted_policy_path),
+            "removed_policy": validator._sha256_file(removed_policy_path),
+            "permanent_control_role": validator._sha256_file(permanent_role_path),
+            "condition": validator._sha256_file(condition_path),
+            "grant_request": validator._sha256_file(grant_path),
+            "resume_attempts": validator._sha256_file(attempts_path),
+            "scheduler_transition": validator._sha256_file(transition_path),
+        },
+    }
+    summary_path = write_json("scheduler-activation-authority.json", summary)
+    terminal_inputs["scheduler_evidence_paths"] = {
+        "authority_summary": summary_path,
+        "transition": transition_path,
+        "before_policy": before_policy_path,
+        "granted_policy": granted_policy_path,
+        "removed_policy": removed_policy_path,
+        "permanent_control_role": permanent_role_path,
+        "role_viewer_before_policy": role_viewer_before_policy_path,
+        "role_viewer_granted_policy": role_viewer_granted_policy_path,
+        "role_viewer_removed_policy": role_viewer_removed_policy_path,
+        "role_viewer_condition": role_viewer_condition_path,
+        "role_viewer_grant_request": role_viewer_grant_path,
+        "condition": condition_path,
+        "grant_request": grant_path,
+        "resume_attempts": attempts_path,
+        "before_summary": before_summary_path,
+        "after_summary": after_summary_path,
+        "before_inventory": before_inventory_path,
+        "after_inventory": after_inventory_path,
+        "before_jobs": before_job_paths,
+        "after_jobs": after_job_paths,
+        "resume_receipts": receipt_paths,
+    }
     manifest = {
         "schema_version": 1,
         "phase": "phase5_reconciliation_completion",
@@ -1134,6 +1702,8 @@ def _terminal(
         "retry": {
             "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
             "failed_phase5_run_id": validator.FAILED_PHASE5_RUN_ID,
+            "failed_retry_run_id": validator.FAILED_PHASE5_RETRY_RUN_ID,
+            "intervening_retry_certification_eligible": False,
             "failed_prefix_replay_result": "phase5_failed_promotion_reconciled",
             "invalidated_smoke_prefix_certification_eligible": False,
             "concurrent_legacy_ai_successor_quarantined": True,
@@ -1141,6 +1711,11 @@ def _terminal(
             "failed_prefix_replay_sha256": replay_sha256,
         },
         "preflight": preflight,
+        "scheduler_activation_authority": summary
+        | {
+            "summary_sha256": validator._sha256_file(summary_path),
+            "transition": transition,
+        },
         "executions": observations,
         "promotion": promotion,
         "cleanup": cleanup,
@@ -1185,6 +1760,10 @@ def test_replay_is_forensic_and_invalidates_old_four(evidence: Evidence) -> None
     assert receipt["certification_eligible"] is False
     assert receipt["invalidated_smoke_prefix"]["unique_successful_receipts"] == 4
     assert receipt["invalidated_smoke_prefix"]["certification_eligible"] is False
+    assert receipt["failed_phase5_retry"]["run_id"] == validator.FAILED_PHASE5_RETRY_RUN_ID
+    assert receipt["failed_phase5_retry"]["unique_successful_smoke_receipts"] == 4
+    assert receipt["failed_phase5_retry"]["certification_eligible"] is False
+    assert receipt["failed_phase5_retry"]["rollback_verified"] is True
     assert receipt["continuation_heads"] == evidence.descriptor["expected_continuation_heads"]
     assert receipt["concurrent_legacy_ai"]["global_one_writer_interval_violated"] is True
     assert receipt["concurrent_legacy_ai"]["disposition"] == "quarantined_separate_legacy_artifact"
@@ -1206,7 +1785,7 @@ def test_replay_is_forensic_and_invalidates_old_four(evidence: Evidence) -> None
         for item in receipt["frozen_legacy_successors"]
     )
     assert [item["run_id"] for item in receipt["legacy_high_water"]["runs"][:2]] == list(
-        validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS
+        validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS[-2:]
     )
 
 
@@ -1235,7 +1814,175 @@ def test_completion_certifies_only_a_fresh_clean_cycle(evidence: Evidence) -> No
         item["run_id"] for item in receipt["reconciliation"]["frozen_legacy_successors"]
     ] == list(validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
     assert receipt["production_authority_transferred"] is True
+    assert receipt["temporary_scheduler_activation_authority_removed"] is True
+    assert receipt["temporary_role_inspection_authority_removed"] is True
     assert receipt["phase6_started"] is False
+
+
+def _refresh_scheduler_authority_manifest(
+    manifest: dict[str, Any], terminal_inputs: dict[str, Any]
+) -> None:
+    paths = terminal_inputs["scheduler_evidence_paths"]
+    summary = json.loads(paths["authority_summary"].read_text(encoding="utf-8"))
+    transition = json.loads(paths["transition"].read_text(encoding="utf-8"))
+    paths["authority_summary"].write_bytes(_json_bytes(summary))
+    manifest["scheduler_activation_authority"] = summary | {
+        "summary_sha256": validator._sha256_file(paths["authority_summary"]),
+        "transition": transition,
+    }
+
+
+def test_completion_requires_scheduler_authority_manifest(evidence: Evidence) -> None:
+    replay = _replay(evidence)
+    baseline, manifest, terminal_inputs = _terminal(replay, evidence)
+    del manifest["scheduler_activation_authority"]
+    with pytest.raises(validator.PromotionValidationError, match="scheduler activation authority"):
+        validator.complete_phase5(
+            descriptor=evidence.descriptor,
+            replay=replay,
+            terminal_baseline=baseline,
+            terminal_manifest=manifest,
+            control_revision="5" * 40,
+            **terminal_inputs,
+        )
+
+
+@pytest.mark.parametrize(
+    ("key", "index"),
+    [
+        ("authority_summary", None),
+        ("transition", None),
+        ("before_policy", None),
+        ("resume_receipts", 0),
+        ("before_jobs", 0),
+    ],
+)
+def test_completion_rejects_tampered_raw_scheduler_evidence(
+    evidence: Evidence, key: str, index: int | None
+) -> None:
+    replay = _replay(evidence)
+    baseline, manifest, terminal_inputs = _terminal(replay, evidence)
+    value = terminal_inputs["scheduler_evidence_paths"][key]
+    path = value if index is None else value[index]
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(validator.PromotionValidationError, match="scheduler"):
+        validator.complete_phase5(
+            descriptor=evidence.descriptor,
+            replay=replay,
+            terminal_baseline=baseline,
+            terminal_manifest=manifest,
+            control_revision="5" * 40,
+            **terminal_inputs,
+        )
+
+
+def test_completion_rejects_permanent_scheduler_activation_permission(
+    evidence: Evidence,
+) -> None:
+    replay = _replay(evidence)
+    baseline, manifest, terminal_inputs = _terminal(replay, evidence)
+    paths = terminal_inputs["scheduler_evidence_paths"]
+    permanent_role = json.loads(paths["permanent_control_role"].read_text(encoding="utf-8"))
+    permanent_role["includedPermissions"].append("cloudscheduler.jobs.enable")
+    paths["permanent_control_role"].write_bytes(_json_bytes(permanent_role))
+    summary = json.loads(paths["authority_summary"].read_text(encoding="utf-8"))
+    summary["evidence_sha256"]["permanent_control_role"] = validator._sha256_file(
+        paths["permanent_control_role"]
+    )
+    paths["authority_summary"].write_bytes(_json_bytes(summary))
+    _refresh_scheduler_authority_manifest(manifest, terminal_inputs)
+    with pytest.raises(validator.PromotionValidationError, match="forbidden Scheduler"):
+        validator.complete_phase5(
+            descriptor=evidence.descriptor,
+            replay=replay,
+            terminal_baseline=baseline,
+            terminal_manifest=manifest,
+            control_revision="5" * 40,
+            **terminal_inputs,
+        )
+
+
+def test_completion_rejects_tampered_role_viewer_evidence(evidence: Evidence) -> None:
+    replay = _replay(evidence)
+    baseline, manifest, terminal_inputs = _terminal(replay, evidence)
+    paths = terminal_inputs["scheduler_evidence_paths"]
+    paths["role_viewer_removed_policy"].write_bytes(
+        paths["role_viewer_removed_policy"].read_bytes() + b" "
+    )
+    with pytest.raises(validator.PromotionValidationError, match="Role Viewer"):
+        validator.complete_phase5(
+            descriptor=evidence.descriptor,
+            replay=replay,
+            terminal_baseline=baseline,
+            terminal_manifest=manifest,
+            control_revision="5" * 40,
+            **terminal_inputs,
+        )
+
+
+def test_completion_rejects_unverified_role_viewer_cleanup(evidence: Evidence) -> None:
+    replay = _replay(evidence)
+    baseline, manifest, terminal_inputs = _terminal(replay, evidence)
+    paths = terminal_inputs["scheduler_evidence_paths"]
+    permanent_role = json.loads(paths["permanent_control_role"].read_text(encoding="utf-8"))
+    permanent_role["temporary_role_viewer_evidence"][
+        "physically_absent_after_removal"
+    ] = False
+    paths["permanent_control_role"].write_bytes(_json_bytes(permanent_role))
+    summary = json.loads(paths["authority_summary"].read_text(encoding="utf-8"))
+    summary["evidence_sha256"]["permanent_control_role"] = validator._sha256_file(
+        paths["permanent_control_role"]
+    )
+    paths["authority_summary"].write_bytes(_json_bytes(summary))
+    _refresh_scheduler_authority_manifest(manifest, terminal_inputs)
+    with pytest.raises(validator.PromotionValidationError, match="Role Viewer"):
+        validator.complete_phase5(
+            descriptor=evidence.descriptor,
+            replay=replay,
+            terminal_baseline=baseline,
+            terminal_manifest=manifest,
+            control_revision="5" * 40,
+            **terminal_inputs,
+        )
+
+
+def test_completion_rejects_unproven_scheduler_propagation_denial(
+    evidence: Evidence,
+) -> None:
+    replay = _replay(evidence)
+    baseline, manifest, terminal_inputs = _terminal(replay, evidence)
+    paths = terminal_inputs["scheduler_evidence_paths"]
+    summary = json.loads(paths["authority_summary"].read_text(encoding="utf-8"))
+    attempts = copy.deepcopy(summary["attempts"])
+    attempts[0]["attempt"] = 2
+    attempts.insert(
+        0,
+        {
+            "scheduler": "polititrack-legislative",
+            "attempt": 1,
+            "outcome": "iam_propagation_pending",
+            "observed_at": "2026-09-05T21:02:19Z",
+            "denial_error": "unrelated error",
+            "evidence_file": "scheduler-resume-polititrack-legislative-attempt-1.stderr",
+            "evidence_sha256": "a" * 64,
+        },
+    )
+    paths["resume_attempts"].write_bytes(_jsonl(attempts))
+    summary["attempts"] = attempts
+    summary["evidence_sha256"]["resume_attempts"] = validator._sha256_file(
+        paths["resume_attempts"]
+    )
+    paths["authority_summary"].write_bytes(_json_bytes(summary))
+    _refresh_scheduler_authority_manifest(manifest, terminal_inputs)
+    with pytest.raises(validator.PromotionValidationError, match="exact expected denial"):
+        validator.complete_phase5(
+            descriptor=evidence.descriptor,
+            replay=replay,
+            terminal_baseline=baseline,
+            terminal_manifest=manifest,
+            control_revision="5" * 40,
+            **terminal_inputs,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1636,7 +2383,7 @@ def test_frozen_successor_requires_exact_zero_change_lineage(
         7300,
         validator.RECOVERY_ARTIFACT_NAMES["legislative"],
         validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS[0],
-        validator.FROZEN_LEGACY_SUCCESSOR_REVISION,
+            validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[0],
         created_at="2026-09-05T18:20:00Z",
     )
     bad["descriptor"]["frozen_legacy_successors"][0]["artifact"] = pin
@@ -1650,6 +2397,63 @@ def test_frozen_successor_requires_exact_zero_change_lineage(
         validator.reconcile_failed_phase5(**bad)
 
 
+def test_frozen_successor_accepts_one_second_early_success_marker(
+    evidence: Evidence,
+) -> None:
+    with zipfile.ZipFile(evidence.frozen_successor_archives[2]) as bundle:
+        state = json.loads(bundle.read("state.json"))
+    with zipfile.ZipFile(evidence.frozen_successor_output_archives[2]) as bundle:
+        result = json.loads(bundle.read(validator.RECOVERY_RESULT_MEMBERS["legislative"]))
+    success = datetime.fromisoformat(state["last_success_utc"].replace("Z", "+00:00"))
+    finished = datetime.fromisoformat(result["finished_utc"].replace("Z", "+00:00"))
+    assert (finished - success).total_seconds() == 1
+    assert _replay(evidence)["frozen_legacy_successors"][2]["run_id"] == 33992770754
+
+
+@pytest.mark.parametrize(
+    ("last_success_utc", "message"),
+    [
+        (
+            "2026-09-05T20:10:18Z",
+            "last success marker is more than one second before result finish",
+        ),
+        (
+            "2026-09-05T20:10:21Z",
+            "last success marker is outside the recovery result interval",
+        ),
+    ],
+)
+def test_frozen_successor_rejects_out_of_bound_success_marker(
+    evidence: Evidence,
+    tmp_path: Path,
+    last_success_utc: str,
+    message: str,
+) -> None:
+    with zipfile.ZipFile(evidence.frozen_successor_archives[2]) as bundle:
+        members = {name: bundle.read(name) for name in bundle.namelist()}
+    state = json.loads(members["state.json"])
+    state["last_success_utc"] = last_success_utc
+    members["state.json"] = _json_bytes(state)
+    changed = tmp_path / "changed-layer-two-legislative.zip"
+    _zip(changed, members)
+    bad = copy.deepcopy(evidence.replay_kwargs)
+    bad["descriptor"] = copy.deepcopy(bad["descriptor"])
+    old_pin = bad["descriptor"]["frozen_legacy_successors"][2]["artifact"]
+    pin, metadata = _artifact_pin(
+        changed,
+        old_pin["id"],
+        validator.RECOVERY_ARTIFACT_NAMES["legislative"],
+        validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS[2],
+        validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[1],
+        created_at="2026-09-05T20:20:00Z",
+    )
+    bad["descriptor"]["frozen_legacy_successors"][2]["artifact"] = pin
+    bad["frozen_successor_artifact_metadatas"][2] = metadata
+    bad["frozen_successor_archives"][2] = changed
+    with pytest.raises(validator.PromotionValidationError, match=message):
+        validator.reconcile_failed_phase5(**bad)
+
+
 def test_frozen_successor_revision_has_only_incident_control_paths() -> None:
     workflow = Path(".github/workflows/runtime_v2_tests.yml").read_text(encoding="utf-8")
     checkout = workflow[
@@ -1657,7 +2461,7 @@ def test_frozen_successor_revision_has_only_incident_control_paths() -> None:
     ]
     assert "fetch-depth: 0" in checkout
     validator._verify_frozen_legacy_successor_revision(MODULE_PATH.parents[2])
-    assert validator.FROZEN_LEGACY_SUCCESSOR_DIFF == {
+    assert validator.FROZEN_LEGACY_SUCCESSOR_DIFFS[0] == {
         ".github/workflows/phase5_failed_promotion_retry.yml": "A",
         ".github/workflows/runtime_v2_tests.yml": "M",
         "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "A",
@@ -1666,6 +2470,15 @@ def test_frozen_successor_revision_has_only_incident_control_paths() -> None:
         "docs/DECISIONS.md": "M",
         "tests/test_phase5_failed_promotion_retry.py": "A",
         "tests/test_reconcile_phase5_failed_promotion.py": "A",
+    }
+    assert validator.FROZEN_LEGACY_SUCCESSOR_DIFFS[1] == {
+        ".github/workflows/phase5_failed_promotion_retry.yml": "M",
+        ".github/workflows/runtime_v2_tests.yml": "M",
+        "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "M",
+        "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "M",
+        "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "M",
+        "tests/test_phase5_failed_promotion_retry.py": "M",
+        "tests/test_reconcile_phase5_failed_promotion.py": "M",
     }
 
 
@@ -1686,7 +2499,7 @@ def test_replay_rejects_later_legacy_run_and_newer_protected_artifact(
     bad = copy.deepcopy(evidence.replay_kwargs)
     newer = copy.deepcopy(bad["legacy_artifact_inventories"][0]["artifacts"][0])
     newer["id"] += 999
-    newer["created_at"] = "2026-09-05T19:00:00Z"
+    newer["created_at"] = "2026-09-05T21:00:00Z"
     bad["legacy_artifact_inventories"][0]["artifacts"].append(newer)
     bad["legacy_artifact_inventories"][0]["total_count"] = 2
     with pytest.raises(
@@ -1893,8 +2706,8 @@ def test_completion_derives_global_one_writer_from_raw_inventories(
     )
     overlapping["id"] += 77
     overlapping["created_at"] = "2026-09-05T08:00:00Z"
-    overlapping["run_started_at"] = "2026-09-05T14:00:00Z"
-    overlapping["updated_at"] = "2026-09-05T14:01:00Z"
+    overlapping["run_started_at"] = "2026-09-05T21:00:00Z"
+    overlapping["updated_at"] = "2026-09-05T21:01:00Z"
     terminal_inputs["terminal_legacy_run_inventories"][0]["workflow_runs"].append(overlapping)
     terminal_inputs["terminal_legacy_run_inventories"][0]["total_count"] = 2
     _rehash_terminal_input(manifest, terminal_inputs, "terminal_legacy_run_inventories", 0)
@@ -2054,6 +2867,9 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         "failed_run": evidence.failed_source["run"],
         "failed_artifact": evidence.failed_source["artifact"],
         "failed_jobs": evidence.failed_source["jobs"],
+        "failed_retry_run": evidence.failed_retry_source["run"],
+        "failed_retry_artifact": evidence.failed_retry_source["artifact"],
+        "failed_retry_jobs": evidence.failed_retry_source["jobs"],
         "legacy_run": evidence.legacy_source["run"],
         "legacy_jobs": evidence.legacy_source["jobs"],
         "predecessor_artifact": evidence.legacy_source["predecessor_artifact"],
@@ -2134,6 +2950,10 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         "--failed-artifact-metadata", str(files["failed_artifact"]),
         "--failed-jobs-metadata", str(files["failed_jobs"]),
         "--failed-archive", str(evidence.failed_archive),
+        "--failed-retry-run-metadata", str(files["failed_retry_run"]),
+        "--failed-retry-artifact-metadata", str(files["failed_retry_artifact"]),
+        "--failed-retry-jobs-metadata", str(files["failed_retry_jobs"]),
+        "--failed-retry-archive", str(evidence.failed_retry_archive),
         "--legacy-ai-run-metadata", str(files["legacy_run"]),
         "--legacy-ai-jobs-metadata", str(files["legacy_jobs"]),
         "--legacy-ai-predecessor-artifact-metadata", str(files["predecessor_artifact"]),
@@ -2218,5 +3038,33 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         complete_args += ["--terminal-legacy-workflow-state", str(path)]
     for path in terminal_paths["terminal_runtime_execution_inventories"]:
         complete_args += ["--terminal-runtime-execution-inventory", str(path)]
+    scheduler_paths = terminal_inputs["scheduler_evidence_paths"]
+    for flag, key in (
+        ("scheduler-authority-summary", "authority_summary"),
+        ("scheduler-transition", "transition"),
+        ("scheduler-before-policy", "before_policy"),
+        ("scheduler-granted-policy", "granted_policy"),
+            ("scheduler-removed-policy", "removed_policy"),
+            ("permanent-control-role", "permanent_control_role"),
+            ("role-viewer-before-policy", "role_viewer_before_policy"),
+            ("role-viewer-granted-policy", "role_viewer_granted_policy"),
+            ("role-viewer-removed-policy", "role_viewer_removed_policy"),
+            ("role-viewer-condition", "role_viewer_condition"),
+            ("role-viewer-grant-request", "role_viewer_grant_request"),
+            ("scheduler-condition", "condition"),
+        ("scheduler-grant-request", "grant_request"),
+        ("scheduler-resume-attempts", "resume_attempts"),
+        ("scheduler-before-summary", "before_summary"),
+        ("scheduler-after-summary", "after_summary"),
+        ("scheduler-before-inventory", "before_inventory"),
+        ("scheduler-after-inventory", "after_inventory"),
+    ):
+        complete_args += [f"--{flag}", str(scheduler_paths[key])]
+    for path in scheduler_paths["before_jobs"]:
+        complete_args += ["--scheduler-before-job", str(path)]
+    for path in scheduler_paths["after_jobs"]:
+        complete_args += ["--scheduler-after-job", str(path)]
+    for path in scheduler_paths["resume_receipts"]:
+        complete_args += ["--scheduler-resume-receipt", str(path)]
     assert validator.main(complete_args) == 0
     assert json.loads(complete_path.read_text(encoding="utf-8"))["result"] == "phase5_complete"

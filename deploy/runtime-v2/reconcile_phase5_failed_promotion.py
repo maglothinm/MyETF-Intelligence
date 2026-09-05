@@ -46,33 +46,64 @@ from validate_runtime_promotion import (  # noqa: E402
 
 REPOSITORY_ID = 1349678672
 REPOSITORY = "maglothinm/MyETF-Intelligence"
+PROJECT_ID = "project-38008d5f-4918-46e6-920"
+REGION = "us-central1"
+DEPLOYER_MEMBER = (
+    "serviceAccount:polititrack-phase3-deployer@"
+    "project-38008d5f-4918-46e6-920.iam.gserviceaccount.com"
+)
+PERMANENT_CONTROL_ROLE = (
+    "projects/project-38008d5f-4918-46e6-920/roles/polititrackPhase3Terraform"
+)
+VAULT_SCHEDULER = "polititrack-vault-lifecycle"
 
 # This is deliberately an incident-specific validator, not a general escape
 # hatch around Phase 4/5 invariants.
 PHASE4_RUN_ID = 33979432233
 FAILED_PHASE5_RUN_ID = 33979778020
+FAILED_PHASE5_RETRY_RUN_ID = 33990741282
 CONCURRENT_LEGACY_AI_RUN_ID = 33980946687
 RECOVERY_RUN_IDS = (33981311523, 33981312757)
-FROZEN_LEGACY_SUCCESSOR_RUN_IDS = (33987160591, 33987130349)
+FROZEN_LEGACY_SUCCESSOR_RUN_IDS = (
+    33987160591,
+    33987130349,
+    33992770754,
+    33992772006,
+)
 CERTIFIED_CONTROL_REVISION = "48efd8a45bbb51ee89e8b680430e593ac8867046"
 CERTIFIED_TREE_SHA = "e6ca055af1973765bea1b3de5c01a5dbd69c0393"
 RUNTIME_SOURCE_REVISION = "8908f067298078f8c013e90cf6b7ad8ad420285b"
-FROZEN_LEGACY_SUCCESSOR_REVISION = "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2"
+FROZEN_LEGACY_SUCCESSOR_REVISIONS = (
+    "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2",
+    "7dba656fe37098f0b7a2576f49803eb10d49f1be",
+)
 RUNTIME_SNAPSHOT_DIGEST_PREFIX = "0f601d"
 
-FROZEN_LEGACY_SUCCESSOR_DIFF = {
-    ".github/workflows/phase5_failed_promotion_retry.yml": "A",
-    ".github/workflows/runtime_v2_tests.yml": "M",
-    "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "A",
-    "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "A",
-    "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "A",
-    "docs/DECISIONS.md": "M",
-    "tests/test_phase5_failed_promotion_retry.py": "A",
-    "tests/test_reconcile_phase5_failed_promotion.py": "A",
-}
+FROZEN_LEGACY_SUCCESSOR_DIFFS = (
+    {
+        ".github/workflows/phase5_failed_promotion_retry.yml": "A",
+        ".github/workflows/runtime_v2_tests.yml": "M",
+        "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "A",
+        "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "A",
+        "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "A",
+        "docs/DECISIONS.md": "M",
+        "tests/test_phase5_failed_promotion_retry.py": "A",
+        "tests/test_reconcile_phase5_failed_promotion.py": "A",
+    },
+    {
+        ".github/workflows/phase5_failed_promotion_retry.yml": "M",
+        ".github/workflows/runtime_v2_tests.yml": "M",
+        "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "M",
+        "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "M",
+        "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "M",
+        "tests/test_phase5_failed_promotion_retry.py": "M",
+        "tests/test_reconcile_phase5_failed_promotion.py": "M",
+    },
+)
 
 PHASE4_WORKFLOW_PATH = ".github/workflows/phase4_live_shadow_validation_v6.yml"
 PHASE5_WORKFLOW_PATH = ".github/workflows/phase5_production_promotion_v2.yml"
+PHASE5_RETRY_WORKFLOW_PATH = ".github/workflows/phase5_failed_promotion_retry.yml"
 AI_WORKFLOW_PATH = ".github/workflows/ai_filing_analyst.yml"
 DASHBOARD_WORKFLOW_PATH = ".github/workflows/publish_trade_dashboard.yml"
 RECOVERY_PATHS = {
@@ -469,49 +500,50 @@ def _verify_tree_equal_descendant(
 
 
 def _verify_frozen_legacy_successor_revision(repository_root: Path) -> None:
-    _expect(
-        _git(repository_root, "rev-parse", f"{FROZEN_LEGACY_SUCCESSOR_REVISION}^{{commit}}"),
-        FROZEN_LEGACY_SUCCESSOR_REVISION,
-        "frozen legacy successor commit",
-    )
-    try:
-        subprocess.run(
-            [
-                "git",
-                "merge-base",
-                "--is-ancestor",
-                CERTIFIED_CONTROL_REVISION,
-                FROZEN_LEGACY_SUCCESSOR_REVISION,
-            ],
-            cwd=repository_root,
-            check=True,
-            capture_output=True,
+    predecessor = CERTIFIED_CONTROL_REVISION
+    for layer, (revision, expected_diff) in enumerate(
+        zip(FROZEN_LEGACY_SUCCESSOR_REVISIONS, FROZEN_LEGACY_SUCCESSOR_DIFFS), start=1
+    ):
+        _expect(
+            _git(repository_root, "rev-parse", f"{revision}^{{commit}}"),
+            revision,
+            f"frozen legacy successor layer {layer} commit",
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise PromotionValidationError(
-            "frozen legacy successor revision does not descend from the certified revision"
-        ) from exc
+        try:
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", predecessor, revision],
+                cwd=repository_root,
+                check=True,
+                capture_output=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise PromotionValidationError(
+                f"frozen legacy successor layer {layer} does not descend from its predecessor"
+            ) from exc
 
-    output = _git(
-        repository_root,
-        "diff",
-        "--name-status",
-        "--no-renames",
-        CERTIFIED_CONTROL_REVISION,
-        FROZEN_LEGACY_SUCCESSOR_REVISION,
-        "--",
-    )
-    observed: dict[str, str] = {}
-    for line in output.splitlines():
-        parts = line.split("\t")
-        if len(parts) != 2 or parts[0] not in {"A", "M", "D"} or parts[1] in observed:
-            _fail("frozen legacy successor revision has an ambiguous changed-path inventory")
-        observed[parts[1]] = parts[0]
-    _expect(
-        observed,
-        FROZEN_LEGACY_SUCCESSOR_DIFF,
-        "frozen legacy successor incident-only changed paths",
-    )
+        output = _git(
+            repository_root,
+            "diff",
+            "--name-status",
+            "--no-renames",
+            predecessor,
+            revision,
+            "--",
+        )
+        observed: dict[str, str] = {}
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) != 2 or parts[0] not in {"A", "M", "D"} or parts[1] in observed:
+                _fail(
+                    f"frozen legacy successor layer {layer} has an ambiguous changed-path inventory"
+                )
+            observed[parts[1]] = parts[0]
+        _expect(
+            observed,
+            expected_diff,
+            f"frozen legacy successor layer {layer} incident-only changed paths",
+        )
+        predecessor = revision
 
 
 def _parse_sha256_file(data: bytes, expected_name: str, label: str) -> str:
@@ -757,8 +789,11 @@ def _failed_phase5_prefix(
         cycles=1,
         runtime_source_revision=RUNTIME_SOURCE_REVISION,
     )
+    retry_pin = _require_object(
+        descriptor.get("failed_phase5_retry"), "failed Phase 5 retry pin"
+    )
     expected_heads = _require_object(
-        descriptor.get("expected_continuation_heads"), "expected continuation heads"
+        retry_pin.get("baseline_heads"), "failed retry baseline heads"
     )
     _same_heads(final_heads, expected_heads, "failed Phase 5 continuation heads")
     return {
@@ -766,6 +801,322 @@ def _failed_phase5_prefix(
         "final_heads": final_heads,
         "receipts": receipts,
     }, observations, job
+
+
+def _validate_failed_phase5_retry(
+    descriptor: Mapping[str, Any],
+    run_metadata: Mapping[str, Any],
+    artifact_metadata: Mapping[str, Any],
+    jobs_metadata: Mapping[str, Any],
+    archive: Path,
+    prefix: Mapping[str, Any],
+) -> dict[str, Any]:
+    pin = _require_object(descriptor.get("failed_phase5_retry"), "failed Phase 5 retry pin")
+    job = _validate_run_job_metadata(
+        pin,
+        run_metadata,
+        jobs_metadata,
+        expected_run_id=FAILED_PHASE5_RETRY_RUN_ID,
+        expected_path=PHASE5_RETRY_WORKFLOW_PATH,
+        expected_conclusion="failure",
+        expected_job_name="reconcile-and-retry",
+    )
+    _expect(
+        pin.get("head_sha"),
+        FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        "failed Phase 5 retry revision",
+    )
+    artifact_pin = _require_object(pin.get("artifact"), "failed Phase 5 retry artifact pin")
+    members = _load_pinned_artifact(
+        archive,
+        artifact_metadata,
+        artifact_pin,
+        producer_run_id=FAILED_PHASE5_RETRY_RUN_ID,
+        producer_head_sha=FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+    )
+    forbidden = {"phase5-complete.json", "phase5-complete.sha256", "terminal-manifest.json"}
+    present_basenames = {PurePosixPath(name).name for name in members}
+    if forbidden & present_basenames:
+        _fail("failed Phase 5 retry artifact unexpectedly contains completion evidence")
+    for marker in ("live-mutation-started", "route-touched", "retry-rollback-complete"):
+        if marker not in present_basenames:
+            _fail(f"failed Phase 5 retry artifact is missing {marker}")
+
+    replay_bytes = _unique_basename(members, "failed-prefix-replay.json")
+    replay_sha = _sha256_bytes(replay_bytes)
+    _expect(
+        replay_sha,
+        pin.get("predecessor_replay_sha256"),
+        "failed Phase 5 retry predecessor replay digest",
+    )
+    replay_checksum = _parse_sha256_file(
+        _unique_basename(members, "failed-prefix-replay.sha256"),
+        "failed-prefix-replay.json",
+        "failed Phase 5 retry replay checksum",
+    )
+    _expect(replay_checksum, replay_sha, "failed Phase 5 retry replay checksum")
+    embedded_replay = _json_bytes(replay_bytes, "failed Phase 5 retry embedded replay")
+    embedded_replay = _require_object(embedded_replay, "failed Phase 5 retry embedded replay")
+    for key, expected in {
+        "result": "phase5_failed_promotion_reconciled",
+        "certification_eligible": False,
+        "descriptor_sha256": pin.get("predecessor_descriptor_sha256"),
+    }.items():
+        _expect(embedded_replay.get(key), expected, f"failed Phase 5 retry replay {key}")
+    embedded_reconciliation = _require_object(
+        embedded_replay.get("reconciliation"), "failed Phase 5 retry replay reconciliation"
+    )
+    for key, expected in {
+        "additional_runtime_producer_execution_performed": False,
+        "production_authority_transferred": False,
+        "phase6_started": False,
+    }.items():
+        _expect(embedded_reconciliation.get(key), expected, f"failed Phase 5 retry replay {key}")
+    embedded_successors = _require_list(
+        embedded_replay.get("frozen_legacy_successors"),
+        "failed Phase 5 retry embedded frozen successors",
+    )
+    _expect(
+        [item.get("run_id") for item in embedded_successors if isinstance(item, Mapping)],
+        list(FROZEN_LEGACY_SUCCESSOR_RUN_IDS[:2]),
+        "failed Phase 5 retry embedded frozen successor runs",
+    )
+
+    baseline = _json_bytes(
+        _unique_basename(members, "terminal-baseline.json"),
+        "failed Phase 5 retry terminal baseline",
+    )
+    baseline = dict(_require_object(baseline, "failed Phase 5 retry terminal baseline"))
+    prefix_heads = _require_object(prefix.get("final_heads"), "failed Phase 5 prefix heads")
+    _same_heads(_heads(baseline), prefix_heads, "failed Phase 5 retry baseline")
+    prefix_receipts = _require_list(prefix.get("receipts"), "failed Phase 5 prefix receipts")
+    _assert_current_runtime_state(baseline, prefix_heads, prefix_receipts)
+
+    observations = _observations_from_ndjson(
+        _unique_basename(members, "observations.ndjson"),
+        "failed Phase 5 retry observations.ndjson",
+    )
+    status_members = _require_list(
+        pin.get("status_members"), "failed Phase 5 retry status member pins"
+    )
+    expected_status_members = [
+        f"retry-smoke-sequence-{index}-{role}-status.json"
+        for index, role in enumerate(NAMESPACES, start=1)
+    ]
+    _expect(status_members, expected_status_members, "failed Phase 5 retry status member list")
+    if len(observations) != len(status_members):
+        _fail("failed Phase 5 retry observation/status count mismatch")
+    for index, (observation, name, role) in enumerate(
+        zip(observations, status_members, NAMESPACES), start=1
+    ):
+        for key, expected in {"cycle": 1, "sequence": index, "job": role}.items():
+            _expect(observation.get(key), expected, f"failed retry observation {index} {key}")
+        status = _json_bytes(
+            _unique_basename(members, str(name)), f"failed Phase 5 retry artifact {name}"
+        )
+        _expect(observation.get("status"), status, f"failed retry observation {index} status file")
+
+    final_heads, receipts = _validate_sequence(
+        baseline=baseline,
+        observations=observations,
+        expected_mode="production",
+        expected_trigger="phase5_smoke",
+        cycles=1,
+        runtime_source_revision=RUNTIME_SOURCE_REVISION,
+    )
+    expected_heads = _require_object(
+        descriptor.get("expected_continuation_heads"), "expected continuation heads"
+    )
+    _same_heads(final_heads, expected_heads, "failed Phase 5 retry continuation heads")
+    pinned_terminal_heads = _require_object(
+        pin.get("terminal_heads"), "failed Phase 5 retry terminal head pins"
+    )
+    _same_heads(final_heads, pinned_terminal_heads, "failed Phase 5 retry terminal heads")
+    terminal_confirmation = _json_bytes(
+        _unique_basename(members, "terminal-confirmation.json"),
+        "failed Phase 5 retry terminal confirmation",
+    )
+    _expect(
+        terminal_confirmation,
+        observations[-1].get("status"),
+        "failed Phase 5 retry terminal confirmation",
+    )
+
+    interval_start_text = _unique_basename(members, "fresh-cycle-started-at.txt").decode(
+        "ascii"
+    ).strip()
+    interval_finish_text = _unique_basename(members, "fresh-cycle-finished-at.txt").decode(
+        "ascii"
+    ).strip()
+    interval_start = _parse_time(interval_start_text, "failed retry fresh-cycle started_at")
+    interval_finish = _parse_time(interval_finish_text, "failed retry fresh-cycle finished_at")
+    if interval_finish < interval_start:
+        _fail("failed retry fresh-cycle interval finished before it started")
+
+    legacy_run_inventories = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/legacy-{role}-runs-terminal.json"),
+                f"failed retry {role} run inventory",
+            ),
+            f"failed retry {role} run inventory",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES
+    ]
+    legacy_workflow_states = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/legacy-{role}-workflow-terminal.json"),
+                f"failed retry {role} workflow state",
+            ),
+            f"failed retry {role} workflow state",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES
+    ]
+    runtime_execution_inventories = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/runtime-{role}-executions-terminal.json"),
+                f"failed retry {role} Runtime inventory",
+            ),
+            f"failed retry {role} Runtime inventory",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES
+    ]
+    evidence_files = {
+        "legacy_run_inventories": [
+            f"incident/legacy-{role}-runs-terminal.json" for role in LEGACY_HIGH_WATER_ROLES
+        ],
+        "legacy_workflow_states": [
+            f"incident/legacy-{role}-workflow-terminal.json"
+            for role in LEGACY_HIGH_WATER_ROLES
+        ],
+        "runtime_execution_inventories": [
+            f"incident/runtime-{role}-executions-terminal.json"
+            for role in LEGACY_HIGH_WATER_ROLES
+        ],
+    }
+    evidence_digests = {
+        field: [_sha256_bytes(_member(members, name)) for name in names]
+        for field, names in evidence_files.items()
+    }
+    one_writer = {
+        "fresh_cycle_interval": {
+            "started_at": interval_start_text,
+            "finished_at": interval_finish_text,
+        },
+        "overlapping_legacy_run_count": 0,
+        "unexpected_runtime_execution_count": 0,
+        "expected_runtime_execution_count": 4,
+    }
+    for field, digests in evidence_digests.items():
+        one_writer[f"{field}_sha256"] = dict(zip(LEGACY_HIGH_WATER_ROLES, digests))
+    _validate_terminal_one_writer(
+        descriptor=descriptor,
+        replay=embedded_replay,
+        manifest={"one_writer_evidence": one_writer},
+        receipts=receipts,
+        legacy_run_inventories=legacy_run_inventories,
+        legacy_workflow_states=legacy_workflow_states,
+        runtime_execution_inventories=runtime_execution_inventories,
+        evidence_digests=evidence_digests,
+        successor_layer=0,
+    )
+    legacy_artifact_inventories = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/legacy-{role}-artifacts-terminal.json"),
+                f"failed retry {role} artifact inventory",
+            ),
+            f"failed retry {role} artifact inventory",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES[:3]
+    ]
+    _validate_high_water_artifact_inventories(
+        descriptor, legacy_artifact_inventories, successor_layer=0
+    )
+
+    rollback = _require_object(
+        _json_bytes(
+            _unique_basename(members, "retry-rollback.json"),
+            "failed Phase 5 retry rollback receipt",
+        ),
+        "failed Phase 5 retry rollback receipt",
+    )
+    for key, expected in {
+        "schema_version": 1,
+        "result": "phase5_failed_promotion_retry_rolled_back",
+        "runtime_schedulers_paused": True,
+        "web_public": False,
+        "runtime_mode": "shadow",
+        "observed_legacy_route_kind": "historic_active",
+        "legacy_route_restored": True,
+        "legacy_recovery_required": True,
+        "legacy_recovery_action_complete": True,
+        "temporary_execution_authority_removed": True,
+        "temporary_service_account_user_removed": True,
+        "temporary_private_web_invoker_removed": True,
+        "cloud_sql_private_only": True,
+        "vault_scheduler_state": "PAUSED",
+    }.items():
+        _expect(rollback.get(key), expected, f"failed Phase 5 retry rollback {key}")
+    dispatch = _require_object(
+        _json_bytes(
+            _unique_basename(members, "legacy-recovery-dispatch.json"),
+            "failed Phase 5 retry recovery dispatch",
+        ),
+        "failed Phase 5 retry recovery dispatch",
+    )
+    _expect(dispatch.get("result"), "legacy_recovery_runs_succeeded", "failed retry recovery")
+    dispatches = _require_list(dispatch.get("workflows"), "failed retry recovery workflows")
+    layer_two_pins = _require_list(
+        descriptor.get("frozen_legacy_successors"), "frozen successor pins"
+    )[2:]
+    if len(dispatches) != 2 or len(layer_two_pins) != 2:
+        _fail("failed retry recovery dispatch does not contain exactly two layer-two runs")
+    for role, value, successor_pin in zip(("legislative", "executive"), dispatches, layer_two_pins):
+        row = _require_object(value, f"failed retry {role} recovery dispatch")
+        expected_workflow = PurePosixPath(RECOVERY_PATHS[role]).name
+        for key, expected in {
+            "result": "legacy_recovery_run_succeeded",
+            "workflow": expected_workflow,
+            "workflow_id": _require_object(
+                successor_pin.get("workflow"), f"{role} successor workflow pin"
+            ).get("id"),
+            "control_revision": FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+            "dispatch_attempted": True,
+            "run_id": successor_pin.get("run_id"),
+            "status": "completed",
+            "conclusion": "success",
+            "run_attempt": successor_pin.get("run_attempt"),
+        }.items():
+            _expect(row.get(key), expected, f"failed retry {role} recovery dispatch {key}")
+        if _parse_time(
+            _require_object(successor_pin.get("job"), f"{role} successor job pin").get(
+                "started_at"
+            ),
+            f"{role} rollback recovery started_at",
+        ) <= interval_finish:
+            _fail(f"{role} rollback recovery did not begin after the intervening fresh cycle")
+
+    return {
+        "run_id": FAILED_PHASE5_RETRY_RUN_ID,
+        "artifact_id": artifact_pin.get("id"),
+        "head_sha": pin.get("head_sha"),
+        "job_id": job.get("id"),
+        "conclusion": "failure",
+        "result": "clean_cycle_rolled_back_noncertifying",
+        "certification_eligible": False,
+        "unique_successful_smoke_receipts": 4,
+        "executions": receipts,
+        "baseline_heads": _head_summary(_heads(baseline)),
+        "final_heads": _head_summary(final_heads),
+        "legacy_global_one_writer_verified": True,
+        "runtime_execution_set_verified": True,
+        "rollback_verified": True,
+        "production_authority_transferred": False,
+        "phase6_started": False,
+    }
 
 
 def _assert_current_runtime_state(
@@ -1234,67 +1585,53 @@ def _validate_frozen_legacy_successors(
     successor_pins = _require_list(
         descriptor.get("frozen_legacy_successors"), "frozen legacy successor pins"
     )
-    collections = (
-        recovery_pins,
-        successor_pins,
-        predecessor_artifact_metadatas,
-        predecessor_archives,
-        run_metadatas,
-        jobs_metadatas,
-        artifact_metadatas,
-        archives,
-        output_artifact_metadatas,
-        output_archives,
-    )
-    if any(len(items) != 2 for items in collections):
-        _fail("reconciliation requires exactly two frozen legacy successors")
-
-    _verify_frozen_legacy_successor_revision(repository_root)
-    recovery_finished = max(
-        _parse_time(
-            _require_object(pin, "recovery pin").get("job", {}).get("completed_at"),
-            "original recovery completed_at",
-        )
-        for pin in recovery_pins
-    )
-    result: list[dict[str, Any]] = []
-    for index, (
-        recovery_value,
-        pin_value,
-        predecessor_metadata,
-        predecessor_archive,
-        run,
-        jobs,
-        artifact_metadata,
-        archive,
-        output_metadata,
-        output_archive,
-        role,
-        run_id,
-    ) in enumerate(
-        zip(
-            recovery_pins,
+    expected_count = len(FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
+    if len(recovery_pins) != 2:
+        _fail("reconciliation requires exactly two original recovery runs")
+    if len(predecessor_artifact_metadatas) != 2 or len(predecessor_archives) != 2:
+        _fail("reconciliation requires exactly two original successor predecessors")
+    if any(
+        len(items) != expected_count
+        for items in (
             successor_pins,
-            predecessor_artifact_metadatas,
-            predecessor_archives,
             run_metadatas,
             jobs_metadatas,
             artifact_metadatas,
             archives,
             output_artifact_metadatas,
             output_archives,
-            ("legislative", "executive"),
-            FROZEN_LEGACY_SUCCESSOR_RUN_IDS,
-        ),
-        start=1,
+        )
     ):
-        recovery_pin = _require_object(recovery_value, f"original recovery pin {index}")
+        _fail(f"reconciliation requires exactly {expected_count} frozen legacy successors")
+
+    _verify_frozen_legacy_successor_revision(repository_root)
+    result: list[dict[str, Any]] = []
+    roles = ("legislative", "executive") * len(FROZEN_LEGACY_SUCCESSOR_REVISIONS)
+    expected_events = ("schedule", "schedule", "workflow_dispatch", "workflow_dispatch")
+    for offset, (pin_value, run, jobs, artifact_metadata, archive, output_metadata, output_archive) in enumerate(
+        zip(
+            successor_pins,
+            run_metadatas,
+            jobs_metadatas,
+            artifact_metadatas,
+            archives,
+            output_artifact_metadatas,
+            output_archives,
+        )
+    ):
+        index = offset + 1
+        role_index = offset % 2
+        layer_index = offset // 2
+        role = roles[offset]
+        run_id = FROZEN_LEGACY_SUCCESSOR_RUN_IDS[offset]
+        revision = FROZEN_LEGACY_SUCCESSOR_REVISIONS[layer_index]
         pin = _require_object(pin_value, f"frozen legacy successor pin {index}")
         _expect(pin.get("role"), role, f"frozen legacy successor pin {index} role")
+        _expect(pin.get("event"), expected_events[offset], f"{role} layer {layer_index + 1} event")
         _expect(
             pin.get("head_sha"),
-            FROZEN_LEGACY_SUCCESSOR_REVISION,
-            f"{role} frozen legacy successor revision",
+            revision,
+            f"{role} frozen legacy successor layer {layer_index + 1} revision",
         )
         job = _validate_run_job_metadata(
             pin,
@@ -1305,11 +1642,33 @@ def _validate_frozen_legacy_successors(
             expected_conclusion="success",
             expected_job_name="track",
         )
-        if _parse_time(job["started_at"], f"{role} successor started_at") <= recovery_finished:
-            _fail(f"{role} frozen legacy successor did not begin after both original recoveries")
+        prior_layer_pins = (
+            recovery_pins
+            if layer_index == 0
+            else successor_pins[(layer_index - 1) * 2 : layer_index * 2]
+        )
+        prior_layer_finished = max(
+            _parse_time(
+                _require_object(value, f"layer {layer_index} predecessor pin")
+                .get("job", {})
+                .get("completed_at"),
+                f"layer {layer_index} predecessor completed_at",
+            )
+            for value in prior_layer_pins
+        )
+        if _parse_time(job["started_at"], f"{role} successor started_at") <= prior_layer_finished:
+            _fail(
+                f"{role} frozen legacy successor layer {layer_index + 1} did not begin "
+                "after both prior-layer runs"
+            )
 
-        original_artifact_pin = _require_object(
-            recovery_pin.get("artifact"), f"{role} original recovery artifact pin"
+        predecessor_run_pin = _require_object(
+            recovery_pins[role_index] if layer_index == 0 else successor_pins[offset - 2],
+            f"{role} layer {layer_index + 1} predecessor run pin",
+        )
+        expected_predecessor_artifact_pin = _require_object(
+            predecessor_run_pin.get("artifact"),
+            f"{role} layer {layer_index + 1} predecessor artifact source pin",
         )
         predecessor_pin = _require_object(
             pin.get("predecessor_artifact"), f"{role} successor predecessor artifact pin"
@@ -1317,25 +1676,33 @@ def _validate_frozen_legacy_successors(
         for key in ("id", "name", "size_in_bytes", "digest", "expires_at"):
             _expect(
                 predecessor_pin.get(key),
-                original_artifact_pin.get(key),
+                expected_predecessor_artifact_pin.get(key),
                 f"{role} successor predecessor {key}",
             )
         _expect(
             predecessor_pin.get("producer_run_id"),
-            recovery_pin.get("run_id"),
+            predecessor_run_pin.get("run_id"),
             f"{role} successor predecessor producer run",
         )
         _expect(
             predecessor_pin.get("producer_head_sha"),
-            recovery_pin.get("head_sha"),
+            predecessor_run_pin.get("head_sha"),
             f"{role} successor predecessor producer revision",
+        )
+        predecessor_metadata = (
+            predecessor_artifact_metadatas[role_index]
+            if layer_index == 0
+            else artifact_metadatas[offset - 2]
+        )
+        predecessor_archive = (
+            predecessor_archives[role_index] if layer_index == 0 else archives[offset - 2]
         )
         predecessor_members = _load_pinned_artifact(
             Path(predecessor_archive),
             predecessor_metadata,
             predecessor_pin,
-            producer_run_id=int(recovery_pin["run_id"]),
-            producer_head_sha=str(recovery_pin["head_sha"]),
+            producer_run_id=int(predecessor_run_pin["run_id"]),
+            producer_head_sha=str(predecessor_run_pin["head_sha"]),
         )
         predecessor_created = _parse_time(
             predecessor_metadata.get("created_at"),
@@ -1355,13 +1722,13 @@ def _validate_frozen_legacy_successors(
             artifact_metadata,
             artifact_pin,
             producer_run_id=run_id,
-            producer_head_sha=FROZEN_LEGACY_SUCCESSOR_REVISION,
+            producer_head_sha=revision,
         )
         current_created = _parse_time(
             artifact_metadata.get("created_at"), f"{role} successor artifact created_at"
         )
         if current_created <= predecessor_created:
-            _fail(f"{role} successor artifact does not follow its original recovery predecessor")
+            _fail(f"{role} successor artifact does not follow its prior-layer predecessor")
 
         output_pin = _require_object(
             pin.get("output_artifact"), f"{role} successor output artifact pin"
@@ -1381,7 +1748,7 @@ def _validate_frozen_legacy_successors(
             output_metadata,
             output_pin,
             producer_run_id=run_id,
-            producer_head_sha=FROZEN_LEGACY_SUCCESSOR_REVISION,
+            producer_head_sha=revision,
         )
         successor_result = _validate_zero_change_recovery(
             role=role,
@@ -1401,8 +1768,9 @@ def _validate_frozen_legacy_successors(
                 "head_sha": pin.get("head_sha"),
                 "job_id": job.get("id"),
                 "conclusion": "success",
+                "successor_layer": layer_index + 1,
                 "incident_only_revision_allowlist_verified": True,
-                "predecessor_recovery_run_id": recovery_pin.get("run_id"),
+                "predecessor_run_id": predecessor_run_pin.get("run_id"),
                 "predecessor_artifact_id": predecessor_pin.get("id"),
                 "predecessor_artifact_sha256": _digest_pin(
                     predecessor_pin.get("digest"), f"{role} successor predecessor digest"
@@ -1511,7 +1879,11 @@ def _validate_zero_change_recovery(
             predecessor_state[marker], f"{role} predecessor recovery state {marker}"
         ):
             _fail(f"{role} recovery state marker {marker} did not advance chronologically")
-    _expect(state.get("last_success_utc"), output.get("finished_utc"), f"{role} success marker")
+    last_success = _parse_time(state.get("last_success_utc"), f"{role} last success marker")
+    if last_success < started or last_success > finished:
+        _fail(f"{role} last success marker is outside the recovery result interval")
+    if (finished - last_success).total_seconds() > 1:
+        _fail(f"{role} last success marker is more than one second before result finish")
     last_attempt = _parse_time(state.get("last_attempt_utc"), f"{role} last attempt marker")
     if last_attempt < started or last_attempt > finished:
         _fail(f"{role} last attempt marker is outside the recovery result interval")
@@ -1593,32 +1965,35 @@ def _run_matches_pin(run: Mapping[str, Any], pin: Mapping[str, Any], label: str)
         _expect(boundary.get("id"), REPOSITORY_ID, f"{label} {key} id")
 
 
-def _high_water_pins(descriptor: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def _high_water_pins(
+    descriptor: Mapping[str, Any], *, successor_layer: int = -1
+) -> list[Mapping[str, Any]]:
     successors = _require_list(
         descriptor.get("frozen_legacy_successors"), "frozen legacy successor pins"
     )
-    if len(successors) != 2:
-        _fail("reconciliation requires exactly two frozen legacy successor pins")
-    legislative = _require_object(successors[0], "legislative frozen legacy successor pin")
-    executive = _require_object(successors[1], "executive frozen legacy successor pin")
-    _expect(legislative.get("role"), "legislative", "legislative frozen successor role")
-    _expect(executive.get("role"), "executive", "executive frozen successor role")
-    _expect(
-        legislative.get("run_id"),
-        FROZEN_LEGACY_SUCCESSOR_RUN_IDS[0],
-        "legislative frozen successor run ID",
-    )
-    _expect(
-        executive.get("run_id"),
-        FROZEN_LEGACY_SUCCESSOR_RUN_IDS[1],
-        "executive frozen successor run ID",
-    )
-    for role, pin in (("legislative", legislative), ("executive", executive)):
+    expected_count = len(FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
+    if len(successors) != expected_count:
+        _fail(f"reconciliation requires exactly {expected_count} frozen legacy successor pins")
+    roles = ("legislative", "executive") * len(FROZEN_LEGACY_SUCCESSOR_REVISIONS)
+    validated: list[Mapping[str, Any]] = []
+    for index, (value, role, run_id) in enumerate(
+        zip(successors, roles, FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
+    ):
+        pin = _require_object(value, f"{role} frozen legacy successor pin {index + 1}")
+        layer_index = index // 2
+        _expect(pin.get("role"), role, f"{role} frozen successor role {index + 1}")
+        _expect(pin.get("run_id"), run_id, f"{role} frozen successor run ID {index + 1}")
         _expect(
             pin.get("head_sha"),
-            FROZEN_LEGACY_SUCCESSOR_REVISION,
-            f"{role} frozen successor revision",
+            FROZEN_LEGACY_SUCCESSOR_REVISIONS[layer_index],
+            f"{role} frozen successor revision {index + 1}",
         )
+        validated.append(pin)
+    if successor_layer == -1:
+        successor_layer = len(FROZEN_LEGACY_SUCCESSOR_REVISIONS) - 1
+    if successor_layer < 0 or successor_layer >= len(FROZEN_LEGACY_SUCCESSOR_REVISIONS):
+        _fail("legacy high-water successor layer is invalid")
+    legislative, executive = validated[successor_layer * 2 : successor_layer * 2 + 2]
     dashboard = _require_object(descriptor.get("legacy_dashboard"), "legacy dashboard pin")
     _expect(dashboard.get("role"), "dashboard", "legacy dashboard role")
     _expect(
@@ -1635,9 +2010,13 @@ def _high_water_pins(descriptor: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _validate_high_water_run_inventories(
-    descriptor: Mapping[str, Any], inventories: Sequence[Mapping[str, Any]], *, label: str
+    descriptor: Mapping[str, Any],
+    inventories: Sequence[Mapping[str, Any]],
+    *,
+    label: str,
+    successor_layer: int = -1,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    pins = _high_water_pins(descriptor)
+    pins = _high_water_pins(descriptor, successor_layer=successor_layer)
     if len(inventories) != 4:
         _fail(f"{label} requires exactly four legacy workflow run inventories")
     summaries: list[dict[str, Any]] = []
@@ -1679,9 +2058,12 @@ def _validate_high_water_run_inventories(
 
 
 def _validate_high_water_artifact_inventories(
-    descriptor: Mapping[str, Any], inventories: Sequence[Mapping[str, Any]]
+    descriptor: Mapping[str, Any],
+    inventories: Sequence[Mapping[str, Any]],
+    *,
+    successor_layer: int = -1,
 ) -> list[str]:
-    pins = _high_water_pins(descriptor)[:3]
+    pins = _high_water_pins(descriptor, successor_layer=successor_layer)[:3]
     artifact_pins = [
         _require_object(pins[0].get("artifact"), "legislative protected artifact pin"),
         _require_object(pins[1].get("artifact"), "executive protected artifact pin"),
@@ -1803,6 +2185,91 @@ def _validate_receipt_summary(
     return accepted
 
 
+def _validate_failed_retry_replay_summary(
+    descriptor: Mapping[str, Any],
+    replay: Mapping[str, Any],
+    invalidated_receipts: Sequence[Mapping[str, Any]],
+    invalidated_final_heads: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    pin = _require_object(descriptor.get("failed_phase5_retry"), "failed Phase 5 retry pin")
+    failed_retry = _require_object(
+        replay.get("failed_phase5_retry"), "replay failed Phase 5 retry"
+    )
+    artifact_pin = _require_object(pin.get("artifact"), "failed Phase 5 retry artifact pin")
+    job_pin = _require_object(pin.get("job"), "failed Phase 5 retry job pin")
+    for key, expected in {
+        "run_id": FAILED_PHASE5_RETRY_RUN_ID,
+        "artifact_id": artifact_pin.get("id"),
+        "head_sha": FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        "job_id": job_pin.get("id"),
+        "conclusion": "failure",
+        "result": "clean_cycle_rolled_back_noncertifying",
+        "certification_eligible": False,
+        "unique_successful_smoke_receipts": 4,
+        "legacy_global_one_writer_verified": True,
+        "runtime_execution_set_verified": True,
+        "rollback_verified": True,
+        "production_authority_transferred": False,
+        "phase6_started": False,
+    }.items():
+        _expect(failed_retry.get(key), expected, f"replay failed Phase 5 retry {key}")
+
+    baseline_heads = _require_object(
+        failed_retry.get("baseline_heads"), "failed Phase 5 retry baseline heads"
+    )
+    terminal_heads = _require_object(
+        failed_retry.get("final_heads"), "failed Phase 5 retry final heads"
+    )
+    pinned_baseline = _require_object(pin.get("baseline_heads"), "failed retry baseline pins")
+    pinned_terminal = _require_object(pin.get("terminal_heads"), "failed retry terminal pins")
+    expected_continuation = _require_object(
+        descriptor.get("expected_continuation_heads"), "descriptor continuation heads"
+    )
+    _same_heads(invalidated_final_heads, pinned_baseline, "failed retry pinned baseline")
+    _same_heads(baseline_heads, pinned_baseline, "replay failed retry baseline")
+    _same_heads(terminal_heads, pinned_terminal, "replay failed retry terminal heads")
+    _same_heads(terminal_heads, expected_continuation, "replay failed retry continuation heads")
+
+    receipts = _validate_receipt_summary(
+        _require_list(failed_retry.get("executions"), "failed Phase 5 retry executions"),
+        cycles=1,
+        label="failed Phase 5 retry",
+    )
+    terminal_receipts = {item["job"]: item for item in receipts}
+    for role in NAMESPACES:
+        head = _require_object(terminal_heads.get(role), f"failed retry final {role} head")
+        _expect(
+            head.get("generation"),
+            terminal_receipts[role].get("generation"),
+            f"failed retry {role} generation",
+        )
+        _expect(
+            head.get("snapshot_sha256"),
+            terminal_receipts[role].get("snapshot_sha256"),
+            f"failed retry {role} snapshot digest",
+        )
+
+    invalidated_ids = {item.get("run_id") for item in invalidated_receipts}
+    invalidated_executions = {
+        item.get("cloud_run_execution") for item in invalidated_receipts
+    }
+    if any(item.get("run_id") in invalidated_ids for item in receipts):
+        _fail("failed Phase 5 retry reused an invalidated Runtime receipt")
+    if any(item.get("cloud_run_execution") in invalidated_executions for item in receipts):
+        _fail("failed Phase 5 retry reused an invalidated Cloud Run execution")
+    invalidated_finish = max(
+        _parse_time(item.get("finished_at"), "invalidated smoke finished_at")
+        for item in invalidated_receipts
+    )
+    retry_start = min(
+        _parse_time(item.get("started_at"), "failed retry smoke started_at")
+        for item in receipts
+    )
+    if retry_start <= invalidated_finish:
+        _fail("failed Phase 5 retry overlaps the invalidated prefix")
+    return receipts
+
+
 def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str, Any]) -> None:
     for key, expected in {
         "schema_version": 1,
@@ -1851,19 +2318,19 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
     )
     baseline_heads = _require_object(prefix.get("baseline_heads"), "invalidated baseline heads")
     final_heads = _require_object(prefix.get("final_heads"), "invalidated final heads")
-    continuation = _require_object(replay.get("continuation_heads"), "replay continuation heads")
-    expected_continuation = _require_object(
-        descriptor.get("expected_continuation_heads"), "descriptor continuation heads"
+    failed_retry_pin = _require_object(
+        descriptor.get("failed_phase5_retry"), "failed Phase 5 retry pin"
+    )
+    failed_retry_baseline = _require_object(
+        failed_retry_pin.get("baseline_heads"), "failed Phase 5 retry baseline heads"
     )
     for name, mapping in (
         ("invalidated baseline", baseline_heads),
         ("invalidated final", final_heads),
-        ("replay continuation", continuation),
     ):
         if set(mapping) != set(NAMESPACES):
             _fail(f"{name} heads are not the exact four namespaces")
-    _same_heads(final_heads, expected_continuation, "invalidated final heads")
-    _same_heads(continuation, expected_continuation, "replay continuation heads")
+    _same_heads(final_heads, failed_retry_baseline, "invalidated final heads")
     terminal_receipts = {item["job"]: item for item in receipts}
     for role in NAMESPACES:
         head = _require_object(final_heads.get(role), f"invalidated final {role} head")
@@ -1873,6 +2340,17 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
             terminal_receipts[role].get("snapshot_sha256"),
             f"invalidated {role} snapshot digest",
         )
+
+    _retry_receipts = _validate_failed_retry_replay_summary(
+        descriptor, replay, receipts, final_heads
+    )
+    continuation = _require_object(replay.get("continuation_heads"), "replay continuation heads")
+    expected_continuation = _require_object(
+        descriptor.get("expected_continuation_heads"), "descriptor continuation heads"
+    )
+    if set(continuation) != set(NAMESPACES):
+        _fail("replay continuation heads are not the exact four namespaces")
+    _same_heads(continuation, expected_continuation, "replay continuation heads")
 
     legacy = _require_object(replay.get("concurrent_legacy_ai"), "replay legacy AI evidence")
     legacy_pin = _require_object(descriptor.get("concurrent_legacy_ai"), "legacy AI pin")
@@ -1976,38 +2454,40 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
     successor_pins = _require_list(
         descriptor.get("frozen_legacy_successors"), "frozen legacy successor pins"
     )
-    if len(successors) != 2 or len(successor_pins) != 2:
-        _fail("replay does not contain exactly two frozen legacy successors")
-    for role, run_id, value, pin_value, recovery_pin_value in zip(
-        ("legislative", "executive"),
-        FROZEN_LEGACY_SUCCESSOR_RUN_IDS,
-        successors,
-        successor_pins,
-        recovery_pins,
+    expected_count = len(FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
+    if len(successors) != expected_count or len(successor_pins) != expected_count:
+        _fail(f"replay does not contain exactly {expected_count} frozen legacy successors")
+    roles = ("legislative", "executive") * len(FROZEN_LEGACY_SUCCESSOR_REVISIONS)
+    for offset, (role, run_id, value, pin_value) in enumerate(
+        zip(roles, FROZEN_LEGACY_SUCCESSOR_RUN_IDS, successors, successor_pins)
     ):
+        layer_index = offset // 2
         successor = _require_object(value, f"replay {role} frozen legacy successor")
         pin = _require_object(pin_value, f"{role} frozen legacy successor pin")
-        recovery_pin = _require_object(recovery_pin_value, f"{role} original recovery pin")
+        predecessor_run_pin = _require_object(
+            recovery_pins[offset % 2] if layer_index == 0 else successor_pins[offset - 2],
+            f"{role} frozen legacy predecessor run pin",
+        )
         predecessor_pin = _require_object(
             pin.get("predecessor_artifact"), f"{role} successor predecessor artifact pin"
         )
-        recovery_artifact_pin = _require_object(
-            recovery_pin.get("artifact"), f"{role} original recovery artifact pin"
+        predecessor_artifact_pin = _require_object(
+            predecessor_run_pin.get("artifact"), f"{role} predecessor protected artifact pin"
         )
         for key in ("id", "name", "size_in_bytes", "digest", "expires_at"):
             _expect(
                 predecessor_pin.get(key),
-                recovery_artifact_pin.get(key),
+                predecessor_artifact_pin.get(key),
                 f"replay {role} successor predecessor {key}",
             )
         _expect(
             predecessor_pin.get("producer_run_id"),
-            recovery_pin.get("run_id"),
+            predecessor_run_pin.get("run_id"),
             f"replay {role} successor predecessor producer run",
         )
         _expect(
             predecessor_pin.get("producer_head_sha"),
-            recovery_pin.get("head_sha"),
+            predecessor_run_pin.get("head_sha"),
             f"replay {role} successor predecessor producer revision",
         )
         artifact_pin = _require_object(pin.get("artifact"), f"{role} successor artifact pin")
@@ -2018,11 +2498,12 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
             "role": role,
             "run_id": run_id,
             "run_attempt": pin.get("run_attempt"),
-            "head_sha": FROZEN_LEGACY_SUCCESSOR_REVISION,
+            "head_sha": FROZEN_LEGACY_SUCCESSOR_REVISIONS[layer_index],
             "job_id": _require_object(pin.get("job"), f"{role} successor job pin").get("id"),
             "conclusion": "success",
+            "successor_layer": layer_index + 1,
             "incident_only_revision_allowlist_verified": True,
-            "predecessor_recovery_run_id": recovery_pin.get("run_id"),
+            "predecessor_run_id": predecessor_run_pin.get("run_id"),
             "predecessor_artifact_id": predecessor_pin.get("id"),
             "predecessor_artifact_sha256": _digest_pin(
                 predecessor_pin.get("digest"), f"{role} successor predecessor digest"
@@ -2101,10 +2582,17 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
             "global_one_writer_violation_verified",
             "legacy_ai_artifact_quarantined",
             "frozen_legacy_successors_verified",
+            "failed_retry_intervening_attempt_verified",
+            "intervening_runtime_producer_execution_performed",
             "legacy_high_water_verified",
             "full_snapshot_chain_preserved",
         ),
         "replay reconciliation",
+    )
+    _expect(
+        reconciliation.get("intervening_runtime_producer_execution_count"),
+        4,
+        "replay reconciliation intervening Runtime execution count",
     )
     for key in (
         "legacy_artifact_merge_or_import_authorized",
@@ -2124,6 +2612,7 @@ def reconcile_failed_phase5(
     current_ai_analyses: Any,
     phase4_source: Mapping[str, Any],
     failed_source: Mapping[str, Any],
+    failed_retry_source: Mapping[str, Any],
     legacy_ai_source: Mapping[str, Any],
     recovery_run_metadatas: Sequence[Mapping[str, Any]],
     recovery_jobs_metadatas: Sequence[Mapping[str, Any]],
@@ -2156,7 +2645,7 @@ def reconcile_failed_phase5(
         _require_object(phase4_source.get("jobs"), "Phase 4 jobs metadata"),
         Path(phase4_source["archive"]),
     )
-    prefix, _raw_observations, _failed_job = _failed_phase5_prefix(
+    prefix, raw_observations, _failed_job = _failed_phase5_prefix(
         descriptor,
         certificate,
         certificate_bytes,
@@ -2165,7 +2654,9 @@ def reconcile_failed_phase5(
         _require_object(failed_source.get("jobs"), "failed Phase 5 jobs metadata"),
         Path(failed_source["archive"]),
     )
-    _assert_current_runtime_state(current_status, prefix["final_heads"], prefix["receipts"])
+    failed_prefix_terminal_status = _require_object(
+        raw_observations[-1].get("status"), "failed Phase 5 terminal observation status"
+    )
     legacy = _validate_legacy_ai_conflict(
         descriptor,
         _require_object(legacy_ai_source.get("run"), "legacy AI run metadata"),
@@ -2179,7 +2670,7 @@ def reconcile_failed_phase5(
         _require_object(legacy_ai_source.get("output_artifact"), "legacy AI output artifact metadata"),
         Path(legacy_ai_source["output_archive"]),
         current_ai_analyses,
-        current_status,
+        failed_prefix_terminal_status,
         prefix["receipts"],
     )
     recoveries = _validate_recoveries(
@@ -2206,6 +2697,21 @@ def reconcile_failed_phase5(
         frozen_successor_archives,
         frozen_successor_output_artifact_metadatas,
         frozen_successor_output_archives,
+    )
+    failed_retry = _validate_failed_phase5_retry(
+        descriptor,
+        _require_object(failed_retry_source.get("run"), "failed Phase 5 retry run metadata"),
+        _require_object(
+            failed_retry_source.get("artifact"), "failed Phase 5 retry artifact metadata"
+        ),
+        _require_object(failed_retry_source.get("jobs"), "failed Phase 5 retry jobs metadata"),
+        Path(failed_retry_source["archive"]),
+        prefix,
+    )
+    _assert_current_runtime_state(
+        current_status,
+        _require_object(failed_retry.get("final_heads"), "failed Phase 5 retry final heads"),
+        _require_list(failed_retry.get("executions"), "failed Phase 5 retry executions"),
     )
     high_water_runs, high_water_run_digests = _validate_high_water_run_inventories(
         descriptor, legacy_run_inventories, label="replay"
@@ -2243,7 +2749,8 @@ def reconcile_failed_phase5(
             "baseline_heads": _head_summary(_heads(prefix["baseline"])),
             "final_heads": _head_summary(prefix["final_heads"]),
         },
-        "continuation_heads": _head_summary(prefix["final_heads"]),
+        "failed_phase5_retry": failed_retry,
+        "continuation_heads": failed_retry["final_heads"],
         "current_heads_verified": True,
         "current_latest_receipts_verified": True,
         "concurrent_legacy_ai": legacy,
@@ -2264,6 +2771,9 @@ def reconcile_failed_phase5(
             "global_one_writer_violation_verified": True,
             "legacy_ai_artifact_quarantined": True,
             "frozen_legacy_successors_verified": True,
+            "failed_retry_intervening_attempt_verified": True,
+            "intervening_runtime_producer_execution_performed": True,
+            "intervening_runtime_producer_execution_count": 4,
             "legacy_high_water_verified": True,
             "legacy_artifact_merge_or_import_authorized": False,
             "rebaseline_performed": False,
@@ -2311,6 +2821,7 @@ def _validate_terminal_one_writer(
     legacy_workflow_states: Sequence[Mapping[str, Any]],
     runtime_execution_inventories: Sequence[Mapping[str, Any]],
     evidence_digests: Mapping[str, Sequence[str]],
+    successor_layer: int = -1,
 ) -> None:
     evidence = _require_object(manifest.get("one_writer_evidence"), "terminal one-writer evidence")
     for field in (
@@ -2335,7 +2846,10 @@ def _validate_terminal_one_writer(
         _fail("fresh-cycle interval does not contain the four Runtime receipts")
 
     high_water_summaries, _digests = _validate_high_water_run_inventories(
-        descriptor, legacy_run_inventories, label="terminal"
+        descriptor,
+        legacy_run_inventories,
+        label="terminal",
+        successor_layer=successor_layer,
     )
     replay_high_water = _require_object(replay.get("legacy_high_water"), "replay high-water")
     _expect(high_water_summaries, replay_high_water.get("runs"), "terminal/replay legacy high-water")
@@ -2353,7 +2867,7 @@ def _validate_terminal_one_writer(
             if overlaps:
                 _fail(f"terminal {role} legacy workflow run overlaps the fresh cycle")
 
-    pins = _high_water_pins(descriptor)
+    pins = _high_water_pins(descriptor, successor_layer=successor_layer)
     if len(legacy_workflow_states) != 4:
         _fail("terminal evidence requires exactly four legacy workflow states")
     for role, pin, state in zip(LEGACY_HIGH_WATER_ROLES, pins, legacy_workflow_states):
@@ -2485,7 +2999,585 @@ def _validate_terminal_one_writer(
         _expect(evidence.get(key), expected, f"terminal one-writer evidence {key}")
 
 
-def _validate_completion_manifest(manifest: Mapping[str, Any]) -> None:
+def _scheduler_evidence_path(
+    paths: Mapping[str, Any], key: str, label: str
+) -> Path:
+    value = paths.get(key)
+    if not isinstance(value, Path):
+        _fail(f"{label} path is missing")
+    if not value.is_file():
+        _fail(f"{label} file is missing")
+    return value
+
+
+def _scheduler_evidence_paths(
+    paths: Mapping[str, Any], key: str, count: int, label: str
+) -> list[Path]:
+    values = paths.get(key)
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes, bytearray)):
+        _fail(f"{label} paths are missing")
+    result = list(values)
+    if len(result) != count or any(not isinstance(value, Path) or not value.is_file() for value in result):
+        _fail(f"{label} does not contain exactly {count} readable files")
+    return result
+
+
+def _scheduler_policy_member_bindings(
+    policy: Mapping[str, Any], role: str, member: str, label: str
+) -> list[Mapping[str, Any]]:
+    bindings = _require_list(policy.get("bindings"), f"{label} bindings")
+    matched: list[Mapping[str, Any]] = []
+    for value in bindings:
+        binding = _require_object(value, f"{label} binding")
+        members = _require_list(binding.get("members"), f"{label} binding members")
+        if not all(isinstance(item, str) and item for item in members):
+            _fail(f"{label} binding members are invalid")
+        if binding.get("role") == role and member in members:
+            matched.append(binding)
+    return matched
+
+
+def _scheduler_spec_sha256(job: Mapping[str, Any]) -> str:
+    transient = {"state", "status", "userUpdateTime", "lastAttemptTime", "scheduleTime"}
+    stable = {key: value for key, value in job.items() if key not in transient}
+    encoded = json.dumps(
+        stable, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8") + b"\n"
+    return _sha256_bytes(encoded)
+
+
+def _validate_scheduler_activation_authority(
+    manifest: Mapping[str, Any], paths: Mapping[str, Any]
+) -> None:
+    authority = _require_object(
+        manifest.get("scheduler_activation_authority"),
+        "completion scheduler activation authority",
+    )
+    scalar_paths = {
+        "authority_summary": "scheduler activation authority summary",
+        "transition": "scheduler transition",
+        "before_policy": "scheduler before-grant policy",
+        "granted_policy": "scheduler granted policy",
+        "removed_policy": "scheduler removed policy",
+        "permanent_control_role": "permanent control role",
+        "role_viewer_before_policy": "role viewer before-grant policy",
+        "role_viewer_granted_policy": "role viewer granted policy",
+        "role_viewer_removed_policy": "role viewer removed policy",
+        "role_viewer_condition": "role viewer grant condition",
+        "role_viewer_grant_request": "role viewer grant request",
+        "condition": "scheduler grant condition",
+        "grant_request": "scheduler grant request",
+        "resume_attempts": "scheduler resume attempts",
+        "before_summary": "scheduler before summary",
+        "after_summary": "scheduler after summary",
+        "before_inventory": "scheduler before inventory",
+        "after_inventory": "scheduler after inventory",
+    }
+    files = {
+        key: _scheduler_evidence_path(paths, key, label)
+        for key, label in scalar_paths.items()
+    }
+    before_jobs = _scheduler_evidence_paths(paths, "before_jobs", 5, "scheduler before jobs")
+    after_jobs = _scheduler_evidence_paths(paths, "after_jobs", 5, "scheduler after jobs")
+    resume_receipts = _scheduler_evidence_paths(
+        paths, "resume_receipts", 4, "scheduler resume receipts"
+    )
+
+    summary = _load_object(files["authority_summary"])
+    transition = _load_object(files["transition"])
+    expected_manifest_authority = dict(summary)
+    expected_manifest_authority.update(
+        summary_sha256=_sha256_file(files["authority_summary"]), transition=transition
+    )
+    _expect(
+        authority,
+        expected_manifest_authority,
+        "completion scheduler activation authority/raw evidence",
+    )
+
+    grant = _load_object(files["grant_request"])
+    condition = _load_object(files["condition"])
+    before_policy = _load_object(files["before_policy"])
+    granted_policy = _load_object(files["granted_policy"])
+    removed_policy = _load_object(files["removed_policy"])
+    permanent_role = _load_object(files["permanent_control_role"])
+    role_viewer_before_policy = _load_object(files["role_viewer_before_policy"])
+    role_viewer_granted_policy = _load_object(files["role_viewer_granted_policy"])
+    role_viewer_removed_policy = _load_object(files["role_viewer_removed_policy"])
+    role_viewer_condition = _load_object(files["role_viewer_condition"])
+    role_viewer_grant = _load_object(files["role_viewer_grant_request"])
+    attempts = _jsonl_records(
+        files["resume_attempts"].read_bytes(), "scheduler resume attempts"
+    )
+    before_summary = _load_object(files["before_summary"])
+    after_summary = _load_object(files["after_summary"])
+    before_inventory = _load_list_or_object(files["before_inventory"])
+    after_inventory = _load_list_or_object(files["after_inventory"])
+
+    scheduler_names = list(PRODUCER_SCHEDULERS)
+    all_scheduler_names = [*scheduler_names, VAULT_SCHEDULER]
+    resource_names = [
+        f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{name}" for name in scheduler_names
+    ]
+    for key, expected in {
+        "schema_version": 1,
+        "result": "jit_scheduler_activation_authority_removed",
+        "absent_before_grant": True,
+        "grant_observed": True,
+        "physically_absent_after_removal": True,
+        "propagation_probe_scheduler": scheduler_names[0],
+        "propagation_deadline_seconds": 600,
+        "scheduler_transition_result": "exact_four_producer_schedulers_enabled_vault_unchanged",
+    }.items():
+        _expect(summary.get(key), expected, f"scheduler activation authority {key}")
+    _expect(summary.get("grant"), grant, "scheduler activation authority grant")
+    _expect(summary.get("attempts"), attempts, "scheduler activation authority attempts")
+
+    for key, expected in {
+        "schema_version": 1,
+        "result": "scheduler_activation_authority_requested",
+        "project_id": PROJECT_ID,
+        "location": REGION,
+        "member": DEPLOYER_MEMBER,
+        "role": "roles/cloudscheduler.admin",
+        "condition": condition,
+        "condition_scope": "request_time_only",
+        "authorized_scheduler_short_names": scheduler_names,
+        "exact_authorized_resource_names": resource_names,
+    }.items():
+        _expect(grant.get(key), expected, f"scheduler grant {key}")
+    title = condition.get("title")
+    if not isinstance(title, str) or re.fullmatch(
+        r"phase5-retry-[1-9][0-9]*-[1-9][0-9]*-scheduler-activation", title
+    ) is None:
+        _fail("scheduler grant condition title is invalid")
+    _expect(
+        condition.get("description"),
+        "JIT activation of the exact four Phase 5 producer schedules",
+        "scheduler grant condition description",
+    )
+    issued_at = _parse_time(grant.get("issued_at"), "scheduler grant issued_at")
+    expires_at = _parse_time(grant.get("expires_at"), "scheduler grant expires_at")
+    propagation_deadline = _parse_time(
+        grant.get("propagation_deadline_at"), "scheduler grant propagation_deadline_at"
+    )
+    if not 1190 <= (expires_at - issued_at).total_seconds() <= 1210:
+        _fail("scheduler grant is not limited to the exact twenty-minute window")
+    if not 595 <= (propagation_deadline - issued_at).total_seconds() <= 605:
+        _fail("scheduler propagation deadline is not the exact ten-minute bound")
+    if propagation_deadline >= expires_at:
+        _fail("scheduler propagation deadline is not before grant expiry")
+    _expect(
+        condition.get("expression"),
+        f'request.time < timestamp("{grant.get("expires_at")}")',
+        "scheduler grant condition expression",
+    )
+
+    before_grants = _scheduler_policy_member_bindings(
+        before_policy, "roles/cloudscheduler.admin", DEPLOYER_MEMBER, "scheduler before policy"
+    )
+    granted_grants = _scheduler_policy_member_bindings(
+        granted_policy, "roles/cloudscheduler.admin", DEPLOYER_MEMBER, "scheduler granted policy"
+    )
+    removed_grants = _scheduler_policy_member_bindings(
+        removed_policy, "roles/cloudscheduler.admin", DEPLOYER_MEMBER, "scheduler removed policy"
+    )
+    if before_grants:
+        _fail("scheduler activation authority was present before the JIT grant")
+    if len(granted_grants) != 1 or granted_grants[0].get("condition") != condition:
+        _fail("scheduler granted policy lacks the one exact conditional deployer binding")
+    if removed_grants:
+        _fail("scheduler activation authority remains after cleanup")
+
+    for key, expected in {
+        "name": PERMANENT_CONTROL_ROLE,
+        "stage": "GA",
+    }.items():
+        _expect(permanent_role.get(key), expected, f"permanent control role {key}")
+    _expect(permanent_role.get("deleted", False), False, "permanent control role deletion state")
+    included_permissions = _require_list(
+        permanent_role.get("includedPermissions"), "permanent control role permissions"
+    )
+    if not all(isinstance(value, str) and value for value in included_permissions):
+        _fail("permanent control role permissions are invalid")
+    forbidden_permissions = {
+        "cloudscheduler.jobs.enable",
+        "cloudscheduler.jobs.run",
+        "cloudscheduler.jobs.delete",
+    }
+    if forbidden_permissions & set(included_permissions):
+        _fail("permanent control role contains forbidden Scheduler activation authority")
+    required_permissions = {
+        "cloudscheduler.jobs.pause",
+        "cloudscheduler.jobs.get",
+        "cloudscheduler.jobs.list",
+    }
+    if not required_permissions <= set(included_permissions):
+        _fail("permanent control role lacks its exact read-and-pause Scheduler authority")
+
+    role_viewer_evidence = _require_object(
+        permanent_role.get("temporary_role_viewer_evidence"),
+        "permanent control role temporary Role Viewer evidence",
+    )
+    for key, expected in {
+        "result": "jit_role_viewer_removed",
+        "absent_before_grant": True,
+        "grant_observed": True,
+        "live_role_described": True,
+        "physically_absent_after_removal": True,
+    }.items():
+        _expect(
+            role_viewer_evidence.get(key),
+            expected,
+            f"temporary Role Viewer evidence {key}",
+        )
+    _expect(
+        role_viewer_evidence.get("grant"),
+        role_viewer_grant,
+        "temporary Role Viewer evidence grant",
+    )
+    for key, expected in {
+        "schema_version": 1,
+        "result": "role_viewer_live_role_capture_requested",
+        "project_id": PROJECT_ID,
+        "member": DEPLOYER_MEMBER,
+        "role": "roles/iam.roleViewer",
+        "target_role_name": PERMANENT_CONTROL_ROLE,
+        "authorized_operation": "iam.roles.get",
+        "condition": role_viewer_condition,
+        "condition_scope": "request_time_only",
+    }.items():
+        _expect(role_viewer_grant.get(key), expected, f"temporary Role Viewer grant {key}")
+    role_viewer_title = role_viewer_condition.get("title")
+    if not isinstance(role_viewer_title, str) or re.fullmatch(
+        r"phase5-retry-[1-9][0-9]*-[1-9][0-9]*-role-viewer", role_viewer_title
+    ) is None:
+        _fail("temporary Role Viewer condition title is invalid")
+    _expect(
+        role_viewer_condition.get("description"),
+        "JIT read of the exact permanent Phase 3 custom role",
+        "temporary Role Viewer condition description",
+    )
+    role_viewer_issued_at = _parse_time(
+        role_viewer_grant.get("issued_at"), "temporary Role Viewer grant issued_at"
+    )
+    role_viewer_expires_at = _parse_time(
+        role_viewer_grant.get("expires_at"), "temporary Role Viewer grant expires_at"
+    )
+    role_viewer_propagation_deadline = _parse_time(
+        role_viewer_grant.get("propagation_deadline_at"),
+        "temporary Role Viewer grant propagation_deadline_at",
+    )
+    if not 890 <= (role_viewer_expires_at - role_viewer_issued_at).total_seconds() <= 910:
+        _fail("temporary Role Viewer grant is not limited to the fifteen-minute window")
+    if not 595 <= (
+        role_viewer_propagation_deadline - role_viewer_issued_at
+    ).total_seconds() <= 605:
+        _fail("temporary Role Viewer propagation deadline is not the exact ten-minute bound")
+    if role_viewer_propagation_deadline >= role_viewer_expires_at:
+        _fail("temporary Role Viewer propagation deadline is not before grant expiry")
+    _expect(
+        role_viewer_condition.get("expression"),
+        f'request.time < timestamp("{role_viewer_grant.get("expires_at")}")',
+        "temporary Role Viewer condition expression",
+    )
+
+    role_viewer_before_bindings = _scheduler_policy_member_bindings(
+        role_viewer_before_policy,
+        "roles/iam.roleViewer",
+        DEPLOYER_MEMBER,
+        "Role Viewer before policy",
+    )
+    role_viewer_granted_bindings = _scheduler_policy_member_bindings(
+        role_viewer_granted_policy,
+        "roles/iam.roleViewer",
+        DEPLOYER_MEMBER,
+        "Role Viewer granted policy",
+    )
+    role_viewer_removed_bindings = _scheduler_policy_member_bindings(
+        role_viewer_removed_policy,
+        "roles/iam.roleViewer",
+        DEPLOYER_MEMBER,
+        "Role Viewer removed policy",
+    )
+    if role_viewer_before_bindings:
+        _fail("Role Viewer authority was present before its JIT grant")
+    if (
+        len(role_viewer_granted_bindings) != 1
+        or role_viewer_granted_bindings[0].get("condition") != role_viewer_condition
+    ):
+        _fail("Role Viewer granted policy lacks the one exact conditional deployer binding")
+    if role_viewer_removed_bindings:
+        _fail("temporary Role Viewer authority remains after cleanup")
+    for label, policy in (
+        ("Role Viewer before policy", role_viewer_before_policy),
+        ("Role Viewer granted policy", role_viewer_granted_policy),
+        ("Role Viewer removed policy", role_viewer_removed_policy),
+    ):
+        if _scheduler_policy_member_bindings(
+            policy, "roles/cloudscheduler.admin", DEPLOYER_MEMBER, label
+        ):
+            _fail(f"{label} overlaps Scheduler activation authority")
+        bindings = _scheduler_policy_member_bindings(
+            policy, PERMANENT_CONTROL_ROLE, DEPLOYER_MEMBER, label
+        )
+        if len(bindings) != 1 or bindings[0].get("condition") is not None:
+            _fail(f"{label} does not preserve the exact permanent control-role binding")
+    for label, policy in (
+        ("scheduler before policy", before_policy),
+        ("scheduler granted policy", granted_policy),
+        ("scheduler removed policy", removed_policy),
+    ):
+        if _scheduler_policy_member_bindings(
+            policy, "roles/iam.roleViewer", DEPLOYER_MEMBER, label
+        ):
+            _fail(f"temporary Role Viewer authority overlaps {label}")
+
+    expected_role_viewer_hashes = {
+        "before_policy": _sha256_file(files["role_viewer_before_policy"]),
+        "granted_policy": _sha256_file(files["role_viewer_granted_policy"]),
+        "removed_policy": _sha256_file(files["role_viewer_removed_policy"]),
+        "condition": _sha256_file(files["role_viewer_condition"]),
+        "grant_request": _sha256_file(files["role_viewer_grant_request"]),
+    }
+    _expect(
+        role_viewer_evidence.get("evidence_sha256"),
+        expected_role_viewer_hashes,
+        "temporary Role Viewer raw evidence hashes",
+    )
+    permanent_bindings = _scheduler_policy_member_bindings(
+        before_policy, PERMANENT_CONTROL_ROLE, DEPLOYER_MEMBER, "scheduler before policy"
+    )
+    if len(permanent_bindings) != 1 or permanent_bindings[0].get("condition") is not None:
+        _fail("deployer lacks its exact unconditional permanent control-role binding")
+    removed_permanent_bindings = _scheduler_policy_member_bindings(
+        removed_policy, PERMANENT_CONTROL_ROLE, DEPLOYER_MEMBER, "scheduler removed policy"
+    )
+    if (
+        len(removed_permanent_bindings) != 1
+        or removed_permanent_bindings[0].get("condition") is not None
+    ):
+        _fail("temporary cleanup altered the deployer's permanent control-role binding")
+
+    expected_evidence_hashes = {
+        "before_policy": _sha256_file(files["before_policy"]),
+        "granted_policy": _sha256_file(files["granted_policy"]),
+        "removed_policy": _sha256_file(files["removed_policy"]),
+        "permanent_control_role": _sha256_file(files["permanent_control_role"]),
+        "condition": _sha256_file(files["condition"]),
+        "grant_request": _sha256_file(files["grant_request"]),
+        "resume_attempts": _sha256_file(files["resume_attempts"]),
+        "scheduler_transition": _sha256_file(files["transition"]),
+    }
+    _expect(
+        summary.get("evidence_sha256"),
+        expected_evidence_hashes,
+        "scheduler activation authority raw evidence hashes",
+    )
+
+    if len(attempts) < 4:
+        _fail("scheduler resume attempt timeline is incomplete")
+    resumed: list[str] = []
+    legislative_attempts: list[int] = []
+    for index, value in enumerate(attempts, start=1):
+        attempt = _require_object(value, f"scheduler resume attempt {index}")
+        scheduler = attempt.get("scheduler")
+        outcome = attempt.get("outcome")
+        if scheduler not in scheduler_names or outcome not in {"resumed", "iam_propagation_pending"}:
+            _fail(f"scheduler resume attempt {index} is outside the authorized transition")
+        attempt_number = attempt.get("attempt")
+        if isinstance(attempt_number, bool) or not isinstance(attempt_number, int) or attempt_number < 1:
+            _fail(f"scheduler resume attempt {index} number is invalid")
+        observed_at = _parse_time(attempt.get("observed_at"), f"scheduler resume attempt {index}")
+        if observed_at < issued_at or observed_at >= expires_at:
+            _fail(f"scheduler resume attempt {index} is outside the JIT authority window")
+        digest = attempt.get("evidence_sha256")
+        if not isinstance(digest, str) or SHA64.fullmatch(digest) is None:
+            _fail(f"scheduler resume attempt {index} evidence digest is invalid")
+        denial_error = attempt.get("denial_error")
+        if outcome == "resumed":
+            _expect(denial_error, None, f"scheduler resume attempt {index} denial error")
+        else:
+            legislative_resource = resource_names[0]
+            if not isinstance(denial_error, str) or any(
+                token not in denial_error
+                for token in (
+                    "PERMISSION_DENIED",
+                    "cloudscheduler.jobs.enable",
+                    legislative_resource,
+                )
+            ):
+                _fail("scheduler IAM propagation denial is not the exact expected denial")
+        if scheduler == scheduler_names[0]:
+            legislative_attempts.append(attempt_number)
+            if observed_at >= propagation_deadline:
+                _fail("first-scheduler propagation attempt exceeded its bounded deadline")
+        elif attempt_number != 1 or outcome != "resumed":
+            _fail("only the first producer scheduler may use the bounded propagation probe")
+        if outcome == "iam_propagation_pending" and scheduler != scheduler_names[0]:
+            _fail("IAM propagation probing escaped the first producer scheduler")
+        if outcome == "resumed":
+            resumed.append(str(scheduler))
+    _expect(resumed, scheduler_names, "scheduler resumed producer order")
+    _expect(
+        legislative_attempts,
+        list(range(1, len(legislative_attempts) + 1)),
+        "scheduler propagation attempt sequence",
+    )
+    if attempts[-1].get("scheduler") != scheduler_names[-1] or attempts[-1].get("outcome") != "resumed":
+        _fail("scheduler resume timeline lacks a terminal dashboard resume")
+
+    receipt_summaries = _require_list(
+        summary.get("resume_receipts"), "scheduler resume receipt hashes"
+    )
+    if len(receipt_summaries) != 4:
+        _fail("scheduler authority summary does not bind exactly four resume receipts")
+    actual_receipt_hashes: dict[str, str] = {}
+    for path in resume_receipts:
+        receipt = _load_object(path)
+        resource_name = receipt.get("name")
+        if resource_name not in resource_names:
+            _fail("scheduler resume receipt names an unauthorized resource")
+        scheduler = str(resource_name).rsplit("/", 1)[-1]
+        if scheduler in actual_receipt_hashes:
+            _fail("scheduler resume receipts contain a duplicate producer")
+        _expect(receipt.get("state"), "ENABLED", f"scheduler resume receipt {scheduler} state")
+        actual_receipt_hashes[scheduler] = _sha256_file(path)
+    expected_receipt_summaries = [
+        {"scheduler": name, "sha256": actual_receipt_hashes.get(name)}
+        for name in scheduler_names
+    ]
+    _expect(receipt_summaries, expected_receipt_summaries, "scheduler resume receipt hashes")
+    resumed_attempts = [item for item in attempts if item.get("outcome") == "resumed"]
+    for attempt, receipt in zip(resumed_attempts, expected_receipt_summaries):
+        _expect(attempt.get("scheduler"), receipt["scheduler"], "scheduler resumed attempt binding")
+        _expect(attempt.get("evidence_sha256"), receipt["sha256"], "scheduler resume evidence hash")
+
+    def validate_summary(
+        value: Mapping[str, Any], phase: str, jobs: Sequence[Path]
+    ) -> dict[str, Mapping[str, Any]]:
+        for key, expected in {
+            "schema_version": 1,
+            "phase": phase,
+            "project_id": PROJECT_ID,
+            "location": REGION,
+        }.items():
+            _expect(value.get(key), expected, f"scheduler {phase} summary {key}")
+        rows = _require_list(value.get("schedulers"), f"scheduler {phase} summary rows")
+        if len(rows) != 5:
+            _fail(f"scheduler {phase} summary does not contain exactly five jobs")
+        by_name: dict[str, Mapping[str, Any]] = {}
+        raw_by_name: dict[str, tuple[Path, Mapping[str, Any]]] = {}
+        for path in jobs:
+            raw = _load_object(path)
+            resource_name = raw.get("name")
+            if not isinstance(resource_name, str):
+                _fail(f"scheduler {phase} raw job name is invalid")
+            name = resource_name.rsplit("/", 1)[-1]
+            if name in raw_by_name:
+                _fail(f"scheduler {phase} raw jobs contain a duplicate")
+            raw_by_name[name] = (path, raw)
+        _expect(set(raw_by_name), set(all_scheduler_names), f"scheduler {phase} raw job set")
+        for index, row_value in enumerate(rows):
+            row = _require_object(row_value, f"scheduler {phase} summary row {index + 1}")
+            name = row.get("name")
+            if name != all_scheduler_names[index] or name in by_name:
+                _fail(f"scheduler {phase} summary job order/set is invalid")
+            path, raw = raw_by_name[str(name)]
+            expected_state = "PAUSED" if phase == "before" or name == VAULT_SCHEDULER else "ENABLED"
+            expected_resource = f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{name}"
+            for key, expected in {
+                "resource_name": expected_resource,
+                "state": expected_state,
+                "raw_sha256": _sha256_file(path),
+                "canonical_spec_sha256": _scheduler_spec_sha256(raw),
+            }.items():
+                _expect(row.get(key), expected, f"scheduler {phase} {name} {key}")
+            _expect(raw.get("name"), expected_resource, f"scheduler {phase} raw {name} name")
+            _expect(raw.get("state"), expected_state, f"scheduler {phase} raw {name} state")
+            by_name[str(name)] = row
+        return by_name
+
+    before_rows = validate_summary(before_summary, "before", before_jobs)
+    after_rows = validate_summary(after_summary, "after", after_jobs)
+    for phase, inventory in (("before", before_inventory), ("after", after_inventory)):
+        values = _require_list(inventory, f"scheduler {phase} list inventory")
+        if len(values) != 5:
+            _fail(f"scheduler {phase} list inventory does not contain exactly five jobs")
+        inventory_by_name: dict[str, Mapping[str, Any]] = {}
+        for item in values:
+            row = _require_object(item, f"scheduler {phase} list inventory row")
+            resource_name = row.get("name")
+            if not isinstance(resource_name, str):
+                _fail(f"scheduler {phase} list inventory name is invalid")
+            name = resource_name.rsplit("/", 1)[-1]
+            if name in inventory_by_name:
+                _fail(f"scheduler {phase} list inventory contains a duplicate")
+            inventory_by_name[name] = row
+        _expect(set(inventory_by_name), set(all_scheduler_names), f"scheduler {phase} inventory set")
+        for name, row in inventory_by_name.items():
+            expected_state = "PAUSED" if phase == "before" or name == VAULT_SCHEDULER else "ENABLED"
+            _expect(
+                row.get("name"),
+                f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{name}",
+                f"scheduler {phase} inventory {name} resource name",
+            )
+            _expect(row.get("state"), expected_state, f"scheduler {phase} inventory {name} state")
+
+    for key, expected in {
+        "schema_version": 1,
+        "result": "exact_four_producer_schedulers_enabled_vault_unchanged",
+        "project_id": PROJECT_ID,
+        "location": REGION,
+        "before_summary_sha256": _sha256_file(files["before_summary"]),
+        "after_summary_sha256": _sha256_file(files["after_summary"]),
+        "before": before_summary,
+        "after": after_summary,
+    }.items():
+        _expect(transition.get(key), expected, f"scheduler transition {key}")
+    transitions = _require_list(
+        transition.get("authorized_transitions"), "scheduler authorized transitions"
+    )
+    if len(transitions) != 4:
+        _fail("scheduler transition does not contain exactly four authorized jobs")
+    for name, value in zip(scheduler_names, transitions):
+        row = _require_object(value, f"scheduler transition {name}")
+        before_row = before_rows[name]
+        after_row = after_rows[name]
+        for key, expected in {
+            "name": name,
+            "before_state": "PAUSED",
+            "after_state": "ENABLED",
+            "before_spec_sha256": before_row.get("canonical_spec_sha256"),
+            "after_spec_sha256": after_row.get("canonical_spec_sha256"),
+            "spec_unchanged": True,
+        }.items():
+            _expect(row.get(key), expected, f"scheduler transition {name} {key}")
+        _expect(
+            row.get("before_spec_sha256"),
+            row.get("after_spec_sha256"),
+            f"scheduler transition {name} immutable specification",
+        )
+    vault = _require_object(transition.get("vault"), "scheduler transition vault")
+    for key, expected in {
+        "name": VAULT_SCHEDULER,
+        "before_state": "PAUSED",
+        "after_state": "PAUSED",
+        "before_spec_sha256": before_rows[VAULT_SCHEDULER].get("canonical_spec_sha256"),
+        "after_spec_sha256": after_rows[VAULT_SCHEDULER].get("canonical_spec_sha256"),
+        "spec_unchanged": True,
+    }.items():
+        _expect(vault.get(key), expected, f"scheduler transition vault {key}")
+    _expect(
+        vault.get("before_spec_sha256"),
+        vault.get("after_spec_sha256"),
+        "scheduler transition vault immutable specification",
+    )
+
+
+def _validate_completion_manifest(
+    manifest: Mapping[str, Any], scheduler_evidence_paths: Mapping[str, Any]
+) -> None:
     for key, expected in {"schema_version": 1, "phase": "phase5_reconciliation_completion"}.items():
         _expect(manifest.get(key), expected, f"completion manifest {key}")
     preflight = _require_object(manifest.get("preflight"), "completion preflight")
@@ -2501,12 +3593,15 @@ def _validate_completion_manifest(manifest: Mapping[str, Any]) -> None:
             "old_smoke_prefix_invalidated",
             "legacy_ai_artifact_quarantined",
             "frozen_legacy_successors_verified",
+            "failed_retry_intervening_attempt_verified",
             "legacy_runs_drained",
             "legacy_workflows_disabled",
             "continuation_heads_verified",
             "no_rebaseline_performed",
             "full_snapshot_chain_preserved",
             "temporary_private_web_invoker_removed",
+            "scheduler_activation_authority_absent_before_grant",
+            "temporary_role_inspection_authority_removed",
             "no_concurrent_legacy_runs",
             "fresh_cycle_global_one_writer_verified",
         ),
@@ -2523,6 +3618,8 @@ def _validate_completion_manifest(manifest: Mapping[str, Any]) -> None:
             "no_rebaseline_performed",
             "full_snapshot_chain_preserved",
             "temporary_private_web_invoker_removed",
+            "temporary_scheduler_activation_authority_removed",
+            "temporary_role_inspection_authority_removed",
         ),
         "completion cleanup",
     )
@@ -2661,10 +3758,14 @@ def _validate_completion_manifest(manifest: Mapping[str, Any]) -> None:
         _fail("completion does not disable exactly the four legacy workflows")
     _expect(promotion.get("vault_scheduler_state"), "PAUSED", "completion vault scheduler state")
 
+    _validate_scheduler_activation_authority(manifest, scheduler_evidence_paths)
+
     retry = _require_object(manifest.get("retry"), "completion retry binding")
     for key, expected in {
         "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
         "failed_phase5_run_id": FAILED_PHASE5_RUN_ID,
+        "failed_retry_run_id": FAILED_PHASE5_RETRY_RUN_ID,
+        "intervening_retry_certification_eligible": False,
         "failed_prefix_replay_result": "phase5_failed_promotion_reconciled",
         "invalidated_smoke_prefix_certification_eligible": False,
         "concurrent_legacy_ai_successor_quarantined": True,
@@ -2686,6 +3787,7 @@ def complete_phase5(
     terminal_legacy_workflow_states: Sequence[Mapping[str, Any]],
     terminal_runtime_execution_inventories: Sequence[Mapping[str, Any]],
     terminal_evidence_digests: Mapping[str, Sequence[str]],
+    scheduler_evidence_paths: Mapping[str, Any],
 ) -> dict[str, Any]:
     _validate_descriptor(descriptor)
     _validate_replay_receipt(descriptor, replay)
@@ -2727,13 +3829,21 @@ def complete_phase5(
     prefix_receipts = _require_list(prefix.get("executions"), "invalidated smoke receipts")
     if len(prefix_receipts) != 4:
         _fail("invalidated smoke prefix does not contain exactly four receipts")
+    failed_retry = _require_object(
+        replay.get("failed_phase5_retry"), "replay failed Phase 5 retry"
+    )
+    retry_receipts = _require_list(
+        failed_retry.get("executions"), "failed Phase 5 retry executions"
+    )
+    if len(retry_receipts) != 4:
+        _fail("failed Phase 5 retry does not contain exactly four receipts")
     latest = _latest_runs(terminal_baseline)
     if set(latest) != set(NAMESPACES):
-        _fail("clean-cycle baseline lacks exact latest invalidated-prefix receipts")
-    for item in prefix_receipts:
+        _fail("clean-cycle baseline lacks exact latest failed-retry receipts")
+    for item in retry_receipts:
         run = latest.get(str(item.get("job")))
         if run is None:
-            _fail("clean-cycle baseline lost an invalidated-prefix receipt")
+            _fail("clean-cycle baseline lost a failed-retry receipt")
         for key, value in {
             "run_id": item.get("run_id"),
             "status": "success",
@@ -2747,7 +3857,7 @@ def complete_phase5(
         }.items():
             _expect(run.get(key), value, f"clean-cycle baseline {item.get('job')} {key}")
 
-    _validate_completion_manifest(terminal_manifest)
+    _validate_completion_manifest(terminal_manifest, scheduler_evidence_paths)
     retry = _require_object(terminal_manifest.get("retry"), "completion retry binding")
     _expect(
         retry.get("failed_prefix_replay_sha256"),
@@ -2763,16 +3873,20 @@ def complete_phase5(
         cycles=1,
         runtime_source_revision=RUNTIME_SOURCE_REVISION,
     )
-    old_ids = {item.get("run_id") for item in prefix_receipts}
-    old_executions = {item.get("cloud_run_execution") for item in prefix_receipts}
+    prior_receipts = [*prefix_receipts, *retry_receipts]
+    old_ids = {item.get("run_id") for item in prior_receipts}
+    old_executions = {item.get("cloud_run_execution") for item in prior_receipts}
     if any(item.get("run_id") in old_ids for item in receipts):
         _fail("fresh smoke cycle reused an invalidated Runtime receipt")
     if any(item.get("cloud_run_execution") in old_executions for item in receipts):
         _fail("fresh smoke cycle reused an invalidated Cloud Run execution")
-    old_finish = max(_parse_time(item.get("finished_at"), "invalidated smoke finished_at") for item in prefix_receipts)
+    old_finish = max(
+        _parse_time(item.get("finished_at"), "failed retry smoke finished_at")
+        for item in retry_receipts
+    )
     new_start = min(_parse_time(item.get("started_at"), "fresh smoke started_at") for item in receipts)
     if new_start <= old_finish:
-        _fail("fresh smoke cycle overlaps the invalidated prefix")
+        _fail("fresh smoke cycle overlaps the intervening failed retry")
     _validate_terminal_one_writer(
         descriptor=descriptor,
         replay=replay,
@@ -2813,6 +3927,9 @@ def complete_phase5(
         "served_snapshot_sha256": dashboard_digest,
         "cloud_sql_private_only": True,
         "temporary_authority_removed": True,
+        "temporary_scheduler_activation_authority_removed": True,
+        "temporary_role_inspection_authority_removed": True,
+        "scheduler_activation_authority": terminal_manifest["scheduler_activation_authority"],
         "rollback_armed": True,
         "phase6_started": False,
         "reconciliation": {
@@ -2823,6 +3940,7 @@ def complete_phase5(
             "phase4_certificate": replay["phase4_certificate"],
             "failed_phase5": replay["failed_phase5"],
             "invalidated_smoke_prefix": prefix,
+            "failed_phase5_retry": failed_retry,
             "concurrent_legacy_ai": legacy,
             "recovery_runs": replay["recovery_runs"],
             "frozen_legacy_successors": replay["frozen_legacy_successors"],
@@ -2871,6 +3989,7 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--current-ai-analyses", type=Path, required=True)
     _add_metadata_source(replay, "phase4")
     _add_metadata_source(replay, "failed")
+    _add_metadata_source(replay, "failed_retry")
     _add_metadata_source(replay, "legacy_ai", archive=False)
     for label in ("predecessor", "state", "output"):
         replay.add_argument(f"--legacy-ai-{label}-artifact-metadata", type=Path, required=True)
@@ -2921,6 +4040,32 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument(
         "--terminal-runtime-execution-inventory", type=Path, action="append", required=True
     )
+    for flag in (
+        "scheduler-authority-summary",
+        "scheduler-transition",
+        "scheduler-before-policy",
+        "scheduler-granted-policy",
+        "scheduler-removed-policy",
+        "permanent-control-role",
+        "role-viewer-before-policy",
+        "role-viewer-granted-policy",
+        "role-viewer-removed-policy",
+        "role-viewer-condition",
+        "role-viewer-grant-request",
+        "scheduler-condition",
+        "scheduler-grant-request",
+        "scheduler-resume-attempts",
+        "scheduler-before-summary",
+        "scheduler-after-summary",
+        "scheduler-before-inventory",
+        "scheduler-after-inventory",
+    ):
+        complete.add_argument(f"--{flag}", type=Path, required=True)
+    complete.add_argument("--scheduler-before-job", type=Path, action="append", required=True)
+    complete.add_argument("--scheduler-after-job", type=Path, action="append", required=True)
+    complete.add_argument(
+        "--scheduler-resume-receipt", type=Path, action="append", required=True
+    )
     complete.add_argument("--control-revision", required=True)
     complete.add_argument("--output", type=Path, required=True)
     return parser
@@ -2937,6 +4082,7 @@ def main(argv: list[str] | None = None) -> int:
             current_ai_analyses=_load_list_or_object(args.current_ai_analyses),
             phase4_source=_source(args, "phase4"),
             failed_source=_source(args, "failed"),
+            failed_retry_source=_source(args, "failed_retry"),
             legacy_ai_source={
                 "run": _load_object(args.legacy_ai_run_metadata),
                 "jobs": _load_object(args.legacy_ai_jobs_metadata),
@@ -3010,6 +4156,29 @@ def main(argv: list[str] | None = None) -> int:
                 "runtime_execution_inventories": [
                     _sha256_file(path) for path in terminal_execution_paths
                 ],
+            },
+            scheduler_evidence_paths={
+                "authority_summary": args.scheduler_authority_summary,
+                "transition": args.scheduler_transition,
+                "before_policy": args.scheduler_before_policy,
+                "granted_policy": args.scheduler_granted_policy,
+                "removed_policy": args.scheduler_removed_policy,
+                "permanent_control_role": args.permanent_control_role,
+                "role_viewer_before_policy": args.role_viewer_before_policy,
+                "role_viewer_granted_policy": args.role_viewer_granted_policy,
+                "role_viewer_removed_policy": args.role_viewer_removed_policy,
+                "role_viewer_condition": args.role_viewer_condition,
+                "role_viewer_grant_request": args.role_viewer_grant_request,
+                "condition": args.scheduler_condition,
+                "grant_request": args.scheduler_grant_request,
+                "resume_attempts": args.scheduler_resume_attempts,
+                "before_summary": args.scheduler_before_summary,
+                "after_summary": args.scheduler_after_summary,
+                "before_inventory": args.scheduler_before_inventory,
+                "after_inventory": args.scheduler_after_inventory,
+                "before_jobs": args.scheduler_before_job,
+                "after_jobs": args.scheduler_after_job,
+                "resume_receipts": args.scheduler_resume_receipt,
             },
         )
     _write(args.output, receipt)
