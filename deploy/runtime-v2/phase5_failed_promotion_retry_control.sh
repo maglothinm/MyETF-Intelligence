@@ -11,11 +11,38 @@
 
 PHASE5_RETRY_INCIDENT_DIR="${EVIDENCE_DIR}/incident"
 PHASE5_RETRY_RUN_ID="33979778020"
+PHASE5_RETRY_FAILED_RETRY_RUN_ID="33990741282"
 PHASE5_RETRY_PHASE4_RUN_ID="33979432233"
 PHASE5_RETRY_LEGACY_AI_RUN_ID="33980946687"
 PHASE5_RETRY_DASHBOARD_RUN_ID="33974683885"
 PHASE5_RETRY_RECOVERY_RUN_IDS=(33981311523 33981312757)
-PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS=(33987160591 33987130349)
+PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS=(
+  33987160591 33987130349
+  33992770754 33992772006
+)
+PHASE5_RETRY_SCHEDULER_CONTROL_ROLE="roles/cloudscheduler.admin"
+PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID="polititrackPhase3Terraform"
+PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT="${RESOURCE_DIR}/permanent-control-role.json"
+PHASE5_RETRY_ROLE_VIEWER_ROLE="roles/iam.roleViewer"
+PHASE5_RETRY_ROLE_VIEWER_POLICY="${RESOURCE_DIR}/role-viewer-policy.json"
+PHASE5_RETRY_ROLE_VIEWER_BEFORE_POLICY="${RESOURCE_DIR}/role-viewer-before-policy.json"
+PHASE5_RETRY_ROLE_VIEWER_GRANTED_POLICY="${RESOURCE_DIR}/role-viewer-granted-policy.json"
+PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY="${RESOURCE_DIR}/role-viewer-removed-policy.json"
+PHASE5_RETRY_ROLE_VIEWER_CONDITION="${RESOURCE_DIR}/role-viewer-condition.json"
+PHASE5_RETRY_ROLE_VIEWER_GRANT="${RESOURCE_DIR}/role-viewer-grant.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_POLICY="${RESOURCE_DIR}/scheduler-control-policy.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_BEFORE_POLICY="${RESOURCE_DIR}/scheduler-control-before-policy.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_GRANTED_POLICY="${RESOURCE_DIR}/scheduler-control-granted-policy.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_REMOVED_POLICY="${RESOURCE_DIR}/scheduler-control-removed-policy.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION="${RESOURCE_DIR}/scheduler-control-condition.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_GRANT="${RESOURCE_DIR}/scheduler-control-grant.json"
+PHASE5_RETRY_SCHEDULER_CONTROL_SUMMARY="${RESOURCE_DIR}/scheduler-activation-authority.json"
+PHASE5_RETRY_SCHEDULER_TRANSITION="${RESOURCE_DIR}/scheduler-transition.json"
+PHASE5_RETRY_SCHEDULER_ATTEMPTS="${RESOURCE_DIR}/scheduler-resume-attempts.ndjson"
+PHASE5_RETRY_ALL_SCHEDULERS=(
+  polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard
+  polititrack-vault-lifecycle
+)
 
 phase5_retry_descriptor_value() {
   local expression="$1"
@@ -30,11 +57,14 @@ phase5_retry_verify_descriptor_identity() {
   jq -e \
     --arg phase4_run "${PHASE5_RETRY_PHASE4_RUN_ID}" \
     --arg failed_run "${PHASE5_RETRY_RUN_ID}" \
+    --arg failed_retry_run "${PHASE5_RETRY_FAILED_RETRY_RUN_ID}" \
     --arg legacy_ai_run "${PHASE5_RETRY_LEGACY_AI_RUN_ID}" \
     --arg recovery_legislative "${PHASE5_RETRY_RECOVERY_RUN_IDS[0]}" \
     --arg recovery_executive "${PHASE5_RETRY_RECOVERY_RUN_IDS[1]}" \
     --argjson successor_legislative "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[0]}" \
     --argjson successor_executive "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[1]}" \
+    --argjson successor2_legislative "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[2]}" \
+    --argjson successor2_executive "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[3]}" \
     --arg dashboard_run "${PHASE5_RETRY_DASHBOARD_RUN_ID}" \
     'type == "object" and .schema_version == 1 and
      .result == "phase5_failed_promotion_reconciliation_authorized" and
@@ -46,6 +76,37 @@ phase5_retry_verify_descriptor_identity() {
      (.immutable_image | test("@sha256:[0-9a-f]{64}$")) and
      (.phase4.run_id | tostring) == $phase4_run and
      (.failed_phase5.run_id | tostring) == $failed_run and
+     .failed_phase5_retry == {
+       run_id:33990741282,run_number:3,run_attempt:1,
+       event:"workflow_dispatch",head_sha:"7dba656fe37098f0b7a2576f49803eb10d49f1be",
+       conclusion:"failure",created_at:"2026-09-05T20:39:01Z",
+       run_started_at:"2026-09-05T20:39:01Z",updated_at:"2026-09-05T21:26:13Z",
+       workflow:{id:351113264,name:"Reconcile failed Phase 5 promotion 33979778020",
+                 path:".github/workflows/phase5_failed_promotion_retry.yml"},
+       job:{id:101372396515,name:"reconcile-and-retry",
+            started_at:"2026-09-05T20:39:05Z",completed_at:"2026-09-05T21:26:12Z"},
+       artifact:{id:9977196639,
+                 name:"phase5-failed-promotion-retry-rollback-33979778020",
+                 size_in_bytes:9862789,
+                 digest:"sha256:b20af9ba4ad5dff00d81fc7646dd05ff30c16cf0bf3f811495044818afc026ec",
+                 expires_at:"2026-12-04T20:39:03Z"},
+       predecessor_replay_sha256:"07056fa175c71195039bbfdf420036d382373b53700bbd6ca6857fa1bfddcad7",
+       predecessor_descriptor_sha256:"74172ed974d5608d0d935a8f5463a63d7f658ee8ded31d637c09165e88548ebc",
+       status_members:["retry-smoke-sequence-1-legislative-status.json",
+                       "retry-smoke-sequence-2-executive-status.json",
+                       "retry-smoke-sequence-3-ai-status.json",
+                       "retry-smoke-sequence-4-dashboard-status.json"],
+       baseline_heads:{
+         legislative:{generation:7,snapshot_sha256:"db8ed21c1a5cb9b668ee23acb0a9813eb3ba2561130337677ab7b2c73013931a"},
+         executive:{generation:7,snapshot_sha256:"0c0c141424f4d4a597606ed95f00d0fb5c64d75a3cc59ae3e35539f90125ee72"},
+         ai:{generation:6,snapshot_sha256:"69b001d2b307843ae6f708ccdc3717272596225a46847b5892c984da90053ae6"},
+         dashboard:{generation:7,snapshot_sha256:"0f601dfb15d5ed5809d61245ee4feff9ac1eec63ff50f79ce6d88ac090d92348"}},
+       terminal_heads:{
+         legislative:{generation:8,snapshot_sha256:"ad767bf6f098f4f7bf47bff655a38d04c281a8826f6cf7733dc4cdeebe5a2208"},
+         executive:{generation:8,snapshot_sha256:"9902fb9fdebd93e089f3a9e0b2a8c0fc60481237f05dc11bd639f40e6770eb57"},
+         ai:{generation:7,snapshot_sha256:"adac132b2e629eff086e505c980e8912bcbf697c4b2deab3030c5d925116ce1e"},
+         dashboard:{generation:8,snapshot_sha256:"42e6dea7db23a933bff2f653f57f05d7b4a46e67d9b4acd64fcb3a83619d200b"}}
+     } and
      (.concurrent_legacy_ai.run_id | tostring) == $legacy_ai_run and
      .legacy_dashboard.role == "dashboard" and
      (.legacy_dashboard.run_id | tostring) == $dashboard_run and
@@ -109,11 +170,59 @@ phase5_retry_verify_descriptor_identity() {
            id:9975529940,name:"executive-tracker-state",size_in_bytes:512042,
            digest:"sha256:0f0cd0e3fb30a43e32d50bd684b5bfb143343460c69bcb54b590ebd0d687c67f",
            expires_at:"2026-12-04T19:26:49Z"},
+          output_artifact:{
+            id:9975530113,name:"executive-purchase-output-33987130349",
+            size_in_bytes:495654,
+            digest:"sha256:c947b27b4a006efa074db1295753a0d4d215c3857acd942d634026a8a9355d4d",
+            expires_at:"2026-10-05T19:29:14Z"}
+       },
+       {
+         role:"legislative",run_id:$successor2_legislative,run_number:60,run_attempt:1,
+         event:"workflow_dispatch",head_sha:"7dba656fe37098f0b7a2576f49803eb10d49f1be",
+         conclusion:"success",created_at:"2026-09-05T21:20:40Z",
+         run_started_at:"2026-09-05T21:20:40Z",updated_at:"2026-09-05T21:23:20Z",
+         workflow:{id:345003824,name:"Legislative purchase tracker v2",
+                   path:".github/workflows/legislative_trade_tracker_v2.yml"},
+         job:{id:101377828721,name:"track",started_at:"2026-09-05T21:20:45Z",
+              completed_at:"2026-09-05T21:23:19Z"},
+         predecessor_artifact:{
+           id:9975534045,name:"legislative-tracker-state",size_in_bytes:759138,
+           digest:"sha256:49b12457193ec72629ec4afea38acdb0074c49687354993842c7495a3919c951",
+           expires_at:"2026-12-04T19:27:28Z",producer_run_id:33987160591,
+           producer_head_sha:"40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2"},
+         artifact:{
+           id:9977152928,name:"legislative-tracker-state",size_in_bytes:759177,
+           digest:"sha256:d228a953420d0e3d259363d9825b9f21a0a07e1d518828ea4973fe954db3e59f",
+           expires_at:"2026-12-04T21:20:42Z"},
          output_artifact:{
-           id:9975530113,name:"executive-purchase-output-33987130349",
-           size_in_bytes:495654,
-           digest:"sha256:c947b27b4a006efa074db1295753a0d4d215c3857acd942d634026a8a9355d4d",
-           expires_at:"2026-10-05T19:29:14Z"}
+           id:9977153300,name:"legislative-purchase-output-33992770754-1",
+           size_in_bytes:149724,
+           digest:"sha256:b444e6f83038fd3f44c70287e37849a6a175a2be0384e5df2d245f7915a09c7b",
+           expires_at:"2026-10-05T21:23:14Z"}
+       },
+       {
+         role:"executive",run_id:$successor2_executive,run_number:51,run_attempt:1,
+         event:"workflow_dispatch",head_sha:"7dba656fe37098f0b7a2576f49803eb10d49f1be",
+         conclusion:"success",created_at:"2026-09-05T21:20:42Z",
+         run_started_at:"2026-09-05T21:20:42Z",updated_at:"2026-09-05T21:23:09Z",
+         workflow:{id:344663671,name:"Executive purchase tracker",
+                   path:".github/workflows/executive_trade_tracker.yml"},
+         job:{id:101377831574,name:"track",started_at:"2026-09-05T21:20:45Z",
+              completed_at:"2026-09-05T21:23:08Z"},
+         predecessor_artifact:{
+           id:9975529940,name:"executive-tracker-state",size_in_bytes:512042,
+           digest:"sha256:0f0cd0e3fb30a43e32d50bd684b5bfb143343460c69bcb54b590ebd0d687c67f",
+           expires_at:"2026-12-04T19:26:49Z",producer_run_id:33987130349,
+           producer_head_sha:"40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2"},
+         artifact:{
+           id:9977151026,name:"executive-tracker-state",size_in_bytes:512074,
+           digest:"sha256:c3884c54bfb554e867e072c2463f3b2a4a510b295b228c5bb3fe5edada7c3d17",
+           expires_at:"2026-12-04T21:20:43Z"},
+         output_artifact:{
+           id:9977151187,name:"executive-purchase-output-33992772006",
+           size_in_bytes:495657,
+           digest:"sha256:739c9cc69fb2c83ae90daeddae348a45f8e99f3e3059b0a26f02b912e23e4d05",
+           expires_at:"2026-10-05T21:23:06Z"}
        }
      ] and
      .frozen_legacy_successors[0].predecessor_artifact ==
@@ -124,6 +233,14 @@ phase5_retry_verify_descriptor_identity() {
        (.recovery_runs[1].artifact + {
          producer_run_id:.recovery_runs[1].run_id,
          producer_head_sha:.recovery_runs[1].head_sha}) and
+     .frozen_legacy_successors[2].predecessor_artifact ==
+       (.frozen_legacy_successors[0].artifact + {
+         producer_run_id:.frozen_legacy_successors[0].run_id,
+         producer_head_sha:.frozen_legacy_successors[0].head_sha}) and
+     .frozen_legacy_successors[3].predecessor_artifact ==
+       (.frozen_legacy_successors[1].artifact + {
+         producer_run_id:.frozen_legacy_successors[1].run_id,
+         producer_head_sha:.frozen_legacy_successors[1].head_sha}) and
      (.expected_continuation_heads | type) == "object" and
      (.expected_continuation_heads | keys | sort) == (["ai","dashboard","executive","legislative"] | sort) and
      all(.expected_continuation_heads[];
@@ -207,6 +324,8 @@ phase5_retry_download_incident_evidence() {
   phase5_retry_capture_artifact '.phase4.artifact' phase4 || return 1
   phase5_retry_capture_run '.failed_phase5' failed-phase5 || return 1
   phase5_retry_capture_artifact '.failed_phase5.artifact' failed-phase5 || return 1
+  phase5_retry_capture_run '.failed_phase5_retry' failed-retry || return 1
+  phase5_retry_capture_artifact '.failed_phase5_retry.artifact' failed-retry || return 1
 
   phase5_retry_capture_run '.concurrent_legacy_ai' concurrent-legacy-ai || return 1
   phase5_retry_capture_artifact \
@@ -241,6 +360,18 @@ phase5_retry_download_incident_evidence() {
     '.frozen_legacy_successors[1].artifact' frozen-successor-executive || return 1
   phase5_retry_capture_artifact \
     '.frozen_legacy_successors[1].output_artifact' frozen-successor-executive-output || return 1
+  phase5_retry_capture_run \
+    '.frozen_legacy_successors[2]' frozen-successor2-legislative || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[2].artifact' frozen-successor2-legislative || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[2].output_artifact' frozen-successor2-legislative-output || return 1
+  phase5_retry_capture_run \
+    '.frozen_legacy_successors[3]' frozen-successor2-executive || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[3].artifact' frozen-successor2-executive || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[3].output_artifact' frozen-successor2-executive-output || return 1
   phase5_retry_verify_legacy_high_water downloaded || return 1
 }
 
@@ -328,8 +459,8 @@ phase5_retry_verify_legacy_high_water() {
   local suffix="${1:-current}" role run_path artifact_path workflow artifact_name
   local expected_run_id expected_run_created_at expected_artifact_id runs_file artifacts_file
   local specifications=(
-    'legislative|.frozen_legacy_successors[0]|.frozen_legacy_successors[0].artifact|legislative_trade_tracker_v2.yml'
-    'executive|.frozen_legacy_successors[1]|.frozen_legacy_successors[1].artifact|executive_trade_tracker.yml'
+    'legislative|.frozen_legacy_successors[2]|.frozen_legacy_successors[2].artifact|legislative_trade_tracker_v2.yml'
+    'executive|.frozen_legacy_successors[3]|.frozen_legacy_successors[3].artifact|executive_trade_tracker.yml'
     'ai|.concurrent_legacy_ai|.concurrent_legacy_ai.state_artifact|ai_filing_analyst.yml'
   )
   mkdir -p "${PHASE5_RETRY_INCIDENT_DIR}" || return 1
@@ -516,8 +647,296 @@ phase5_retry_restore_pre_live_legacy_route() {
   verify_legacy_workflows_match_observed
 }
 
+phase5_retry_validate_permanent_control_role_receipt() {
+  local permanent_control_role
+  permanent_control_role="projects/${PROJECT_ID}/roles/${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}"
+  [[ -s "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}" ]] || {
+    echo "The live permanent Phase 3 control-role receipt is missing." >&2
+    return 1
+  }
+  jq -e --arg name "${permanent_control_role}" \
+    '. as $role |
+     .name == $name and (.deleted // false) == false and .stage == "GA" and
+     (.includedPermissions | type) == "array" and
+     all(["cloudscheduler.jobs.pause","cloudscheduler.jobs.get","cloudscheduler.jobs.list"][];
+       . as $permission | ($role.includedPermissions | index($permission)) != null) and
+     (.includedPermissions | index("cloudscheduler.jobs.enable") | not) and
+     (.includedPermissions | index("cloudscheduler.jobs.run") | not) and
+     (.includedPermissions | index("cloudscheduler.jobs.delete") | not)' \
+    "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}" >/dev/null || {
+      echo "The permanent Phase 3 control role cannot guarantee constrained rollback." >&2
+      return 1
+    }
+}
+
+phase5_retry_capture_role_viewer_policy() {
+  if ! gcloud projects get-iam-policy "${PROJECT_ID}" --format=json \
+    > "${PHASE5_RETRY_ROLE_VIEWER_POLICY}"; then
+    echo "Unable to read project IAM while checking temporary Role Viewer authority." >&2
+    return 1
+  fi
+  jq -e 'type == "object" and (.bindings | type) == "array"' \
+    "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" >/dev/null || {
+      echo "Project IAM policy is malformed while checking temporary Role Viewer authority." >&2
+      return 1
+    }
+}
+
+phase5_retry_role_viewer_any_present() {
+  phase5_retry_capture_role_viewer_policy || return 2
+  jq -e --arg member "${DEPLOYER_MEMBER}" --arg role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    '[.bindings[]? | select(.role == $role) | .members[]?] |
+     any(. == $member)' "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" >/dev/null
+}
+
+phase5_retry_role_viewer_exact_present() {
+  [[ -s "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" ]] || return 2
+  phase5_retry_capture_role_viewer_policy || return 2
+  jq -e --arg member "${DEPLOYER_MEMBER}" \
+    --arg role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    --slurpfile expected "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" \
+    '([.bindings[]? |
+        select(.role == $role and .condition == $expected[0] and
+               any(.members[]?; . == $member))] | length) == 1 and
+     ([.bindings[]? | select(.role == $role) | .members[]? |
+        select(. == $member)] | length) == 1' \
+    "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" >/dev/null
+}
+
+phase5_retry_role_viewer_exact_binding_present() {
+  [[ -s "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" ]] || return 2
+  phase5_retry_capture_role_viewer_policy || return 2
+  jq -e --arg member "${DEPLOYER_MEMBER}" \
+    --arg role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    --slurpfile expected "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" \
+    'any(.bindings[]?;
+       .role == $role and .condition == $expected[0] and
+       any(.members[]?; . == $member))' \
+    "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" >/dev/null
+}
+
+phase5_retry_verify_role_viewer_removed() {
+  local status
+  if phase5_retry_role_viewer_any_present; then
+    echo "IAM Role Viewer remains bound to the deployer." >&2
+    return 1
+  else
+    status=$?
+  fi
+  [[ "${status}" == "1" ]] || {
+    echo "Temporary IAM Role Viewer cleanup is unverified." >&2
+    return 1
+  }
+}
+
+phase5_retry_verify_role_viewer_condition_window() {
+  [[ -s "${PHASE5_RETRY_ROLE_VIEWER_GRANT}" ]] || {
+    echo "Temporary IAM Role Viewer grant metadata is missing." >&2
+    return 1
+  }
+  python - "${PHASE5_RETRY_ROLE_VIEWER_GRANT}" <<'PY'
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+grant = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+now = dt.datetime.now(dt.timezone.utc)
+issued = dt.datetime.fromisoformat(grant["issued_at"].replace("Z", "+00:00"))
+expires = dt.datetime.fromisoformat(grant["expires_at"].replace("Z", "+00:00"))
+propagation_deadline = dt.datetime.fromisoformat(
+    grant["propagation_deadline_at"].replace("Z", "+00:00")
+)
+window = (expires - issued).total_seconds()
+remaining = (expires - now).total_seconds()
+if not (
+    890 <= window <= 910
+    and 595 <= (propagation_deadline - issued).total_seconds() <= 605
+    and propagation_deadline < expires
+    and 240 <= remaining <= 910
+):
+    raise SystemExit("Temporary IAM Role Viewer condition is outside its authorized time window.")
+PY
+}
+
+phase5_retry_remove_role_viewer() {
+  local attempt status error_file
+  for attempt in $(seq 1 18); do
+    error_file="${RESOURCE_DIR}/role-viewer-remove-attempt-${attempt}.stderr"
+    if phase5_retry_role_viewer_exact_binding_present; then
+      gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+        --member "${DEPLOYER_MEMBER}" --role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+        --condition-from-file="${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" \
+        --quiet --format=none >/dev/null 2> "${error_file}" || true
+    else
+      status=$?
+      [[ "${status}" == "1" || "${status}" == "2" ]] || return 1
+    fi
+    if phase5_retry_verify_role_viewer_removed; then
+      cp -- "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" \
+        "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" || return 1
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Temporary IAM Role Viewer could not be verified physically absent." >&2
+  return 1
+}
+
+phase5_retry_finalize_role_viewer_evidence() {
+  local receipt_tmp before_sha granted_sha removed_sha condition_sha grant_sha
+  local permanent_control_role
+  phase5_retry_validate_permanent_control_role_receipt || return 1
+  phase5_retry_verify_role_viewer_removed || return 1
+  cp -- "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" \
+    "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" || return 1
+  permanent_control_role="projects/${PROJECT_ID}/roles/${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}"
+  jq -e --arg member "${DEPLOYER_MEMBER}" --arg role "${permanent_control_role}" \
+    '([.bindings[]? |
+       select(.role == $role and (.condition? == null) and
+              any(.members[]?; . == $member))] | length) == 1' \
+    "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" >/dev/null || {
+      echo "The permanent rollback role binding changed during the JIT role read." >&2
+      return 1
+    }
+  jq -e --arg member "${DEPLOYER_MEMBER}" --arg role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    '([.bindings[]? | select(.role == $role) | .members[]?] |
+      any(. == $member) | not)' \
+    "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" >/dev/null || {
+      echo "Scheduler activation authority overlapped the JIT role read." >&2
+      return 1
+    }
+  before_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_ROLE_VIEWER_BEFORE_POLICY}")" || return 1
+  granted_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_ROLE_VIEWER_GRANTED_POLICY}")" || return 1
+  removed_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}")" || return 1
+  condition_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}")" || return 1
+  grant_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_ROLE_VIEWER_GRANT}")" || return 1
+  receipt_tmp="${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}.tmp"
+  jq --slurpfile grant "${PHASE5_RETRY_ROLE_VIEWER_GRANT}" \
+    --arg before_sha "${before_sha}" --arg granted_sha "${granted_sha}" \
+    --arg removed_sha "${removed_sha}" --arg condition_sha "${condition_sha}" \
+    --arg grant_sha "${grant_sha}" \
+    '. + {temporary_role_viewer_evidence:{
+      result:"jit_role_viewer_removed",grant:$grant[0],absent_before_grant:true,
+      grant_observed:true,live_role_described:true,physically_absent_after_removal:true,
+      evidence_sha256:{before_policy:$before_sha,granted_policy:$granted_sha,
+        removed_policy:$removed_sha,condition:$condition_sha,grant_request:$grant_sha}}}' \
+    "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}" > "${receipt_tmp}" || return 1
+  mv -- "${receipt_tmp}" "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}" || return 1
+  phase5_retry_validate_permanent_control_role_receipt
+}
+
+phase5_retry_role_describe_denial_is_propagation() {
+  local error_file="$1"
+  local expected_role="projects/${PROJECT_ID}/roles/${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}"
+  [[ -s "${error_file}" ]] || return 1
+  grep -Fq 'PERMISSION_DENIED' "${error_file}" || return 1
+  if grep -Fq "${expected_role}" "${error_file}"; then
+    return 0
+  fi
+  # Some gcloud surfaces split the same canonical target across the project
+  # and role-id fields instead of printing one resource-name token.
+  grep -Fq "${PROJECT_ID}" "${error_file}" &&
+    grep -Fq "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}" "${error_file}"
+}
+
+phase5_retry_capture_and_verify_permanent_control_role() {
+  local issued_at expires_at propagation_deadline_at condition_title condition_description
+  local condition_expression attempt status error_file receipt_tmp role_described=false
+  local deadline now remaining command_timeout
+  [[ -f "${EVIDENCE_DIR}/live-mutation-started" ]] || {
+    echo "The rollback trap is not armed for temporary IAM Role Viewer authority." >&2
+    return 1
+  }
+  phase5_retry_verify_role_viewer_removed || return 1
+  cp -- "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" \
+    "${PHASE5_RETRY_ROLE_VIEWER_BEFORE_POLICY}" || return 1
+  rm -f -- "${PHASE5_RETRY_ROLE_VIEWER_GRANTED_POLICY}" \
+    "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" \
+    "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" \
+    "${PHASE5_RETRY_ROLE_VIEWER_GRANT}" \
+    "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}"
+
+  issued_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  expires_at="$(date -u -d '+15 minutes' +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  propagation_deadline_at="$(date -u -d '+10 minutes' +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  condition_title="phase5-retry-${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}-${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}-role-viewer"
+  condition_description="JIT read of the exact permanent Phase 3 custom role"
+  condition_expression="request.time < timestamp(\"${expires_at}\")"
+  jq -n --arg title "${condition_title}" --arg description "${condition_description}" \
+    --arg expression "${condition_expression}" \
+    '{title:$title,description:$description,expression:$expression}' \
+    > "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" || return 1
+  jq -n --arg project "${PROJECT_ID}" --arg member "${DEPLOYER_MEMBER}" \
+    --arg role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    --arg target_role "projects/${PROJECT_ID}/roles/${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}" \
+    --arg issued_at "${issued_at}" --arg expires_at "${expires_at}" \
+    --arg propagation_deadline_at "${propagation_deadline_at}" \
+    --slurpfile condition "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" \
+    '{schema_version:1,result:"role_viewer_live_role_capture_requested",
+      project_id:$project,member:$member,role:$role,target_role_name:$target_role,
+      authorized_operation:"iam.roles.get",issued_at:$issued_at,expires_at:$expires_at,
+      propagation_deadline_at:$propagation_deadline_at,condition:$condition[0],
+      condition_scope:"request_time_only"}' \
+    > "${PHASE5_RETRY_ROLE_VIEWER_GRANT}" || return 1
+  phase5_retry_verify_role_viewer_condition_window || return 1
+
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member "${DEPLOYER_MEMBER}" --role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    --condition-from-file="${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" \
+    --quiet --format=none || return 1
+
+  receipt_tmp="${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}.tmp"
+  deadline="$(date -u -d "${propagation_deadline_at}" +%s)" || return 1
+  for attempt in $(seq 1 60); do
+    now="$(date +%s)" || return 1
+    (( now < deadline )) || {
+      echo "Temporary IAM Role Viewer did not propagate within 600 seconds." >&2
+      return 1
+    }
+    if phase5_retry_role_viewer_exact_present; then
+      cp -- "${PHASE5_RETRY_ROLE_VIEWER_POLICY}" \
+        "${PHASE5_RETRY_ROLE_VIEWER_GRANTED_POLICY}" || return 1
+      phase5_retry_verify_role_viewer_condition_window || return 1
+      error_file="${RESOURCE_DIR}/role-viewer-describe-attempt-${attempt}.stderr"
+      remaining=$(( deadline - now ))
+      command_timeout=30
+      (( remaining >= command_timeout )) || command_timeout="${remaining}"
+      (( command_timeout > 0 )) || return 1
+      if timeout "${command_timeout}s" gcloud iam roles describe "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}" \
+        --project "${PROJECT_ID}" --format=json > "${receipt_tmp}" 2> "${error_file}"; then
+        mv -- "${receipt_tmp}" "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}" || return 1
+        phase5_retry_validate_permanent_control_role_receipt || return 1
+        role_described=true
+        break
+      fi
+      rm -f -- "${receipt_tmp}"
+      if ! phase5_retry_role_describe_denial_is_propagation "${error_file}"; then
+        cat "${error_file}" >&2
+        return 1
+      fi
+    else
+      status=$?
+      [[ "${status}" == "1" ]] || return 1
+    fi
+    now="$(date +%s)" || return 1
+    (( now + 10 < deadline )) || {
+      echo "Temporary IAM Role Viewer did not propagate within 600 seconds." >&2
+      return 1
+    }
+    sleep 10
+  done
+  [[ "${role_described}" == "true" ]] || {
+    echo "Temporary IAM Role Viewer did not permit the bounded live role read." >&2
+    return 1
+  }
+  phase5_retry_remove_role_viewer || return 1
+  phase5_retry_verify_role_viewer_removed || return 1
+  phase5_retry_finalize_role_viewer_evidence
+}
+
 phase5_retry_verify_current_base_authority_absent() {
-  local job policy_file project_policy
+  local job policy_file project_policy permanent_control_role
   mkdir -p "${RESOURCE_DIR}" || return 1
   rm -f -- "${LOGGING_VIEW_POLICY_RECEIPT}" \
     "${RESOURCE_DIR}/retry-preflight-logging-view-absence-receipt.json" || return 1
@@ -538,6 +957,7 @@ phase5_retry_verify_current_base_authority_absent() {
       }
   done
   project_policy="${RESOURCE_DIR}/retry-preflight-project-iam-policy.json"
+  permanent_control_role="projects/${PROJECT_ID}/roles/${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}"
   gcloud projects get-iam-policy "${PROJECT_ID}" --format=json \
     > "${project_policy}" || return 1
   jq -e --arg member "${DEPLOYER_MEMBER}" \
@@ -545,6 +965,19 @@ phase5_retry_verify_current_base_authority_absent() {
      ([.bindings[]? | select(.role == "roles/logging.admin") | .members[]?] |
       any(. == $member) | not)' "${project_policy}" >/dev/null || {
       echo "Temporary logging.admin authority is already present." >&2
+      return 1
+    }
+  jq -e --arg member "${DEPLOYER_MEMBER}" --arg role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    '([.bindings[]? | select(.role == $role) | .members[]?] |
+      any(. == $member) | not)' "${project_policy}" >/dev/null || {
+      echo "Temporary IAM Role Viewer authority is already present." >&2
+      return 1
+    }
+  jq -e --arg member "${DEPLOYER_MEMBER}" --arg role "${permanent_control_role}" \
+    'any(.bindings[]?;
+       .role == $role and (.condition? == null) and any(.members[]?; . == $member))' \
+    "${project_policy}" >/dev/null || {
+      echo "The constrained deployer is no longer bound to its exact permanent control role." >&2
       return 1
     }
 }
@@ -626,8 +1059,194 @@ phase5_retry_verify_safe_rollback_state() {
   verify_cloud_sql_private || return 1
   collect_service_accounts || return 1
   phase5_retry_verify_current_base_authority_absent || return 1
+  phase5_retry_verify_scheduler_control_removed || return 1
   verify_service_account_user_removed || return 1
   phase5_retry_verify_private_web_invoker_removed || return 1
+}
+
+phase5_retry_capture_scheduler_control_policy() {
+  if ! gcloud projects get-iam-policy "${PROJECT_ID}" --format=json \
+    > "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}"; then
+    echo "Unable to read project IAM while checking temporary scheduler control." >&2
+    return 1
+  fi
+  jq -e 'type == "object" and (.bindings | type) == "array"' \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" >/dev/null || {
+      echo "Project IAM policy is malformed while checking temporary scheduler control." >&2
+      return 1
+    }
+}
+
+phase5_retry_scheduler_control_any_present() {
+  phase5_retry_capture_scheduler_control_policy || return 2
+  jq -e --arg member "${DEPLOYER_MEMBER}" --arg role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    '[.bindings[]? | select(.role == $role) | .members[]?] |
+     any(. == $member)' "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" >/dev/null
+}
+
+phase5_retry_scheduler_control_exact_present() {
+  [[ -s "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" ]] || return 2
+  phase5_retry_capture_scheduler_control_policy || return 2
+  jq -e --arg member "${DEPLOYER_MEMBER}" \
+    --arg role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    --slurpfile expected "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" \
+    '([.bindings[]? |
+        select(.role == $role and .condition == $expected[0] and
+               any(.members[]?; . == $member))] | length) == 1 and
+     ([.bindings[]? | select(.role == $role) | .members[]? |
+        select(. == $member)] | length) == 1' \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" >/dev/null
+}
+
+phase5_retry_scheduler_control_exact_binding_present() {
+  [[ -s "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" ]] || return 2
+  phase5_retry_capture_scheduler_control_policy || return 2
+  jq -e --arg member "${DEPLOYER_MEMBER}" \
+    --arg role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    --slurpfile expected "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" \
+    'any(.bindings[]?;
+       .role == $role and .condition == $expected[0] and
+       any(.members[]?; . == $member))' \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" >/dev/null
+}
+
+phase5_retry_verify_scheduler_control_removed() {
+  local status
+  if phase5_retry_scheduler_control_any_present; then
+    echo "Cloud Scheduler Admin remains bound to the deployer." >&2
+    return 1
+  else
+    status=$?
+  fi
+  [[ "${status}" == "1" ]] || {
+    echo "Temporary Cloud Scheduler control cleanup is unverified." >&2
+    return 1
+  }
+}
+
+phase5_retry_verify_scheduler_condition_window() {
+  [[ -s "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}" ]] || {
+    echo "Temporary Cloud Scheduler grant metadata is missing." >&2
+    return 1
+  }
+  python - "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}" <<'PY'
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+grant = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+now = dt.datetime.now(dt.timezone.utc)
+issued = dt.datetime.fromisoformat(grant["issued_at"].replace("Z", "+00:00"))
+expires = dt.datetime.fromisoformat(grant["expires_at"].replace("Z", "+00:00"))
+propagation_deadline = dt.datetime.fromisoformat(
+    grant["propagation_deadline_at"].replace("Z", "+00:00")
+)
+window = (expires - issued).total_seconds()
+remaining = (expires - now).total_seconds()
+if not (
+    1190 <= window <= 1210
+    and 595 <= (propagation_deadline - issued).total_seconds() <= 605
+    and propagation_deadline < expires
+    and 300 <= remaining <= 1210
+):
+    raise SystemExit("Temporary Cloud Scheduler condition is outside its authorized time window.")
+PY
+}
+
+phase5_retry_grant_scheduler_control() {
+  local issued_at expires_at propagation_deadline_at
+  local condition_title condition_description condition_expression attempt
+  phase5_retry_verify_scheduler_control_removed || return 1
+  phase5_retry_capture_and_verify_permanent_control_role || return 1
+  phase5_retry_verify_role_viewer_removed || return 1
+  # The Role Viewer propagation wait can be several minutes.  Recapture the
+  # Scheduler policy only after that temporary reader is physically gone so an
+  # intervening activation grant cannot hide behind the older pre-read policy.
+  phase5_retry_verify_scheduler_control_removed || return 1
+  cp -- "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_BEFORE_POLICY}" || return 1
+  jq -e --arg member "${DEPLOYER_MEMBER}" \
+    --arg role "projects/${PROJECT_ID}/roles/${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID}" \
+    'any(.bindings[]?;
+       .role == $role and (.condition? == null) and any(.members[]?; . == $member))' \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_BEFORE_POLICY}" >/dev/null || {
+      echo "Rollback authority changed immediately before the JIT Scheduler grant." >&2
+      return 1
+    }
+  rm -f -- "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANTED_POLICY}" \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_REMOVED_POLICY}" \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}" \
+    "${PHASE5_RETRY_SCHEDULER_CONTROL_SUMMARY}" \
+    "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}"
+
+  issued_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  expires_at="$(date -u -d '+20 minutes' +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  propagation_deadline_at="$(date -u -d '+10 minutes' +'%Y-%m-%dT%H:%M:%SZ')" || return 1
+  condition_title="phase5-retry-${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}-${GITHUB_RUN_ATTEMPT:?GITHUB_RUN_ATTEMPT is required}-scheduler-activation"
+  condition_description="JIT activation of the exact four Phase 5 producer schedules"
+  condition_expression="request.time < timestamp(\"${expires_at}\")"
+  jq -n --arg title "${condition_title}" --arg description "${condition_description}" \
+    --arg expression "${condition_expression}" \
+    '{title:$title,description:$description,expression:$expression}' \
+    > "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" || return 1
+  jq -n --arg project "${PROJECT_ID}" --arg location "${REGION}" \
+    --arg member "${DEPLOYER_MEMBER}" --arg role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    --arg issued_at "${issued_at}" --arg expires_at "${expires_at}" \
+    --arg propagation_deadline_at "${propagation_deadline_at}" \
+    --slurpfile condition "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" \
+    --argjson resources "$(printf '%s\n' "${PRODUCER_SCHEDULERS[@]}" | jq -R . | jq -s .)" \
+    --argjson resource_names "$(printf '%s\n' "${PRODUCER_SCHEDULERS[@]}" |
+      sed "s#^#projects/${PROJECT_ID}/locations/${REGION}/jobs/#" | jq -R . | jq -s .)" \
+    '{schema_version:1,result:"scheduler_activation_authority_requested",
+      project_id:$project,location:$location,member:$member,role:$role,
+      issued_at:$issued_at,expires_at:$expires_at,
+      propagation_deadline_at:$propagation_deadline_at,condition:$condition[0],
+      condition_scope:"request_time_only",authorized_scheduler_short_names:$resources,
+      exact_authorized_resource_names:$resource_names}' \
+    > "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}" || return 1
+  phase5_retry_verify_scheduler_condition_window || return 1
+
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member "${DEPLOYER_MEMBER}" --role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    --condition-from-file="${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" \
+    --quiet --format=none || return 1
+  for attempt in $(seq 1 18); do
+    if phase5_retry_scheduler_control_exact_present; then
+      cp -- "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" \
+        "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANTED_POLICY}" || return 1
+      phase5_retry_verify_scheduler_condition_window || return 1
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Exact conditional Cloud Scheduler control did not become visible in project IAM." >&2
+  return 1
+}
+
+phase5_retry_remove_scheduler_control() {
+  local attempt status error_file
+  for attempt in $(seq 1 18); do
+    error_file="${RESOURCE_DIR}/scheduler-control-remove-attempt-${attempt}.stderr"
+    if phase5_retry_scheduler_control_exact_binding_present; then
+      gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+        --member "${DEPLOYER_MEMBER}" --role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+        --condition-from-file="${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" \
+        --quiet --format=none >/dev/null 2> "${error_file}" || true
+    else
+      status=$?
+      [[ "${status}" == "1" || "${status}" == "2" ]] || return 1
+    fi
+    if phase5_retry_verify_scheduler_control_removed; then
+      cp -- "${PHASE5_RETRY_SCHEDULER_CONTROL_POLICY}" \
+        "${PHASE5_RETRY_SCHEDULER_CONTROL_REMOVED_POLICY}" || return 1
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Temporary Cloud Scheduler control could not be verified physically absent." >&2
+  return 1
 }
 
 phase5_retry_private_web_invoker_present() {
@@ -1102,7 +1721,211 @@ phase5_retry_append_observation() {
     >> "${EVIDENCE_DIR}/observations.ndjson"
 }
 
+phase5_retry_file_sha256() {
+  sha256sum "$1" | awk '{print $1}'
+}
+
+phase5_retry_capture_scheduler_snapshot() {
+  local phase="$1" scheduler expected_state raw_file raw_sha spec_sha state
+  local inventory_file="${RESOURCE_DIR}/scheduler-${phase}-inventory.json"
+  local records_file="${RESOURCE_DIR}/scheduler-${phase}-records.ndjson"
+  local summary_file="${RESOURCE_DIR}/scheduler-${phase}-summary.json"
+  local expected_names
+  [[ "${phase}" == "before" || "${phase}" == "after" ]] || return 1
+  [[ "${#PHASE5_RETRY_ALL_SCHEDULERS[@]}" == "5" ]] || return 1
+  [[ "${PHASE5_RETRY_ALL_SCHEDULERS[*]}" == \
+     "polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle" ]] || {
+    echo "The complete scheduler inventory differs from the frozen five." >&2
+    return 1
+  }
+  expected_names="$(printf '%s\n' "${PHASE5_RETRY_ALL_SCHEDULERS[@]}" |
+    sed "s#^#projects/${PROJECT_ID}/locations/${REGION}/jobs/#" | jq -R . | jq -s 'sort')" || return 1
+
+  gcloud scheduler jobs list --project "${PROJECT_ID}" --location "${REGION}" \
+    --format=json > "${inventory_file}" || return 1
+  jq -e --argjson expected "${expected_names}" \
+    'type == "array" and length == 5 and
+     ([.[].name] | unique | sort) == $expected' "${inventory_file}" >/dev/null || {
+      echo "The live Cloud Scheduler inventory is not the exact frozen set of five." >&2
+      return 1
+    }
+
+  : > "${records_file}" || return 1
+  for scheduler in "${PHASE5_RETRY_ALL_SCHEDULERS[@]}"; do
+    raw_file="${RESOURCE_DIR}/scheduler-${phase}-${scheduler}.json"
+    gcloud scheduler jobs describe "${scheduler}" --project "${PROJECT_ID}" \
+      --location "${REGION}" --format=json > "${raw_file}" || return 1
+    state="$(jq -er '.state | select(type == "string")' "${raw_file}")" || return 1
+    if [[ "${phase}" == "before" || "${scheduler}" == "${VAULT_SCHEDULER}" ]]; then
+      expected_state=PAUSED
+    else
+      expected_state=ENABLED
+    fi
+    [[ "${state}" == "${expected_state}" ]] || {
+      echo "${scheduler} is ${state}, expected ${expected_state} in the ${phase} snapshot." >&2
+      return 1
+    }
+    jq -e --arg name "projects/${PROJECT_ID}/locations/${REGION}/jobs/${scheduler}" \
+      '.name == $name' "${raw_file}" >/dev/null || {
+        echo "The ${phase} scheduler receipt is not for ${scheduler}." >&2
+        return 1
+      }
+    raw_sha="$(phase5_retry_file_sha256 "${raw_file}")" || return 1
+    spec_sha="$(jq -cS \
+      'del(.state,.status,.userUpdateTime,.lastAttemptTime,.scheduleTime)' \
+      "${raw_file}" | sha256sum | awk '{print $1}')" || return 1
+    jq -cn --arg name "${scheduler}" \
+      --arg resource "projects/${PROJECT_ID}/locations/${REGION}/jobs/${scheduler}" \
+      --arg state "${state}" --arg raw_sha "${raw_sha}" --arg spec_sha "${spec_sha}" \
+      '{name:$name,resource_name:$resource,state:$state,
+        raw_sha256:$raw_sha,canonical_spec_sha256:$spec_sha}' >> "${records_file}" || return 1
+  done
+  jq -s --arg phase "${phase}" --arg project "${PROJECT_ID}" --arg location "${REGION}" \
+    '{schema_version:1,phase:$phase,project_id:$project,location:$location,schedulers:.}' \
+    "${records_file}" > "${summary_file}" || return 1
+  rm -f -- "${records_file}"
+}
+
+phase5_retry_compare_scheduler_snapshots() {
+  local before="${RESOURCE_DIR}/scheduler-before-summary.json"
+  local after="${RESOURCE_DIR}/scheduler-after-summary.json"
+  local before_sha after_sha
+  jq -e --slurpfile after "${after}" \
+    '.phase == "before" and (.schedulers | length) == 5 and
+     $after[0].phase == "after" and ($after[0].schedulers | length) == 5 and
+     all(.schedulers[] as $before;
+       any($after[0].schedulers[];
+         .name == $before.name and .resource_name == $before.resource_name and
+         .canonical_spec_sha256 == $before.canonical_spec_sha256 and
+         (if .name == "polititrack-vault-lifecycle"
+          then $before.state == "PAUSED" and .state == "PAUSED"
+          else $before.state == "PAUSED" and .state == "ENABLED" end)))' \
+    "${before}" >/dev/null || {
+      echo "The scheduler transition changed a specification, omitted a scheduler, or altered the vault." >&2
+      return 1
+    }
+  before_sha="$(phase5_retry_file_sha256 "${before}")" || return 1
+  after_sha="$(phase5_retry_file_sha256 "${after}")" || return 1
+  jq -n --arg project "${PROJECT_ID}" --arg location "${REGION}" \
+    --arg before_sha "${before_sha}" --arg after_sha "${after_sha}" \
+    --slurpfile before "${before}" --slurpfile after "${after}" \
+    '{schema_version:1,result:"exact_four_producer_schedulers_enabled_vault_unchanged",
+      project_id:$project,location:$location,
+      authorized_transitions:[
+        $before[0].schedulers[] as $b |
+        select($b.name != "polititrack-vault-lifecycle") |
+        ($after[0].schedulers[] | select(.name == $b.name)) as $a |
+        {name:$b.name,before_state:$b.state,after_state:$a.state,
+         before_spec_sha256:$b.canonical_spec_sha256,
+         after_spec_sha256:$a.canonical_spec_sha256,
+         spec_unchanged:($b.canonical_spec_sha256 == $a.canonical_spec_sha256)}],
+      vault:($before[0].schedulers[] as $b |
+        select($b.name == "polititrack-vault-lifecycle") |
+        ($after[0].schedulers[] | select(.name == $b.name)) as $a |
+        {name:$b.name,before_state:$b.state,after_state:$a.state,
+         before_spec_sha256:$b.canonical_spec_sha256,
+         after_spec_sha256:$a.canonical_spec_sha256,
+         spec_unchanged:($b.canonical_spec_sha256 == $a.canonical_spec_sha256)}),
+      before_summary_sha256:$before_sha,after_summary_sha256:$after_sha,
+      before:$before[0],after:$after[0]}' > "${PHASE5_RETRY_SCHEDULER_TRANSITION}" || return 1
+}
+
+phase5_retry_record_scheduler_resume_attempt() {
+  local scheduler="$1" attempt="$2" outcome="$3" evidence_file="$4" evidence_sha denial_error=""
+  evidence_sha="$(phase5_retry_file_sha256 "${evidence_file}")" || return 1
+  if [[ "${outcome}" == "iam_propagation_pending" ]]; then
+    denial_error="$(<"${evidence_file}")" || return 1
+  fi
+  jq -cn --arg scheduler "${scheduler}" --argjson attempt "${attempt}" \
+    --arg outcome "${outcome}" --arg observed_at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    --arg evidence_file "$(basename "${evidence_file}")" --arg evidence_sha "${evidence_sha}" \
+    --arg denial_error "${denial_error}" \
+    '{scheduler:$scheduler,attempt:$attempt,outcome:$outcome,observed_at:$observed_at,
+      evidence_file:$evidence_file,evidence_sha256:$evidence_sha,
+      denial_error:(if $outcome == "iam_propagation_pending" then $denial_error else null end)}' \
+    >> "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}"
+}
+
+phase5_retry_resume_scheduler_with_propagation() {
+  local scheduler="$1"
+  local receipt="${RESOURCE_DIR}/scheduler-resume-${scheduler}.json"
+  local expected_name="projects/${PROJECT_ID}/locations/${REGION}/jobs/${scheduler}"
+  local error_file attempt=0 deadline now deadline_at remaining command_timeout
+  [[ "${scheduler}" == "${PRODUCER_SCHEDULERS[0]}" ]] || {
+    echo "Only the first exact producer scheduler may probe IAM propagation." >&2
+    return 1
+  }
+  deadline_at="$(jq -er '.propagation_deadline_at' "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}")" || return 1
+  deadline="$(date -u -d "${deadline_at}" +%s)" || return 1
+  rm -f -- "${receipt}"
+
+  while (( attempt < 60 )); do
+    now="$(date +%s)" || return 1
+    (( now < deadline )) || {
+      echo "Temporary Cloud Scheduler control did not propagate within 600 seconds." >&2
+      return 1
+    }
+    remaining=$(( deadline - now ))
+    command_timeout=30
+    (( remaining >= command_timeout )) || command_timeout="${remaining}"
+    (( command_timeout > 0 )) || return 1
+    attempt=$(( attempt + 1 ))
+    error_file="${RESOURCE_DIR}/scheduler-resume-${scheduler}-attempt-${attempt}.stderr"
+    : > "${error_file}" || return 1
+    phase5_retry_verify_scheduler_condition_window || return 1
+    if timeout "${command_timeout}s" gcloud scheduler jobs resume "${scheduler}" --project "${PROJECT_ID}" \
+      --location "${REGION}" --quiet --format=json > "${receipt}" 2> "${error_file}"; then
+      jq -e --arg name "${expected_name}" \
+        '.name == $name and .state == "ENABLED"' "${receipt}" >/dev/null || {
+          echo "Cloud Scheduler returned an invalid resume receipt for ${scheduler}." >&2
+          return 1
+        }
+      phase5_retry_record_scheduler_resume_attempt \
+        "${scheduler}" "${attempt}" resumed "${receipt}" || return 1
+      return 0
+    fi
+    if ! grep -Fq 'PERMISSION_DENIED' "${error_file}" ||
+       ! grep -Fq 'cloudscheduler.jobs.enable' "${error_file}" ||
+       ! grep -Fq "${expected_name}" "${error_file}"; then
+      cat "${error_file}" >&2
+      return 1
+    fi
+    phase5_retry_record_scheduler_resume_attempt \
+      "${scheduler}" "${attempt}" iam_propagation_pending "${error_file}" || return 1
+    now="$(date +%s)" || return 1
+    if (( attempt >= 60 || now + 10 >= deadline )); then
+      cat "${error_file}" >&2
+      echo "Temporary Cloud Scheduler control did not propagate within 600 seconds." >&2
+      return 1
+    fi
+    sleep 10
+  done
+  echo "Temporary Cloud Scheduler control exhausted its bounded propagation probe." >&2
+  return 1
+}
+
+phase5_retry_resume_scheduler_once() {
+  local scheduler="$1" receipt expected_name error_file
+  receipt="${RESOURCE_DIR}/scheduler-resume-${scheduler}.json"
+  expected_name="projects/${PROJECT_ID}/locations/${REGION}/jobs/${scheduler}"
+  error_file="${RESOURCE_DIR}/scheduler-resume-${scheduler}-attempt-1.stderr"
+  rm -f -- "${receipt}" "${error_file}"
+  phase5_retry_verify_scheduler_condition_window || return 1
+  if ! timeout 30s gcloud scheduler jobs resume "${scheduler}" --project "${PROJECT_ID}" \
+    --location "${REGION}" --quiet --format=json > "${receipt}" 2> "${error_file}"; then
+    cat "${error_file}" >&2
+    return 1
+  fi
+  jq -e --arg name "${expected_name}" \
+    '.name == $name and .state == "ENABLED"' "${receipt}" >/dev/null || {
+      echo "Cloud Scheduler returned an invalid one-shot resume receipt for ${scheduler}." >&2
+      return 1
+    }
+  phase5_retry_record_scheduler_resume_attempt "${scheduler}" 1 resumed "${receipt}"
+}
+
 phase5_retry_enable_exact_producer_schedulers_last() {
+  local scheduler
   [[ "${#PRODUCER_SCHEDULERS[@]}" == "4" ]] || {
     echo "The retry may enable exactly four producer schedulers." >&2
     return 1
@@ -1112,9 +1935,69 @@ phase5_retry_enable_exact_producer_schedulers_last() {
     echo "The producer scheduler inventory differs from the authorized four." >&2
     return 1
   }
-  resume_producer_schedulers || return 1
+  phase5_retry_scheduler_control_exact_present || {
+    echo "Exact conditional Cloud Scheduler control is absent before final activation." >&2
+    return 1
+  }
+  : > "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}" || return 1
+  phase5_retry_resume_scheduler_with_propagation "${PRODUCER_SCHEDULERS[0]}" || return 1
+  for scheduler in "${PRODUCER_SCHEDULERS[@]:1}"; do
+    phase5_retry_resume_scheduler_once "${scheduler}" || return 1
+  done
   verify_producer_scheduler_state ENABLED || return 1
   touch "${EVIDENCE_DIR}/producer-schedulers-enabled-last"
+}
+
+phase5_retry_finalize_scheduler_activation_evidence() {
+  local permanent_role_sha before_policy_sha granted_policy_sha removed_policy_sha condition_sha
+  local grant_sha attempts_sha transition_sha
+  phase5_retry_verify_scheduler_control_removed || return 1
+  phase5_retry_verify_role_viewer_removed || return 1
+  phase5_retry_validate_permanent_control_role_receipt || return 1
+  phase5_retry_compare_scheduler_snapshots || return 1
+  jq -e \
+    'length >= 4 and
+     ([.[] | select(.outcome == "resumed") | .scheduler] | sort) ==
+       (["polititrack-legislative","polititrack-executive","polititrack-ai","polititrack-dashboard"] | sort) and
+     all(.[] | select(.outcome == "iam_propagation_pending");
+       .scheduler == "polititrack-legislative") and
+     ([.[] | select(.scheduler != "polititrack-legislative") | .attempt] | all(. == 1))' \
+    <(jq -s '.' "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}") >/dev/null || {
+      echo "Scheduler activation attempts do not prove one bounded propagation probe and three one-shot resumes." >&2
+      return 1
+    }
+  permanent_role_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_PERMANENT_CONTROL_ROLE_RECEIPT}")" || return 1
+  before_policy_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_CONTROL_BEFORE_POLICY}")" || return 1
+  granted_policy_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANTED_POLICY}")" || return 1
+  removed_policy_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_CONTROL_REMOVED_POLICY}")" || return 1
+  condition_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}")" || return 1
+  grant_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}")" || return 1
+  attempts_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}")" || return 1
+  transition_sha="$(phase5_retry_file_sha256 "${PHASE5_RETRY_SCHEDULER_TRANSITION}")" || return 1
+  jq -n --slurpfile grant "${PHASE5_RETRY_SCHEDULER_CONTROL_GRANT}" \
+    --arg permanent_role_sha "${permanent_role_sha}" \
+    --arg before_policy_sha "${before_policy_sha}" --arg granted_policy_sha "${granted_policy_sha}" \
+    --arg removed_policy_sha "${removed_policy_sha}" --arg condition_sha "${condition_sha}" \
+    --arg grant_sha "${grant_sha}" --arg attempts_sha "${attempts_sha}" \
+    --arg transition_sha "${transition_sha}" \
+    --argjson attempts "$(jq -s '.' "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}")" \
+    --argjson receipts "$(for scheduler in "${PRODUCER_SCHEDULERS[@]}"; do
+      receipt="${RESOURCE_DIR}/scheduler-resume-${scheduler}.json"
+      jq -cn --arg scheduler "${scheduler}" --arg sha "$(phase5_retry_file_sha256 "${receipt}")" \
+        '{scheduler:$scheduler,sha256:$sha}'
+    done | jq -s '.')" \
+    '{schema_version:1,result:"jit_scheduler_activation_authority_removed",
+      grant:$grant[0],absent_before_grant:true,grant_observed:true,
+      physically_absent_after_removal:true,
+      propagation_probe_scheduler:"polititrack-legislative",
+      propagation_deadline_seconds:600,attempts:$attempts,resume_attempts:$attempts,
+      resume_receipts:$receipts,
+      scheduler_transition_result:"exact_four_producer_schedulers_enabled_vault_unchanged",
+      evidence_sha256:{permanent_control_role:$permanent_role_sha,
+        before_policy:$before_policy_sha,granted_policy:$granted_policy_sha,
+        removed_policy:$removed_policy_sha,condition:$condition_sha,grant_request:$grant_sha,
+        resume_attempts:$attempts_sha,scheduler_transition:$transition_sha}}' \
+    > "${PHASE5_RETRY_SCHEDULER_CONTROL_SUMMARY}" || return 1
 }
 
 phase5_retry_dispatch_legacy_recovery_once() {
@@ -1136,7 +2019,11 @@ phase5_retry_rollback() {
   local schedulers_paused=false web_private=false runtime_shadow=false legacy_restored=false
   local recovery_required=false recovery_complete=false execution_authority_removed=false
   local service_account_user_removed=false private_web_invoker_removed=false
-  local cloud_sql_private=false vault_scheduler_paused=false legacy_route_kind=invalid
+  local scheduler_control_removed=false role_viewer_removed=false cloud_sql_private=false
+  local vault_scheduler_paused=false legacy_route_kind=invalid
+  local legacy_maintenance_fence_preserved=false
+  local scheduler_removed_policy_sha256="" scheduler_condition_sha256=""
+  local role_viewer_removed_policy_sha256="" role_viewer_condition_sha256=""
   set +e
 
   [[ -f "${EVIDENCE_DIR}/live-mutation-started" ]] || {
@@ -1153,6 +2040,8 @@ phase5_retry_rollback() {
   make_web_private
   verify_web_private && web_private=true
   phase5_retry_remove_private_web_invoker
+  phase5_retry_remove_scheduler_control
+  phase5_retry_remove_role_viewer
   phase5_retry_restore_preflight_logging_receipt_if_safe || true
   remove_execution_authority
   collect_service_accounts
@@ -1160,21 +2049,37 @@ phase5_retry_rollback() {
 
   if [[ -f "${EVIDENCE_DIR}/route-touched" ]]; then
     configure_runtime_best_effort shadow && verify_runtime_configuration shadow && runtime_shadow=true
-    if [[ "${legacy_route_kind}" == "historic_active" ]] &&
-       restore_legacy_workflows_observed; then
-      legacy_restored=true
-      recovery_required=true
-      if phase5_retry_dispatch_legacy_recovery_once; then
-        recovery_complete=true
-      fi
-    fi
   else
     verify_runtime_configuration shadow && runtime_shadow=true
-    if [[ "${legacy_route_kind}" == "historic_active" ]] &&
-       restore_legacy_workflows_observed; then
+  fi
+
+  # Never reopen a legacy writer unless every Runtime writer surface is already
+  # proven inert.  On any pause/mode/privacy failure, preserve the all-disabled
+  # maintenance fence and report rollback incomplete instead of risking two
+  # production writer families.
+  if [[ "${legacy_route_kind}" == "historic_active" &&
+        "${schedulers_paused}" == "true" &&
+        "${runtime_shadow}" == "true" &&
+        "${web_private}" == "true" ]]; then
+    if restore_legacy_workflows_observed; then
       legacy_restored=true
-      recovery_complete=true
+      if [[ -f "${EVIDENCE_DIR}/route-touched" ]]; then
+        recovery_required=true
+        if phase5_retry_dispatch_legacy_recovery_once; then
+          recovery_complete=true
+        fi
+      else
+        recovery_complete=true
+      fi
+    else
+      disable_legacy_workflows &&
+        verify_legacy_workflows_state disabled_manually &&
+        legacy_maintenance_fence_preserved=true
     fi
+  else
+    disable_legacy_workflows &&
+      verify_legacy_workflows_state disabled_manually &&
+      legacy_maintenance_fence_preserved=true
   fi
 
   remove_execution_authority
@@ -1184,6 +2089,32 @@ phase5_retry_rollback() {
   verify_service_account_user_removed && service_account_user_removed=true
   phase5_retry_remove_private_web_invoker
   phase5_retry_verify_private_web_invoker_removed && private_web_invoker_removed=true
+  phase5_retry_remove_scheduler_control
+  if phase5_retry_verify_scheduler_control_removed; then
+    scheduler_control_removed=true
+    if [[ -s "${PHASE5_RETRY_SCHEDULER_CONTROL_REMOVED_POLICY}" ]]; then
+      scheduler_removed_policy_sha256="$(phase5_retry_file_sha256 \
+        "${PHASE5_RETRY_SCHEDULER_CONTROL_REMOVED_POLICY}" 2>/dev/null || true)"
+    fi
+    if [[ -s "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" ]]; then
+      scheduler_condition_sha256="$(phase5_retry_file_sha256 \
+        "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" 2>/dev/null || true)"
+    fi
+    [[ "${scheduler_removed_policy_sha256}" =~ ^[0-9a-f]{64}$ ]] || scheduler_control_removed=false
+  fi
+  phase5_retry_remove_role_viewer
+  if phase5_retry_verify_role_viewer_removed; then
+    role_viewer_removed=true
+    if [[ -s "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" ]]; then
+      role_viewer_removed_policy_sha256="$(phase5_retry_file_sha256 \
+        "${PHASE5_RETRY_ROLE_VIEWER_REMOVED_POLICY}" 2>/dev/null || true)"
+    fi
+    if [[ -s "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" ]]; then
+      role_viewer_condition_sha256="$(phase5_retry_file_sha256 \
+        "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" 2>/dev/null || true)"
+    fi
+    [[ "${role_viewer_removed_policy_sha256}" =~ ^[0-9a-f]{64}$ ]] || role_viewer_removed=false
+  fi
   verify_cloud_sql_private && cloud_sql_private=true
   verify_vault_scheduler_paused && vault_scheduler_paused=true
 
@@ -1194,9 +2125,19 @@ phase5_retry_rollback() {
     --arg legacy_restored "${legacy_restored}" \
     --arg recovery_required "${recovery_required}" \
     --arg recovery_complete "${recovery_complete}" \
+    --arg legacy_maintenance_fence_preserved "${legacy_maintenance_fence_preserved}" \
     --arg execution_authority_removed "${execution_authority_removed}" \
     --arg service_account_user_removed "${service_account_user_removed}" \
     --arg private_web_invoker_removed "${private_web_invoker_removed}" \
+    --arg scheduler_control_removed "${scheduler_control_removed}" \
+    --arg scheduler_control_role "${PHASE5_RETRY_SCHEDULER_CONTROL_ROLE}" \
+    --arg scheduler_control_member "${DEPLOYER_MEMBER}" \
+    --arg scheduler_removed_policy_sha256 "${scheduler_removed_policy_sha256}" \
+    --arg scheduler_condition_sha256 "${scheduler_condition_sha256}" \
+    --arg role_viewer_removed "${role_viewer_removed}" \
+    --arg role_viewer_role "${PHASE5_RETRY_ROLE_VIEWER_ROLE}" \
+    --arg role_viewer_removed_policy_sha256 "${role_viewer_removed_policy_sha256}" \
+    --arg role_viewer_condition_sha256 "${role_viewer_condition_sha256}" \
     --arg cloud_sql_private "${cloud_sql_private}" \
     --arg vault_scheduler_paused "${vault_scheduler_paused}" \
     --arg legacy_route_kind "${legacy_route_kind}" \
@@ -1206,11 +2147,22 @@ phase5_retry_rollback() {
       runtime_mode:(if $runtime_shadow == "true" then "shadow" else "unverified" end),
       observed_legacy_route_kind:$legacy_route_kind,
       legacy_route_restored:($legacy_restored == "true"),
+      legacy_maintenance_fence_preserved:($legacy_maintenance_fence_preserved == "true"),
       legacy_recovery_required:($recovery_required == "true"),
       legacy_recovery_action_complete:($recovery_complete == "true"),
       temporary_execution_authority_removed:($execution_authority_removed == "true"),
       temporary_service_account_user_removed:($service_account_user_removed == "true"),
       temporary_private_web_invoker_removed:($private_web_invoker_removed == "true"),
+      temporary_scheduler_activation_authority_removed:($scheduler_control_removed == "true"),
+      scheduler_activation_authority_cleanup:{role:$scheduler_control_role,
+        member:$scheduler_control_member,physically_absent:($scheduler_control_removed == "true"),
+        removed_policy_sha256:($scheduler_removed_policy_sha256 | select(length > 0) // null),
+        condition_sha256:($scheduler_condition_sha256 | select(length > 0) // null)},
+      temporary_role_viewer_authority_removed:($role_viewer_removed == "true"),
+      role_viewer_authority_cleanup:{role:$role_viewer_role,
+        member:$scheduler_control_member,physically_absent:($role_viewer_removed == "true"),
+        removed_policy_sha256:($role_viewer_removed_policy_sha256 | select(length > 0) // null),
+        condition_sha256:($role_viewer_condition_sha256 | select(length > 0) // null)},
       cloud_sql_private_only:($cloud_sql_private == "true"),
       vault_scheduler_state:(if $vault_scheduler_paused == "true" then "PAUSED" else "unverified" end)}' \
     > "${EVIDENCE_DIR}/retry-rollback.json"
@@ -1221,6 +2173,8 @@ phase5_retry_rollback() {
         "${execution_authority_removed}" == "true" &&
         "${service_account_user_removed}" == "true" &&
         "${private_web_invoker_removed}" == "true" &&
+        "${scheduler_control_removed}" == "true" &&
+        "${role_viewer_removed}" == "true" &&
         "${cloud_sql_private}" == "true" &&
         "${vault_scheduler_paused}" == "true" ]]; then
     touch "${EVIDENCE_DIR}/retry-rollback-complete"

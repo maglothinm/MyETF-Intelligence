@@ -11,20 +11,20 @@
   "legacy_artifact_merge_or_import_authorized": false,
   "expected_continuation_heads": {
     "legislative": {
-      "generation": 7,
-      "snapshot_sha256": "db8ed21c1a5cb9b668ee23acb0a9813eb3ba2561130337677ab7b2c73013931a"
+      "generation": 8,
+      "snapshot_sha256": "ad767bf6f098f4f7bf47bff655a38d04c281a8826f6cf7733dc4cdeebe5a2208"
     },
     "executive": {
-      "generation": 7,
-      "snapshot_sha256": "0c0c141424f4d4a597606ed95f00d0fb5c64d75a3cc59ae3e35539f90125ee72"
+      "generation": 8,
+      "snapshot_sha256": "9902fb9fdebd93e089f3a9e0b2a8c0fc60481237f05dc11bd639f40e6770eb57"
     },
     "ai": {
-      "generation": 6,
-      "snapshot_sha256": "69b001d2b307843ae6f708ccdc3717272596225a46847b5892c984da90053ae6"
+      "generation": 7,
+      "snapshot_sha256": "adac132b2e629eff086e505c980e8912bcbf697c4b2deab3030c5d925116ce1e"
     },
     "dashboard": {
-      "generation": 7,
-      "snapshot_sha256": "0f601dfb15d5ed5809d61245ee4feff9ac1eec63ff50f79ce6d88ac090d92348"
+      "generation": 8,
+      "snapshot_sha256": "42e6dea7db23a933bff2f653f57f05d7b4a46e67d9b4acd64fcb3a83619d200b"
     }
   },
   "phase4": {
@@ -91,6 +91,79 @@
       "smoke-sequence-3-ai-status.json",
       "smoke-sequence-4-dashboard-status.json"
     ]
+  },
+  "failed_phase5_retry": {
+    "run_id": 33990741282,
+    "run_number": 3,
+    "run_attempt": 1,
+    "event": "workflow_dispatch",
+    "head_sha": "7dba656fe37098f0b7a2576f49803eb10d49f1be",
+    "conclusion": "failure",
+    "created_at": "2026-09-05T20:39:01Z",
+    "run_started_at": "2026-09-05T20:39:01Z",
+    "updated_at": "2026-09-05T21:26:13Z",
+    "workflow": {
+      "id": 351113264,
+      "name": "Reconcile failed Phase 5 promotion 33979778020",
+      "path": ".github/workflows/phase5_failed_promotion_retry.yml"
+    },
+    "job": {
+      "id": 101372396515,
+      "name": "reconcile-and-retry",
+      "started_at": "2026-09-05T20:39:05Z",
+      "completed_at": "2026-09-05T21:26:12Z"
+    },
+    "artifact": {
+      "id": 9977196639,
+      "name": "phase5-failed-promotion-retry-rollback-33979778020",
+      "size_in_bytes": 9862789,
+      "digest": "sha256:b20af9ba4ad5dff00d81fc7646dd05ff30c16cf0bf3f811495044818afc026ec",
+      "expires_at": "2026-12-04T20:39:03Z"
+    },
+    "predecessor_replay_sha256": "07056fa175c71195039bbfdf420036d382373b53700bbd6ca6857fa1bfddcad7",
+    "predecessor_descriptor_sha256": "74172ed974d5608d0d935a8f5463a63d7f658ee8ded31d637c09165e88548ebc",
+    "status_members": [
+      "retry-smoke-sequence-1-legislative-status.json",
+      "retry-smoke-sequence-2-executive-status.json",
+      "retry-smoke-sequence-3-ai-status.json",
+      "retry-smoke-sequence-4-dashboard-status.json"
+    ],
+    "baseline_heads": {
+      "legislative": {
+        "generation": 7,
+        "snapshot_sha256": "db8ed21c1a5cb9b668ee23acb0a9813eb3ba2561130337677ab7b2c73013931a"
+      },
+      "executive": {
+        "generation": 7,
+        "snapshot_sha256": "0c0c141424f4d4a597606ed95f00d0fb5c64d75a3cc59ae3e35539f90125ee72"
+      },
+      "ai": {
+        "generation": 6,
+        "snapshot_sha256": "69b001d2b307843ae6f708ccdc3717272596225a46847b5892c984da90053ae6"
+      },
+      "dashboard": {
+        "generation": 7,
+        "snapshot_sha256": "0f601dfb15d5ed5809d61245ee4feff9ac1eec63ff50f79ce6d88ac090d92348"
+      }
+    },
+    "terminal_heads": {
+      "legislative": {
+        "generation": 8,
+        "snapshot_sha256": "ad767bf6f098f4f7bf47bff655a38d04c281a8826f6cf7733dc4cdeebe5a2208"
+      },
+      "executive": {
+        "generation": 8,
+        "snapshot_sha256": "9902fb9fdebd93e089f3a9e0b2a8c0fc60481237f05dc11bd639f40e6770eb57"
+      },
+      "ai": {
+        "generation": 7,
+        "snapshot_sha256": "adac132b2e629eff086e505c980e8912bcbf697c4b2deab3030c5d925116ce1e"
+      },
+      "dashboard": {
+        "generation": 8,
+        "snapshot_sha256": "42e6dea7db23a933bff2f653f57f05d7b4a46e67d9b4acd64fcb3a83619d200b"
+      }
+    }
   },
   "concurrent_legacy_ai": {
     "run_id": 33980946687,
@@ -335,6 +408,98 @@
         "size_in_bytes": 495654,
         "digest": "sha256:c947b27b4a006efa074db1295753a0d4d215c3857acd942d634026a8a9355d4d",
         "expires_at": "2026-10-05T19:29:14Z"
+      }
+    },
+    {
+      "role": "legislative",
+      "run_id": 33992770754,
+      "run_number": 60,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_sha": "7dba656fe37098f0b7a2576f49803eb10d49f1be",
+      "conclusion": "success",
+      "created_at": "2026-09-05T21:20:40Z",
+      "run_started_at": "2026-09-05T21:20:40Z",
+      "updated_at": "2026-09-05T21:23:20Z",
+      "workflow": {
+        "id": 345003824,
+        "name": "Legislative purchase tracker v2",
+        "path": ".github/workflows/legislative_trade_tracker_v2.yml"
+      },
+      "job": {
+        "id": 101377828721,
+        "name": "track",
+        "started_at": "2026-09-05T21:20:45Z",
+        "completed_at": "2026-09-05T21:23:19Z"
+      },
+      "predecessor_artifact": {
+        "id": 9975534045,
+        "name": "legislative-tracker-state",
+        "size_in_bytes": 759138,
+        "digest": "sha256:49b12457193ec72629ec4afea38acdb0074c49687354993842c7495a3919c951",
+        "expires_at": "2026-12-04T19:27:28Z",
+        "producer_run_id": 33987160591,
+        "producer_head_sha": "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2"
+      },
+      "artifact": {
+        "id": 9977152928,
+        "name": "legislative-tracker-state",
+        "size_in_bytes": 759177,
+        "digest": "sha256:d228a953420d0e3d259363d9825b9f21a0a07e1d518828ea4973fe954db3e59f",
+        "expires_at": "2026-12-04T21:20:42Z"
+      },
+      "output_artifact": {
+        "id": 9977153300,
+        "name": "legislative-purchase-output-33992770754-1",
+        "size_in_bytes": 149724,
+        "digest": "sha256:b444e6f83038fd3f44c70287e37849a6a175a2be0384e5df2d245f7915a09c7b",
+        "expires_at": "2026-10-05T21:23:14Z"
+      }
+    },
+    {
+      "role": "executive",
+      "run_id": 33992772006,
+      "run_number": 51,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_sha": "7dba656fe37098f0b7a2576f49803eb10d49f1be",
+      "conclusion": "success",
+      "created_at": "2026-09-05T21:20:42Z",
+      "run_started_at": "2026-09-05T21:20:42Z",
+      "updated_at": "2026-09-05T21:23:09Z",
+      "workflow": {
+        "id": 344663671,
+        "name": "Executive purchase tracker",
+        "path": ".github/workflows/executive_trade_tracker.yml"
+      },
+      "job": {
+        "id": 101377831574,
+        "name": "track",
+        "started_at": "2026-09-05T21:20:45Z",
+        "completed_at": "2026-09-05T21:23:08Z"
+      },
+      "predecessor_artifact": {
+        "id": 9975529940,
+        "name": "executive-tracker-state",
+        "size_in_bytes": 512042,
+        "digest": "sha256:0f0cd0e3fb30a43e32d50bd684b5bfb143343460c69bcb54b590ebd0d687c67f",
+        "expires_at": "2026-12-04T19:26:49Z",
+        "producer_run_id": 33987130349,
+        "producer_head_sha": "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2"
+      },
+      "artifact": {
+        "id": 9977151026,
+        "name": "executive-tracker-state",
+        "size_in_bytes": 512074,
+        "digest": "sha256:c3884c54bfb554e867e072c2463f3b2a4a510b295b228c5bb3fe5edada7c3d17",
+        "expires_at": "2026-12-04T21:20:43Z"
+      },
+      "output_artifact": {
+        "id": 9977151187,
+        "name": "executive-purchase-output-33992772006",
+        "size_in_bytes": 495657,
+        "digest": "sha256:739c9cc69fb2c83ae90daeddae348a45f8e99f3e3059b0a26f02b912e23e4d05",
+        "expires_at": "2026-10-05T21:23:06Z"
       }
     }
   ],

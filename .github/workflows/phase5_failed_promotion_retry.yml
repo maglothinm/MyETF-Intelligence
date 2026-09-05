@@ -41,6 +41,7 @@ jobs:
       RUNTIME_SOURCE_REVISION: 8908f067298078f8c013e90cf6b7ad8ad420285b
       PHASE5_RETRY_DESCRIPTOR: deploy/runtime-v2/phase5-retry-evidence-33979778020.json
       EVIDENCE_DIR: phase5-retry-live
+      ROLLBACK_EVIDENCE_DIR: phase5-retry-rollback-publication
       CONTROL_REVISION: ${{ inputs.frozen_main_sha }}
       RETRY_FAILED_RUN_ID: ${{ inputs.failed_phase5_run_id }}
       GH_TOKEN: ${{ github.token }}
@@ -166,6 +167,10 @@ jobs:
               --failed-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5-artifact.json" \
               --failed-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5-jobs.json" \
               --failed-archive "${PHASE5_RETRY_INCIDENT_DIR}/failed-phase5.zip" \
+              --failed-retry-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-run.json" \
+              --failed-retry-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-artifact.json" \
+              --failed-retry-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-jobs.json" \
+              --failed-retry-archive "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry.zip" \
               --legacy-ai-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-run.json" \
               --legacy-ai-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-jobs.json" \
               --legacy-ai-predecessor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-predecessor-artifact.json" \
@@ -192,16 +197,28 @@ jobs:
               --recovery-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/recovery-executive-output.zip" \
               --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-run.json" \
               --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-run.json" \
+              --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-run.json" \
+              --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-run.json" \
               --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-jobs.json" \
               --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-jobs.json" \
+              --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-jobs.json" \
+              --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-jobs.json" \
               --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-artifact.json" \
               --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-artifact.json" \
+              --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-artifact.json" \
+              --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-artifact.json" \
               --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative.zip" \
               --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive.zip" \
+              --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative.zip" \
+              --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive.zip" \
               --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-output-artifact.json" \
               --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-output-artifact.json" \
+              --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-output-artifact.json" \
+              --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-output-artifact.json" \
               --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-output.zip" \
               --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-output.zip" \
+              --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-output.zip" \
+              --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-output.zip" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-runs-${inventory_suffix}.json" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-runs-${inventory_suffix}.json" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-runs-${inventory_suffix}.json" \
@@ -222,6 +239,8 @@ jobs:
                .concurrent_legacy_ai.disposition == "quarantined_separate_legacy_artifact" and
                .reconciliation.legacy_ai_artifact_quarantined == true and
                .reconciliation.frozen_legacy_successors_verified == true and
+               .reconciliation.failed_retry_intervening_attempt_verified == true and
+               .failed_phase5_retry.certification_eligible == false and
                .reconciliation.legacy_high_water_verified == true' \
               "${replay}" >/dev/null
           }
@@ -309,9 +328,20 @@ jobs:
           verify_vault_scheduler_paused
           web_policy_has_public_invoker
 
-          # Enabling these exact four schedulers is the final live mutation.
+          # The permanent Phase 3 role intentionally cannot activate schedules.
+          # Snapshot all five schedulers.  A separate request.time-only,
+          # read-only Role Viewer grant captures the live permanent role and is
+          # physically removed before one JIT Scheduler Admin binding activates
+          # the exact four producers.  Then remove that binding and prove the
+          # vault and every scheduler specification unchanged.
           phase5_retry_verify_frozen_context
+          phase5_retry_capture_scheduler_snapshot before
+          phase5_retry_grant_scheduler_control
           phase5_retry_enable_exact_producer_schedulers_last
+          phase5_retry_remove_scheduler_control
+          phase5_retry_verify_scheduler_control_removed
+          phase5_retry_capture_scheduler_snapshot after
+          phase5_retry_finalize_scheduler_activation_evidence
 
           python - "${EVIDENCE_DIR}" "${RETRY_FAILED_RUN_ID}" <<'PY'
           import json
@@ -345,6 +375,44 @@ jobs:
           )
           removed_policy = json.loads(
               (root / "resources" / "private-web-invoker-removed-policy.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          scheduler_authority_path = root / "resources" / "scheduler-activation-authority.json"
+          scheduler_authority = json.loads(scheduler_authority_path.read_text(encoding="utf-8"))
+          scheduler_transition = json.loads(
+              (root / "resources" / "scheduler-transition.json").read_text(encoding="utf-8")
+          )
+          scheduler_granted_policy = json.loads(
+              (root / "resources" / "scheduler-control-granted-policy.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          scheduler_before_policy = json.loads(
+              (root / "resources" / "scheduler-control-before-policy.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          permanent_control_role = json.loads(
+              (root / "resources" / "permanent-control-role.json").read_text(encoding="utf-8")
+          )
+          role_viewer_before_policy = json.loads(
+              (root / "resources" / "role-viewer-before-policy.json").read_text(encoding="utf-8")
+          )
+          role_viewer_granted_policy = json.loads(
+              (root / "resources" / "role-viewer-granted-policy.json").read_text(encoding="utf-8")
+          )
+          role_viewer_removed_policy = json.loads(
+              (root / "resources" / "role-viewer-removed-policy.json").read_text(encoding="utf-8")
+          )
+          role_viewer_condition = json.loads(
+              (root / "resources" / "role-viewer-condition.json").read_text(encoding="utf-8")
+          )
+          role_viewer_grant = json.loads(
+              (root / "resources" / "role-viewer-grant.json").read_text(encoding="utf-8")
+          )
+          scheduler_removed_policy = json.loads(
+              (root / "resources" / "scheduler-control-removed-policy.json").read_text(
                   encoding="utf-8"
               )
           )
@@ -383,6 +451,200 @@ jobs:
           ):
               raise SystemExit("Temporary private Runtime invocation evidence is incomplete.")
 
+          scheduler_names = [f"polititrack-{role}" for role in roles]
+          scheduler_resources = [
+              f"projects/{os.environ['PROJECT_ID']}/locations/{os.environ['REGION']}/jobs/{name}"
+              for name in scheduler_names
+          ]
+          scheduler_role = "roles/cloudscheduler.admin"
+          scheduler_grant = scheduler_authority.get("grant", {})
+          scheduler_condition = scheduler_grant.get("condition", {})
+          matching_grants = [
+              binding
+              for binding in scheduler_granted_policy.get("bindings", [])
+              if binding.get("role") == scheduler_role
+              and deployer_member in binding.get("members", [])
+          ]
+          preexisting_grants = [
+              binding
+              for binding in scheduler_before_policy.get("bindings", [])
+              if binding.get("role") == scheduler_role
+              and deployer_member in binding.get("members", [])
+          ]
+          permanent_role_name = (
+              f"projects/{os.environ['PROJECT_ID']}/roles/polititrackPhase3Terraform"
+          )
+          permanent_role_bindings = [
+              binding
+              for binding in scheduler_before_policy.get("bindings", [])
+              if binding.get("role") == permanent_role_name
+              and deployer_member in binding.get("members", [])
+              and not binding.get("condition")
+          ]
+          post_permanent_role_bindings = [
+              binding
+              for binding in scheduler_removed_policy.get("bindings", [])
+              if binding.get("role") == permanent_role_name
+              and deployer_member in binding.get("members", [])
+              and not binding.get("condition")
+          ]
+          lingering_grants = [
+              binding
+              for binding in scheduler_removed_policy.get("bindings", [])
+              if binding.get("role") == scheduler_role
+              and deployer_member in binding.get("members", [])
+          ]
+          resumed = [
+              item.get("scheduler")
+              for item in scheduler_authority.get("attempts", [])
+              if item.get("outcome") == "resumed"
+          ]
+          propagation_pending = [
+              item
+              for item in scheduler_authority.get("attempts", [])
+              if item.get("outcome") == "iam_propagation_pending"
+          ]
+          role_viewer_role = "roles/iam.roleViewer"
+          role_viewer_evidence = permanent_control_role.get(
+              "temporary_role_viewer_evidence", {}
+          )
+          role_viewer_before_bindings = [
+              binding
+              for binding in role_viewer_before_policy.get("bindings", [])
+              if binding.get("role") == role_viewer_role
+              and deployer_member in binding.get("members", [])
+          ]
+          role_viewer_granted_bindings = [
+              binding
+              for binding in role_viewer_granted_policy.get("bindings", [])
+              if binding.get("role") == role_viewer_role
+              and deployer_member in binding.get("members", [])
+          ]
+          role_viewer_removed_bindings = [
+              binding
+              for binding in role_viewer_removed_policy.get("bindings", [])
+              if binding.get("role") == role_viewer_role
+              and deployer_member in binding.get("members", [])
+          ]
+          role_viewer_expected_hashes = {
+              "before_policy": sha256(root / "resources" / "role-viewer-before-policy.json"),
+              "granted_policy": sha256(root / "resources" / "role-viewer-granted-policy.json"),
+              "removed_policy": sha256(root / "resources" / "role-viewer-removed-policy.json"),
+              "condition": sha256(root / "resources" / "role-viewer-condition.json"),
+              "grant_request": sha256(root / "resources" / "role-viewer-grant.json"),
+          }
+          if not (
+              role_viewer_evidence.get("result") == "jit_role_viewer_removed"
+              and role_viewer_evidence.get("grant") == role_viewer_grant
+              and role_viewer_evidence.get("absent_before_grant") is True
+              and role_viewer_evidence.get("grant_observed") is True
+              and role_viewer_evidence.get("live_role_described") is True
+              and role_viewer_evidence.get("physically_absent_after_removal") is True
+              and role_viewer_evidence.get("evidence_sha256") == role_viewer_expected_hashes
+              and role_viewer_grant.get("result")
+              == "role_viewer_live_role_capture_requested"
+              and role_viewer_grant.get("project_id") == os.environ["PROJECT_ID"]
+              and role_viewer_grant.get("member") == deployer_member
+              and role_viewer_grant.get("role") == role_viewer_role
+              and role_viewer_grant.get("target_role_name") == permanent_role_name
+              and role_viewer_grant.get("authorized_operation") == "iam.roles.get"
+              and role_viewer_grant.get("condition") == role_viewer_condition
+              and role_viewer_grant.get("condition_scope") == "request_time_only"
+              and role_viewer_condition.get("title")
+              == f"phase5-retry-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-role-viewer"
+              and role_viewer_condition.get("description")
+              == "JIT read of the exact permanent Phase 3 custom role"
+              and role_viewer_condition.get("expression")
+              == f'request.time < timestamp("{role_viewer_grant.get("expires_at")}")'
+              and not role_viewer_before_bindings
+              and len(role_viewer_granted_bindings) == 1
+              and role_viewer_granted_bindings[0].get("condition") == role_viewer_condition
+              and not role_viewer_removed_bindings
+              and all(
+                  deployer_member
+                  not in role_members(policy, scheduler_role)
+                  for policy in (
+                      role_viewer_before_policy,
+                      role_viewer_granted_policy,
+                      role_viewer_removed_policy,
+                  )
+              )
+              and all(
+                  deployer_member
+                  not in role_members(policy, role_viewer_role)
+                  for policy in (
+                      scheduler_before_policy,
+                      scheduler_granted_policy,
+                      scheduler_removed_policy,
+                  )
+              )
+          ):
+              raise SystemExit("Temporary IAM Role Viewer evidence is incomplete.")
+          if not (
+              scheduler_authority.get("result")
+              == "jit_scheduler_activation_authority_removed"
+              and scheduler_authority.get("absent_before_grant") is True
+              and scheduler_authority.get("grant_observed") is True
+              and scheduler_authority.get("physically_absent_after_removal") is True
+              and scheduler_authority.get("propagation_probe_scheduler")
+              == "polititrack-legislative"
+              and scheduler_authority.get("propagation_deadline_seconds") == 600
+              and scheduler_grant.get("project_id") == os.environ["PROJECT_ID"]
+              and scheduler_grant.get("location") == os.environ["REGION"]
+              and scheduler_grant.get("member") == deployer_member
+              and scheduler_grant.get("role") == scheduler_role
+              and scheduler_grant.get("condition_scope") == "request_time_only"
+              and permanent_control_role.get("name") == permanent_role_name
+              and permanent_control_role.get("stage") == "GA"
+              and permanent_control_role.get("deleted", False) is False
+              and not {
+                  "cloudscheduler.jobs.enable",
+                  "cloudscheduler.jobs.run",
+                  "cloudscheduler.jobs.delete",
+              }.intersection(permanent_control_role.get("includedPermissions", []))
+              and {
+                  "cloudscheduler.jobs.pause",
+                  "cloudscheduler.jobs.get",
+                  "cloudscheduler.jobs.list",
+              }.issubset(permanent_control_role.get("includedPermissions", []))
+              and len(permanent_role_bindings) == 1
+              and len(post_permanent_role_bindings) == 1
+              and scheduler_grant.get("authorized_scheduler_short_names") == scheduler_names
+              and scheduler_grant.get("exact_authorized_resource_names") == scheduler_resources
+              and scheduler_condition.get("title")
+              == f"phase5-retry-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-scheduler-activation"
+              and scheduler_condition.get("description")
+              == "JIT activation of the exact four Phase 5 producer schedules"
+              and scheduler_condition.get("expression")
+              == f'request.time < timestamp("{scheduler_grant.get("expires_at")}")'
+              and len(matching_grants) == 1
+              and matching_grants[0].get("condition") == scheduler_condition
+              and not preexisting_grants
+              and not lingering_grants
+              and sorted(resumed) == sorted(scheduler_names)
+              and all(
+                  item.get("scheduler") == "polititrack-legislative"
+                  for item in propagation_pending
+              )
+              and scheduler_transition.get("result")
+              == "exact_four_producer_schedulers_enabled_vault_unchanged"
+              and scheduler_transition.get("vault", {}).get("name")
+              == "polititrack-vault-lifecycle"
+              and scheduler_transition.get("vault", {}).get("before_state") == "PAUSED"
+              and scheduler_transition.get("vault", {}).get("after_state") == "PAUSED"
+              and scheduler_transition.get("vault", {}).get("spec_unchanged") is True
+              and [item.get("name") for item in scheduler_transition.get("authorized_transitions", [])]
+              == scheduler_names
+              and all(
+                  item.get("before_state") == "PAUSED"
+                  and item.get("after_state") == "ENABLED"
+                  and item.get("spec_unchanged") is True
+                  and item.get("before_spec_sha256") == item.get("after_spec_sha256")
+                  for item in scheduler_transition.get("authorized_transitions", [])
+              )
+          ):
+              raise SystemExit("Temporary Scheduler activation evidence is incomplete.")
+
           manifest = {
               "schema_version": 1,
               "phase": "phase5_reconciliation_completion",
@@ -390,6 +652,8 @@ jobs:
               "retry": {
                   "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
                   "failed_phase5_run_id": failed_run_id,
+                  "failed_retry_run_id": 33990741282,
+                  "intervening_retry_certification_eligible": False,
                   "failed_prefix_replay_result": replay["result"],
                   "failed_prefix_replay_sha256": sha256(root / "failed-prefix-replay.json"),
                   "invalidated_smoke_prefix_certification_eligible": False,
@@ -408,6 +672,7 @@ jobs:
                   "persistent_job_configuration_verified": True,
                   "phase4_certificate_verified": True,
                   "failed_promotion_replay_verified": True,
+                  "failed_retry_intervening_attempt_verified": True,
                   "concurrent_writer_incident_acknowledged": True,
                   "old_smoke_prefix_invalidated": True,
                   "legacy_ai_artifact_quarantined": True,
@@ -420,6 +685,9 @@ jobs:
                   "no_rebaseline_performed": True,
                   "full_snapshot_chain_preserved": True,
                   "temporary_private_web_invoker_removed": True,
+                  "scheduler_activation_authority_absent_before_grant": True,
+                  "standing_scheduler_activation_authority_absent": True,
+                  "temporary_role_inspection_authority_removed": True,
                   "private_web_id_token_claims_matched": True,
                   "private_web_authenticated_inventory_verified": True,
                   "private_web_same_token_revocation_verified": True,
@@ -449,6 +717,11 @@ jobs:
                           root / "private-web-invoker-revocation.json"
                       ),
                   },
+              },
+              "scheduler_activation_authority": scheduler_authority | {
+                  "summary_sha256": sha256(scheduler_authority_path),
+                  "resume_attempts": scheduler_authority["attempts"],
+                  "transition": scheduler_transition,
               },
               "executions": executions,
               "one_writer_evidence": {
@@ -513,6 +786,8 @@ jobs:
                   "temporary_logging_authority_removed": True,
                   "temporary_service_account_user_removed": True,
                   "temporary_private_web_invoker_removed": True,
+                  "temporary_scheduler_activation_authority_removed": True,
+                  "temporary_role_inspection_authority_removed": True,
                   "private_web_same_token_invocation_denied": True,
                   "legacy_workflows_disabled": True,
                   "producer_schedulers_enabled": True,
@@ -547,16 +822,52 @@ jobs:
             --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-executive-executions-terminal.json" \
             --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-ai-executions-terminal.json" \
             --terminal-runtime-execution-inventory "${PHASE5_RETRY_INCIDENT_DIR}/runtime-dashboard-executions-terminal.json" \
+            --scheduler-authority-summary "${RESOURCE_DIR}/scheduler-activation-authority.json" \
+            --scheduler-transition "${RESOURCE_DIR}/scheduler-transition.json" \
+            --scheduler-before-policy "${RESOURCE_DIR}/scheduler-control-before-policy.json" \
+            --scheduler-granted-policy "${RESOURCE_DIR}/scheduler-control-granted-policy.json" \
+            --scheduler-removed-policy "${RESOURCE_DIR}/scheduler-control-removed-policy.json" \
+            --permanent-control-role "${RESOURCE_DIR}/permanent-control-role.json" \
+            --role-viewer-before-policy "${RESOURCE_DIR}/role-viewer-before-policy.json" \
+            --role-viewer-granted-policy "${RESOURCE_DIR}/role-viewer-granted-policy.json" \
+            --role-viewer-removed-policy "${RESOURCE_DIR}/role-viewer-removed-policy.json" \
+            --role-viewer-condition "${RESOURCE_DIR}/role-viewer-condition.json" \
+            --role-viewer-grant-request "${RESOURCE_DIR}/role-viewer-grant.json" \
+            --scheduler-condition "${RESOURCE_DIR}/scheduler-control-condition.json" \
+            --scheduler-grant-request "${RESOURCE_DIR}/scheduler-control-grant.json" \
+            --scheduler-resume-attempts "${RESOURCE_DIR}/scheduler-resume-attempts.ndjson" \
+            --scheduler-before-summary "${RESOURCE_DIR}/scheduler-before-summary.json" \
+            --scheduler-after-summary "${RESOURCE_DIR}/scheduler-after-summary.json" \
+            --scheduler-before-inventory "${RESOURCE_DIR}/scheduler-before-inventory.json" \
+            --scheduler-after-inventory "${RESOURCE_DIR}/scheduler-after-inventory.json" \
+            --scheduler-before-job "${RESOURCE_DIR}/scheduler-before-polititrack-legislative.json" \
+            --scheduler-before-job "${RESOURCE_DIR}/scheduler-before-polititrack-executive.json" \
+            --scheduler-before-job "${RESOURCE_DIR}/scheduler-before-polititrack-ai.json" \
+            --scheduler-before-job "${RESOURCE_DIR}/scheduler-before-polititrack-dashboard.json" \
+            --scheduler-before-job "${RESOURCE_DIR}/scheduler-before-polititrack-vault-lifecycle.json" \
+            --scheduler-after-job "${RESOURCE_DIR}/scheduler-after-polititrack-legislative.json" \
+            --scheduler-after-job "${RESOURCE_DIR}/scheduler-after-polititrack-executive.json" \
+            --scheduler-after-job "${RESOURCE_DIR}/scheduler-after-polititrack-ai.json" \
+            --scheduler-after-job "${RESOURCE_DIR}/scheduler-after-polititrack-dashboard.json" \
+            --scheduler-after-job "${RESOURCE_DIR}/scheduler-after-polititrack-vault-lifecycle.json" \
+            --scheduler-resume-receipt "${RESOURCE_DIR}/scheduler-resume-polititrack-legislative.json" \
+            --scheduler-resume-receipt "${RESOURCE_DIR}/scheduler-resume-polititrack-executive.json" \
+            --scheduler-resume-receipt "${RESOURCE_DIR}/scheduler-resume-polititrack-ai.json" \
+            --scheduler-resume-receipt "${RESOURCE_DIR}/scheduler-resume-polititrack-dashboard.json" \
             --control-revision "${CONTROL_REVISION}" \
             --output "${EVIDENCE_DIR}/phase5-complete.json"
           jq -e \
             '.result == "phase5_complete" and
              .production_authority_transferred == true and
              .unique_successful_smoke_receipts == 4 and
+             .temporary_scheduler_activation_authority_removed == true and
+             .temporary_role_inspection_authority_removed == true and
+             .scheduler_activation_authority.physically_absent_after_removal == true and
              .reconciliation.additional_runtime_producer_execution_performed == true and
              (.executions | length) == 4 and
              (.reconciliation.invalidated_smoke_prefix.executions | length) == 4 and
-             (.reconciliation.frozen_legacy_successors | length) == 2 and
+             (.reconciliation.frozen_legacy_successors | length) == 4 and
+             .reconciliation.failed_phase5_retry.certification_eligible == false and
              .reconciliation.invalidated_smoke_prefix.certification_eligible == false and
              .phase6_started == false' \
             "${EVIDENCE_DIR}/phase5-complete.json" >/dev/null
@@ -580,6 +891,8 @@ jobs:
           collect_service_accounts
           verify_service_account_user_removed
           phase5_retry_verify_private_web_invoker_removed
+          phase5_retry_verify_scheduler_control_removed
+          phase5_retry_verify_role_viewer_removed
           verify_producer_scheduler_state ENABLED
           verify_vault_scheduler_paused
           verify_runtime_configuration production
@@ -604,14 +917,127 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${EVIDENCE_DIR}"
+
+          # A later verification or upload error can occur after the provisional
+          # certificate has been written.  The EXIT trap makes every rollback
+          # exit path delete those affirmative files and only then atomically
+          # expose a separate, explicitly noncertifying publication directory.
+          publish_noncertifying_rollback_evidence() {
+            local original_status=$?
+            local completion_present=false completion_sha256=""
+            local checksum_present=false checksum_sha256=""
+            local manifest_present=false manifest_sha256=""
+            local receipt_tmp publication_tmp
+            trap - EXIT
+
+            if [[ -e "${EVIDENCE_DIR}/phase5-complete.json" ]]; then
+              completion_present=true
+              completion_sha256="$(sha256sum "${EVIDENCE_DIR}/phase5-complete.json" | awk '{print $1}')"
+            fi
+            if [[ -e "${EVIDENCE_DIR}/phase5-complete.sha256" ]]; then
+              checksum_present=true
+              checksum_sha256="$(sha256sum "${EVIDENCE_DIR}/phase5-complete.sha256" | awk '{print $1}')"
+            fi
+            if [[ -e "${EVIDENCE_DIR}/terminal-manifest.json" ]]; then
+              manifest_present=true
+              manifest_sha256="$(sha256sum "${EVIDENCE_DIR}/terminal-manifest.json" | awk '{print $1}')"
+            fi
+
+            rm -f -- \
+              "${EVIDENCE_DIR}/phase5-complete.json" \
+              "${EVIDENCE_DIR}/phase5-complete.sha256" \
+              "${EVIDENCE_DIR}/terminal-manifest.json"
+            [[ ! -e "${EVIDENCE_DIR}/phase5-complete.json" ]]
+            [[ ! -e "${EVIDENCE_DIR}/phase5-complete.sha256" ]]
+            [[ ! -e "${EVIDENCE_DIR}/terminal-manifest.json" ]]
+
+            receipt_tmp="${EVIDENCE_DIR}/phase5-completion-invalidation.json.tmp"
+            jq -n \
+              --arg invalidated_at "$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')" \
+              --arg run_id "${GITHUB_RUN_ID}" \
+              --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+              --arg control_revision "${CONTROL_REVISION}" \
+              --argjson completion_present "${completion_present}" \
+              --arg completion_sha256 "${completion_sha256}" \
+              --argjson checksum_present "${checksum_present}" \
+              --arg checksum_sha256 "${checksum_sha256}" \
+              --argjson manifest_present "${manifest_present}" \
+              --arg manifest_sha256 "${manifest_sha256}" \
+              '{
+                schema_version: 1,
+                result: "phase5_completion_evidence_invalidated",
+                certification_eligible: false,
+                phase5_completion_claim_valid: false,
+                production_cutover_certified: false,
+                trigger: "workflow_failure_or_cancellation",
+                invalidated_at: $invalidated_at,
+                run_id: $run_id,
+                run_attempt: $run_attempt,
+                control_revision: $control_revision,
+                affirmative_completion_evidence_absent_before_rollback_artifact_upload: true,
+                invalidated_files: [
+                  {
+                    path: "phase5-complete.json",
+                    existed_before_invalidation: $completion_present,
+                    prior_sha256: ($completion_sha256 | if length == 0 then null else . end),
+                    disposition: (if $completion_present then "deleted_and_invalidated" else "not_created" end)
+                  },
+                  {
+                    path: "phase5-complete.sha256",
+                    existed_before_invalidation: $checksum_present,
+                    prior_sha256: ($checksum_sha256 | if length == 0 then null else . end),
+                    disposition: (if $checksum_present then "deleted_and_invalidated" else "not_created" end)
+                  },
+                  {
+                    path: "terminal-manifest.json",
+                    existed_before_invalidation: $manifest_present,
+                    prior_sha256: ($manifest_sha256 | if length == 0 then null else . end),
+                    disposition: (if $manifest_present then "deleted_and_invalidated" else "not_created" end)
+                  }
+                ]
+              }' > "${receipt_tmp}"
+            mv -- "${receipt_tmp}" "${EVIDENCE_DIR}/phase5-completion-invalidation.json"
+            jq -e \
+              '.result == "phase5_completion_evidence_invalidated" and
+               .certification_eligible == false and
+               .phase5_completion_claim_valid == false and
+               .production_cutover_certified == false and
+               .affirmative_completion_evidence_absent_before_rollback_artifact_upload == true and
+               (.invalidated_files | length) == 3' \
+              "${EVIDENCE_DIR}/phase5-completion-invalidation.json" >/dev/null
+
+            [[ ! -e "${ROLLBACK_EVIDENCE_DIR}" ]]
+            publication_tmp="${ROLLBACK_EVIDENCE_DIR}.tmp"
+            [[ ! -e "${publication_tmp}" ]]
+            mkdir "${publication_tmp}"
+            cp -a "${EVIDENCE_DIR}/." "${publication_tmp}/"
+            [[ ! -e "${publication_tmp}/phase5-complete.json" ]]
+            [[ ! -e "${publication_tmp}/phase5-complete.sha256" ]]
+            [[ ! -e "${publication_tmp}/terminal-manifest.json" ]]
+            jq -e \
+              '.certification_eligible == false and
+               .phase5_completion_claim_valid == false and
+               .production_cutover_certified == false and
+               .affirmative_completion_evidence_absent_before_rollback_artifact_upload == true' \
+              "${publication_tmp}/phase5-completion-invalidation.json" >/dev/null
+            mv -- "${publication_tmp}" "${ROLLBACK_EVIDENCE_DIR}"
+            exit "${original_status}"
+          }
+          trap publish_noncertifying_rollback_evidence EXIT
+
           if [[ ! -f "${EVIDENCE_DIR}/live-mutation-started" ]]; then
             source deploy/runtime-v2/runtime_promotion_control.sh
             source deploy/runtime-v2/runtime_promotion_observed_state.sh
             source deploy/runtime-v2/phase4_reconciliation_control.sh
             source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
-            phase5_retry_restore_pre_live_legacy_route
-            printf '%s\n' \
-              '{"result":"phase5_retry_failed_before_live_mutation","live_mutation_performed":false,"legacy_route_restored":true,"observed_legacy_route_kind":"historic_active"}' \
+            phase5_retry_write_frozen_legacy_states
+            verify_legacy_workflows_state disabled_manually
+            jq -n \
+              --arg failed_at "$(date -u +'%Y-%m-%dT%H:%M:%S.%6NZ')" \
+              '{schema_version:1,result:"phase5_retry_failed_before_live_mutation_fenced",
+                failed_at:$failed_at,certification_eligible:false,live_mutation_performed:false,
+                no_cloud_mutation_attempted_by_retry:true,legacy_route_restored:false,
+                legacy_maintenance_fence_preserved:true,runtime_state_verified:false}' \
               > "${EVIDENCE_DIR}/retry-rollback.json"
             exit 0
           fi
@@ -628,6 +1054,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: phase5-failed-promotion-retry-rollback-33979778020
-          path: phase5-retry-live/
+          # This directory is exposed atomically by the rollback EXIT trap only
+          # after all affirmative completion files are absent and the explicit
+          # noncertifying invalidation receipt has passed validation.
+          path: ${{ env.ROLLBACK_EVIDENCE_DIR }}/
           if-no-files-found: error
           retention-days: 90
