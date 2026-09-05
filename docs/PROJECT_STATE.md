@@ -1,10 +1,10 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-05 14:15 UTC
+**Current as of:** 2026-09-05 14:25 UTC
 **Canonical repository ID:** `1349678672`
 **Current repository name:** `maglothinm/MyETF-Intelligence`
 **Default branch:** `main`
-**Current main:** `706873d041f5dfc1c0cc384205ee385413f7a432`
+**Current main:** `4e0791f29e09831bfc399d528a8dd66604b1ebf7`
 **Phase 4 tracking issue:** #99
 **Phase 5 authorization:** #100
 **Phase 4 certificate:** not issued
@@ -114,14 +114,25 @@ metadata and digests, validates all three receipts and archive contents, and pro
 that collector implementation bytes and executable mode did not change before the
 schedule-restoration revision. No placeholder descriptor is present.
 
-No reconciliation commit is on `main`, no reconciliation Actions run has
-succeeded, and no `phase4-ready.json` completion certificate exists yet.
+PR #126 merged the reconciliation and controlled Legislative correction to
+`main` as `4e0791f29e09831bfc399d528a8dd66604b1ebf7`. Its exact PR head passed the
+required Python, Node, repository-contract, and observed-state checks. The first
+controlled run, `33971479311` attempt 1, stopped in predecessor restore before
+the tracker executed, before any state upload, and without any notification or
+heartbeat credential. The live artifact was unexpired; the workflow's jq
+expression used boolean-alternative semantics that converted an explicit
+`expired: false` value to `true`.
+
+The active narrow correction branch is
+`phase4/fix-artifact-expired-metadata-20260905`. It tests for the exact JSON
+boolean `false` and fails closed for a missing, null, true, or malformed value. No
+`phase4-ready.json` completion certificate exists yet.
 
 ## Exact blockers
 
-1. Merge the reconciliation and corrective code only after the exact PR head is
-   green.
-2. Re-enable the manual-only Legislative workflow and complete one controlled,
+1. Merge the narrow artifact-expiration parsing correction only after the exact
+   PR head is green.
+2. Complete one controlled,
    no-notify main-branch validation. Pin its exact run, job, predecessor, artifacts,
    digests, and receipts in the Phase 4 prerequisite descriptor.
 3. Restore the reviewed recurring schedule in a follow-up change. At the moment
@@ -150,7 +161,6 @@ complete.
 
 ## Next safe action
 
-Finish and review the manual-only Legislative correction and Phase 4
-reconciliation, run the full required test set on their exact PR head, merge,
-perform the alerts-suppressed main validation, and only then restore the recurring
-route and allow Phase 4 certification to run.
+Review and merge the narrow expiration-field correction, perform the
+alerts-suppressed main validation, and only then restore the recurring route and
+allow Phase 4 certification to run.

@@ -1,11 +1,11 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-05 14:15 UTC**
+Updated: **2026-09-05 14:25 UTC**
 Canonical repository: **ID 1349678672 — `maglothinm/MyETF-Intelligence`**
-Canonical main: **`706873d041f5dfc1c0cc384205ee385413f7a432`**
+Canonical main: **`4e0791f29e09831bfc399d528a8dd66604b1ebf7`**
 Active issue: **#99 — Phase 4 final live shadow validation gate**
 Authorized successor: **#100 — Phase 5 production promotion**
-Active branch: **`phase4/reconcile-failed-shadow-evidence-20260905`**
+Active branch: **`phase4/fix-artifact-expired-metadata-20260905`**
 Certificate state: **not issued**
 Production cutover state: **blocked**
 
@@ -69,11 +69,25 @@ implementation bytes through schedule restoration. The descriptor is deliberatel
 absent until the live controlled run exists, so the first merged Phase 4 run fails
 closed before cloud authentication.
 
+## Current reconciliation checkpoint
+
+PR #126 merged the reconciliation and controlled Legislative correction as
+`4e0791f29e09831bfc399d528a8dd66604b1ebf7` after its exact head passed the
+required checks. Controlled validation run `33971479311` attempt 1 failed in the
+restore step before the tracker executed. It uploaded no protected state and had
+no notification or heartbeat credentials.
+
+Artifact `9969550055` is still live and reports `expired: false`. The restore
+check used jq's boolean-alternative operator, which substitutes its fallback for
+both null and false, so that explicit false value was incorrectly read as true.
+The active narrow correction requires the exact JSON boolean false and retains
+fail-closed behavior for every other value.
+
 ## Work still required
 
-1. Merge the combined correction and Phase 4 reconciliation only from a green,
+1. Merge the narrow artifact-expiration parsing correction only from a green,
    reviewed PR head.
-2. After merge, enable only the manual workflow path and perform one controlled
+2. After merge, perform one controlled
    no-notify main validation. Verify and pin the exact run, attempt, job, state and
    diagnostic artifacts, digests, predecessor, and all receipts.
 3. Restore the recurring schedule in a follow-up reviewed change. Ensure the
