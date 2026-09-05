@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "result": "phase5_failed_promotion_reconciliation_authorized",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "certified_control_revision": "48efd8a45bbb51ee89e8b680430e593ac8867046",
+  "certified_tree_sha": "e6ca055af1973765bea1b3de5c01a5dbd69c0393",
+  "runtime_source_revision": "8908f067298078f8c013e90cf6b7ad8ad420285b",
+  "immutable_image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:420670e057036ebd78527aefdadaae30eeb360fcbe82865173861b19b303dc21",
+  "rebaseline_authorized": false,
+  "legacy_artifact_merge_or_import_authorized": false,
+  "expected_continuation_heads": {
+    "legislative": {
+      "generation": 7,
+      "snapshot_sha256": "db8ed21c1a5cb9b668ee23acb0a9813eb3ba2561130337677ab7b2c73013931a"
+    },
+    "executive": {
+      "generation": 7,
+      "snapshot_sha256": "0c0c141424f4d4a597606ed95f00d0fb5c64d75a3cc59ae3e35539f90125ee72"
+    },
+    "ai": {
+      "generation": 6,
+      "snapshot_sha256": "69b001d2b307843ae6f708ccdc3717272596225a46847b5892c984da90053ae6"
+    },
+    "dashboard": {
+      "generation": 7,
+      "snapshot_sha256": "0f601dfb15d5ed5809d61245ee4feff9ac1eec63ff50f79ce6d88ac090d92348"
+    }
+  },
+  "phase4": {
+    "run_id": 33979432233,
+    "run_number": 12,
+    "run_attempt": 1,
+    "event": "push",
+    "head_sha": "48efd8a45bbb51ee89e8b680430e593ac8867046",
+    "conclusion": "success",
+    "created_at": "2026-09-05T16:57:06Z",
+    "run_started_at": "2026-09-05T16:57:06Z",
+    "updated_at": "2026-09-05T17:03:52Z",
+    "workflow": {
+      "id": 350129720,
+      "name": "Phase 4 live shadow validation v6",
+      "path": ".github/workflows/phase4_live_shadow_validation_v6.yml"
+    },
+    "job": {
+      "id": 101341860865,
+      "name": "controlled-shadow-acceptance",
+      "started_at": "2026-09-05T16:57:08Z",
+      "completed_at": "2026-09-05T17:03:51Z"
+    },
+    "artifact": {
+      "id": 9973392769,
+      "name": "phase4-readiness",
+      "size_in_bytes": 1204749,
+      "digest": "sha256:b84585d9d37a3d6c5d5acf855381c8e7950bccae1e5dafe73d55f2f5d9c893b5",
+      "expires_at": "2026-12-04T16:57:06Z"
+    },
+    "certificate_sha256": "75bb50dc94bd0d99d14c4735bcf2cc2e6fa91de07663b9415fb120d214bdd87d"
+  },
+  "failed_phase5": {
+    "run_id": 33979778020,
+    "run_number": 11,
+    "run_attempt": 1,
+    "event": "workflow_run",
+    "head_sha": "48efd8a45bbb51ee89e8b680430e593ac8867046",
+    "conclusion": "failure",
+    "created_at": "2026-09-05T17:03:54Z",
+    "run_started_at": "2026-09-05T17:03:54Z",
+    "updated_at": "2026-09-05T18:37:08Z",
+    "workflow": {
+      "id": 350129721,
+      "name": "Phase 5 Runtime v2 production promotion v2",
+      "path": ".github/workflows/phase5_production_promotion_v2.yml"
+    },
+    "job": {
+      "id": 101342811238,
+      "name": "promote-production-authority",
+      "started_at": "2026-09-05T17:03:56Z",
+      "completed_at": "2026-09-05T18:37:07Z"
+    },
+    "artifact": {
+      "id": 9974762372,
+      "name": "phase5-completion",
+      "size_in_bytes": 1288007,
+      "digest": "sha256:3a83c9174887318322d2bac98234eb1f5325b0fcf5605e6f679a1a8d61a5ce63",
+      "expires_at": "2026-12-04T17:03:54Z"
+    },
+    "status_members": [
+      "smoke-sequence-1-legislative-status.json",
+      "smoke-sequence-2-executive-status.json",
+      "smoke-sequence-3-ai-status.json",
+      "smoke-sequence-4-dashboard-status.json"
+    ]
+  },
+  "concurrent_legacy_ai": {
+    "run_id": 33980946687,
+    "run_number": 84,
+    "run_attempt": 1,
+    "event": "workflow_dispatch",
+    "head_sha": "3b6daacdd2d1a4049b024da31029ae41a9d0a0e7",
+    "conclusion": "success",
+    "created_at": "2026-09-05T17:26:04Z",
+    "run_started_at": "2026-09-05T17:26:04Z",
+    "updated_at": "2026-09-05T17:28:12Z",
+    "workflow": {
+      "id": 344663669,
+      "name": "AI filing analyst and paper portfolio",
+      "path": ".github/workflows/ai_filing_analyst.yml"
+    },
+    "job": {
+      "id": 101345936709,
+      "name": "analyze",
+      "started_at": "2026-09-05T17:26:07Z",
+      "completed_at": "2026-09-05T17:28:12Z"
+    },
+    "predecessor_artifact": {
+      "id": 9849967781,
+      "name": "ai-analysis-state",
+      "size_in_bytes": 674334,
+      "digest": "sha256:14ec9b28b51b830924bb4252546b0ca65fba7e30f7f1b60003dfd90c838c3193",
+      "expires_at": "2026-12-01T13:56:05Z",
+      "producer_run_id": 33638794359,
+      "producer_head_sha": "d603e9b40ffb78c51f635589bc886875f411299b"
+    },
+    "state_artifact": {
+      "id": 9973753297,
+      "name": "ai-analysis-state",
+      "size_in_bytes": 920308,
+      "digest": "sha256:75e3d3263189c66a620f4656f600ca00535e633de431d7acda7ba30053cf9eac",
+      "expires_at": "2026-12-04T17:26:05Z"
+    },
+    "output_artifact": {
+      "id": 9973753484,
+      "name": "ai-analysis-output-33980946687-1",
+      "size_in_bytes": 28810,
+      "digest": "sha256:568b359318015cfc1239151e7bd880bc6b9229493b5759b6df057743bbe5b0b9",
+      "expires_at": "2026-10-05T17:28:08Z"
+    },
+    "expected_counts": {
+      "predecessor_analyses": 12,
+      "successor_analyses": 13,
+      "predecessor_runs": 60,
+      "successor_runs": 61
+    },
+    "conflict": {
+      "runtime_snapshot_sha256": "0f601dfb15d5ed5809d61245ee4feff9ac1eec63ff50f79ce6d88ac090d92348",
+      "analysis_id": "analysis:9f700a78dc91f68c4073ab30a3e46a5b",
+      "trade_id": "trade:42de4a0f2d76b1a936821af2f1bc4569",
+      "document_content_hash": "af73c26251afec1ef51a12dfe1e0821df3dfdd059b8e464b734c0fb48dacdb3e"
+    },
+    "merge_or_import_authorized": false
+  },
+  "recovery_runs": [
+    {
+      "role": "legislative",
+      "run_id": 33981311523,
+      "run_number": 58,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_sha": "042f22e0a08f1f3ea69f62a0842a4cefdea6230c",
+      "conclusion": "success",
+      "created_at": "2026-09-05T17:33:06Z",
+      "run_started_at": "2026-09-05T17:33:06Z",
+      "updated_at": "2026-09-05T17:35:31Z",
+      "workflow": {
+        "id": 345003824,
+        "name": "Legislative purchase tracker v2",
+        "path": ".github/workflows/legislative_trade_tracker_v2.yml"
+      },
+      "job": {
+        "id": 101346909537,
+        "name": "track",
+        "started_at": "2026-09-05T17:33:10Z",
+        "completed_at": "2026-09-05T17:35:30Z"
+      },
+      "predecessor_artifact": {
+        "id": 9972194465,
+        "name": "legislative-tracker-state",
+        "size_in_bytes": 759086,
+        "digest": "sha256:d8cbb38c42fabb5df6d82bd9177784ab5a70f55668f521ae29a5d1f5a2fb94c4",
+        "expires_at": "2026-12-04T15:38:20Z",
+        "producer_run_id": 33975410453,
+        "producer_head_sha": "06067890ac861cbde20008159a931f40794b2196"
+      },
+      "artifact": {
+        "id": 9973858440,
+        "name": "legislative-tracker-state",
+        "size_in_bytes": 759113,
+        "digest": "sha256:2b80d235e7cfc74cde59c47bdb4fcecd4f80ab7a420dc31462baf83db1f72d4e",
+        "expires_at": "2026-12-04T17:33:07Z"
+      },
+      "output_artifact": {
+        "id": 9973858695,
+        "name": "legislative-purchase-output-33981311523-1",
+        "size_in_bytes": 149725,
+        "digest": "sha256:fb927c851218a53eccf80090993a42a35473c714d4f50307ddceb65adb762eb8",
+        "expires_at": "2026-10-05T17:35:27Z"
+      }
+    },
+    {
+      "role": "executive",
+      "run_id": 33981312757,
+      "run_number": 49,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_sha": "042f22e0a08f1f3ea69f62a0842a4cefdea6230c",
+      "conclusion": "success",
+      "created_at": "2026-09-05T17:33:08Z",
+      "run_started_at": "2026-09-05T17:33:08Z",
+      "updated_at": "2026-09-05T17:35:37Z",
+      "workflow": {
+        "id": 344663671,
+        "name": "Executive purchase tracker",
+        "path": ".github/workflows/executive_trade_tracker.yml"
+      },
+      "job": {
+        "id": 101346914648,
+        "name": "track",
+        "started_at": "2026-09-05T17:33:11Z",
+        "completed_at": "2026-09-05T17:35:36Z"
+      },
+      "predecessor_artifact": {
+        "id": 9972184868,
+        "name": "executive-tracker-state",
+        "size_in_bytes": 511991,
+        "digest": "sha256:c03079ec40608566ed8e40729fa174bf96899a748da18ff64bd8fa13904776c6",
+        "expires_at": "2026-12-04T15:38:21Z",
+        "producer_run_id": 33975411380,
+        "producer_head_sha": "06067890ac861cbde20008159a931f40794b2196"
+      },
+      "artifact": {
+        "id": 9973859530,
+        "name": "executive-tracker-state",
+        "size_in_bytes": 512016,
+        "digest": "sha256:f86fe1b4c8dd832aefe71c0385d848add243820a8a7158342ba4e2448349e0e1",
+        "expires_at": "2026-12-04T17:33:09Z"
+      },
+      "output_artifact": {
+        "id": 9973859995,
+        "name": "executive-purchase-output-33981312757",
+        "size_in_bytes": 495654,
+        "digest": "sha256:a9f9b2c986593508c610522cc7916dcb443955efa1bf20b960033f59a0204164",
+        "expires_at": "2026-10-05T17:35:31Z"
+      }
+    }
+  ],
+  "legacy_dashboard": {
+    "role": "dashboard",
+    "run_id": 33974683885,
+    "run_number": 166,
+    "run_attempt": 1,
+    "event": "push",
+    "head_sha": "06067890ac861cbde20008159a931f40794b2196",
+    "conclusion": "success",
+    "created_at": "2026-09-05T15:24:06Z",
+    "run_started_at": "2026-09-05T15:24:06Z",
+    "updated_at": "2026-09-05T15:25:14Z",
+    "workflow": {
+      "id": 344663676,
+      "name": "Publish government trade dashboard",
+      "path": ".github/workflows/publish_trade_dashboard.yml"
+    },
+    "jobs": [
+      {
+        "id": 101329199632,
+        "name": "build",
+        "started_at": "2026-09-05T15:24:08Z",
+        "completed_at": "2026-09-05T15:25:01Z"
+      },
+      {
+        "id": 101329320821,
+        "name": "deploy",
+        "started_at": "2026-09-05T15:25:05Z",
+        "completed_at": "2026-09-05T15:25:13Z"
+      }
+    ]
+  }
+}
