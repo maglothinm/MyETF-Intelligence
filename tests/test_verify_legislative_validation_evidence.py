@@ -102,6 +102,10 @@ jobs:
         encoding="utf-8",
     )
     _run(["git", "add", "."], path)
+    _run(
+        ["git", "update-index", "--chmod=+x", "scripts/government_trade_tracker.py"],
+        path,
+    )
     _run(["git", "commit", "-m", "restore schedule after validation"], path)
     control_sha = _run(["git", "rev-parse", "HEAD"], path)
     return validation_sha, control_sha
