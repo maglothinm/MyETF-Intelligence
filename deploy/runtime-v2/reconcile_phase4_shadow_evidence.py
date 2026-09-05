@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import stat
+import subprocess
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -48,13 +49,16 @@ REQUIRED_ARCHIVE_FILES = (
     "observations.ndjson",
     "cleanup.json",
 )
-CONTROL_FILES = (
+HISTORICAL_CONTROL_FILES = (
     "deploy/runtime-v2/runtime_promotion_control.sh",
     "deploy/runtime-v2/runtime_promotion_observed_state.sh",
     "deploy/runtime-v2/validate_runtime_promotion.py",
+)
+CURRENT_BOUND_EVIDENCE_FILES = (
     "deploy/runtime-v2/phase4-approved-image.json",
     "deploy/runtime-v2/phase4-legacy-run-inventory.json",
 )
+CONTROL_FILES = HISTORICAL_CONTROL_FILES + CURRENT_BOUND_EVIDENCE_FILES
 MAX_ARCHIVE_FILE_BYTES = 8 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_BYTES = 50 * 1024 * 1024
 
@@ -102,13 +106,12 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _normalized_text_sha256(path: Path) -> str:
-    data = path.read_bytes()
+def _normalized_text_bytes_sha256(data: bytes, label: str) -> str:
     if b"\x00" in data:
-        raise PromotionValidationError(f"control file {path} is not text")
+        raise PromotionValidationError(f"control file {label} is not text")
     data = data.replace(b"\r\n", b"\n")
     if b"\r" in data:
-        raise PromotionValidationError(f"control file {path} has unsupported line endings")
+        raise PromotionValidationError(f"control file {label} has unsupported line endings")
     return hashlib.sha256(data).hexdigest()
 
 
@@ -285,7 +288,9 @@ def _validate_metadata(
         _assert_equal(step_results.get(name), conclusion, f"source run {pin.get('run_id')} step {name}")
 
 
-def _validate_control_files(descriptor: Mapping[str, Any], repository_root: Path) -> None:
+def _validate_control_files(
+    descriptor: Mapping[str, Any], repository_root: Path, evidence_revision: str
+) -> None:
     raw = descriptor.get("control_files")
     if not isinstance(raw, dict) or tuple(sorted(raw)) != tuple(sorted(CONTROL_FILES)):
         raise PromotionValidationError("reconciliation control-file set changed")
@@ -299,8 +304,30 @@ def _validate_control_files(descriptor: Mapping[str, Any], repository_root: Path
             path.relative_to(root)
         except ValueError as exc:
             raise PromotionValidationError(f"control path {relative} escapes the repository") from exc
-        if not path.is_file() or _normalized_text_sha256(path) != expected:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(root), "show", f"{evidence_revision}:{relative}"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise PromotionValidationError("unable to read the evidence-control revision") from exc
+        if result.returncode != 0:
+            raise PromotionValidationError(
+                f"control file {relative} is missing from the evidence revision"
+            )
+        if _normalized_text_bytes_sha256(result.stdout, relative) != expected:
             raise PromotionValidationError(f"control file {relative} differs from the evidence revision")
+        if relative in CURRENT_BOUND_EVIDENCE_FILES:
+            try:
+                current_data = path.read_bytes()
+            except OSError as exc:
+                raise PromotionValidationError(f"unable to read current evidence file {relative}") from exc
+            if _normalized_text_bytes_sha256(current_data, relative) != expected:
+                raise PromotionValidationError(
+                    f"current evidence file {relative} differs from the evidence revision"
+                )
 
 
 def _validate_phase4_guards(manifest: Mapping[str, Any], label: str) -> None:
@@ -541,10 +568,13 @@ def _validate_current_manifest(manifest: Mapping[str, Any]) -> None:
             "legacy_route_source_verified",
             "current_status_captured",
             "runtime_shadow_mode_verified",
-            "evidence_control_files_verified",
         ),
         "current reconciliation preflight",
     )
+    if preflight.get("evidence_control_files_verified") is not False:
+        raise PromotionValidationError(
+            "current reconciliation preflight must not pre-claim evidence control verification"
+        )
     _base_cleanup(cleanup)
     _required_true(
         cleanup,
@@ -584,9 +614,12 @@ def reconcile_phase4(
         _assert_equal(descriptor.get(key), expected, f"reconciliation descriptor {key}")
     if not isinstance(control_revision, str) or re.fullmatch(r"[0-9a-f]{40}", control_revision) is None:
         raise PromotionValidationError("current control revision is invalid")
+    evidence_revision = descriptor.get("evidence_control_revision")
+    if not isinstance(evidence_revision, str) or re.fullmatch(r"[0-9a-f]{40}", evidence_revision) is None:
+        raise PromotionValidationError("evidence control revision is invalid")
     if not isinstance(image, str) or re.search(r"@sha256:[0-9a-f]{64}$", image) is None:
         raise PromotionValidationError("approved image is not immutable")
-    _validate_control_files(descriptor, repository_root)
+    _validate_control_files(descriptor, repository_root, evidence_revision)
     _validate_current_manifest(current_manifest)
 
     pins = descriptor.get("runs")
@@ -597,7 +630,7 @@ def reconcile_phase4(
     if set(pin_by_role) != expected_roles:
         raise PromotionValidationError("reconciliation source-run roles changed")
     _assert_equal(
-        descriptor.get("evidence_control_revision"),
+        evidence_revision,
         pin_by_role["completed_two_cycle_history"].get("head_sha"),
         "reconciliation evidence control revision",
     )

@@ -292,7 +292,7 @@ jobs:
                   "legacy_route_source_verified": True,
                   "current_status_captured": True,
                   "runtime_shadow_mode_verified": True,
-                  "evidence_control_files_verified": True,
+                  "evidence_control_files_verified": False,
               },
               "cleanup": {
                   "temporary_execution_authority_removed": True,
@@ -327,6 +327,9 @@ jobs:
             --run7-jobs-metadata "${EVIDENCE_DIR}/sources/run7/jobs.json" \
             --run7-archive "${EVIDENCE_DIR}/sources/run7/artifact.zip" \
             --output "${EVIDENCE_DIR}/phase4-ready.json"
+          jq '.preflight.evidence_control_files_verified = true' \
+            "${EVIDENCE_DIR}/current-manifest.json" > "${EVIDENCE_DIR}/current-manifest.tmp"
+          mv "${EVIDENCE_DIR}/current-manifest.tmp" "${EVIDENCE_DIR}/current-manifest.json"
           jq --slurpfile states "${LEGACY_STATE_FILE}" \
             --slurpfile route "${EVIDENCE_DIR}/legacy-route-receipt.json" \
             --slurpfile legislative "${EVIDENCE_DIR}/legislative-validation/verified.json" \
@@ -404,9 +407,28 @@ jobs:
           verify_cloud_sql_private
           verify_runtime_configuration shadow
           verify_legacy_workflows_match_observed
+          certificate_hash_verified=false
           if [[ "${{ job.status }}" == "success" ]]; then
             (cd "${EVIDENCE_DIR}" && sha256sum -c phase4-ready.sha256)
+            certificate_hash_verified=true
           fi
+          jq -n \
+            --arg triggering_job_status "${{ job.status }}" \
+            --argjson certificate_hash_verified "${certificate_hash_verified}" \
+            '{schema_version:1,
+              result:"phase4_reconciliation_cleanup_verified",
+              triggering_job_status:$triggering_job_status,
+              certificate_hash_verified:$certificate_hash_verified,
+              producer_schedulers_paused:true,
+              vault_scheduler_paused:true,
+              web_public_invoker_absent:true,
+              cloud_sql_private_only:true,
+              runtime_shadow_mode_verified:true,
+              legacy_workflow_states_verified:true,
+              temporary_execution_authority_removed:true,
+              temporary_logging_authority_removed:true,
+              temporary_service_account_user_removed:true}' \
+            > "${EVIDENCE_DIR}/cleanup.json"
 
       - name: Upload Phase 4 readiness evidence
         if: always()
