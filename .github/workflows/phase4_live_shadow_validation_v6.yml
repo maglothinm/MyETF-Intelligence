@@ -11,9 +11,14 @@ on:
       - "deploy/runtime-v2/validate_runtime_promotion.py"
       - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
       - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
       - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
       - "deploy/runtime-v2/phase4-approved-image.json"
       - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+      - ".github/workflows/legislative_trade_tracker_v2.yml"
+      - ".github/workflows/executive_trade_tracker.yml"
+      - ".github/workflows/ai_filing_analyst.yml"
+      - ".github/workflows/publish_trade_dashboard.yml"
   workflow_dispatch:
 
 permissions:
@@ -116,6 +121,20 @@ jobs:
           run7 completed_two_cycle_history
           EOF
 
+      - name: Verify the live legacy rollback route contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          capture_legacy_workflow_states
+          verify_legacy_workflows_match_observed
+          python deploy/runtime-v2/verify_legacy_route_contract.py \
+            --root . \
+            --workflow-states "${LEGACY_STATE_FILE}" \
+            --output "${EVIDENCE_DIR}/legacy-route-receipt.json"
+
       - name: Authenticate as constrained deployer
         uses: google-github-actions/auth@v3
         with:
@@ -124,6 +143,10 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+
+      - name: Mark authenticated cloud control ready
+        shell: bash
+        run: echo "CLOUD_CONTROL_READY=true" >> "${GITHUB_ENV}"
 
       - name: Reconcile pinned shadow history and current heads
         shell: bash
@@ -156,15 +179,18 @@ jobs:
           make_web_private
           verify_web_private
           verify_cloud_sql_private
-          capture_legacy_workflow_states
           verify_legacy_workflows_match_observed
           verify_runtime_configuration shadow
+          collect_service_accounts
+          remove_service_account_user
+          verify_service_account_user_removed
 
           grant_phase4_status_authority
           capture_status "${EVIDENCE_DIR}/current-status.json" current-status
           remove_phase4_status_authority
           verify_phase4_status_authority_removed
           verify_execution_authority_removed
+          verify_service_account_user_removed
           verify_producer_scheduler_state PAUSED
           verify_vault_scheduler_paused
           verify_web_private
@@ -190,6 +216,7 @@ jobs:
                   "web_public_invoker_absent": True,
                   "persistent_job_configuration_verified": True,
                   "legacy_production_route_active": True,
+                  "legacy_route_source_verified": True,
                   "current_status_captured": True,
                   "runtime_shadow_mode_verified": True,
                   "evidence_control_files_verified": True,
@@ -228,7 +255,9 @@ jobs:
             --run7-archive "${EVIDENCE_DIR}/sources/run7/artifact.zip" \
             --output "${EVIDENCE_DIR}/phase4-ready.json"
           jq --slurpfile states "${LEGACY_STATE_FILE}" \
-            '. + {legacy_workflow_states:$states[0], legacy_state_preserved:true}' \
+            --slurpfile route "${EVIDENCE_DIR}/legacy-route-receipt.json" \
+            '. + {legacy_workflow_states:$states[0], legacy_state_preserved:true,
+                  legacy_route_receipt:$route[0], legacy_route_source_verified:true}' \
             "${EVIDENCE_DIR}/phase4-ready.json" > "${EVIDENCE_DIR}/phase4-ready.tmp"
           mv "${EVIDENCE_DIR}/phase4-ready.tmp" "${EVIDENCE_DIR}/phase4-ready.json"
           (cd "${EVIDENCE_DIR}" && sha256sum phase4-ready.json > phase4-ready.sha256)
@@ -242,7 +271,10 @@ jobs:
              .reconciliation.completed_two_cycle_history_verified == true and
              .reconciliation.current_heads_verified == true and
              .reconciliation.current_latest_receipts_verified == true and
-             .reconciliation.additional_producer_execution_performed == false' \
+             .reconciliation.additional_producer_execution_performed == false and
+             .legacy_route_source_verified == true and
+             .legacy_route_receipt.result == "legacy_rollback_route_verified" and
+             .legacy_route_receipt.legacy_production_route_active == true' \
             "${EVIDENCE_DIR}/phase4-ready.json" >/dev/null
 
           trap - EXIT
@@ -261,23 +293,28 @@ jobs:
           if [[ -z "${APPROVED_IMAGE:-}" || -z "${RUNTIME_SOURCE_REVISION:-}" ]]; then
             exit 0
           fi
+          if [[ "${CLOUD_CONTROL_READY:-}" != "true" ]]; then
+            exit 0
+          fi
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
           source deploy/runtime-v2/phase4_reconciliation_control.sh
+          collect_service_accounts
           pause_producer_schedulers || true
           make_web_private || true
           remove_phase4_status_authority || true
           remove_execution_authority || true
           remove_service_account_user || true
+          verify_phase4_status_authority_removed
+          verify_execution_authority_removed
+          verify_service_account_user_removed
+          verify_producer_scheduler_state PAUSED
+          verify_vault_scheduler_paused
+          verify_web_private
+          verify_cloud_sql_private
+          verify_runtime_configuration shadow
+          verify_legacy_workflows_match_observed
           if [[ "${{ job.status }}" == "success" ]]; then
-            verify_phase4_status_authority_removed
-            verify_execution_authority_removed
-            verify_producer_scheduler_state PAUSED
-            verify_vault_scheduler_paused
-            verify_web_private
-            verify_cloud_sql_private
-            verify_runtime_configuration shadow
-            verify_legacy_workflows_match_observed
             (cd "${EVIDENCE_DIR}" && sha256sum -c phase4-ready.sha256)
           fi
 

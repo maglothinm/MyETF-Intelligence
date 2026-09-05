@@ -538,6 +538,7 @@ def _validate_current_manifest(manifest: Mapping[str, Any]) -> None:
         preflight,
         (
             "legacy_production_route_active",
+            "legacy_route_source_verified",
             "current_status_captured",
             "runtime_shadow_mode_verified",
             "evidence_control_files_verified",

@@ -220,6 +220,7 @@ def current_manifest() -> dict:
             "current_status_captured": True,
             "runtime_shadow_mode_verified": True,
             "evidence_control_files_verified": True,
+            "legacy_route_source_verified": True,
         }
     )
     cleanup.update(
@@ -443,6 +444,12 @@ def test_reconciliation_accepts_pinned_history_without_rebaselining(tmp_path: Pa
         (
             lambda data: data["current_status"]["heads"][0].update(snapshot_sha256="0" * 64),
             "current legislative snapshot_sha256",
+        ),
+        (
+            lambda data: data["current_manifest"]["preflight"].update(
+                legacy_route_source_verified=False
+            ),
+            "legacy_route_source_verified",
         ),
     ],
 )

@@ -53,3 +53,43 @@ verify_phase4_status_authority_removed() {
     return 1
   fi
 }
+
+# Preserve the shared receipt lookup while making the Phase 5 smoke execution
+# fail closed. A failed `gcloud run jobs execute --wait` may still write a JSON
+# response; it must never be mistaken for a successful producer receipt.
+execute_producer() {
+  local logical_name="$1"
+  local trigger="$2"
+  local stem="$3"
+  local job="polititrack-${logical_name}"
+  local execute_result="${EVIDENCE_DIR}/${stem}-${logical_name}-execute.json"
+  local execute_status=0
+
+  gcloud run jobs execute "${job}" --project "${PROJECT_ID}" --region "${REGION}" \
+    --update-env-vars "POLITITRACK_TRIGGER_SOURCE=${trigger},SOURCE_REVISION=${RUNTIME_SOURCE_REVISION}" \
+    --wait --format=json > "${execute_result}" || execute_status=$?
+  if (( execute_status != 0 )); then
+    echo "Producer execution ${job} failed; refusing to resolve or accept a receipt." >&2
+    return "${execute_status}"
+  fi
+
+  latest_execution_name "${job}" "${execute_result}" \
+    | tee "${EVIDENCE_DIR}/${stem}-${logical_name}-execution.txt"
+}
+
+# Rollback is not complete unless both retained collector workflows accepted
+# their recovery dispatches. Keep the reviewed workflow targets but remove the
+# v1 helper's best-effort error swallowing.
+dispatch_legacy_recovery() {
+  local status=0
+  gh workflow run legislative_trade_tracker_v2.yml \
+    --repo "${GITHUB_REPOSITORY}" --ref main || status=$?
+  gh workflow run executive_trade_tracker.yml \
+    --repo "${GITHUB_REPOSITORY}" --ref main || status=$?
+  if (( status != 0 )); then
+    echo "One or more legacy recovery dispatches failed." >&2
+    return "${status}"
+  fi
+  printf '%s\n' '{"result":"legacy_recovery_dispatches_accepted","workflows":["legislative_trade_tracker_v2.yml","executive_trade_tracker.yml"]}' \
+    > "${EVIDENCE_DIR}/legacy-recovery-dispatch.json"
+}

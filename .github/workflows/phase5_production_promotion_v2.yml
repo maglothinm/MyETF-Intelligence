@@ -75,7 +75,10 @@ jobs:
              .reconciliation.completed_two_cycle_history_verified == true and
              .reconciliation.current_heads_verified == true and
              .reconciliation.current_latest_receipts_verified == true and
-             .reconciliation.additional_producer_execution_performed == false' \
+             .reconciliation.additional_producer_execution_performed == false and
+             .legacy_route_source_verified == true and
+             .legacy_route_receipt.result == "legacy_rollback_route_verified" and
+             .legacy_route_receipt.legacy_production_route_active == true' \
             "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
           echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
           echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
@@ -83,6 +86,13 @@ jobs:
             "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
           jq '.legacy_workflow_states' "${EVIDENCE_DIR}/phase4/phase4-ready.json" \
             > "${EVIDENCE_DIR}/legacy-workflow-states.json"
+          python deploy/runtime-v2/verify_legacy_route_contract.py \
+            --root . \
+            --workflow-states "${EVIDENCE_DIR}/legacy-workflow-states.json" \
+            --output "${EVIDENCE_DIR}/legacy-route-current.json"
+          jq -e --slurpfile route "${EVIDENCE_DIR}/legacy-route-current.json" \
+            '.legacy_route_receipt == $route[0]' \
+            "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
 
       - name: Authenticate as constrained deployer
         uses: google-github-actions/auth@v3
@@ -100,12 +110,15 @@ jobs:
           mkdir -p "${EVIDENCE_DIR}"
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
           route_touched=false
           promotion_complete=false
 
           rollback() {
             local code=$?
             local schedulers_paused=false web_private=false runtime_shadow=false legacy_restored=false
+            local recovery_dispatched=false recovery_complete=false
+            local execution_authority_removed=false service_account_user_removed=false
             trap - EXIT
             if [[ "${promotion_complete}" != "true" ]]; then
               set +e
@@ -116,10 +129,26 @@ jobs:
               if [[ "${route_touched}" == "true" ]]; then
                 configure_runtime_best_effort shadow && verify_runtime_configuration shadow && runtime_shadow=true
                 restore_legacy_workflows_observed && legacy_restored=true
-                dispatch_legacy_recovery
+                if [[ "${legacy_restored}" == "true" ]] && dispatch_legacy_recovery; then
+                  recovery_dispatched=true
+                  recovery_complete=true
+                fi
               else
-                runtime_shadow=true
-                legacy_restored=true
+                verify_runtime_configuration shadow && runtime_shadow=true
+                verify_legacy_workflows_match_observed && legacy_restored=true
+                if [[ "${runtime_shadow}" == "true" && "${legacy_restored}" == "true" ]]; then
+                  recovery_complete=true
+                fi
+              fi
+              remove_execution_authority
+              if verify_execution_authority_removed; then
+                execution_authority_removed=true
+              fi
+              if collect_service_accounts; then
+                remove_service_account_user
+                if verify_service_account_user_removed; then
+                  service_account_user_removed=true
+                fi
               fi
               jq -n \
                 --argjson exit_code "${code}" \
@@ -128,15 +157,27 @@ jobs:
                 --arg web_private "${web_private}" \
                 --arg runtime_shadow "${runtime_shadow}" \
                 --arg legacy_restored "${legacy_restored}" \
+                --arg recovery_dispatched "${recovery_dispatched}" \
+                --arg recovery_complete "${recovery_complete}" \
+                --arg execution_authority_removed "${execution_authority_removed}" \
+                --arg service_account_user_removed "${service_account_user_removed}" \
                 '{result:"phase5_rolled_back", exit_code:$exit_code,
                   route_touched:($route_touched == "true"),
                   runtime_schedulers_paused:($schedulers_paused == "true"),
                   runtime_mode:(if $runtime_shadow == "true" then "shadow" else "unverified" end),
                   web_public:($web_private != "true"),
-                  legacy_route_restored:($legacy_restored == "true")}' \
+                  legacy_route_restored:($legacy_restored == "true"),
+                  legacy_recovery_required:($route_touched == "true"),
+                  legacy_recovery_dispatched:($recovery_dispatched == "true"),
+                  legacy_recovery_action_complete:($recovery_complete == "true"),
+                  temporary_execution_authority_removed:($execution_authority_removed == "true"),
+                  temporary_service_account_user_removed:($service_account_user_removed == "true")}' \
                 > "${EVIDENCE_DIR}/rollback.json"
               if [[ "${schedulers_paused}" == "true" && "${web_private}" == "true" && \
-                    "${runtime_shadow}" == "true" && "${legacy_restored}" == "true" ]]; then
+                    "${runtime_shadow}" == "true" && "${legacy_restored}" == "true" && \
+                    "${recovery_complete}" == "true" && \
+                    "${execution_authority_removed}" == "true" && \
+                    "${service_account_user_removed}" == "true" ]]; then
                 touch "${EVIDENCE_DIR}/rollback-complete"
               fi
               set -e
@@ -165,11 +206,31 @@ jobs:
           baseline = json.load(open(sys.argv[1], encoding="utf-8"))
           certificate = json.load(open(sys.argv[2], encoding="utf-8"))
           heads = {item["namespace"]: item for item in baseline["heads"]}
+          latest_runs = {item["job_name"]: item for item in baseline["latest_runs"]}
+          expected_runs = {}
+          for item in certificate["executions"]:
+              expected_runs[item["job"]] = item
           for name, expected in certificate["final_heads"].items():
               actual = heads.get(name, {})
               for key in ("generation", "snapshot_sha256"):
                   if actual.get(key) != expected.get(key):
                       raise SystemExit(f"Phase 5 baseline {name} {key} no longer matches the certified Phase 4 head")
+              expected_run = expected_runs.get(name, {})
+              actual_run = latest_runs.get(name, {})
+              receipt_fields = {
+                  "run_id": expected_run.get("run_id"),
+                  "status": "success",
+                  "runtime_mode": "shadow",
+                  "runtime_mode_verified": True,
+                  "trigger_source": "shadow",
+                  "side_effects_possible": False,
+                  "source_revision": certificate["runtime_source_revision"],
+                  "snapshot_generation": expected.get("generation"),
+                  "snapshot_sha256": expected.get("snapshot_sha256"),
+              }
+              for key, value in receipt_fields.items():
+                  if actual_run.get(key) != value:
+                      raise SystemExit(f"Phase 5 baseline {name} latest receipt {key} no longer matches Phase 4")
           PY
 
           route_touched=true
@@ -335,16 +396,34 @@ jobs:
           fi
           source deploy/runtime-v2/runtime_promotion_control.sh
           source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
+          cleanup_safe=false
+          recovery_safe=true
           pause_producer_schedulers
           make_web_private
           remove_execution_authority
+          collect_service_accounts
           remove_service_account_user
           if [[ -f "${EVIDENCE_DIR}/route-touched" && ! -f "${EVIDENCE_DIR}/rollback-complete" ]]; then
             configure_runtime_best_effort shadow
             restore_legacy_workflows_observed
-            dispatch_legacy_recovery
+            dispatch_legacy_recovery || recovery_safe=false
           fi
-          exit 0
+          remove_execution_authority
+          collect_service_accounts
+          remove_service_account_user
+          if verify_execution_authority_removed && verify_service_account_user_removed && \
+             verify_producer_scheduler_state PAUSED && verify_web_private && \
+             verify_runtime_configuration shadow && [[ "${recovery_safe}" == "true" ]]; then
+            cleanup_safe=true
+          fi
+          jq -n \
+            --arg cleanup_safe "${cleanup_safe}" \
+            --arg recovery_safe "${recovery_safe}" \
+            '{result:"phase5_terminal_cleanup", cleanup_safe:($cleanup_safe == "true"),
+              recovery_safe:($recovery_safe == "true")}' \
+            > "${EVIDENCE_DIR}/terminal-cleanup.json"
+          [[ "${cleanup_safe}" == "true" ]]
 
       - name: Upload Phase 5 completion or rollback evidence
         if: always()
