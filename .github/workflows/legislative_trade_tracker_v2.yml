@@ -1,99 +1,417 @@
 name: Legislative purchase tracker v2
 
-# RECOVERY MODE — the recurring schedule is intentionally paused.
-# This workflow republishes the last verified state after reconciling the
-# September 4 Senate access-denied incident. Production polling is restored
-# only by the follow-on validated workflow change.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/legislative_trade_tracker_v2.yml"
+  schedule:
+    # Poll four times per hour, offset from :00 to reduce scheduler congestion.
+    - cron: "7,22,37,52 * * * *"
+      timezone: "America/New_York"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
+  # All trigger sources serialize through this one protected-state writer.
   group: legislative-purchase-tracker-v2
   cancel-in-progress: false
+
+env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
+  STATE_FILE: ".trade-tracker/legislative/state.json"
+  LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
+  TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
+  FILINGS_FILE: ".trade-tracker/legislative/filings.jsonl"
+  RUN_HISTORY_FILE: ".trade-tracker/legislative/runs.jsonl"
+  PENDING_FILE: ".trade-tracker/legislative/pending-review.jsonl"
+  RESULT_FILE: "legislative-result.json"
+  LATEST_CSV: "legislative-latest-purchases.csv"
+  LATEST_TRANSACTIONS_CSV: "legislative-latest-transactions.csv"
+  LATEST_FILINGS_CSV: "legislative-latest-filings.csv"
+  SENATE_LOOKBACK_DAYS: "180"
+  REQUIRE_PUSHOVER: "false"
+  NOTIFY_EQUITY_ONLY: "true"
+  NOTIFY_PENDING_REVIEWS: "true"
+  NOTIFY_ALL_FILINGS: "true"
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  ALLOW_EMPTY_SOURCES: "false"
+  DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
 
 jobs:
   track:
     if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 40
 
     steps:
+      - name: Signal tracker start
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "${healthchecks_base}/start" >/dev/null
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Restore and verify last authoritative state
+      - name: Record runner region
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from urllib.request import Request, ProxyHandler, build_opener
+          context = {key: os.environ.get(key, "unknown") for key in
+                     ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_OS", "RUNNER_ARCH", "RUNNER_ENVIRONMENT")}
+          try:
+              request = Request("http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01&format=text",
+                                headers={"Metadata": "true"})
+              with build_opener(ProxyHandler({})).open(request, timeout=2) as response:
+                  region = response.read(80).decode("ascii").strip()
+              context["azure_region"] = region if region.isalnum() else "unavailable"
+          except Exception:
+              context["azure_region"] = "unavailable"
+          print("Runner context: " + json.dumps(context, sort_keys=True))
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-tracker.txt
+
+      - name: Install PDF and OCR system dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends poppler-utils tesseract-ocr
+
+      - name: Install tracker dependencies
+        shell: bash
+        run: python -m pip install --requirement requirements-tracker.txt pytest==9.0.2
+
+      - name: Restore authoritative Legislative state artifact
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: "9949231927"
-          EXPECTED_ARCHIVE_SHA256: "4f02ca1baa29e349cf20a9d3abd979f31d7ce6e3e34ac3939e0ef2ca17f666b3"
-          SAFE_PRODUCER_RUN: "33905284052"
-          RECONCILED_RUN: "33918350040"
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
+          artifact_name="legislative-tracker-state"
+          workflow_file="legislative_trade_tracker_v2.yml"
+          workflow_name="Legislative purchase tracker v2"
+          authoritative_job="track"
+          destination=".trade-tracker/legislative"
+          consumer_sha="$(git rev-parse HEAD)"
+          live_default_sha="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${DEFAULT_BRANCH}" \
+              --jq '.object.sha'
+          )"
+          if [[ "$consumer_sha" != "$live_default_sha" ]]; then
+            echo "This queued tracker checked out ${consumer_sha}, but ${DEFAULT_BRANCH} is now ${live_default_sha}; refusing stale-code execution." >&2
+            exit 1
+          fi
 
+          artifact_id=""
+          producer_run_id=""
+          producer_attempt=""
+          producer_workflow_id=""
+          while IFS=$'\t' read -r candidate_artifact_id candidate_run_id candidate_created_at; do
+            [[ -n "$candidate_artifact_id" && -n "$candidate_run_id" && -n "$candidate_created_at" ]] || continue
+            run_payload="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}"
+            )"
+            current_run_attempt="$(jq -r '.run_attempt // 1' <<< "$run_payload")"
+            [[ "$current_run_attempt" =~ ^[1-9][0-9]*$ ]] || continue
+
+            for ((candidate_attempt = current_run_attempt; candidate_attempt >= 1; candidate_attempt--)); do
+              attempt_payload="$run_payload"
+              if (( candidate_attempt != current_run_attempt )); then
+                attempt_payload="$(
+                  gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${candidate_attempt}"
+                )"
+              fi
+              run_started_at="$(jq -r '.run_started_at // ""' <<< "$attempt_payload")"
+              next_attempt_started_at=""
+              if (( candidate_attempt < current_run_attempt )); then
+                next_attempt_started_at="$(
+                  gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/$((candidate_attempt + 1))" \
+                    --jq '.run_started_at // ""'
+                )"
+              fi
+              if [[ \
+                -z "$run_started_at" || \
+                "$candidate_created_at" < "$run_started_at" || \
+                ( -n "$next_attempt_started_at" && ( "$candidate_created_at" > "$next_attempt_started_at" || "$candidate_created_at" == "$next_attempt_started_at" ) ) \
+              ]]; then
+                continue
+              fi
+
+              run_name="$(jq -r '.name // ""' <<< "$attempt_payload")"
+              run_path="$(jq -r '.path // ""' <<< "$attempt_payload")"
+              run_path="${run_path%%@*}"
+              run_branch="$(jq -r '.head_branch // ""' <<< "$attempt_payload")"
+              run_conclusion="$(jq -r '.conclusion // ""' <<< "$attempt_payload")"
+              run_repository_id="$(jq -r '.repository.id // ""' <<< "$attempt_payload")"
+              run_head_sha="$(jq -r '.head_sha // ""' <<< "$attempt_payload")"
+              workflow_id="$(jq -r '.workflow_id // ""' <<< "$attempt_payload")"
+              if [[ \
+                "$run_name" != "$workflow_name" || \
+                "$run_path" != ".github/workflows/${workflow_file}" || \
+                "$run_branch" != "$DEFAULT_BRANCH" || \
+                "$run_conclusion" != "success" || \
+                "$run_repository_id" != "$GITHUB_REPOSITORY_ID" || \
+                -z "$run_head_sha" || \
+                -z "$workflow_id" \
+              ]]; then
+                continue
+              fi
+              successful_state_jobs="$(
+                gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/attempts/${candidate_attempt}/jobs?per_page=100" \
+                  --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
+              )"
+              (( successful_state_jobs > 0 )) || continue
+              compare_status="$(
+                gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/compare/${run_head_sha}...${consumer_sha}" \
+                  --jq '.status'
+              )"
+              if [[ "$compare_status" == "ahead" || "$compare_status" == "identical" ]]; then
+                artifact_id="$candidate_artifact_id"
+                producer_run_id="$candidate_run_id"
+                producer_attempt="$candidate_attempt"
+                producer_workflow_id="$workflow_id"
+                break 2
+              fi
+            done
+          done < <(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${artifact_name}&per_page=100" \
+              --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse[] | [.id, .workflow_run.id, .created_at] | @tsv'
+          )
+          if [[ -z "$artifact_id" ]]; then
+            echo "No authoritative ${artifact_name} artifact is available; refusing to initialize protected state." >&2
+            exit 1
+          fi
+
+          later_writers=""
+          run_page=1
+          while :; do
+            runs_payload="$(
+              gh api --method GET \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/${producer_workflow_id}/runs" \
+                -f branch="$DEFAULT_BRANCH" \
+                -f per_page=100 \
+                -f page="$run_page"
+            )"
+            page_count="$(jq '.workflow_runs | length' <<< "$runs_payload")"
+            while IFS= read -r later_run_id; do
+              [[ -n "$later_run_id" ]] || continue
+              later_run_payload="$(
+                gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/actions/runs/${later_run_id}"
+              )"
+              later_run_name="$(jq -r '.name // ""' <<< "$later_run_payload")"
+              later_run_path="$(jq -r '.path // ""' <<< "$later_run_payload")"
+              later_run_path="${later_run_path%%@*}"
+              later_run_branch="$(jq -r '.head_branch // ""' <<< "$later_run_payload")"
+              later_repository_id="$(jq -r '.repository.id // ""' <<< "$later_run_payload")"
+              if [[ \
+                "$later_run_name" != "$workflow_name" || \
+                "$later_run_path" != ".github/workflows/${workflow_file}" || \
+                "$later_run_branch" != "$DEFAULT_BRANCH" || \
+                "$later_repository_id" != "$GITHUB_REPOSITORY_ID" \
+              ]]; then
+                continue
+              fi
+              later_attempt_count="$(jq -r '.run_attempt // 1' <<< "$later_run_payload")"
+              [[ "$later_attempt_count" =~ ^[1-9][0-9]*$ ]] || continue
+              first_later_attempt=1
+              if (( later_run_id == producer_run_id )); then
+                first_later_attempt=$((producer_attempt + 1))
+              fi
+              for ((later_attempt = first_later_attempt; later_attempt <= later_attempt_count; later_attempt++)); do
+                successful_state_jobs="$(
+                  gh api \
+                    -H "Accept: application/vnd.github+json" \
+                    "/repos/${GITHUB_REPOSITORY}/actions/runs/${later_run_id}/attempts/${later_attempt}/jobs?per_page=100" \
+                    --jq "[.jobs[] | select(.name == \"${authoritative_job}\" and .conclusion == \"success\")] | length"
+                )"
+                if (( successful_state_jobs > 0 )); then
+                  later_writers+="${later_writers:+$'\n'}${later_run_id}.${later_attempt}"
+                fi
+              done
+            done < <(
+              jq -r --argjson predecessor "$producer_run_id" \
+                '.workflow_runs[] | select(.id >= $predecessor) | .id' \
+                <<< "$runs_payload"
+            )
+            if (( page_count == 0 || page_count < 100 )); then
+              break
+            fi
+            oldest_run_id="$(jq '[.workflow_runs[].id] | min' <<< "$runs_payload")"
+            if (( oldest_run_id < producer_run_id )); then
+              break
+            fi
+            ((run_page += 1))
+          done
+          if [[ -n "$later_writers" ]]; then
+            later_writers="$(sort -V -u <<< "$later_writers")"
+            echo "${workflow_name} high-water violation at run attempt(s) ${later_writers//$'\n'/, }; refusing stale protected state." >&2
+            exit 1
+          fi
+
+          # An earlier failed/cancelled collector can have sent alerts without
+          # publishing its delivery state. Do not replay from the old artifact.
+          GITHUB_SHA="$consumer_sha" python scripts/collect_workflow_evidence.py \
+            --guard-branch legislative \
+            --producer-run "$producer_run_id" --producer-attempt "$producer_attempt"
+
+          temp_dir="$(mktemp -d)"
           gh api \
             -H "Accept: application/vnd.github+json" \
-            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
-            > "$work/state.zip"
-          echo "${EXPECTED_ARCHIVE_SHA256}  $work/state.zip" | sha256sum --check --status
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+            > "$temp_dir/state.zip"
+          mkdir -p "$temp_dir/unpacked"
+          unzip -q "$temp_dir/state.zip" -d "$temp_dir/unpacked"
+          state_file="$(find "$temp_dir/unpacked" -type f -name state.json -print -quit)"
+          if [[ -z "$state_file" ]]; then
+            echo "Artifact ${artifact_id} (${artifact_name}) contains no state.json." >&2
+            exit 1
+          fi
+          if ! jq -e 'type == "object" and (.last_success_utc | type == "string" and length > 0)' "$state_file" >/dev/null; then
+            echo "Artifact ${artifact_id} (${artifact_name}) has no successful-state marker." >&2
+            exit 1
+          fi
+          rm -rf "$destination"
+          mkdir -p "$destination"
+          cp -R "$(dirname "$state_file")/." "$destination/"
+          echo "Restored authoritative Legislative state from artifact ${artifact_id}, run ${producer_run_id}, attempt ${producer_attempt}."
 
-          mkdir -p "$work/unpacked"
-          unzip -q "$work/state.zip" -d "$work/unpacked"
-          state_file="$(find "$work/unpacked" -type f -name state.json -print -quit)"
-          [[ -n "$state_file" ]] || { echo "Recovered artifact contains no state.json" >&2; exit 1; }
+      - name: Run offline tests
+        shell: bash
+        run: |
+          export GITHUB_STEP_SUMMARY=/tmp/polititrack-offline-test-summary
+          python -m pytest -q \
+            tests/test_monitor_disclosures.py \
+            tests/test_senate_client.py \
+            tests/test_legislative_healthcheck.py \
+            tests/test_government_trade_tracker.py \
+            tests/test_historical_transaction_bootstrap.py \
+            tests/test_oge_disclosures.py \
+            tests/test_trade_dashboard.py
 
-          jq -e '
-            type == "object" and
-            .version == 1 and
-            (.last_success_utc | type == "string" and length > 0) and
-            (.seen_filings | type == "object") and
-            (.seen_trades | type == "object") and
-            (.seen_reviews | type == "object")
-          ' "$state_file" >/dev/null
+      - name: Track House and Senate purchases
+        id: tracker
+        shell: bash
+        env:
+          BOOTSTRAP_ALERTS: "false"
+          ALLOW_STATE_INITIALIZATION: "false"
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+        run: python scripts/government_trade_tracker.py --branch legislative --source all
 
-          mkdir -p recovered-state
-          cp -R "$(dirname "$state_file")/." recovered-state/
-          jq -n \
-            --arg recovered_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg safe_producer_run "$SAFE_PRODUCER_RUN" \
-            --arg safe_artifact_id "$ARTIFACT_ID" \
-            --arg reconciled_run "$RECONCILED_RUN" \
-            --arg reason "Run 33918350040 failed during read-only Senate discovery with HTTP 403, before filing processing or purchase notifications; no Pushover credentials were present." \
-            '{version:1,recovered_at_utc:$recovered_at,safe_producer_run:$safe_producer_run,safe_artifact_id:$safe_artifact_id,reconciled_run:$reconciled_run,reconciliation_reason:$reason,notifications_replayed:false}' \
-            > recovered-state/recovery-receipt.json
+      - name: Validate complete Legislative result
+        id: discovery_validation
+        shell: bash
+        run: python scripts/legislative_healthcheck.py --validate-only
 
-          echo "Recovered state last_success_utc=$(jq -r .last_success_utc recovered-state/state.json)"
-
-      - name: Upload recovered durable tracker state
+      - name: Upload durable tracker state
+        if: ${{ success() && steps.tracker.outcome == 'success' && steps.discovery_validation.outcome == 'success' && hashFiles('.trade-tracker/legislative/state.json') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: legislative-tracker-state
-          path: recovered-state/
+          path: .trade-tracker/legislative
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 90
 
-      - name: Record recovery summary
+      - name: Upload run outputs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: legislative-purchase-output-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            legislative-result.json
+            legislative-latest-purchases.csv
+            legislative-latest-transactions.csv
+            legislative-latest-filings.csv
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Signal tracker terminal result
+        if: ${{ always() }}
+        continue-on-error: true
         shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
+          JOB_STATUS: ${{ job.status }}
+          TRACKER_OUTCOME: ${{ steps.tracker.outcome }}
         run: |
-          {
-            echo "## Legislative tracker recovery"
-            echo
-            echo "- Recurring schedule: **paused**"
-            echo "- Safe source run: \`33905284052\`"
-            echo "- Reconciled failed run: \`33918350040\`"
-            echo "- Notifications replayed: **no**"
-            echo "- Durable state: **republished after integrity validation**"
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f scripts/legislative_healthcheck.py ]]; then
+            python3 scripts/legislative_healthcheck.py
+          elif [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            # Checkout failed: retain the one classified terminal failure ping.
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --max-time 20 \
+              --data "legislative_workflow_failed" "${healthchecks_base}/fail" >/dev/null
+          fi
+
+      - name: Send Pushover failure notification
+        # No source/filing notifications before both discovery phases succeed.
+        if: ${{ always() && failure() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+        run: |
+          if ! python3 scripts/legislative_healthcheck.py --discovery-only; then
+            exit 0
+          fi
+          if [[ -n "$PUSHOVER_API_TOKEN" && -n "$PUSHOVER_USER_KEY" ]]; then
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              --form-string "token=$PUSHOVER_API_TOKEN" \
+              --form-string "user=$PUSHOVER_USER_KEY" \
+              --form-string "title=Legislative purchase tracker failed" \
+              --form-string "message=Open the GitHub Actions run for logs and the result artifact." \
+              --form-string "url=$run_url" \
+              --form-string "url_title=Open failed workflow" \
+              https://api.pushover.net/1/messages.json >/dev/null
+          fi
