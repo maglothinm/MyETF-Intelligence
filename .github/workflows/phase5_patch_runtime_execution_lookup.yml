@@ -1,0 +1,115 @@
+name: Phase 5 patch Runtime execution lookup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_patch_runtime_execution_lookup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  patch-shared-controller:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET: deploy/runtime-v2/runtime_promotion_control.sh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Replace and validate the obsolete lookup
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ['TARGET'])
+          text = path.read_text(encoding='utf-8')
+          obsolete = 'gcloud run jobs executions describe-latest'
+          pattern = re.compile(
+              r'''latest_execution_name\(\) \{\n'''
+              r'''  local job="\$1"\n'''
+              r'''  gcloud run jobs executions describe-latest --job "\$\{job\}" --project "\$\{PROJECT_ID\}" --region "\$\{REGION\}" \\\n'''
+              r'''    --format='value\(metadata\.name\)'\n'''
+              r'''\}\n'''
+          )
+          replacement = '''latest_execution_name() {
+            local job="$1" execution=""
+            for attempt in $(seq 1 24); do
+              execution="$(gcloud run jobs describe "${job}" \\
+                --project "${PROJECT_ID}" \\
+                --region "${REGION}" \\
+                --format='value(status.latestCreatedExecution.name)')"
+              if [[ -n "${execution}" ]]; then
+                printf '%s\\n' "${execution}"
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Unable to resolve the latest execution for ${job}." >&2
+            return 1
+          }
+          '''
+          changed = False
+          if obsolete in text:
+              text, count = pattern.subn(replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit('Obsolete lookup did not match the reviewed function exactly.')
+              changed = True
+          if obsolete in text:
+              raise SystemExit('Obsolete lookup remains.')
+          for token in ('latest_execution_name()', 'gcloud run jobs describe',
+                        'status.latestCreatedExecution.name'):
+              if token not in text:
+                  raise SystemExit(f'Missing supported resolver token: {token}')
+          if changed:
+              path.write_text(text, encoding='utf-8')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as out:
+              out.write(f"changed={'true' if changed else 'false'}\n")
+          PY
+          bash -n "${TARGET}"
+          python -m pip install --disable-pip-version-check pytest PyYAML
+          python -m pytest -q tests/test_validate_runtime_promotion.py
+          bash verify.sh
+
+      - name: Commit correction to canonical main
+        if: steps.patch.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          [[ "$(git rev-parse origin/main)" == "${GITHUB_SHA}" ]] || {
+            echo 'Canonical main advanced during validation.' >&2
+            exit 1
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "${TARGET}"
+          git commit -m 'Replace obsolete Runtime execution lookup'
+          git push origin HEAD:main
+
+      - name: Dispatch Phase 4 when correction is already present
+        if: steps.patch.outputs.changed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${GITHUB_SHA}" ]]
+          gh workflow run phase4_live_shadow_validation_v6.yml \
+            --repo "${GITHUB_REPOSITORY}" --ref main
