@@ -1765,6 +1765,15 @@ def test_replay_is_forensic_and_invalidates_old_four(evidence: Evidence) -> None
     assert receipt["failed_phase5_retry"]["certification_eligible"] is False
     assert receipt["failed_phase5_retry"]["rollback_verified"] is True
     assert receipt["continuation_heads"] == evidence.descriptor["expected_continuation_heads"]
+    continuation_dashboard = receipt["continuation_heads"]["dashboard"]["snapshot_sha256"]
+    historic_conflict = evidence.descriptor["concurrent_legacy_ai"]["conflict"][
+        "runtime_snapshot_sha256"
+    ]
+    assert continuation_dashboard != historic_conflict
+    assert (
+        receipt["concurrent_legacy_ai"]["conflicting_runtime_snapshot_sha256"]
+        == historic_conflict
+    )
     assert receipt["concurrent_legacy_ai"]["global_one_writer_interval_violated"] is True
     assert receipt["concurrent_legacy_ai"]["disposition"] == "quarantined_separate_legacy_artifact"
     assert receipt["concurrent_legacy_ai"]["merge_or_import_authorized"] is False

@@ -155,6 +155,81 @@ def test_retry_is_manual_serialized_and_frozen_to_exact_canonical_main() -> None
     assert '.id == 1349678672' in control
 
 
+def test_private_inventory_uses_the_pinned_current_continuation_dashboard() -> None:
+    expected = "b" * 64
+    historic = "a" * 64
+    descriptor = {
+        "expected_continuation_heads": {
+            "dashboard": {"generation": 8, "snapshot_sha256": expected}
+        },
+        "concurrent_legacy_ai": {
+            "conflict": {"runtime_snapshot_sha256": historic}
+        },
+    }
+    current_status = {
+        "heads": [
+            {
+                "namespace": "dashboard",
+                "generation": 8,
+                "snapshot_sha256": expected,
+            }
+        ]
+    }
+    stale_status = {
+        "heads": [
+            {
+                "namespace": "dashboard",
+                "generation": 7,
+                "snapshot_sha256": historic,
+            }
+        ]
+    }
+    missing_status = {"heads": []}
+    duplicate_status = {
+        "heads": [current_status["heads"][0], current_status["heads"][0]]
+    }
+    script = f'''
+set -Eeuo pipefail
+EVIDENCE_DIR="$(mktemp -d)"
+trap 'rm -rf -- "${{EVIDENCE_DIR}}"' EXIT
+RESOURCE_DIR="${{EVIDENCE_DIR}}/resources"
+mkdir -p "${{RESOURCE_DIR}}"
+CONTROL_REVISION="$(printf 'c%.0s' {{1..40}})"
+PRIVATE_WEB_AUDIENCE="https://polititrack-web.example.run.app"
+PHASE5_RETRY_DESCRIPTOR="${{EVIDENCE_DIR}}/descriptor.json"
+printf '%s\n' '{json.dumps(descriptor, separators=(",", ":"))}' > "${{PHASE5_RETRY_DESCRIPTOR}}"
+printf '%s\n' '{json.dumps(current_status, separators=(",", ":"))}' > "${{EVIDENCE_DIR}}/status.json"
+source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+[[ "$(phase5_retry_current_dashboard_digest "${{EVIDENCE_DIR}}/status.json")" == '{expected}' ]]
+printf '%s\n' '{json.dumps(stale_status, separators=(",", ":"))}' > "${{EVIDENCE_DIR}}/status.json"
+if phase5_retry_current_dashboard_digest "${{EVIDENCE_DIR}}/status.json"; then
+  exit 91
+fi
+printf '%s\n' '{json.dumps(missing_status, separators=(",", ":"))}' > "${{EVIDENCE_DIR}}/status.json"
+if phase5_retry_current_dashboard_digest "${{EVIDENCE_DIR}}/status.json"; then
+  exit 92
+fi
+printf '%s\n' '{json.dumps(duplicate_status, separators=(",", ":"))}' > "${{EVIDENCE_DIR}}/status.json"
+if phase5_retry_current_dashboard_digest "${{EVIDENCE_DIR}}/status.json"; then
+  exit 93
+fi
+'''
+    completed = _run_control_shell(script)
+    assert completed.returncode == 0, completed.stderr
+    assert "differs from the pinned continuation head" in completed.stderr
+
+    workflow = _workflow()
+    capture = workflow.index('capture_status "${EVIDENCE_DIR}/current-status.json"')
+    resolve = workflow.index("phase5_retry_current_dashboard_digest", capture)
+    grant = workflow.index("phase5_retry_grant_private_web_invoker", resolve)
+    inventory = workflow.index("phase5_retry_capture_private_ai_analyses", grant)
+    current_binding = workflow[capture:inventory]
+    assert capture < resolve < grant
+    assert ".concurrent_legacy_ai.conflict.runtime_snapshot_sha256" not in current_binding
+    assert '"${EVIDENCE_DIR}/current-status.json"' in current_binding
+    assert '"${current_dashboard_digest}"' in workflow[inventory : inventory + 250]
+
+
 def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
     workflow = _workflow()
     control = _control()
@@ -343,6 +418,12 @@ def test_retry3_is_pinned_as_clean_noncertifying_continuation_evidence() -> None
             "snapshot_sha256": "42e6dea7db23a933bff2f653f57f05d7b4a46e67d9b4acd64fcb3a83619d200b",
         },
     }
+    historic_dashboard = descriptor["concurrent_legacy_ai"]["conflict"][
+        "runtime_snapshot_sha256"
+    ]
+    assert retry["baseline_heads"]["dashboard"]["snapshot_sha256"] == historic_dashboard
+    assert retry["terminal_heads"] == heads
+    assert heads["dashboard"]["snapshot_sha256"] != historic_dashboard
 
     identity = control[
         control.index("phase5_retry_verify_descriptor_identity()") :

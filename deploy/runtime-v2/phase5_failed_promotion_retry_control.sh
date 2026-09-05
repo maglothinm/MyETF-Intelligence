@@ -49,6 +49,31 @@ phase5_retry_descriptor_value() {
   jq -er "${expression}" "${PHASE5_RETRY_DESCRIPTOR}"
 }
 
+phase5_retry_current_dashboard_digest() {
+  local current_status="$1" expected observed
+  expected="$(jq -er '
+    .expected_continuation_heads.dashboard.snapshot_sha256 |
+    select(type == "string" and test("^[0-9a-f]{64}$"))
+  ' "${PHASE5_RETRY_DESCRIPTOR}")" || {
+    echo "The pinned continuation dashboard snapshot digest is invalid." >&2
+    return 1
+  }
+  observed="$(jq -er '
+    [.heads[]? | select(.namespace == "dashboard") | .snapshot_sha256] as $digests |
+    select(($digests | length) == 1) |
+    $digests[0] |
+    select(type == "string" and test("^[0-9a-f]{64}$"))
+  ' "${current_status}")" || {
+    echo "The current Runtime status does not contain exactly one valid dashboard head." >&2
+    return 1
+  }
+  [[ "${observed}" == "${expected}" ]] || {
+    echo "The current Runtime dashboard head differs from the pinned continuation head." >&2
+    return 1
+  }
+  printf '%s\n' "${expected}"
+}
+
 phase5_retry_verify_descriptor_identity() {
   [[ -f "${PHASE5_RETRY_DESCRIPTOR}" ]] || {
     echo "Phase 5 retry descriptor is missing: ${PHASE5_RETRY_DESCRIPTOR}." >&2
