@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """Compatibility entrypoint for the resilient Legislative collector.
 
-All existing imports continue to receive the original tracker API. Only the canonical
-``--branch legislative --source all`` command is routed through the source-isolated
+All existing imports receive the original tracker API. Only the canonical command
+``--branch legislative --source all`` is routed through the source-isolated
 orchestrator, which invokes the unchanged core once for Senate and once for House.
+
+The module proxy deliberately mirrors public monkeypatches into the core module. This
+preserves the established test and integration contract: callers that replace
+``fetch_house_reports``, ``SenateClient``, notification functions, or other public
+symbols continue to affect the original functions' global namespace.
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import types
 from pathlib import Path
+from typing import Sequence
 
 try:
     from . import government_trade_tracker_core as _core  # type: ignore
@@ -23,8 +30,7 @@ for _name, _value in vars(_core).items():
         globals()[_name] = _value
 
 
-def _argument_value(flag: str) -> str | None:
-    arguments = sys.argv[1:]
+def _argument_value(arguments: Sequence[str], flag: str) -> str | None:
     try:
         index = arguments.index(flag)
     except ValueError:
@@ -32,17 +38,18 @@ def _argument_value(flag: str) -> str | None:
     return arguments[index + 1] if index + 1 < len(arguments) else None
 
 
-def _use_source_isolation() -> bool:
+def _use_source_isolation(arguments: Sequence[str]) -> bool:
     return (
         os.environ.get("POLITITRACK_SOURCE_CHILD") != "1"
-        and _argument_value("--branch") == "legislative"
-        and _argument_value("--source") == "all"
+        and _argument_value(arguments, "--branch") == "legislative"
+        and _argument_value(arguments, "--source") == "all"
     )
 
 
-def main() -> int:
-    if not _use_source_isolation():
-        return int(_core.main())
+def main(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not _use_source_isolation(arguments):
+        return int(_core.main(arguments))
 
     try:
         from . import run_legislative_sources_resilient as resilient  # type: ignore
@@ -50,12 +57,29 @@ def main() -> int:
         import run_legislative_sources_resilient as resilient  # type: ignore
 
     core_path = Path(__file__).resolve().with_name("government_trade_tracker_core.py")
-    arguments = ["--tracker-script", str(core_path)]
-    if "--no-notify" in sys.argv[1:]:
-        arguments.append("--no-notify")
-    if "--verbose" in sys.argv[1:]:
-        arguments.append("--verbose")
-    return int(resilient.main(arguments))
+    forwarded = ["--tracker-script", str(core_path)]
+    if "--no-notify" in arguments:
+        forwarded.append("--no-notify")
+    if "--verbose" in arguments:
+        forwarded.append("--verbose")
+    return int(resilient.main(forwarded))
+
+
+class _CoreProxyModule(types.ModuleType):
+    """Mirror public assignments so original functions observe caller monkeypatches."""
+
+    def __setattr__(self, name: str, value: object) -> None:
+        super().__setattr__(name, value)
+        if not name.startswith("_") and hasattr(_core, name):
+            setattr(_core, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        super().__delattr__(name)
+        if not name.startswith("_") and hasattr(_core, name):
+            delattr(_core, name)
+
+
+sys.modules[__name__].__class__ = _CoreProxyModule
 
 
 if __name__ == "__main__":
