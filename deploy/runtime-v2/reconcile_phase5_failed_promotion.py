@@ -53,10 +53,23 @@ PHASE4_RUN_ID = 33979432233
 FAILED_PHASE5_RUN_ID = 33979778020
 CONCURRENT_LEGACY_AI_RUN_ID = 33980946687
 RECOVERY_RUN_IDS = (33981311523, 33981312757)
+FROZEN_LEGACY_SUCCESSOR_RUN_IDS = (33987160591, 33987130349)
 CERTIFIED_CONTROL_REVISION = "48efd8a45bbb51ee89e8b680430e593ac8867046"
 CERTIFIED_TREE_SHA = "e6ca055af1973765bea1b3de5c01a5dbd69c0393"
 RUNTIME_SOURCE_REVISION = "8908f067298078f8c013e90cf6b7ad8ad420285b"
+FROZEN_LEGACY_SUCCESSOR_REVISION = "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2"
 RUNTIME_SNAPSHOT_DIGEST_PREFIX = "0f601d"
+
+FROZEN_LEGACY_SUCCESSOR_DIFF = {
+    ".github/workflows/phase5_failed_promotion_retry.yml": "A",
+    ".github/workflows/runtime_v2_tests.yml": "M",
+    "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "A",
+    "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "A",
+    "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "A",
+    "docs/DECISIONS.md": "M",
+    "tests/test_phase5_failed_promotion_retry.py": "A",
+    "tests/test_reconcile_phase5_failed_promotion.py": "A",
+}
 
 PHASE4_WORKFLOW_PATH = ".github/workflows/phase4_live_shadow_validation_v6.yml"
 PHASE5_WORKFLOW_PATH = ".github/workflows/phase5_production_promotion_v2.yml"
@@ -453,6 +466,52 @@ def _verify_tree_equal_descendant(
         raise PromotionValidationError(
             f"recovery revision {descendant_sha} is not a certified-tree-equal descendant"
         ) from exc
+
+
+def _verify_frozen_legacy_successor_revision(repository_root: Path) -> None:
+    _expect(
+        _git(repository_root, "rev-parse", f"{FROZEN_LEGACY_SUCCESSOR_REVISION}^{{commit}}"),
+        FROZEN_LEGACY_SUCCESSOR_REVISION,
+        "frozen legacy successor commit",
+    )
+    try:
+        subprocess.run(
+            [
+                "git",
+                "merge-base",
+                "--is-ancestor",
+                CERTIFIED_CONTROL_REVISION,
+                FROZEN_LEGACY_SUCCESSOR_REVISION,
+            ],
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise PromotionValidationError(
+            "frozen legacy successor revision does not descend from the certified revision"
+        ) from exc
+
+    output = _git(
+        repository_root,
+        "diff",
+        "--name-status",
+        "--no-renames",
+        CERTIFIED_CONTROL_REVISION,
+        FROZEN_LEGACY_SUCCESSOR_REVISION,
+        "--",
+    )
+    observed: dict[str, str] = {}
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2 or parts[0] not in {"A", "M", "D"} or parts[1] in observed:
+            _fail("frozen legacy successor revision has an ambiguous changed-path inventory")
+        observed[parts[1]] = parts[0]
+    _expect(
+        observed,
+        FROZEN_LEGACY_SUCCESSOR_DIFF,
+        "frozen legacy successor incident-only changed paths",
+    )
 
 
 def _parse_sha256_file(data: bytes, expected_name: str, label: str) -> str:
@@ -1159,6 +1218,214 @@ def _validate_recoveries(
     return result
 
 
+def _validate_frozen_legacy_successors(
+    descriptor: Mapping[str, Any],
+    repository_root: Path,
+    predecessor_artifact_metadatas: Sequence[Mapping[str, Any]],
+    predecessor_archives: Sequence[Path],
+    run_metadatas: Sequence[Mapping[str, Any]],
+    jobs_metadatas: Sequence[Mapping[str, Any]],
+    artifact_metadatas: Sequence[Mapping[str, Any]],
+    archives: Sequence[Path],
+    output_artifact_metadatas: Sequence[Mapping[str, Any]],
+    output_archives: Sequence[Path],
+) -> list[dict[str, Any]]:
+    recovery_pins = _require_list(descriptor.get("recovery_runs"), "recovery run pins")
+    successor_pins = _require_list(
+        descriptor.get("frozen_legacy_successors"), "frozen legacy successor pins"
+    )
+    collections = (
+        recovery_pins,
+        successor_pins,
+        predecessor_artifact_metadatas,
+        predecessor_archives,
+        run_metadatas,
+        jobs_metadatas,
+        artifact_metadatas,
+        archives,
+        output_artifact_metadatas,
+        output_archives,
+    )
+    if any(len(items) != 2 for items in collections):
+        _fail("reconciliation requires exactly two frozen legacy successors")
+
+    _verify_frozen_legacy_successor_revision(repository_root)
+    recovery_finished = max(
+        _parse_time(
+            _require_object(pin, "recovery pin").get("job", {}).get("completed_at"),
+            "original recovery completed_at",
+        )
+        for pin in recovery_pins
+    )
+    result: list[dict[str, Any]] = []
+    for index, (
+        recovery_value,
+        pin_value,
+        predecessor_metadata,
+        predecessor_archive,
+        run,
+        jobs,
+        artifact_metadata,
+        archive,
+        output_metadata,
+        output_archive,
+        role,
+        run_id,
+    ) in enumerate(
+        zip(
+            recovery_pins,
+            successor_pins,
+            predecessor_artifact_metadatas,
+            predecessor_archives,
+            run_metadatas,
+            jobs_metadatas,
+            artifact_metadatas,
+            archives,
+            output_artifact_metadatas,
+            output_archives,
+            ("legislative", "executive"),
+            FROZEN_LEGACY_SUCCESSOR_RUN_IDS,
+        ),
+        start=1,
+    ):
+        recovery_pin = _require_object(recovery_value, f"original recovery pin {index}")
+        pin = _require_object(pin_value, f"frozen legacy successor pin {index}")
+        _expect(pin.get("role"), role, f"frozen legacy successor pin {index} role")
+        _expect(
+            pin.get("head_sha"),
+            FROZEN_LEGACY_SUCCESSOR_REVISION,
+            f"{role} frozen legacy successor revision",
+        )
+        job = _validate_run_job_metadata(
+            pin,
+            run,
+            jobs,
+            expected_run_id=run_id,
+            expected_path=RECOVERY_PATHS[role],
+            expected_conclusion="success",
+            expected_job_name="track",
+        )
+        if _parse_time(job["started_at"], f"{role} successor started_at") <= recovery_finished:
+            _fail(f"{role} frozen legacy successor did not begin after both original recoveries")
+
+        original_artifact_pin = _require_object(
+            recovery_pin.get("artifact"), f"{role} original recovery artifact pin"
+        )
+        predecessor_pin = _require_object(
+            pin.get("predecessor_artifact"), f"{role} successor predecessor artifact pin"
+        )
+        for key in ("id", "name", "size_in_bytes", "digest", "expires_at"):
+            _expect(
+                predecessor_pin.get(key),
+                original_artifact_pin.get(key),
+                f"{role} successor predecessor {key}",
+            )
+        _expect(
+            predecessor_pin.get("producer_run_id"),
+            recovery_pin.get("run_id"),
+            f"{role} successor predecessor producer run",
+        )
+        _expect(
+            predecessor_pin.get("producer_head_sha"),
+            recovery_pin.get("head_sha"),
+            f"{role} successor predecessor producer revision",
+        )
+        predecessor_members = _load_pinned_artifact(
+            Path(predecessor_archive),
+            predecessor_metadata,
+            predecessor_pin,
+            producer_run_id=int(recovery_pin["run_id"]),
+            producer_head_sha=str(recovery_pin["head_sha"]),
+        )
+        predecessor_created = _parse_time(
+            predecessor_metadata.get("created_at"),
+            f"{role} successor predecessor artifact created_at",
+        )
+        if predecessor_created >= _parse_time(job["started_at"], f"{role} successor started_at"):
+            _fail(f"{role} successor predecessor artifact was not created before the run")
+
+        artifact_pin = _require_object(pin.get("artifact"), f"{role} successor artifact pin")
+        _expect(
+            artifact_pin.get("name"),
+            RECOVERY_ARTIFACT_NAMES[role],
+            f"{role} successor protected artifact name",
+        )
+        state_members = _load_pinned_artifact(
+            Path(archive),
+            artifact_metadata,
+            artifact_pin,
+            producer_run_id=run_id,
+            producer_head_sha=FROZEN_LEGACY_SUCCESSOR_REVISION,
+        )
+        current_created = _parse_time(
+            artifact_metadata.get("created_at"), f"{role} successor artifact created_at"
+        )
+        if current_created <= predecessor_created:
+            _fail(f"{role} successor artifact does not follow its original recovery predecessor")
+
+        output_pin = _require_object(
+            pin.get("output_artifact"), f"{role} successor output artifact pin"
+        )
+        expected_output_name = (
+            f"legislative-purchase-output-{run_id}-{pin.get('run_attempt')}"
+            if role == "legislative"
+            else f"executive-purchase-output-{run_id}"
+        )
+        _expect(
+            output_pin.get("name"),
+            expected_output_name,
+            f"{role} successor output artifact name",
+        )
+        output_members = _load_pinned_artifact(
+            Path(output_archive),
+            output_metadata,
+            output_pin,
+            producer_run_id=run_id,
+            producer_head_sha=FROZEN_LEGACY_SUCCESSOR_REVISION,
+        )
+        successor_result = _validate_zero_change_recovery(
+            role=role,
+            run_id=run_id,
+            run_attempt=int(pin.get("run_attempt")),
+            event=str(pin.get("event")),
+            job=job,
+            predecessor_members=predecessor_members,
+            state_members=state_members,
+            output_members=output_members,
+        )
+        result.append(
+            {
+                "role": role,
+                "run_id": run_id,
+                "run_attempt": pin.get("run_attempt"),
+                "head_sha": pin.get("head_sha"),
+                "job_id": job.get("id"),
+                "conclusion": "success",
+                "incident_only_revision_allowlist_verified": True,
+                "predecessor_recovery_run_id": recovery_pin.get("run_id"),
+                "predecessor_artifact_id": predecessor_pin.get("id"),
+                "predecessor_artifact_sha256": _digest_pin(
+                    predecessor_pin.get("digest"), f"{role} successor predecessor digest"
+                ),
+                "protected_artifact_id": artifact_pin.get("id"),
+                "protected_artifact_sha256": _digest_pin(
+                    artifact_pin.get("digest"), f"{role} successor protected artifact digest"
+                ),
+                "output_artifact_id": output_pin.get("id"),
+                "output_artifact_sha256": _digest_pin(
+                    output_pin.get("digest"), f"{role} successor output artifact digest"
+                ),
+                "result_started_at": successor_result["started_utc"],
+                "result_finished_at": successor_result["finished_utc"],
+                "protected_domain_data_unchanged": True,
+                "protected_domain_member_count": len(RECOVERY_PROTECTED_DOMAIN_MEMBERS[role]),
+                "run_receipt_appended_count": 1,
+                "state_change_keys": ["last_attempt_utc", "last_success_utc"],
+            }
+        )
+    return result
+
+
 def _validate_zero_change_recovery(
     *,
     role: str,
@@ -1327,9 +1594,31 @@ def _run_matches_pin(run: Mapping[str, Any], pin: Mapping[str, Any], label: str)
 
 
 def _high_water_pins(descriptor: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    recoveries = _require_list(descriptor.get("recovery_runs"), "recovery run pins")
-    if len(recoveries) != 2:
-        _fail("reconciliation requires exactly two recovery run pins")
+    successors = _require_list(
+        descriptor.get("frozen_legacy_successors"), "frozen legacy successor pins"
+    )
+    if len(successors) != 2:
+        _fail("reconciliation requires exactly two frozen legacy successor pins")
+    legislative = _require_object(successors[0], "legislative frozen legacy successor pin")
+    executive = _require_object(successors[1], "executive frozen legacy successor pin")
+    _expect(legislative.get("role"), "legislative", "legislative frozen successor role")
+    _expect(executive.get("role"), "executive", "executive frozen successor role")
+    _expect(
+        legislative.get("run_id"),
+        FROZEN_LEGACY_SUCCESSOR_RUN_IDS[0],
+        "legislative frozen successor run ID",
+    )
+    _expect(
+        executive.get("run_id"),
+        FROZEN_LEGACY_SUCCESSOR_RUN_IDS[1],
+        "executive frozen successor run ID",
+    )
+    for role, pin in (("legislative", legislative), ("executive", executive)):
+        _expect(
+            pin.get("head_sha"),
+            FROZEN_LEGACY_SUCCESSOR_REVISION,
+            f"{role} frozen successor revision",
+        )
     dashboard = _require_object(descriptor.get("legacy_dashboard"), "legacy dashboard pin")
     _expect(dashboard.get("role"), "dashboard", "legacy dashboard role")
     _expect(
@@ -1338,8 +1627,8 @@ def _high_water_pins(descriptor: Mapping[str, Any]) -> list[Mapping[str, Any]]:
         "legacy dashboard workflow path",
     )
     return [
-        _require_object(recoveries[0], "legislative recovery pin"),
-        _require_object(recoveries[1], "executive recovery pin"),
+        legislative,
+        executive,
         _require_object(descriptor.get("concurrent_legacy_ai"), "concurrent legacy AI pin"),
         dashboard,
     ]
@@ -1681,6 +1970,93 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
         ):
             _fail(f"replay {role} recovery result interval is outside its pinned job")
 
+    successors = _require_list(
+        replay.get("frozen_legacy_successors"), "replay frozen legacy successors"
+    )
+    successor_pins = _require_list(
+        descriptor.get("frozen_legacy_successors"), "frozen legacy successor pins"
+    )
+    if len(successors) != 2 or len(successor_pins) != 2:
+        _fail("replay does not contain exactly two frozen legacy successors")
+    for role, run_id, value, pin_value, recovery_pin_value in zip(
+        ("legislative", "executive"),
+        FROZEN_LEGACY_SUCCESSOR_RUN_IDS,
+        successors,
+        successor_pins,
+        recovery_pins,
+    ):
+        successor = _require_object(value, f"replay {role} frozen legacy successor")
+        pin = _require_object(pin_value, f"{role} frozen legacy successor pin")
+        recovery_pin = _require_object(recovery_pin_value, f"{role} original recovery pin")
+        predecessor_pin = _require_object(
+            pin.get("predecessor_artifact"), f"{role} successor predecessor artifact pin"
+        )
+        recovery_artifact_pin = _require_object(
+            recovery_pin.get("artifact"), f"{role} original recovery artifact pin"
+        )
+        for key in ("id", "name", "size_in_bytes", "digest", "expires_at"):
+            _expect(
+                predecessor_pin.get(key),
+                recovery_artifact_pin.get(key),
+                f"replay {role} successor predecessor {key}",
+            )
+        _expect(
+            predecessor_pin.get("producer_run_id"),
+            recovery_pin.get("run_id"),
+            f"replay {role} successor predecessor producer run",
+        )
+        _expect(
+            predecessor_pin.get("producer_head_sha"),
+            recovery_pin.get("head_sha"),
+            f"replay {role} successor predecessor producer revision",
+        )
+        artifact_pin = _require_object(pin.get("artifact"), f"{role} successor artifact pin")
+        output_artifact_pin = _require_object(
+            pin.get("output_artifact"), f"{role} successor output artifact pin"
+        )
+        for key, expected in {
+            "role": role,
+            "run_id": run_id,
+            "run_attempt": pin.get("run_attempt"),
+            "head_sha": FROZEN_LEGACY_SUCCESSOR_REVISION,
+            "job_id": _require_object(pin.get("job"), f"{role} successor job pin").get("id"),
+            "conclusion": "success",
+            "incident_only_revision_allowlist_verified": True,
+            "predecessor_recovery_run_id": recovery_pin.get("run_id"),
+            "predecessor_artifact_id": predecessor_pin.get("id"),
+            "predecessor_artifact_sha256": _digest_pin(
+                predecessor_pin.get("digest"), f"{role} successor predecessor digest"
+            ),
+            "protected_artifact_id": artifact_pin.get("id"),
+            "protected_artifact_sha256": _digest_pin(
+                artifact_pin.get("digest"), f"{role} successor protected artifact digest"
+            ),
+            "output_artifact_id": output_artifact_pin.get("id"),
+            "output_artifact_sha256": _digest_pin(
+                output_artifact_pin.get("digest"), f"{role} successor output artifact digest"
+            ),
+            "protected_domain_data_unchanged": True,
+            "protected_domain_member_count": len(RECOVERY_PROTECTED_DOMAIN_MEMBERS[role]),
+            "run_receipt_appended_count": 1,
+            "state_change_keys": ["last_attempt_utc", "last_success_utc"],
+        }.items():
+            _expect(successor.get(key), expected, f"replay {role} frozen successor {key}")
+        result_started = _parse_time(
+            successor.get("result_started_at"), f"replay {role} successor result_started_at"
+        )
+        result_finished = _parse_time(
+            successor.get("result_finished_at"), f"replay {role} successor result_finished_at"
+        )
+        job_pin = _require_object(pin.get("job"), f"{role} successor job pin")
+        if (
+            result_finished < result_started
+            or result_started
+            < _parse_time(job_pin.get("started_at"), f"{role} successor job started_at")
+            or result_finished
+            > _parse_time(job_pin.get("completed_at"), f"{role} successor job completed_at")
+        ):
+            _fail(f"replay {role} successor result interval is outside its pinned job")
+
     high_water = _require_object(replay.get("legacy_high_water"), "replay legacy high-water")
     high_water_runs = _require_list(high_water.get("runs"), "replay high-water runs")
     pins = _high_water_pins(descriptor)
@@ -1724,6 +2100,7 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
             "fresh_clean_smoke_cycle_required",
             "global_one_writer_violation_verified",
             "legacy_ai_artifact_quarantined",
+            "frozen_legacy_successors_verified",
             "legacy_high_water_verified",
             "full_snapshot_chain_preserved",
         ),
@@ -1756,6 +2133,12 @@ def reconcile_failed_phase5(
     recovery_archives: Sequence[Path],
     recovery_output_artifact_metadatas: Sequence[Mapping[str, Any]],
     recovery_output_archives: Sequence[Path],
+    frozen_successor_run_metadatas: Sequence[Mapping[str, Any]],
+    frozen_successor_jobs_metadatas: Sequence[Mapping[str, Any]],
+    frozen_successor_artifact_metadatas: Sequence[Mapping[str, Any]],
+    frozen_successor_archives: Sequence[Path],
+    frozen_successor_output_artifact_metadatas: Sequence[Mapping[str, Any]],
+    frozen_successor_output_archives: Sequence[Path],
     legacy_run_inventories: Sequence[Mapping[str, Any]],
     legacy_artifact_inventories: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
@@ -1812,6 +2195,18 @@ def reconcile_failed_phase5(
         recovery_output_archives,
         after_time=_parse_time(legacy["completed_at"], "legacy AI completed_at"),
     )
+    frozen_successors = _validate_frozen_legacy_successors(
+        descriptor,
+        repository_root,
+        recovery_artifact_metadatas,
+        recovery_archives,
+        frozen_successor_run_metadatas,
+        frozen_successor_jobs_metadatas,
+        frozen_successor_artifact_metadatas,
+        frozen_successor_archives,
+        frozen_successor_output_artifact_metadatas,
+        frozen_successor_output_archives,
+    )
     high_water_runs, high_water_run_digests = _validate_high_water_run_inventories(
         descriptor, legacy_run_inventories, label="replay"
     )
@@ -1853,6 +2248,7 @@ def reconcile_failed_phase5(
         "current_latest_receipts_verified": True,
         "concurrent_legacy_ai": legacy,
         "recovery_runs": recoveries,
+        "frozen_legacy_successors": frozen_successors,
         "legacy_high_water": {
             "runs": high_water_runs,
             "run_inventory_sha256": high_water_run_digests,
@@ -1867,6 +2263,7 @@ def reconcile_failed_phase5(
             "fresh_clean_smoke_cycle_required": True,
             "global_one_writer_violation_verified": True,
             "legacy_ai_artifact_quarantined": True,
+            "frozen_legacy_successors_verified": True,
             "legacy_high_water_verified": True,
             "legacy_artifact_merge_or_import_authorized": False,
             "rebaseline_performed": False,
@@ -2103,6 +2500,7 @@ def _validate_completion_manifest(manifest: Mapping[str, Any]) -> None:
             "concurrent_writer_incident_acknowledged",
             "old_smoke_prefix_invalidated",
             "legacy_ai_artifact_quarantined",
+            "frozen_legacy_successors_verified",
             "legacy_runs_drained",
             "legacy_workflows_disabled",
             "continuation_heads_verified",
@@ -2427,6 +2825,7 @@ def complete_phase5(
             "invalidated_smoke_prefix": prefix,
             "concurrent_legacy_ai": legacy,
             "recovery_runs": replay["recovery_runs"],
+            "frozen_legacy_successors": replay["frozen_legacy_successors"],
             "legacy_high_water": replay["legacy_high_water"],
             "legacy_ai_artifact_quarantined": True,
             "legacy_artifact_merge_or_import_authorized": False,
@@ -2488,6 +2887,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--recovery-output-artifact-metadata", type=Path, action="append", required=True
     )
     replay.add_argument("--recovery-output-archive", type=Path, action="append", required=True)
+    replay.add_argument("--frozen-successor-run-metadata", type=Path, action="append", required=True)
+    replay.add_argument("--frozen-successor-jobs-metadata", type=Path, action="append", required=True)
+    replay.add_argument(
+        "--frozen-successor-artifact-metadata", type=Path, action="append", required=True
+    )
+    replay.add_argument("--frozen-successor-archive", type=Path, action="append", required=True)
+    replay.add_argument(
+        "--frozen-successor-output-artifact-metadata",
+        type=Path,
+        action="append",
+        required=True,
+    )
+    replay.add_argument(
+        "--frozen-successor-output-archive", type=Path, action="append", required=True
+    )
     replay.add_argument("--legacy-run-inventory", type=Path, action="append", required=True)
     replay.add_argument("--legacy-artifact-inventory", type=Path, action="append", required=True)
     replay.add_argument("--output", type=Path, required=True)
@@ -2547,6 +2961,20 @@ def main(argv: list[str] | None = None) -> int:
                 _load_object(path) for path in args.recovery_output_artifact_metadata
             ],
             recovery_output_archives=args.recovery_output_archive,
+            frozen_successor_run_metadatas=[
+                _load_object(path) for path in args.frozen_successor_run_metadata
+            ],
+            frozen_successor_jobs_metadatas=[
+                _load_object(path) for path in args.frozen_successor_jobs_metadata
+            ],
+            frozen_successor_artifact_metadatas=[
+                _load_object(path) for path in args.frozen_successor_artifact_metadata
+            ],
+            frozen_successor_archives=args.frozen_successor_archive,
+            frozen_successor_output_artifact_metadatas=[
+                _load_object(path) for path in args.frozen_successor_output_artifact_metadata
+            ],
+            frozen_successor_output_archives=args.frozen_successor_output_archive,
             legacy_run_inventories=[_load_object(path) for path in args.legacy_run_inventory],
             legacy_artifact_inventories=[
                 _load_object(path) for path in args.legacy_artifact_inventory

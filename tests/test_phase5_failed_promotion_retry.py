@@ -156,6 +156,8 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
         "33980946687",
         "33981311523",
         "33981312757",
+        "33987160591",
+        "33987130349",
     ):
         assert run_id in control
     for descriptor_path in (
@@ -173,6 +175,12 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
         ".recovery_runs[1].predecessor_artifact",
         ".recovery_runs[1].artifact",
         ".recovery_runs[1].output_artifact",
+        ".frozen_legacy_successors[0]",
+        ".frozen_legacy_successors[0].artifact",
+        ".frozen_legacy_successors[0].output_artifact",
+        ".frozen_legacy_successors[1]",
+        ".frozen_legacy_successors[1].artifact",
+        ".frozen_legacy_successors[1].output_artifact",
         ".legacy_dashboard",
     ):
         assert descriptor_path in control
@@ -211,8 +219,49 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
     assert workflow.count("--recovery-archive") == 2
     assert workflow.count("--recovery-output-artifact-metadata") == 2
     assert workflow.count("--recovery-output-archive") == 2
+    assert workflow.count("--frozen-successor-run-metadata") == 2
+    assert workflow.count("--frozen-successor-jobs-metadata") == 2
+    assert workflow.count("--frozen-successor-artifact-metadata") == 2
+    assert workflow.count("--frozen-successor-archive") == 2
+    assert workflow.count("--frozen-successor-output-artifact-metadata") == 2
+    assert workflow.count("--frozen-successor-output-archive") == 2
     assert workflow.count("--legacy-run-inventory") == 4
     assert workflow.count("--legacy-artifact-inventory") == 3
+
+
+def test_frozen_successor_descriptor_identity_binds_every_exact_field() -> None:
+    descriptor = json.loads(Path(DESCRIPTOR).read_text(encoding="utf-8"))
+    successors = descriptor["frozen_legacy_successors"]
+    control = _control()
+    identity = control[
+        control.index("phase5_retry_verify_descriptor_identity()") :
+        control.index("phase5_retry_verify_frozen_context()")
+    ]
+
+    assert len(successors) == 2
+    assert [item["role"] for item in successors] == ["legislative", "executive"]
+    assert [item["run_id"] for item in successors] == [33987160591, 33987130349]
+    assert ".frozen_legacy_successors == [" in identity
+    assert identity.count("producer_run_id:.recovery_runs[") == 2
+    assert identity.count("producer_head_sha:.recovery_runs[") == 2
+    assert identity.count(".predecessor_artifact ==") == 2
+
+    # The jq array equality is exact (including key set). Ensure every checked-in
+    # scalar pin is also present in the literal or its incident-specific constant.
+    def scalars(value: object) -> list[object]:
+        if isinstance(value, dict):
+            return [item for child in value.values() for item in scalars(child)]
+        if isinstance(value, list):
+            return [item for child in value for item in scalars(child)]
+        return [value]
+
+    for value in scalars(successors):
+        if isinstance(value, str):
+            assert json.dumps(value) in control
+        elif isinstance(value, int) and not isinstance(value, bool):
+            assert str(value) in control
+        else:
+            raise AssertionError(f"unexpected frozen successor scalar: {value!r}")
 
 
 def test_legacy_high_water_is_replayed_again_after_disable_and_before_route_transfer() -> None:
@@ -243,6 +292,29 @@ def test_legacy_high_water_is_replayed_again_after_disable_and_before_route_tran
     assert '.conclusion == "success"' in control
     assert "legacy-dashboard-runs-${suffix}.json" in control
     assert "sort_by(.created_at, .id) | last" in control
+    high_water_function = control[
+        control.index("phase5_retry_verify_legacy_high_water()") :
+        control.index("phase5_retry_capture_runtime_execution_inventories()")
+    ]
+    assert high_water_function.count("verify_legacy_workflows_state disabled_manually") == 3
+    assert high_water_function.count('all(.[]; .status == "completed")') == 2
+    assert 'phase5_retry_verify_no_active_legacy_runs "${suffix}"' in high_water_function
+    first_fence = high_water_function.index("verify_legacy_workflows_state disabled_manually")
+    first_capture = high_water_function.index("phase5_retry_capture_workflow_run_inventory")
+    last_capture = high_water_function.rindex("phase5_retry_capture_workflow_run_inventory")
+    active_check = high_water_function.index("phase5_retry_verify_no_active_legacy_runs")
+    final_fence = high_water_function.rindex("verify_legacy_workflows_state disabled_manually")
+    assert first_fence < first_capture <= last_capture < active_check < final_fence
+
+    preflight = workflow[
+        workflow.index("Bind the exact incident and download immutable evidence") :
+        workflow.index("Authenticate as constrained deployer")
+    ]
+    frozen_state = preflight.index("phase5_retry_write_frozen_legacy_states")
+    verify_frozen = preflight.index("verify_legacy_workflows_match_observed", frozen_state)
+    drain_frozen = preflight.index("drain_legacy_workflows", verify_frozen)
+    download = preflight.index("phase5_retry_download_incident_evidence", drain_frozen)
+    assert frozen_state < verify_frozen < drain_frozen < download
 
 
 def test_old_smokes_are_a_non_certifying_prefix_and_four_new_smokes_are_ordered() -> None:
@@ -588,6 +660,30 @@ def test_rollback_is_fail_closed_and_new_recoveries_are_at_most_once() -> None:
     assert "retry-rollback-complete" in workflow
     assert "verify_cloud_sql_private" in control
     assert "verify_vault_scheduler_paused" in control
+    classifier = control[
+        control.index("phase5_retry_observed_legacy_route_kind()") :
+        control.index("phase5_retry_verify_current_base_authority_absent()")
+    ]
+    assert classifier.count(". == {") == 2
+    assert "frozen_disabled" in classifier
+    assert "historic_active" in classifier
+    assert "neither the exact frozen nor historic rollback route" in classifier
+
+    live_rollback = workflow[
+        workflow.index("rollback() {") : workflow.index("trap rollback EXIT")
+    ]
+    assert "phase5_retry_write_observed_legacy_states" not in live_rollback
+    terminal_rollback = workflow[workflow.index("Fail closed to the verified legacy rollback route") :]
+    assert "phase5_retry_restore_pre_live_legacy_route" in terminal_rollback
+    assert "phase5_retry_write_observed_legacy_states" not in terminal_rollback
+
+    live_step = workflow[
+        workflow.index("Reconcile the failed prefix and execute one fresh serialized smoke cycle") :
+        workflow.index("Verify terminal production state without further mutation")
+    ]
+    rollback_intent = live_step.index("phase5_retry_write_observed_legacy_states")
+    live_marker = live_step.index('touch "${EVIDENCE_DIR}/live-mutation-started"')
+    assert rollback_intent < live_marker
 
     completion_upload = workflow.index("Upload successful Phase 5 retry completion evidence")
     rollback_step = workflow.index("Fail closed to the verified legacy rollback route")
@@ -605,6 +701,121 @@ def test_rollback_is_fail_closed_and_new_recoveries_are_at_most_once() -> None:
     assert "timeout-minutes: 90" in rollback_step
     assert "timeout-minutes: 10" in rollback_step
     assert "Upload successful Phase 5 retry completion evidence\n        if: success()" in workflow
+
+
+def test_rollback_restores_only_the_service_bearing_historic_route() -> None:
+    for route_kind, route_touched, expect_success, expected_calls, forbidden_calls in (
+        (
+            "frozen_disabled",
+            True,
+            False,
+            set(),
+            {"restore", "dispatch"},
+        ),
+        (
+            "historic_active",
+            True,
+            True,
+            {"restore", "dispatch"},
+            set(),
+        ),
+        (
+            "historic_active",
+            False,
+            True,
+            {"restore"},
+            {"dispatch"},
+        ),
+        (
+            "invalid",
+            True,
+            False,
+            set(),
+            {"restore", "dispatch"},
+        ),
+    ):
+        script = rf'''
+set -Eeuo pipefail
+EVIDENCE_DIR="$(mktemp -d)"
+trap 'rm -rf -- "${{EVIDENCE_DIR}}"' EXIT
+CONTROL_REVISION="$(printf 'a%.0s' {{1..40}})"
+PRIVATE_WEB_AUDIENCE="https://polititrack-web.example.run.app"
+LEGACY_STATE_FILE="${{EVIDENCE_DIR}}/legacy-workflow-states.json"
+source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+touch "${{EVIDENCE_DIR}}/live-mutation-started"
+[[ '{str(route_touched).lower()}' != true ]] || touch "${{EVIDENCE_DIR}}/route-touched"
+CALLS="${{EVIDENCE_DIR}}/calls"
+: > "${{CALLS}}"
+phase5_retry_observed_legacy_route_kind() {{
+  [[ '{route_kind}' != invalid ]] || return 1
+  printf '%s\n' '{route_kind}'
+}}
+pause_producer_schedulers() {{ :; }}
+verify_producer_scheduler_state() {{ :; }}
+make_web_private() {{ :; }}
+verify_web_private() {{ :; }}
+phase5_retry_remove_private_web_invoker() {{ :; }}
+phase5_retry_restore_preflight_logging_receipt_if_safe() {{ :; }}
+remove_execution_authority() {{ :; }}
+collect_service_accounts() {{ :; }}
+remove_service_account_user() {{ :; }}
+configure_runtime_best_effort() {{ :; }}
+verify_runtime_configuration() {{ :; }}
+restore_legacy_workflows_observed() {{ printf 'restore\n' >> "${{CALLS}}"; }}
+phase5_retry_dispatch_legacy_recovery_once() {{ printf 'dispatch\n' >> "${{CALLS}}"; }}
+verify_execution_authority_removed() {{ :; }}
+verify_service_account_user_removed() {{ :; }}
+phase5_retry_verify_private_web_invoker_removed() {{ :; }}
+verify_cloud_sql_private() {{ :; }}
+verify_vault_scheduler_paused() {{ :; }}
+jq() {{ printf '{{}}\n'; }}
+if phase5_retry_rollback; then
+  [[ '{str(expect_success).lower()}' == true ]] || exit 91
+else
+  [[ '{str(expect_success).lower()}' == false ]] || exit 92
+fi
+cat "${{CALLS}}"
+'''
+        completed = _run_control_shell(script)
+        assert completed.returncode == 0, completed.stderr
+        calls = set(completed.stdout.splitlines())
+        assert expected_calls <= calls
+        assert calls.isdisjoint(forbidden_calls)
+
+
+def test_pre_live_failure_restores_historic_route_from_only_exact_known_states() -> None:
+    for starting_route, expect_success, expect_restore in (
+        ("frozen", True, True),
+        ("historic", True, False),
+        ("mixed", False, False),
+    ):
+        script = rf'''
+set -Eeuo pipefail
+EVIDENCE_DIR="$(mktemp -d)"
+trap 'rm -rf -- "${{EVIDENCE_DIR}}"' EXIT
+CONTROL_REVISION="$(printf 'a%.0s' {{1..40}})"
+PRIVATE_WEB_AUDIENCE="https://polititrack-web.example.run.app"
+LEGACY_STATE_FILE="${{EVIDENCE_DIR}}/legacy-workflow-states.json"
+source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+CALLS="${{EVIDENCE_DIR}}/calls"
+: > "${{CALLS}}"
+verify_legacy_workflows_state() {{ [[ '{starting_route}' == frozen ]]; }}
+phase5_retry_write_observed_legacy_states() {{ printf 'write-intent\n' >> "${{CALLS}}"; }}
+restore_legacy_workflows_observed() {{ printf 'restore\n' >> "${{CALLS}}"; }}
+verify_legacy_workflows_match_observed() {{ [[ '{starting_route}' != mixed ]]; }}
+phase5_retry_observed_legacy_route_kind() {{ printf '%s\n' historic_active; }}
+if phase5_retry_restore_pre_live_legacy_route; then
+  [[ '{str(expect_success).lower()}' == true ]] || exit 91
+else
+  [[ '{str(expect_success).lower()}' == false ]] || exit 92
+fi
+cat "${{CALLS}}"
+'''
+        completed = _run_control_shell(script)
+        assert completed.returncode == 0, completed.stderr
+        calls = completed.stdout.splitlines()
+        assert calls.count("write-intent") == 1
+        assert ("restore" in calls) is expect_restore
 
 
 def test_fresh_preflight_earns_project_image_and_temporary_authority_absence() -> None:
