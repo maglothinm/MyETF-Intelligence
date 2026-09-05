@@ -930,3 +930,42 @@ notification-eligible rollback artifact, and that exact evidence must be pinned.
 The schedule-capable route must then be restored and active. The resulting Phase 4
 run and certificate artifact must be recorded before this decision is classified
 as operationally complete.
+
+## D-2026-09-05-043 — Pin the controlled successor and restore the operational Legislative route
+
+**Decision:** Accept controlled Legislative run `33972938031` attempt 1, job
+`101324554606`, at revision
+`e160d1783ee93508761e0054b909e29d8b00ef3d` as the Phase 4 prerequisite. Pin
+its exact predecessor, protected successor, diagnostic artifact, API metadata,
+archive digests, and restore/source/controlled receipts in the checked-in
+descriptor. Restore the retained Legislative production cadence and external
+signals without changing any collector implementation byte covered by that
+validation.
+
+The production workflow must restore from the provenance-valid high-water
+artifact, run the unsuppressed tracker, require the durable-result and restore
+receipt gates, and upload protected state only after both succeed. The
+suppression-specific protected-upload validator remains limited to controlled
+validation. Keep `REQUIRE_PUSHOVER=false`; mandatory alert delivery would be a
+separate policy change and the existence of secrets has not been proven.
+
+The legacy-route source verifier must reject a Legislative workflow that only
+contains schedule syntax while retaining controlled-only acknowledgement,
+`--no-notify`, controlled mode, or suppression-specific upload validation.
+
+**Reason:** The controlled run restored exact predecessor artifact `9969550055`,
+completed both official sources, produced a zero-change durable successor, and
+attested zero notification-eligible records and zero outbound activity. It
+therefore closes the live Legislative prerequisite without rebaseline. Requiring
+an operational production source contract prevents a cosmetic cron from being
+misclassified as a usable rollback route.
+
+**Consequence:** Merging the descriptor and schedule restoration triggers Phase 4
+v6. Main must remain fixed through Phase 4 and its authorized Phase 5 v2
+successor. Phase 4 issues its completion certificate as a hash-checked Actions
+artifact, not a Git commit. Phase 5 may transfer production authority only after
+rebinding that artifact, the exact revision, current Runtime heads/latest
+receipts, and the legacy route. Phase 6 remains unauthorized.
+
+**Release verification:** Local, exact-head CI, Phase 4 certificate, and Phase 5
+terminal evidence remain pending at the time of this decision entry.

@@ -1,16 +1,20 @@
 name: Legislative purchase tracker v2
 
-# CONTROLLED VALIDATION MODE — recurring and external schedules remain paused.
-# The only permitted invocation is a deliberately acknowledged manual run, and
-# every producer subprocess is forced into notification-suppressed mode.
 on:
+  schedule:
+    # Poll four times per hour, offset from :00 to reduce scheduler congestion.
+    - cron: "7,22,37,52 * * * *"
+      timezone: "America/New_York"
   workflow_dispatch:
     inputs:
-      validation_acknowledged:
-        description: "Run the notification-suppressed controlled validation"
-        required: true
-        default: false
-        type: boolean
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
 
 permissions:
   actions: read
@@ -22,8 +26,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  POLITITRACK_TRIGGER_SOURCE: workflow_dispatch
-  POLITITRACK_CONTROLLED_VALIDATION: "true"
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
+  POLITITRACK_CONTROLLED_VALIDATION: "false"
   STATE_FILE: ".trade-tracker/legislative/state.json"
   LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
   TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
@@ -49,15 +53,26 @@ env:
 
 jobs:
   track:
-    if: >-
-      github.repository_id == '1349678672' &&
-      github.event_name == 'workflow_dispatch' &&
-      github.ref_name == github.event.repository.default_branch &&
-      inputs.validation_acknowledged == true
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
     steps:
+      - name: Signal tracker start
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "${healthchecks_base}/start" >/dev/null
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v6
 
@@ -411,18 +426,18 @@ jobs:
 
       - name: Track House and Senate purchases
         id: tracker
-        continue-on-error: true
         shell: bash
         env:
           BOOTSTRAP_ALERTS: "false"
           ALLOW_STATE_INITIALIZATION: "false"
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
         run: >-
           python scripts/government_trade_tracker.py
-          --branch legislative --source all --no-notify
+          --branch legislative --source all
 
       - name: Classify durable Legislative result
         id: durable_validation
-        continue-on-error: true
         shell: bash
         run: >-
           python scripts/legislative_healthcheck.py
@@ -430,28 +445,10 @@ jobs:
           --state "$STATE_FILE"
           --source-status "$SOURCE_STATUS_FILE"
           --restore-receipt "$RESTORE_RECEIPT_FILE"
-          --controlled-validation-receipt "$CONTROLLED_VALIDATION_RECEIPT_FILE"
           --require-restore-receipt
-          --require-controlled-validation-receipt
-          --require-notifications-suppressed
-          --require-no-notification-eligible-records
-          --require-run-provenance
-
-      - name: Validate protected Legislative state for upload
-        id: state_validation
-        if: ${{ always() && steps.tracker.outcome != 'skipped' }}
-        shell: bash
-        run: >-
-          python scripts/legislative_healthcheck.py
-          --validate-protected-upload
-          --state "$STATE_FILE"
-          --source-status "$SOURCE_STATUS_FILE"
-          --restore-receipt "$RESTORE_RECEIPT_FILE"
-          --controlled-validation-receipt "$CONTROLLED_VALIDATION_RECEIPT_FILE"
-          --require-run-provenance
 
       - name: Upload protected tracker state
-        if: ${{ success() && steps.state_validation.outcome == 'success' }}
+        if: ${{ success() && steps.tracker.outcome == 'success' && steps.durable_validation.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: legislative-tracker-state
@@ -476,3 +473,48 @@ jobs:
             .trade-tracker/legislative/controlled-validation-receipt.json
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Signal tracker terminal result
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
+          JOB_STATUS: ${{ job.status }}
+          TRACKER_OUTCOME: ${{ steps.tracker.outcome }}
+        run: |
+          if [[ -f scripts/legislative_healthcheck.py ]]; then
+            python3 scripts/legislative_healthcheck.py
+          elif [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            # Checkout failed: retain the one classified terminal failure ping.
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --max-time 20 \
+              --data "legislative_workflow_failed" "${healthchecks_base}/fail" >/dev/null
+          fi
+
+      - name: Send Pushover failure notification
+        # No source/filing notifications before both discovery phases succeed.
+        if: ${{ always() && failure() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+        run: |
+          if ! python3 scripts/legislative_healthcheck.py --discovery-only; then
+            exit 0
+          fi
+          if [[ -n "$PUSHOVER_API_TOKEN" && -n "$PUSHOVER_USER_KEY" ]]; then
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              --form-string "token=$PUSHOVER_API_TOKEN" \
+              --form-string "user=$PUSHOVER_USER_KEY" \
+              --form-string "title=Legislative purchase tracker failed" \
+              --form-string "message=Open the GitHub Actions run for logs and the result artifact." \
+              --form-string "url=$run_url" \
+              --form-string "url_title=Open failed workflow" \
+              https://api.pushover.net/1/messages.json >/dev/null
+          fi

@@ -345,8 +345,11 @@ def test_existing_failed_attempt_before_restored_success_does_not_block():
     guard(FakeAPI([run(), old], {(10, 1): [job()]}))
 
 
-def test_canonical_workflows_keep_single_writer_manual_dispatch_and_retry_guard():
-    schedules = {"executive": "13,43 * * * *"}
+def test_canonical_workflows_keep_single_writer_schedules_and_retry_guard():
+    schedules = {
+        "legislative": "7,22,37,52 * * * *",
+        "executive": "13,43 * * * *",
+    }
     groups = {"legislative": "legislative-purchase-tracker-v2", "executive": "executive-purchase-tracker", "ai": "ai-filing-analyst"}
     for branch, spec in evidence.SPECS.items():
         text = (ROOT / ".github/workflows" / spec["file"]).read_text(encoding="utf-8")
@@ -367,26 +370,24 @@ def test_canonical_workflows_keep_single_writer_manual_dispatch_and_retry_guard(
             assert text.index("--guard-branch") < text.index(
                 f"- name: {spec['step']}"
             )
-        if branch == "legislative":
-            assert set(triggers) == {"workflow_dispatch"}
-            acknowledgement = triggers["workflow_dispatch"]["inputs"]["validation_acknowledged"]
-            assert acknowledgement["required"] is True
-            assert acknowledgement["default"] is False
-            assert acknowledgement["type"] == "boolean"
-            assert "--no-notify" in text
-            assert "--validate-durable" in text
-            assert "--require-notifications-suppressed" in text
-        elif branch != "ai":
+        if branch != "ai":
             assert triggers["schedule"][0]["cron"] == schedules[branch]
             assert triggers["workflow_dispatch"]["inputs"]["trigger_source"]["options"] == ["workflow_dispatch", "external_scheduler"]
+        if branch == "legislative":
+            assert "--no-notify" not in text
+            assert "--validate-durable" in text
+            assert "--require-restore-receipt" in text
+            assert 'POLITITRACK_CONTROLLED_VALIDATION: "false"' in text
 
 
-def test_legislative_controlled_validation_cannot_trigger_automatic_ai_analysis():
+def test_legislative_production_runs_fan_out_to_ai_and_dashboard():
     analyst = (ROOT / ".github/workflows/ai_filing_analyst.yml").read_text(encoding="utf-8")
     publisher = (ROOT / ".github/workflows/publish_trade_dashboard.yml").read_text(encoding="utf-8")
-    assert "github.event.workflow_run.name != 'Legislative purchase tracker v2'" in analyst
-    assert "github.event.workflow_run.name == 'Legislative purchase tracker v2'" in publisher
-    assert "github.event.workflow_run.event == 'workflow_dispatch'" in publisher
+    assert "github.event.workflow_run.name != 'Legislative purchase tracker v2'" not in analyst
+    assert "github.event.workflow_run.name == 'Legislative purchase tracker v2'" not in publisher
+    assert "github.event.workflow_run.event == 'workflow_dispatch'" not in publisher
+    assert "github.event.workflow_run.event == 'schedule'" in analyst
+    assert "github.event.workflow_run.event == 'workflow_dispatch'" in analyst
 
 
 def test_failed_collector_publication_remains_read_only_and_simulations_unchanged():

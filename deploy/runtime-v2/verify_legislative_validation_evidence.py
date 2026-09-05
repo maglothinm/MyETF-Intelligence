@@ -930,14 +930,29 @@ def _validate_implementation_continuity(
     base = compare.get("base_commit")
     head = compare.get("head_commit")
     merge_base = compare.get("merge_base_commit")
+    ahead_by = compare.get("ahead_by")
+    if not isinstance(head, Mapping):
+        commits = compare.get("commits")
+        total_commits = compare.get("total_commits")
+        if (
+            not isinstance(commits, list)
+            or type(total_commits) is not int
+            or total_commits <= 0
+            or len(commits) != total_commits
+            or type(ahead_by) is not int
+            or total_commits != ahead_by
+            or not isinstance(commits[-1], Mapping)
+        ):
+            _fail("GitHub compare metadata is incomplete")
+        head = commits[-1]
     if not all(isinstance(value, Mapping) for value in (base, head, merge_base)):
         _fail("GitHub compare metadata is incomplete")
     _expect(base.get("sha"), validation_sha, "compare base revision")
     _expect(head.get("sha"), control_revision, "compare head revision")
     _expect(merge_base.get("sha"), validation_sha, "compare merge-base revision")
-    ahead_by = compare.get("ahead_by")
     if type(ahead_by) is not int or ahead_by <= 0:
         _fail("schedule-restoration revision is not after the validation revision")
+    _expect(compare.get("behind_by"), 0, "validation/control behind count")
 
     hashes: dict[str, str] = {}
     for relative in IMPLEMENTATION_PATHS:

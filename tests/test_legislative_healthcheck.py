@@ -201,32 +201,34 @@ def test_hashed_suppressed_receipt_binds_degraded_result_and_complete_state(tmp_
     ]) == 1
 
 
-def test_workflow_keeps_manual_validation_suppressed_and_state_upload_gated():
+def test_workflow_restores_production_triggers_notifications_and_durable_upload_gate():
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.load((root / ".github/workflows/legislative_trade_tracker_v2.yml").read_text(), Loader=yaml.BaseLoader)
-    assert set(workflow["on"]) == {"workflow_dispatch"}
-    assert "github.event_name == 'workflow_dispatch'" in workflow["jobs"]["track"]["if"]
+    assert set(workflow["on"]) == {"schedule", "workflow_dispatch"}
+    assert workflow["on"]["schedule"] == [{
+        "cron": "7,22,37,52 * * * *", "timezone": "America/New_York",
+    }]
+    dispatch = workflow["on"]["workflow_dispatch"]["inputs"]["trigger_source"]
+    assert dispatch["options"] == ["workflow_dispatch", "external_scheduler"]
+    assert "github.ref_name == github.event.repository.default_branch" in workflow["jobs"]["track"]["if"]
     steps = workflow["jobs"]["track"]["steps"]
     tracker = next(step for step in steps if step.get("id") == "tracker")
-    assert tracker["continue-on-error"] == "true"
-    assert "--no-notify" in tracker["run"]
-    assert "PUSHOVER_API_TOKEN" not in tracker.get("env", {})
-    assert "PUSHOVER_USER_KEY" not in tracker.get("env", {})
+    assert tracker.get("continue-on-error", "false") == "false"
+    assert "--no-notify" not in tracker["run"]
+    assert "PUSHOVER_API_TOKEN" in tracker["env"]
+    assert "PUSHOVER_USER_KEY" in tracker["env"]
     durable = next(step for step in steps if step.get("id") == "durable_validation")
-    assert durable["continue-on-error"] == "true"
+    assert durable.get("continue-on-error", "false") == "false"
     assert "--validate-durable" in durable["run"]
     assert "--require-restore-receipt" in durable["run"]
-    assert "--require-controlled-validation-receipt" in durable["run"]
-    assert "--require-notifications-suppressed" in durable["run"]
-    assert "--require-no-notification-eligible-records" in durable["run"]
-    assert "--require-run-provenance" in durable["run"]
-    gate = next(step for step in steps if step.get("id") == "state_validation")
-    assert gate.get("continue-on-error", "false") == "false"
-    assert "--validate-protected-upload" in gate["run"]
-    assert "--require-run-provenance" in gate["run"]
+    assert "--require-controlled-validation-receipt" not in durable["run"]
+    assert "--require-notifications-suppressed" not in durable["run"]
+    assert "--require-run-provenance" not in durable["run"]
+    assert not any(step.get("id") == "state_validation" for step in steps)
     upload = next(step for step in steps if step["name"] == "Upload protected tracker state")
     assert "success()" in upload["if"]
-    assert "steps.state_validation.outcome == 'success'" in upload["if"]
+    assert "steps.tracker.outcome == 'success'" in upload["if"]
+    assert "steps.durable_validation.outcome == 'success'" in upload["if"]
     assert "hashFiles" not in upload["if"]
     diagnostic = next(step for step in steps if step["name"] == "Upload run outputs")
     assert "always()" in diagnostic["if"]
@@ -237,6 +239,9 @@ def test_workflow_keeps_manual_validation_suppressed_and_state_upload_gated():
     workflow_text = (root / ".github/workflows/legislative_trade_tracker_v2.yml").read_text()
     assert "artifact_unexpired=\"$(jq -r '.expired == false'" in workflow_text
     assert ".expired // true" not in workflow_text
-    assert "LEGISLATIVE_HEALTHCHECKS_PING_URL" not in workflow_text
-    assert "PUSHOVER_API_TOKEN" not in workflow_text
-    assert "PUSHOVER_USER_KEY" not in workflow_text
+    assert 'POLITITRACK_CONTROLLED_VALIDATION: "false"' in workflow_text
+    assert "validation_acknowledged" not in workflow_text
+    assert "LEGISLATIVE_HEALTHCHECKS_PING_URL" in workflow_text
+    assert "PUSHOVER_API_TOKEN" in workflow_text
+    assert "PUSHOVER_USER_KEY" in workflow_text
+    assert "--validate-protected-upload" not in workflow_text
