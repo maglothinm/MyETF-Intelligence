@@ -19,6 +19,8 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
       - ".github/workflows/phase5_observed_state_tests.yml"
       - "deploy/runtime-v2/runtime_promotion_control.sh"
       - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
