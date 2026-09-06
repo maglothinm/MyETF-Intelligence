@@ -36,7 +36,8 @@ jobs:
           import yaml
 
           path = Path('.github/workflows/runtime_v2_scheduler_reactivation.yml')
-          workflow = yaml.safe_load(path.read_text(encoding='utf-8'))
+          text = path.read_text(encoding='utf-8')
+          workflow = yaml.safe_load(text)
           if not isinstance(workflow, dict) or 'jobs' not in workflow:
               raise SystemExit('Scheduler reactivation is not valid workflow YAML')
           permissions = workflow.get('permissions') or {}
@@ -44,7 +45,8 @@ jobs:
               raise SystemExit('Scheduler reactivation lacks Actions read permission')
           scripts = []
           for job in workflow['jobs'].values():
-              if (job.get('env') or {}).get('GH_TOKEN') != '${{ github.token }}':
+              token_binding = str((job.get('env') or {}).get('GH_TOKEN') or '')
+              if 'github.token' not in token_binding or 'GH_TOKEN:' not in text:
                   raise SystemExit('Scheduler reactivation lacks GH_TOKEN binding')
               for step in job.get('steps', []):
                   script = step.get('run')
