@@ -1,3 +1,5 @@
+import copy
+import json
 import os
 from pathlib import Path
 import shutil
@@ -234,4 +236,116 @@ fi
         .replace("__DESCRIBE_MODE__", describe_mode)
         .replace("__SCHEDULER__", scheduler)
     )
+    assert completed.returncode == 0, completed.stderr
+
+
+SCHEDULERS = (
+    "polititrack-legislative",
+    "polititrack-executive",
+    "polititrack-ai",
+    "polititrack-dashboard",
+    "polititrack-vault-lifecycle",
+)
+
+
+def _scheduler_summary(phase: str) -> dict[str, object]:
+    schedulers = []
+    for index, name in enumerate(SCHEDULERS, start=1):
+        schedulers.append(
+            {
+                "name": name,
+                "resource_name": (
+                    "projects/polititrack-example/locations/us-central1/jobs/"
+                    f"{name}"
+                ),
+                "state": (
+                    "PAUSED"
+                    if phase == "before" or name == "polititrack-vault-lifecycle"
+                    else "ENABLED"
+                ),
+                "raw_sha256": str(index) * 64,
+                "canonical_spec_sha256": format(index, "x") * 64,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "phase": phase,
+        "project_id": "polititrack-example",
+        "location": "us-central1",
+        "schedulers": schedulers,
+    }
+
+
+def _snapshot_comparison_script(after: dict[str, object], *, expect_success: bool) -> str:
+    before_json = json.dumps(_scheduler_summary("before"), separators=(",", ":"))
+    after_json = json.dumps(after, separators=(",", ":"))
+    assertion = r'''
+phase5_retry_compare_scheduler_snapshots
+jq -e '
+  .result == "exact_four_producer_schedulers_enabled_vault_unchanged" and
+  (.authorized_transitions | length) == 4 and
+  all(.authorized_transitions[];
+    .before_state == "PAUSED" and .after_state == "ENABLED" and
+    .before_spec_sha256 == .after_spec_sha256 and .spec_unchanged == true) and
+  .vault.name == "polititrack-vault-lifecycle" and
+  .vault.before_state == "PAUSED" and .vault.after_state == "PAUSED" and
+  .vault.before_spec_sha256 == .vault.after_spec_sha256 and
+  .vault.spec_unchanged == true
+' "${PHASE5_RETRY_SCHEDULER_TRANSITION}" >/dev/null
+''' if expect_success else r'''
+if phase5_retry_compare_scheduler_snapshots; then
+  echo "Tampered Scheduler snapshots were accepted." >&2
+  exit 91
+fi
+[[ ! -e "${PHASE5_RETRY_SCHEDULER_TRANSITION}" ]]
+'''
+    return (
+        r'''
+set -Eeuo pipefail
+EVIDENCE_DIR="$(mktemp -d)"
+trap 'rm -rf -- "${EVIDENCE_DIR}"' EXIT
+RESOURCE_DIR="${EVIDENCE_DIR}/resources"
+mkdir -p "${RESOURCE_DIR}"
+CONTROL_REVISION="$(printf 'a%.0s' {1..40})"
+PRIVATE_WEB_AUDIENCE="https://polititrack-web.example.run.app"
+PROJECT_ID="polititrack-example"
+REGION="us-central1"
+source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+printf '%s\n' '__BEFORE_JSON__' > "${RESOURCE_DIR}/scheduler-before-summary.json"
+printf '%s\n' '__AFTER_JSON__' > "${RESOURCE_DIR}/scheduler-after-summary.json"
+__ASSERTION__
+'''
+        .replace("__BEFORE_JSON__", before_json)
+        .replace("__AFTER_JSON__", after_json)
+        .replace("__ASSERTION__", assertion)
+    )
+
+
+def test_scheduler_snapshot_comparison_executes_real_jq_expression() -> None:
+    completed = _run(
+        _snapshot_comparison_script(
+            _scheduler_summary("after"), expect_success=True
+        )
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ("producer_spec", "producer_state", "vault_state", "scheduler_identity"),
+)
+def test_scheduler_snapshot_comparison_rejects_tampering(tamper: str) -> None:
+    after = copy.deepcopy(_scheduler_summary("after"))
+    rows = after["schedulers"]
+    assert isinstance(rows, list)
+    if tamper == "producer_spec":
+        rows[2]["canonical_spec_sha256"] = "f" * 64
+    elif tamper == "producer_state":
+        rows[1]["state"] = "PAUSED"
+    elif tamper == "vault_state":
+        rows[4]["state"] = "ENABLED"
+    else:
+        rows[3]["name"] = "polititrack-dashboard-tampered"
+
+    completed = _run(_snapshot_comparison_script(after, expect_success=False))
     assert completed.returncode == 0, completed.stderr

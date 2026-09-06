@@ -13,6 +13,7 @@ PHASE5_RETRY_INCIDENT_DIR="${EVIDENCE_DIR}/incident"
 PHASE5_RETRY_RUN_ID="33979778020"
 PHASE5_RETRY_FAILED_RETRY_RUN_ID="33990741282"
 PHASE5_RETRY_FAILED_RETRY_SUCCESSOR_RUN_ID="33998014996"
+PHASE5_RETRY_FAILED_RETRY_SUCCESSOR2_RUN_ID="34001859165"
 PHASE5_RETRY_PHASE4_RUN_ID="33979432233"
 PHASE5_RETRY_LEGACY_AI_RUN_ID="33980946687"
 PHASE5_RETRY_DASHBOARD_RUN_ID="33974683885"
@@ -21,6 +22,7 @@ PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS=(
   33987160591 33987130349
   33992770754 33992772006
   33999935395 33999936212
+  34003839086 34003840018
 )
 PHASE5_RETRY_SCHEDULER_CONTROL_ROLE="roles/cloudscheduler.admin"
 PHASE5_RETRY_PERMANENT_CONTROL_ROLE_ID="polititrackPhase3Terraform"
@@ -86,6 +88,7 @@ phase5_retry_verify_descriptor_identity() {
     --arg failed_run "${PHASE5_RETRY_RUN_ID}" \
     --arg failed_retry_run "${PHASE5_RETRY_FAILED_RETRY_RUN_ID}" \
     --arg failed_retry_successor_run "${PHASE5_RETRY_FAILED_RETRY_SUCCESSOR_RUN_ID}" \
+    --arg failed_retry_successor2_run "${PHASE5_RETRY_FAILED_RETRY_SUCCESSOR2_RUN_ID}" \
     --arg legacy_ai_run "${PHASE5_RETRY_LEGACY_AI_RUN_ID}" \
     --arg recovery_legislative "${PHASE5_RETRY_RECOVERY_RUN_IDS[0]}" \
     --arg recovery_executive "${PHASE5_RETRY_RECOVERY_RUN_IDS[1]}" \
@@ -95,6 +98,8 @@ phase5_retry_verify_descriptor_identity() {
     --argjson successor2_executive "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[3]}" \
     --argjson successor3_legislative "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[4]}" \
     --argjson successor3_executive "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[5]}" \
+    --argjson successor4_legislative "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[6]}" \
+    --argjson successor4_executive "${PHASE5_RETRY_FROZEN_SUCCESSOR_RUN_IDS[7]}" \
     --arg dashboard_run "${PHASE5_RETRY_DASHBOARD_RUN_ID}" \
     'type == "object" and .schema_version == 1 and
      .result == "phase5_failed_promotion_reconciliation_authorized" and
@@ -169,6 +174,38 @@ phase5_retry_verify_descriptor_identity() {
          dashboard:{generation:9,snapshot_sha256:"c9253417fcd42ed3e4012d4452f370e27e647e13293b5e905d0fc8ddf8696a4d"}}
      } and
      (.failed_phase5_retry_successor.run_id | tostring) == $failed_retry_successor_run and
+     .failed_phase5_retry_successor2 == {
+       run_id:34001859165,run_number:6,run_attempt:1,
+       event:"workflow_dispatch",head_sha:"84833a8a61ad243f8d6622b1a2ed14023131c691",
+       conclusion:"failure",created_at:"2026-09-06T00:39:27Z",
+       run_started_at:"2026-09-06T00:39:27Z",updated_at:"2026-09-06T01:31:08Z",
+       workflow:{id:351113264,name:"Reconcile failed Phase 5 promotion 33979778020",
+                 path:".github/workflows/phase5_failed_promotion_retry.yml"},
+       job:{id:101402031730,name:"reconcile-and-retry",
+            started_at:"2026-09-06T00:39:31Z",completed_at:"2026-09-06T01:31:07Z"},
+       artifact:{id:9980385636,
+                 name:"phase5-failed-promotion-retry-rollback-33979778020",
+                 size_in_bytes:44466159,
+                 digest:"sha256:0000d3eb37dd71b94613fda03aec6ebdf51f292f605a60bf8561ece8ff6e71cb",
+                 expires_at:"2026-12-05T00:39:28Z"},
+       predecessor_replay_sha256:"19a764ab3a9a06e94dec864121588e52a908eddc84009436a89955b2bc2ffbcb",
+       predecessor_descriptor_sha256:"b78c9dfb5d5495e8b85a49f286d86cc511b67166213dd52710e6ddd0e6e2f1b4",
+       status_members:["retry-smoke-sequence-1-legislative-status.json",
+                       "retry-smoke-sequence-2-executive-status.json",
+                       "retry-smoke-sequence-3-ai-status.json",
+                       "retry-smoke-sequence-4-dashboard-status.json"],
+       baseline_heads:{
+         legislative:{generation:9,snapshot_sha256:"c499ecc334af8b192762028bb558ae170a446abf17bb56fc480b3b079e5fba9f"},
+         executive:{generation:9,snapshot_sha256:"9839e8aef7f6fd315bdc186dd956d934b7be709d47c84b9d63f462be5e2ac84f"},
+         ai:{generation:8,snapshot_sha256:"cfc5ff3d19c469c8c3df59dca63e807999d02339fa93514d04bb0ede2ddb6eb9"},
+         dashboard:{generation:9,snapshot_sha256:"c9253417fcd42ed3e4012d4452f370e27e647e13293b5e905d0fc8ddf8696a4d"}},
+       terminal_heads:{
+         legislative:{generation:10,snapshot_sha256:"53ceef8781c3bbbce49168c9cc3c3da7c3a93c96c194411bfaa743cdee43cdee"},
+         executive:{generation:10,snapshot_sha256:"21b574614dadf9236d716074556b55d8e4333e4f0444491a1bc5a44d5e6862c6"},
+         ai:{generation:9,snapshot_sha256:"a0fbe8c6c8e7c34a7ebde0d4eeb673c3886bba67379aed102fae699530430555"},
+         dashboard:{generation:10,snapshot_sha256:"81f1e9a8af53cdfb7609b1412fd3cc1e14c1c6cd52d3ba726f02faafe8c20967"}}
+     } and
+     (.failed_phase5_retry_successor2.run_id | tostring) == $failed_retry_successor2_run and
      (.concurrent_legacy_ai.run_id | tostring) == $legacy_ai_run and
      .legacy_dashboard.role == "dashboard" and
      (.legacy_dashboard.run_id | tostring) == $dashboard_run and
@@ -333,6 +370,54 @@ phase5_retry_verify_descriptor_identity() {
            size_in_bytes:495654,
            digest:"sha256:4a040d19ed18007ecfbd175aa562196090b332566e3856cdfd66f102c151484b",
            expires_at:"2026-10-05T23:57:50Z"}
+       },
+       {
+         role:"legislative",run_id:$successor4_legislative,run_number:62,run_attempt:1,
+         event:"workflow_dispatch",head_sha:"84833a8a61ad243f8d6622b1a2ed14023131c691",
+         conclusion:"success",created_at:"2026-09-06T01:25:08Z",
+         run_started_at:"2026-09-06T01:25:08Z",updated_at:"2026-09-06T01:27:41Z",
+         workflow:{id:345003824,name:"Legislative purchase tracker v2",
+                   path:".github/workflows/legislative_trade_tracker_v2.yml"},
+         job:{id:101407365209,name:"track",started_at:"2026-09-06T01:25:13Z",
+              completed_at:"2026-09-06T01:27:40Z"},
+         predecessor_artifact:{
+           id:9979204384,name:"legislative-tracker-state",size_in_bytes:759212,
+           digest:"sha256:df963a11d57e632e4c21494729479a4f2391a1f936638e533efbfb32baaab52d",
+           expires_at:"2026-12-04T23:55:33Z",producer_run_id:33999935395,
+           producer_head_sha:"093bc9c5ad9100e7bf4474f56bdac58d1079129a"},
+         artifact:{
+           id:9980333319,name:"legislative-tracker-state",size_in_bytes:759255,
+           digest:"sha256:b43648ec39a99b8d76b4d3755fd4244473666f157bfdf91c7b600a0fcd180d8a",
+           expires_at:"2026-12-05T01:25:09Z"},
+         output_artifact:{
+           id:9980333723,name:"legislative-purchase-output-34003839086-1",
+           size_in_bytes:149735,
+           digest:"sha256:92664e01374523f00522de72892e789feccfdb62d61a3bda65665228c2238bd9",
+           expires_at:"2026-10-06T01:27:34Z"}
+       },
+       {
+         role:"executive",run_id:$successor4_executive,run_number:53,run_attempt:1,
+         event:"workflow_dispatch",head_sha:"84833a8a61ad243f8d6622b1a2ed14023131c691",
+         conclusion:"success",created_at:"2026-09-06T01:25:09Z",
+         run_started_at:"2026-09-06T01:25:09Z",updated_at:"2026-09-06T01:27:22Z",
+         workflow:{id:344663671,name:"Executive purchase tracker",
+                   path:".github/workflows/executive_trade_tracker.yml"},
+         job:{id:101407367139,name:"track",started_at:"2026-09-06T01:25:12Z",
+              completed_at:"2026-09-06T01:27:21Z"},
+         predecessor_artifact:{
+           id:9979203860,name:"executive-tracker-state",size_in_bytes:512101,
+           digest:"sha256:e0cc55b5d20d6589258883c8af527af3f3d197cfe850e974e8f18873ff5a4309",
+           expires_at:"2026-12-04T23:55:33Z",producer_run_id:33999936212,
+           producer_head_sha:"093bc9c5ad9100e7bf4474f56bdac58d1079129a"},
+         artifact:{
+           id:9980329429,name:"executive-tracker-state",size_in_bytes:512125,
+           digest:"sha256:395b365138cc827086b113d457f3443c184306c9df059572f0f3abaccba28731",
+           expires_at:"2026-12-05T01:25:10Z"},
+         output_artifact:{
+           id:9980329617,name:"executive-purchase-output-34003840018",
+           size_in_bytes:495653,
+           digest:"sha256:a2e7dfc86751130df81d7de8f52da5f1a2f8208b80e5333d8a2f34a6ada27367",
+           expires_at:"2026-10-06T01:27:18Z"}
        }
      ] and
      .frozen_legacy_successors[0].predecessor_artifact ==
@@ -359,6 +444,14 @@ phase5_retry_verify_descriptor_identity() {
        (.frozen_legacy_successors[3].artifact + {
          producer_run_id:.frozen_legacy_successors[3].run_id,
          producer_head_sha:.frozen_legacy_successors[3].head_sha}) and
+     .frozen_legacy_successors[6].predecessor_artifact ==
+       (.frozen_legacy_successors[4].artifact + {
+         producer_run_id:.frozen_legacy_successors[4].run_id,
+         producer_head_sha:.frozen_legacy_successors[4].head_sha}) and
+     .frozen_legacy_successors[7].predecessor_artifact ==
+       (.frozen_legacy_successors[5].artifact + {
+         producer_run_id:.frozen_legacy_successors[5].run_id,
+         producer_head_sha:.frozen_legacy_successors[5].head_sha}) and
      (.expected_continuation_heads | type) == "object" and
      (.expected_continuation_heads | keys | sort) == (["ai","dashboard","executive","legislative"] | sort) and
      all(.expected_continuation_heads[];
@@ -447,6 +540,9 @@ phase5_retry_download_incident_evidence() {
   phase5_retry_capture_run '.failed_phase5_retry_successor' failed-retry-successor || return 1
   phase5_retry_capture_artifact \
     '.failed_phase5_retry_successor.artifact' failed-retry-successor || return 1
+  phase5_retry_capture_run '.failed_phase5_retry_successor2' failed-retry-successor2 || return 1
+  phase5_retry_capture_artifact \
+    '.failed_phase5_retry_successor2.artifact' failed-retry-successor2 || return 1
 
   phase5_retry_capture_run '.concurrent_legacy_ai' concurrent-legacy-ai || return 1
   phase5_retry_capture_artifact \
@@ -505,6 +601,18 @@ phase5_retry_download_incident_evidence() {
     '.frozen_legacy_successors[5].artifact' frozen-successor3-executive || return 1
   phase5_retry_capture_artifact \
     '.frozen_legacy_successors[5].output_artifact' frozen-successor3-executive-output || return 1
+  phase5_retry_capture_run \
+    '.frozen_legacy_successors[6]' frozen-successor4-legislative || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[6].artifact' frozen-successor4-legislative || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[6].output_artifact' frozen-successor4-legislative-output || return 1
+  phase5_retry_capture_run \
+    '.frozen_legacy_successors[7]' frozen-successor4-executive || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[7].artifact' frozen-successor4-executive || return 1
+  phase5_retry_capture_artifact \
+    '.frozen_legacy_successors[7].output_artifact' frozen-successor4-executive-output || return 1
   phase5_retry_verify_legacy_high_water downloaded || return 1
 }
 
@@ -592,8 +700,8 @@ phase5_retry_verify_legacy_high_water() {
   local suffix="${1:-current}" role run_path artifact_path workflow artifact_name
   local expected_run_id expected_run_created_at expected_artifact_id runs_file artifacts_file
   local specifications=(
-    'legislative|.frozen_legacy_successors[4]|.frozen_legacy_successors[4].artifact|legislative_trade_tracker_v2.yml'
-    'executive|.frozen_legacy_successors[5]|.frozen_legacy_successors[5].artifact|executive_trade_tracker.yml'
+    'legislative|.frozen_legacy_successors[6]|.frozen_legacy_successors[6].artifact|legislative_trade_tracker_v2.yml'
+    'executive|.frozen_legacy_successors[7]|.frozen_legacy_successors[7].artifact|executive_trade_tracker.yml'
     'ai|.concurrent_legacy_ai|.concurrent_legacy_ai.state_artifact|ai_filing_analyst.yml'
   )
   mkdir -p "${PHASE5_RETRY_INCIDENT_DIR}" || return 1
@@ -1926,7 +2034,8 @@ phase5_retry_compare_scheduler_snapshots() {
   jq -e --slurpfile after "${after}" \
     '.phase == "before" and (.schedulers | length) == 5 and
      $after[0].phase == "after" and ($after[0].schedulers | length) == 5 and
-     all(.schedulers[] as $before;
+     all(.schedulers[];
+       . as $before |
        any($after[0].schedulers[];
          .name == $before.name and .resource_name == $before.resource_name and
          .canonical_spec_sha256 == $before.canonical_spec_sha256 and

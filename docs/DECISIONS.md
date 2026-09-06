@@ -1061,3 +1061,24 @@ Legislative/Executive recovery layer (`33999935395` and `33999936212`). Its
 completion check must exclude all twelve prior Runtime receipts and certify only
 its own four fresh executions. No retry authorizes snapshot rewind, legacy data
 merge/import, or Phase 6.
+
+**Run 6 amendment:** Retry run `34001859165` completed another distinct,
+serialized four-execution Runtime smoke cycle and reached the final Scheduler
+transition from paused to enabled. The exact post-mutation reads prove that all
+four producer Scheduler jobs were `ENABLED`, their canonical specifications were
+unchanged, and Filing Vault remained `PAUSED`. Certification then failed because
+the local jq snapshot comparator used the invalid binding form
+`all(.schedulers[] as $before; ...)`; jq rejected the expression before any
+comparison ran. The subsequent specification-drift message therefore was not an
+observed cloud-state failure.
+
+The failure handler created no completion certificate and restored the verified
+safe route: Runtime shadow mode, private web, paused Runtime and vault
+Schedulers, active retained Legislative/Executive/dashboard workflows, and no
+temporary authority. Recovery runs `34003839086` and `34003840018` are accepted
+only as the fourth zero-change legacy successor layer. Run 6's generation
+10/10/9/10 heads and four receipts are a third non-certifying predecessor cycle.
+The next retry must bind that exact artifact and recovery layer, exclude all
+sixteen prior Runtime receipts, and certify only four new executions. The jq
+binding correction does not authorize rebaseline, state rewind, legacy
+merge/import, or Phase 6.

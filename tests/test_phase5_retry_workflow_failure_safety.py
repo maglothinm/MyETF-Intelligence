@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import textwrap
+import zipfile
 
 import pytest
 
@@ -58,8 +59,10 @@ def test_failure_path_invalidates_every_affirmative_completion_file() -> None:
     delete = sanitizer.index("rm -f --")
     receipt = sanitizer.index("phase5-completion-invalidation.json")
     copy = sanitizer.index('cp -a "${EVIDENCE_DIR}/."')
+    prune = sanitizer.index('rm -f -- "${nested_archives[@]}"')
+    no_nested_archives = sanitizer.index("remaining_nested_archives=(", prune)
     publish = sanitizer.index('mv -- "${publication_tmp}" "${ROLLBACK_EVIDENCE_DIR}"')
-    assert delete < receipt < copy < publish
+    assert delete < receipt < copy < prune < no_nested_archives < publish
 
 
 def test_rollback_publication_is_atomic_and_explicitly_noncertifying() -> None:
@@ -110,6 +113,17 @@ def test_exit_trap_deletes_provisional_certificate_before_publication(
     }
     for name, content in provisional.items():
         (evidence / name).write_text(content, encoding="utf-8")
+    incident = evidence / "incident"
+    incident.mkdir()
+    oversized_predecessor = incident / "failed-retry-successor2.zip"
+    with oversized_predecessor.open("wb") as stream:
+        stream.truncate(44_466_159)
+    retained = {
+        "failed-retry-successor2-artifact.json": b'{"id":9980385636}\n',
+        "failed-prefix-replay.json": b'{"result":"phase5_failed_promotion_reconciled"}\n',
+    }
+    for name, content in retained.items():
+        (incident / name).write_bytes(content)
 
     script = f"""
 set -euo pipefail
@@ -134,6 +148,21 @@ exit 23
     for name in provisional:
         assert not (evidence / name).exists()
         assert not (publication / name).exists()
+    assert oversized_predecessor.is_file()
+    assert oversized_predecessor.stat().st_size == 44_466_159
+    assert not (publication / "incident" / oversized_predecessor.name).exists()
+    assert not list((publication / "incident").glob("*.zip"))
+    for name, content in retained.items():
+        assert (publication / "incident" / name).read_bytes() == content
+
+    published_archive = tmp_path / "rollback-publication.zip"
+    with zipfile.ZipFile(published_archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        for path in publication.rglob("*"):
+            if path.is_file():
+                bundle.write(path, path.relative_to(publication).as_posix())
+    assert published_archive.stat().st_size <= 64 * 1024 * 1024
+    with zipfile.ZipFile(published_archive) as bundle:
+        assert all(info.file_size <= 32 * 1024 * 1024 for info in bundle.infolist())
     receipt = json.loads(
         (publication / "phase5-completion-invalidation.json").read_text(encoding="utf-8")
     )
