@@ -1,0 +1,77 @@
+name: Validate Runtime v2 scheduler reactivation
+
+on:
+  push:
+    branches:
+      - fix/reactivate-runtime-v2-schedulers
+    paths:
+      - ".github/workflows/runtime_v2_scheduler_reactivation_lint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/reactivate-runtime-v2-schedulers
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install validation dependencies
+        run: python -m pip install PyYAML==6.0.3 pytest==9.0.2
+      - name: Parse workflow and embedded Bash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          import yaml
+
+          path = Path('.github/workflows/runtime_v2_scheduler_reactivation.yml')
+          workflow = yaml.safe_load(path.read_text(encoding='utf-8'))
+          if not isinstance(workflow, dict) or 'jobs' not in workflow:
+              raise SystemExit('Scheduler reactivation is not valid workflow YAML')
+          scripts = []
+          for job in workflow['jobs'].values():
+              for step in job.get('steps', []):
+                  script = step.get('run')
+                  if isinstance(script, str):
+                      scripts.append((step.get('name', '<unnamed>'), script))
+          for index, (name, script) in enumerate(scripts, 1):
+              with tempfile.NamedTemporaryFile('w', suffix='.sh', delete=False) as handle:
+                  handle.write(script)
+                  script_path = handle.name
+              result = subprocess.run(['bash', '-n', script_path], text=True, capture_output=True)
+              if result.returncode:
+                  raise SystemExit(f'Bash syntax failure in step {index} {name}: {result.stderr}')
+          print(f'Validated {len(scripts)} embedded Bash scripts')
+          PY
+      - name: Verify JIT activation invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/runtime_v2_scheduler_reactivation.yml
+          grep -Fq 'verify_producer_scheduler_state PAUSED' "$workflow"
+          grep -Fq 'phase5_retry_grant_scheduler_control' "$workflow"
+          grep -Fq 'phase5_retry_enable_exact_producer_schedulers_last' "$workflow"
+          grep -Fq 'phase5_retry_remove_scheduler_control' "$workflow"
+          grep -Fq 'verify_producer_scheduler_state ENABLED' "$workflow"
+          grep -Fq 'verify_vault_scheduler_paused' "$workflow"
+          grep -Fq 'temporary_scheduler_admin_removed:true' "$workflow"
+          ! grep -Eq -- '--allow-unauthenticated|allUsers|terraform[[:space:]]+apply|roles/owner|roles/editor' "$workflow"
+      - name: Run existing Scheduler activation safety tests
+        run: |
+          python -m pytest -q \
+            tests/test_phase5_failed_promotion_retry.py \
+            tests/test_phase5_scheduler_resume_receipt.py \
+            tests/test_phase5_retry_workflow_failure_safety.py
+      - name: Verify repository safety contract
+        run: bash verify.sh
