@@ -1,0 +1,129 @@
+name: Mirror Runtime v2 production recovery status
+
+on:
+  push:
+    branches:
+      - ops/runtime-v2-status-mirror
+    paths:
+      - ".github/workflows/runtime_v2_status_mirror.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: runtime-v2-production-recovery-status-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/ops/runtime-v2-status-mirror'
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    steps:
+      - name: Check out isolated status branch
+        uses: actions/checkout@v7
+        with:
+          ref: ops/runtime-v2-status-mirror
+          fetch-depth: 0
+
+      - name: Wait for terminal production recovery state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          terminal=false
+          for attempt in $(seq 1 210); do
+            runs="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/runs?per_page=20")"
+            run="$(jq -c \
+              '[.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")][0] // empty' \
+              <<<"${runs}")"
+            if [[ -z "${run}" ]]; then
+              echo "Recovery run not visible yet (${attempt}/210)."
+              sleep 60
+              continue
+            fi
+
+            run_id="$(jq -r '.id' <<<"${run}")"
+            status="$(jq -r '.status' <<<"${run}")"
+            jobs="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")"
+            artifacts="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+
+            jq -n \
+              --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --argjson run "${run}" \
+              --argjson jobs "${jobs}" \
+              --argjson artifacts "${artifacts}" \
+              '{
+                schema_version: 1,
+                checked_at: $checked_at,
+                run: {
+                  id: $run.id,
+                  name: $run.name,
+                  event: $run.event,
+                  status: $run.status,
+                  conclusion: $run.conclusion,
+                  head_branch: $run.head_branch,
+                  head_sha: $run.head_sha,
+                  run_attempt: $run.run_attempt,
+                  created_at: $run.created_at,
+                  run_started_at: $run.run_started_at,
+                  updated_at: $run.updated_at,
+                  html_url: $run.html_url
+                },
+                jobs: [
+                  $jobs.jobs[] | {
+                    id,
+                    name,
+                    status,
+                    conclusion,
+                    started_at,
+                    completed_at,
+                    html_url,
+                    steps: [.steps[]? | {number, name, status, conclusion, started_at, completed_at}]
+                  }
+                ],
+                artifacts: [
+                  $artifacts.artifacts[]? | {
+                    id,
+                    name,
+                    size_in_bytes,
+                    expired,
+                    created_at,
+                    expires_at,
+                    digest
+                  }
+                ]
+              }' > ops/runtime-v2-recovery-status.json
+
+            echo "Recovery ${run_id}: ${status}"
+            if [[ "${status}" == "completed" ]]; then
+              terminal=true
+              break
+            fi
+            sleep 60
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Recovery did not reach a terminal state inside the bounded mirror window." >&2
+            exit 1
+          }
+
+      - name: Publish terminal status to isolated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ops/runtime-v2-recovery-status.json
+          git diff --cached --check
+          git commit -m "Record Runtime v2 production recovery terminal status"
+          git push origin HEAD:ops/runtime-v2-status-mirror
