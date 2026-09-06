@@ -17,6 +17,7 @@ on:
       - "tests/test_runtime_v2_provenance.py"
       - "tests/test_runtime_v2_mode_quarantine.py"
       - "tests/test_runtime_v2_terraform_safety.py"
+      - "tests/test_runtime_v2_scheduler_concurrency.py"
       - "tests/test_runtime_v2_phase3_receipts.py"
       - "tests/test_phase3_cloud_discovery.py"
       - "tests/test_phase3_gcp_auth_inventory.py"
@@ -156,6 +157,7 @@ jobs:
             tests/test_runtime_v2_database.py \
             tests/test_runtime_v2_provenance.py \
             tests/test_runtime_v2_terraform_safety.py \
+            tests/test_runtime_v2_scheduler_concurrency.py \
             tests/test_runtime_v2_phase3_receipts.py \
             tests/test_phase3_cloud_discovery.py \
             tests/test_phase3_gcp_auth_inventory.py \
