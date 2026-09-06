@@ -89,10 +89,13 @@ jobs:
           [[ "${init_ok}" == "true" ]]
           terraform -chdir=deploy/runtime-v2/terraform validate
 
-      - name: Remove temporary repair controls
+      - name: Remove non-workflow temporary control
         run: |
           rm -f scripts/apply_runtime_v2_scheduler_repair.py
-          rm -f .github/workflows/runtime_v2_concurrency_repair.yml
+          # The runner token cannot mutate workflow files. Restore the permanent
+          # workflow here; ChatGPT's connected GitHub writer applies that verified
+          # CI change and removes this temporary workflow after the code commit.
+          git checkout -- .github/workflows/runtime_v2_tests.yml
 
       - name: Verify repository safety contract
         shell: bash
@@ -114,9 +117,7 @@ jobs:
           git add runtime_v2/store.py runtime_v2/cli.py \
             deploy/runtime-v2/terraform/main.tf \
             tests/test_runtime_v2_scheduler_concurrency.py \
-            .github/workflows/runtime_v2_tests.yml \
-            scripts/apply_runtime_v2_scheduler_repair.py \
-            .github/workflows/runtime_v2_concurrency_repair.yml
+            scripts/apply_runtime_v2_scheduler_repair.py
           git diff --cached --check
           git commit -m "Fix Runtime v2 scheduler concurrency"
           git push origin HEAD:fix/runtime-v2-scheduler-concurrency
