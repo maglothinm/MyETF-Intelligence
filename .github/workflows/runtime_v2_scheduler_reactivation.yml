@@ -1,0 +1,142 @@
+name: Reactivate Runtime v2 producer schedulers after repaired smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_scheduler_reactivation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  reactivate:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd
+      RUNTIME_SOURCE_REVISION: 72c1ca8c74a7af4b11f2e677c7a296d5e2358578
+      PRIVATE_WEB_AUDIENCE: https://polititrack-web-497412818801.us-central1.run.app
+      CONTROL_REVISION: ${{ github.sha }}
+      EVIDENCE_DIR: runtime-v2-scheduler-reactivation
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify repaired production and reactivate exact four schedulers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          verify_canonical_context
+          verify_project_boundary
+          verify_cloud_sql_private
+          verify_vault_scheduler_paused
+          verify_legacy_workflows_state disabled_manually
+          verify_runtime_configuration production
+          verify_producer_scheduler_state PAUSED
+          phase5_retry_verify_scheduler_control_removed
+
+          phase5_retry_capture_scheduler_snapshot before
+          phase5_retry_grant_scheduler_control
+          touch "${EVIDENCE_DIR}/scheduler-control-granted"
+          phase5_retry_enable_exact_producer_schedulers_last
+          phase5_retry_remove_scheduler_control
+          phase5_retry_verify_scheduler_control_removed
+          phase5_retry_capture_scheduler_snapshot after
+          phase5_retry_compare_scheduler_snapshots
+          phase5_retry_finalize_scheduler_activation_evidence
+          verify_producer_scheduler_state ENABLED
+          verify_vault_scheduler_paused
+
+          resumed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          printf '%s\n' "${resumed_at}" > "${EVIDENCE_DIR}/schedulers-resumed-at.txt"
+          jq -n \
+            --arg source_revision "${RUNTIME_SOURCE_REVISION}" \
+            --arg immutable_image "${APPROVED_IMAGE}" \
+            --arg resumed_at "${resumed_at}" \
+            '{schema_version:1,result:"runtime_v2_exact_producer_schedulers_reactivated",
+              source_revision:$source_revision,immutable_image:$immutable_image,
+              producer_schedulers:["polititrack-legislative","polititrack-executive","polititrack-ai","polititrack-dashboard"],
+              producer_state:"ENABLED",vault_scheduler:"polititrack-vault-lifecycle",
+              vault_state:"PAUSED",reactivated_at:$resumed_at,
+              temporary_scheduler_admin_removed:true}' \
+            > "${EVIDENCE_DIR}/CERTIFICATE.json"
+
+      - name: Refresh credentials for fail-closed cleanup
+        if: always()
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Remove temporary Scheduler authority and verify final states
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          status=0
+          mkdir -p "${EVIDENCE_DIR}/cleanup"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          if [[ -s "${PHASE5_RETRY_SCHEDULER_CONTROL_CONDITION}" ]]; then
+            phase5_retry_remove_scheduler_control || status=1
+          fi
+          phase5_retry_verify_scheduler_control_removed || status=1
+
+          : > "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" \
+              --project "${PROJECT_ID}" --location "${REGION}" \
+              --format='value(state)' 2>/dev/null)"
+            printf '%s\t%s\n' "${scheduler}" "${state}" \
+              >> "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+            [[ "${state}" == "ENABLED" ]] || status=1
+          done
+          vault_state="$(gcloud scheduler jobs describe polititrack-vault-lifecycle \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(state)' 2>/dev/null)"
+          printf '%s\t%s\n' polititrack-vault-lifecycle "${vault_state}" \
+            >> "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+          [[ "${vault_state}" == "PAUSED" ]] || status=1
+          exit "${status}"
+
+      - name: Upload Scheduler reactivation evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-v2-scheduler-reactivation-${{ github.run_id }}
+          path: runtime-v2-scheduler-reactivation/
+          if-no-files-found: warn
+          retention-days: 90
