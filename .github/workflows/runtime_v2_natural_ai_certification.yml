@@ -86,7 +86,8 @@ jobs:
           [[ "${ai_schedule}" == "14,44 * * * *" ]]
           [[ "${ai_timezone}" == "America/New_York" ]]
           [[ "${dashboard_schedule}" == "2,17,32,47 * * * *" ]]
-          [[ "${dashboard_timezone}" == "America/New_York" ]]
+          # Dashboard retains the canonical Terraform UTC schedule.
+          [[ "${dashboard_timezone}" == "Etc/UTC" ]]
 
           jq -n \
             --arg activation_time "${ACTIVATION_TIME}" \
@@ -229,10 +230,10 @@ jobs:
                               'resource.type="cloud_run_job" AND '
                               f'resource.labels.job_name="{job}" AND '
                               f'resource.labels.location="{region}" AND '
-                              f'labels."run.googleapis.com/execution_name"="{execution}"'
+                              f'labels."run.googleapis.com/execution_name"="{execution}" AND '
+                              f'timestamp>="{activation_raw}"'
                           ),
                           "--project", project,
-                          "--freshness", "4h",
                           "--limit", "1000",
                           "--order", "asc",
                           "--format", "json",
