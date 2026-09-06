@@ -1,0 +1,121 @@
+name: Retry transient Runtime v2 production recovery failure once
+
+on:
+  push:
+    branches: [recoverywatch]
+    paths: [".github/workflows/runtime_v2_recovery_transient_retry.yml"]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: runtime-v2-production-recovery-transient-retry
+  cancel-in-progress: false
+
+jobs:
+  retry-if-transient:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/recoverywatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Wait for initial terminal recovery attempt
+        id: terminal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=false
+          for attempt in $(seq 1 210); do
+            run="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/runs?per_page=20" \
+              --jq '.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")' | head -n1)"
+            if [[ -z "${run}" || "$(jq -r '.status' <<<"${run}")" != "completed" ]]; then
+              sleep 60
+              continue
+            fi
+            run_id="$(jq -r '.id' <<<"${run}")"
+            conclusion="$(jq -r '.conclusion // "unknown"' <<<"${run}")"
+            run_attempt="$(jq -r '.run_attempt // 1' <<<"${run}")"
+            head_sha="$(jq -r '.head_sha' <<<"${run}")"
+            echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+            echo "conclusion=${conclusion}" >> "${GITHUB_OUTPUT}"
+            echo "run_attempt=${run_attempt}" >> "${GITHUB_OUTPUT}"
+            echo "head_sha=${head_sha}" >> "${GITHUB_OUTPUT}"
+            terminal=true
+            break
+          done
+          [[ "${terminal}" == "true" ]]
+
+      - name: Classify failure logs
+        id: classify
+        if: steps.terminal.outputs.conclusion != 'success' && steps.terminal.outputs.run_attempt == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.terminal.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run view "${RUN_ID}" --log-failed > /tmp/recovery-failed.log 2>&1 || true
+          tr '[:upper:]' '[:lower:]' < /tmp/recovery-failed.log > /tmp/recovery-failed.lower.log
+
+          transient=false
+          if grep -Eq \
+            'connection reset|connection refused|temporary failure|temporarily unavailable|service unavailable|deadline exceeded|timed out|timeout|http (429|500|502|503|504)|status code (429|500|502|503|504)|rate limit|registry\.terraform\.io|tls handshake|network is unreachable|broken pipe|remote end closed' \
+            /tmp/recovery-failed.lower.log; then
+            transient=true
+          fi
+
+          invariant=false
+          if grep -Eq \
+            'boundary mismatch|source revision mismatch|refusing|fail[- ]closed|unverified|unexpected .*change|head changed|not private|legacy workflow.*expected|scheduler.*expected|authority cleanup.*unverified|did not become disabled|artifact.*mismatch|certificate.*invalid' \
+            /tmp/recovery-failed.lower.log; then
+            invariant=true
+          fi
+
+          retry=false
+          if [[ "${transient}" == "true" && "${invariant}" == "false" ]]; then
+            retry=true
+          fi
+          echo "transient=${transient}" >> "${GITHUB_OUTPUT}"
+          echo "invariant=${invariant}" >> "${GITHUB_OUTPUT}"
+          echo "retry=${retry}" >> "${GITHUB_OUTPUT}"
+
+      - name: Request one failed-job rerun
+        if: steps.classify.outputs.retry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.terminal.outputs.run_id }}
+          HEAD_SHA: ${{ steps.terminal.outputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/rerun-failed-jobs"
+          ref_name=runtime-v2-recovery-transient-retry-requested
+          existing="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${ref_name}" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -z "${existing}" ]]; then
+            gh api --method POST "/repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field "ref=refs/heads/${ref_name}" --raw-field "sha=${HEAD_SHA}" >/dev/null
+          fi
+          title="Runtime v2 recovery transient retry requested — run ${RUN_ID}"
+          gh issue list --state all --search "${title} in:title" --json title --jq '.[].title' | grep -Fxq "${title}" || \
+            gh issue create --title "${title}" \
+              --body "The initial recovery attempt failed with a whitelisted transient service/network signature and no fail-closed invariant signature. Failed jobs were rerun once for the same source and workflow run."
+
+      - name: Record non-retriable classification
+        if: steps.terminal.outputs.conclusion != 'success' && steps.terminal.outputs.run_attempt == '1' && steps.classify.outputs.retry != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.terminal.outputs.run_id }}
+          TRANSIENT: ${{ steps.classify.outputs.transient }}
+          INVARIANT: ${{ steps.classify.outputs.invariant }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="Runtime v2 recovery not automatically retried — run ${RUN_ID}"
+          gh issue list --state all --search "${title} in:title" --json title --jq '.[].title' | grep -Fxq "${title}" && exit 0
+          gh issue create --title "${title}" \
+            --body "Automatic retry was withheld. Transient signature: \`${TRANSIENT}\`. Invariant/safety signature: \`${INVARIANT}\`. Use targeted diagnostics before any retry."
