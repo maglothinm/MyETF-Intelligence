@@ -1,0 +1,452 @@
+name: Certify Runtime v2 natural AI schedule
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_natural_ai_certification.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd
+      RUNTIME_SOURCE_REVISION: 72c1ca8c74a7af4b11f2e677c7a296d5e2358578
+      ACTIVATION_TIME: "2026-09-06T16:45:54Z"
+      CERTIFICATION_NOT_BEFORE: "2026-09-06T18:08:00Z"
+      EVIDENCE_DIR: runtime-v2-natural-ai-certification
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained deployer for preflight
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify natural-schedule preflight
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}/preflight" "${EVIDENCE_DIR}/natural"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          verify_canonical_context
+          verify_project_boundary
+          verify_cloud_sql_private
+          verify_vault_scheduler_paused
+          verify_legacy_workflows_state disabled_manually
+          verify_runtime_configuration production
+          verify_producer_scheduler_state ENABLED
+          phase5_retry_verify_scheduler_control_removed
+          phase5_retry_verify_role_viewer_removed
+
+          ai_schedule="$(gcloud scheduler jobs describe polititrack-ai \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(schedule)')"
+          ai_timezone="$(gcloud scheduler jobs describe polititrack-ai \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(timeZone)')"
+          dashboard_schedule="$(gcloud scheduler jobs describe polititrack-dashboard \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(schedule)')"
+          dashboard_timezone="$(gcloud scheduler jobs describe polititrack-dashboard \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(timeZone)')"
+          [[ "${ai_schedule}" == "14,44 * * * *" ]]
+          [[ "${ai_timezone}" == "America/New_York" ]]
+          [[ "${dashboard_schedule}" == "2,17,32,47 * * * *" ]]
+          [[ "${dashboard_timezone}" == "America/New_York" ]]
+
+          jq -n \
+            --arg activation_time "${ACTIVATION_TIME}" \
+            --arg certification_not_before "${CERTIFICATION_NOT_BEFORE}" \
+            --arg ai_schedule "${ai_schedule}" \
+            --arg dashboard_schedule "${dashboard_schedule}" \
+            '{schema_version:1,result:"runtime_v2_natural_schedule_preflight_passed",
+              activation_time:$activation_time,
+              certification_not_before:$certification_not_before,
+              ai_schedule:$ai_schedule,dashboard_schedule:$dashboard_schedule,
+              producer_schedulers:"ENABLED",vault_scheduler:"PAUSED",
+              temporary_scheduler_admin_absent:true,
+              temporary_role_viewer_absent:true}' \
+            > "${EVIDENCE_DIR}/preflight/receipt.json"
+
+      - name: Hold until two AI ticks and the following Dashboard window have elapsed
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(date -u -d "${CERTIFICATION_NOT_BEFORE}" +%s)"
+          now="$(date -u +%s)"
+          if (( now < target )); then
+            sleep "$((target - now))"
+          fi
+
+      - name: Refresh credentials for certification
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Inspect exact natural executions and durable state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          verify_runtime_configuration production
+          verify_producer_scheduler_state ENABLED
+          verify_vault_scheduler_paused
+          touch "${EVIDENCE_DIR}/execution-authority-attempted"
+          grant_execution_authority
+          touch "${EVIDENCE_DIR}/execution-authority-granted"
+
+          python - \
+            "${PROJECT_ID}" "${REGION}" "${ACTIVATION_TIME}" \
+            "${EVIDENCE_DIR}/natural" <<'PY'
+          import datetime as dt
+          import json
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          project, region, activation_raw, output_raw = sys.argv[1:]
+          output = Path(output_raw)
+          output.mkdir(parents=True, exist_ok=True)
+          activation = dt.datetime.fromisoformat(activation_raw.replace("Z", "+00:00"))
+
+          def run_json(command: list[str]) -> object:
+              result = subprocess.run(command, text=True, capture_output=True)
+              if result.returncode:
+                  raise SystemExit(
+                      "Command failed: " + " ".join(command) + "\n" + result.stderr
+                  )
+              try:
+                  return json.loads(result.stdout or "null")
+              except json.JSONDecodeError as exc:
+                  raise SystemExit("Command returned malformed JSON: " + " ".join(command)) from exc
+
+          def parse_time(value: str) -> dt.datetime:
+              return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+          def successful_executions(job: str, since: dt.datetime) -> list[dict[str, str]]:
+              rows = run_json(
+                  [
+                      "gcloud", "run", "jobs", "executions", "list",
+                      "--job", job,
+                      "--project", project,
+                      "--region", region,
+                      "--limit", "100",
+                      "--format", "json",
+                  ]
+              )
+              accepted: list[dict[str, str]] = []
+              for row in rows if isinstance(rows, list) else []:
+                  metadata = row.get("metadata") or {}
+                  status = row.get("status") or {}
+                  name = str(metadata.get("name") or "")
+                  created = str(metadata.get("creationTimestamp") or "")
+                  completed = str(status.get("completionTime") or "")
+                  complete = any(
+                      isinstance(condition, dict)
+                      and condition.get("type") == "Completed"
+                      and str(condition.get("status")) == "True"
+                      for condition in status.get("conditions") or []
+                  )
+                  if not (name and created and completed and complete):
+                      continue
+                  if int(status.get("succeededCount") or 0) < 1:
+                      continue
+                  if parse_time(created) < since:
+                      continue
+                  accepted.append(
+                      {"name": name, "created_at": created, "completed_at": completed}
+                  )
+              return sorted(accepted, key=lambda item: parse_time(item["created_at"]))
+
+          def payloads(rows: object) -> list[dict]:
+              found: list[dict] = []
+              for row in rows if isinstance(rows, list) else []:
+                  structured = row.get("jsonPayload")
+                  if isinstance(structured, dict):
+                      found.append(structured)
+                  text = row.get("textPayload")
+                  if not isinstance(text, str):
+                      continue
+                  candidates = [text.strip()]
+                  if "{" in text:
+                      candidates.append(text[text.find("{"):].strip())
+                  for candidate in candidates:
+                      try:
+                          parsed = json.loads(candidate)
+                      except (TypeError, ValueError):
+                          continue
+                      if isinstance(parsed, dict):
+                          found.append(parsed)
+                          break
+              return found
+
+          def writer_result(job: str, namespace: str, execution: str) -> str:
+              log_path = output / f"{execution}-logs.json"
+              for _ in range(18):
+                  rows = run_json(
+                      [
+                          "gcloud", "logging", "read",
+                          (
+                              'resource.type="cloud_run_job" AND '
+                              f'resource.labels.job_name="{job}" AND '
+                              f'resource.labels.location="{region}" AND '
+                              f'labels."run.googleapis.com/execution_name"="{execution}"'
+                          ),
+                          "--project", project,
+                          "--freshness", "4h",
+                          "--limit", "1000",
+                          "--order", "asc",
+                          "--format", "json",
+                      ]
+                  )
+                  log_path.write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
+                  values = payloads(rows)
+                  if any(
+                      value.get("result") == "coalesced"
+                      or value.get("reason") == "writer_already_running"
+                      for value in values
+                  ):
+                      return "coalesced"
+                  if any(
+                      value.get("result") == "success"
+                      and value.get("namespace") == namespace
+                      and value.get("mode") == "production"
+                      for value in values
+                  ):
+                      return "success"
+                  time.sleep(10)
+              return "missing-terminal-success-log"
+
+          ai_candidates = successful_executions("polititrack-ai", activation)
+          ai_results = []
+          for candidate in ai_candidates:
+              result = writer_result("polititrack-ai", "ai", candidate["name"])
+              ai_results.append({**candidate, "writer_result": result})
+          ai_writers = [row for row in ai_results if row["writer_result"] == "success"]
+          if len(ai_writers) < 2:
+              raise SystemExit(
+                  "Fewer than two natural non-coalesced AI writers were observed: "
+                  + json.dumps(ai_results, sort_keys=True)
+              )
+          certified_ai = ai_writers[:2]
+          second_completion = parse_time(certified_ai[1]["completed_at"])
+
+          dashboard_candidates = successful_executions(
+              "polititrack-dashboard", second_completion
+          )
+          dashboard_results = []
+          for candidate in dashboard_candidates:
+              if parse_time(candidate["created_at"]) <= second_completion:
+                  continue
+              result = writer_result(
+                  "polititrack-dashboard", "dashboard", candidate["name"]
+              )
+              dashboard_results.append({**candidate, "writer_result": result})
+          dashboard_writers = [
+              row for row in dashboard_results if row["writer_result"] == "success"
+          ]
+          if not dashboard_writers:
+              raise SystemExit(
+                  "No natural Dashboard writer followed the second AI completion: "
+                  + json.dumps(dashboard_results, sort_keys=True)
+              )
+          certified_dashboard = dashboard_writers[0]
+
+          (output / "execution-observation.json").write_text(
+              json.dumps(
+                  {
+                      "activation_time": activation_raw,
+                      "ai_candidates": ai_results,
+                      "certified_ai": certified_ai,
+                      "dashboard_candidates_after_second_ai": dashboard_results,
+                      "certified_dashboard": certified_dashboard,
+                  },
+                  indent=2,
+                  sort_keys=True,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          capture_status "${EVIDENCE_DIR}/natural/final-status.json" natural-ai-certified
+          python - \
+            "${EVIDENCE_DIR}/natural/execution-observation.json" \
+            "${EVIDENCE_DIR}/natural/final-status.json" \
+            "${RUNTIME_SOURCE_REVISION}" "${APPROVED_IMAGE}" \
+            "${EVIDENCE_DIR}/CERTIFICATE.json" <<'PY'
+          import datetime as dt
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          observation_path = Path(sys.argv[1])
+          status_path = Path(sys.argv[2])
+          revision = sys.argv[3]
+          image = sys.argv[4]
+          certificate_path = Path(sys.argv[5])
+          observation = json.loads(observation_path.read_text(encoding="utf-8"))
+          status = json.loads(status_path.read_text(encoding="utf-8"))
+          heads = {row["namespace"]: row for row in status["heads"]}
+          ai = observation["certified_ai"]
+          dashboard = observation["certified_dashboard"]
+          second_ai_completed = dt.datetime.fromisoformat(
+              ai[1]["completed_at"].replace("Z", "+00:00")
+          )
+          dashboard_created = dt.datetime.fromisoformat(
+              dashboard["created_at"].replace("Z", "+00:00")
+          )
+          if dashboard_created <= second_ai_completed:
+              raise SystemExit("Dashboard execution did not begin after second AI completion")
+          if heads["ai"]["generation"] < 64:
+              raise SystemExit("AI head did not advance through two natural cycles")
+          if heads["dashboard"]["generation"] < 63:
+              raise SystemExit("Dashboard head did not advance after repaired smoke")
+          dashboard_snapshot_time = dt.datetime.fromisoformat(
+              heads["dashboard"]["created_at"].replace("Z", "+00:00")
+          )
+          if dashboard_snapshot_time <= second_ai_completed:
+              raise SystemExit("Dashboard durable snapshot predates the second AI completion")
+          for name in ("ai", "dashboard"):
+              head = heads[name]
+              provenance = head.get("provenance") or {}
+              if head["source_revision"] != revision:
+                  raise SystemExit(f"{name} head is not bound to repaired source")
+              if provenance.get("authority") != "runtime_v2":
+                  raise SystemExit(f"{name} head lacks Runtime v2 authority")
+              if provenance.get("mode") != "production":
+                  raise SystemExit(f"{name} head is not production")
+              if provenance.get("trigger_source") != "external_scheduler":
+                  raise SystemExit(f"{name} head was not scheduler-originated")
+          certificate = {
+              "schema_version": 1,
+              "result": "runtime_v2_natural_ai_schedule_certified",
+              "activation_time": observation["activation_time"],
+              "source_revision": revision,
+              "immutable_image": image,
+              "ai_executions": ai,
+              "dashboard_execution": dashboard,
+              "ai_generation": heads["ai"]["generation"],
+              "dashboard_generation": heads["dashboard"]["generation"],
+              "producer_schedulers": "ENABLED",
+              "vault_scheduler": "PAUSED",
+              "temporary_execution_authority_pending_cleanup": True,
+              "evidence_sha256": {
+                  "execution_observation": hashlib.sha256(
+                      observation_path.read_bytes()
+                  ).hexdigest(),
+                  "final_status": hashlib.sha256(status_path.read_bytes()).hexdigest(),
+              },
+          }
+          certificate_path.write_text(
+              json.dumps(certificate, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(certificate_path.read_text(encoding="utf-8"))
+          PY
+
+          verify_runtime_configuration production
+          verify_producer_scheduler_state ENABLED
+          verify_vault_scheduler_paused
+          phase5_retry_verify_scheduler_control_removed
+          phase5_retry_verify_role_viewer_removed
+
+      - name: Refresh credentials for fail-closed cleanup
+        if: always()
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Remove temporary observation authority and verify terminal boundary
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          status=0
+          mkdir -p "${EVIDENCE_DIR}/cleanup"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          if [[ -f "${EVIDENCE_DIR}/execution-authority-attempted" ]]; then
+            remove_execution_authority || status=1
+          fi
+          verify_execution_authority_removed || status=1
+          phase5_retry_verify_scheduler_control_removed || status=1
+          phase5_retry_verify_role_viewer_removed || status=1
+
+          : > "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard; do
+            state="$(gcloud scheduler jobs describe "${scheduler}" \
+              --project "${PROJECT_ID}" --location "${REGION}" \
+              --format='value(state)' 2>/dev/null)"
+            printf '%s\t%s\n' "${scheduler}" "${state}" \
+              >> "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+            [[ "${state}" == "ENABLED" ]] || status=1
+          done
+          vault_state="$(gcloud scheduler jobs describe polititrack-vault-lifecycle \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(state)' 2>/dev/null)"
+          printf '%s\t%s\n' polititrack-vault-lifecycle "${vault_state}" \
+            >> "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+          [[ "${vault_state}" == "PAUSED" ]] || status=1
+
+          if [[ -s "${EVIDENCE_DIR}/CERTIFICATE.json" && "${status}" -eq 0 ]]; then
+            jq '.temporary_execution_authority_pending_cleanup = false |
+                .temporary_execution_authority_removed = true |
+                .temporary_logging_authority_removed = true' \
+              "${EVIDENCE_DIR}/CERTIFICATE.json" \
+              > "${EVIDENCE_DIR}/CERTIFICATE.json.tmp" \
+              && mv "${EVIDENCE_DIR}/CERTIFICATE.json.tmp" \
+                    "${EVIDENCE_DIR}/CERTIFICATE.json" \
+              || status=1
+          fi
+          exit "${status}"
+
+      - name: Upload natural-schedule certification evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-v2-natural-ai-certification-${{ github.run_id }}
+          path: runtime-v2-natural-ai-certification/
+          if-no-files-found: warn
+          retention-days: 90
