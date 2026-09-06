@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -32,6 +33,7 @@ jobs:
       PRIVATE_WEB_AUDIENCE: https://polititrack-web-497412818801.us-central1.run.app
       CONTROL_REVISION: ${{ github.sha }}
       EVIDENCE_DIR: runtime-v2-scheduler-reactivation
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out canonical main
