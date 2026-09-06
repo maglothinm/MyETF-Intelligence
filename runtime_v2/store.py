@@ -24,6 +24,10 @@ class StateStoreError(RuntimeError):
     """The durable state contract could not be satisfied."""
 
 
+class NamespaceBusy(StateStoreError):
+    """A scheduled writer was coalesced because its namespace is already active."""
+
+
 @dataclass(frozen=True)
 class SnapshotHead:
     namespace: str
@@ -387,7 +391,7 @@ class PostgresSnapshotStore:
                 cursor.execute("SELECT pg_try_advisory_lock(hashtext(%s))", (key,))
                 acquired = cursor.fetchone()[0]
             if not acquired:
-                raise StateStoreError(f"another {namespace} writer is already running")
+                raise NamespaceBusy(f"another {namespace} writer is already running")
             yield LockedNamespace(connection, namespace)
         finally:
             try:
@@ -398,8 +402,21 @@ class PostgresSnapshotStore:
                 connection.close()
 
     def restore_latest(self, namespace: str, destination: Path) -> SnapshotHead:
-        with self.locked(namespace) as locked:
-            return locked.restore(destination)
+        """Restore one immutable committed head without taking its writer lock.
+
+        The head and payload are selected by one joined SQL statement. PostgreSQL
+        therefore returns either the prior committed snapshot or its committed
+        successor, never a partially published state. Taking the namespace writer
+        lock here made AI collide with active collectors and made Dashboard collide
+        with every active producer.
+        """
+        if namespace not in NAMESPACES:
+            raise StateStoreError("unknown runtime state namespace")
+        connection = self._connect()
+        try:
+            return LockedNamespace(connection, namespace).restore(destination)
+        finally:
+            connection.close()
 
     def status(self) -> dict[str, Any]:
         connection = self._connect()

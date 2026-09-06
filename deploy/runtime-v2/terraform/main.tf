@@ -23,7 +23,10 @@ locals {
       cpu      = "2"
     }
     ai = {
-      schedule = "14,29,44,59 * * * *"
+      # Twenty paced analyses can require more than 21 minutes before document
+      # fetching, model latency, retries, Investor Edge, and publication. A
+      # 15-minute writer cadence guaranteed overlapping executions under backlog.
+      schedule = "14,44 * * * *"
       memory   = "4Gi"
       cpu      = "2"
     }
@@ -656,6 +659,10 @@ resource "google_cloud_scheduler_job" "vault_lifecycle" {
   http_target {
     http_method = "POST"
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.vault_lifecycle[0].name}:run"
+    body        = base64encode("{}")
+    headers = {
+      "Content-Type" = "application/json"
+    }
     oauth_token {
       service_account_email = google_service_account.scheduler.email
     }
@@ -690,6 +697,10 @@ resource "google_cloud_scheduler_job" "producer" {
   http_target {
     http_method = "POST"
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${google_cloud_run_v2_job.producer[each.key].name}:run"
+    body        = base64encode("{}")
+    headers = {
+      "Content-Type" = "application/json"
+    }
     oauth_token {
       service_account_email = google_service_account.scheduler.email
     }
