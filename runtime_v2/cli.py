@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -14,7 +15,7 @@ from pathlib import Path
 from .archive import extract_verified_zip
 from .mode import RuntimeModeError, resolve_runtime_mode
 from .runner import JobRunner
-from .store import NAMESPACES, PostgresSnapshotStore, StateStoreError
+from .store import NAMESPACES, NamespaceBusy, PostgresSnapshotStore, StateStoreError
 
 
 REPOSITORY_ID = 1349678672
@@ -182,8 +183,6 @@ def main(argv: list[str] | None = None) -> int:
             from backend.filing_vault import configured_service
             from .database import sqlalchemy_engine
 
-            import os
-
             config = {key: value for key, value in os.environ.items() if key.startswith("VAULT_")}
             if not config.get("VAULT_DATABASE_URL") and not os.environ.get("DATABASE_URL"):
                 config["VAULT_ENGINE"] = sqlalchemy_engine()
@@ -194,7 +193,25 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(store.status(), indent=2 if args.pretty else None, sort_keys=True))
         return 0
     if args.command == "run":
-        head = JobRunner(store, mode=selected_mode).run(args.job)
+        try:
+            head = JobRunner(store, mode=selected_mode).run(args.job)
+        except NamespaceBusy as exc:
+            trigger = str(os.environ.get("POLITITRACK_TRIGGER_SOURCE") or "external_scheduler")
+            if trigger != "external_scheduler":
+                raise
+            print(
+                json.dumps(
+                    {
+                        "result": "coalesced",
+                        "mode": selected_mode.value,
+                        "namespace": args.job,
+                        "reason": "writer_already_running",
+                        "detail": str(exc),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
         print(
             json.dumps(
                 {
