@@ -1043,3 +1043,21 @@ descriptor must pass local tests, independent review, and exact-head CI before
 merge. The merged retry must then succeed from frozen `main`; its completion
 artifact and the final live route, scheduler, workflow, IAM, and one-writer state
 must be independently rebound before this decision is operationally complete.
+
+**Retry-chain amendment:** Retry run `33990741282` and later retry run
+`33998014996` each completed a distinct four-execution Runtime smoke cycle but
+failed before certification and rolled back. The latter reached final scheduler
+activation; after six expected propagation denials, the first producer Scheduler
+resumed on attempt 7, while the CLI action response was the JSON array `[]`
+rather than a Scheduler Job resource. Treating that
+action response as the verification receipt was a controller defect. Scheduler
+activation must retain the mutation result, then read the exact job back and
+validate its name and `ENABLED` state before recording the transition.
+
+Both non-certifying cycles remain immutable predecessors. The next retry must
+bind the complete chain from the original invalidated prefix through both failed
+retries, the generation 9/9/8/9 Runtime continuation heads, and the third exact
+Legislative/Executive recovery layer (`33999935395` and `33999936212`). Its
+completion check must exclude all twelve prior Runtime receipts and certify only
+its own four fresh executions. No retry authorizes snapshot rewind, legacy data
+merge/import, or Phase 6.

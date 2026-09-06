@@ -62,6 +62,7 @@ VAULT_SCHEDULER = "polititrack-vault-lifecycle"
 PHASE4_RUN_ID = 33979432233
 FAILED_PHASE5_RUN_ID = 33979778020
 FAILED_PHASE5_RETRY_RUN_ID = 33990741282
+FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID = 33998014996
 CONCURRENT_LEGACY_AI_RUN_ID = 33980946687
 RECOVERY_RUN_IDS = (33981311523, 33981312757)
 FROZEN_LEGACY_SUCCESSOR_RUN_IDS = (
@@ -69,6 +70,8 @@ FROZEN_LEGACY_SUCCESSOR_RUN_IDS = (
     33987130349,
     33992770754,
     33992772006,
+    33999935395,
+    33999936212,
 )
 CERTIFIED_CONTROL_REVISION = "48efd8a45bbb51ee89e8b680430e593ac8867046"
 CERTIFIED_TREE_SHA = "e6ca055af1973765bea1b3de5c01a5dbd69c0393"
@@ -76,7 +79,10 @@ RUNTIME_SOURCE_REVISION = "8908f067298078f8c013e90cf6b7ad8ad420285b"
 FROZEN_LEGACY_SUCCESSOR_REVISIONS = (
     "40d252f4b26f8235a8a61d5c05d1e8a1b2bc76f2",
     "7dba656fe37098f0b7a2576f49803eb10d49f1be",
+    "093bc9c5ad9100e7bf4474f56bdac58d1079129a",
 )
+FAILED_PHASE5_RETRY_CONTROL_REVISION = FROZEN_LEGACY_SUCCESSOR_REVISIONS[1]
+FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION = FROZEN_LEGACY_SUCCESSOR_REVISIONS[2]
 RUNTIME_SNAPSHOT_DIGEST_PREFIX = "0f601d"
 
 FROZEN_LEGACY_SUCCESSOR_DIFFS = (
@@ -97,6 +103,16 @@ FROZEN_LEGACY_SUCCESSOR_DIFFS = (
         "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "M",
         "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "M",
         "tests/test_phase5_failed_promotion_retry.py": "M",
+        "tests/test_reconcile_phase5_failed_promotion.py": "M",
+    },
+    {
+        ".github/workflows/phase5_failed_promotion_retry.yml": "M",
+        ".github/workflows/runtime_v2_tests.yml": "M",
+        "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "M",
+        "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "M",
+        "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "M",
+        "tests/test_phase5_failed_promotion_retry.py": "M",
+        "tests/test_phase5_retry_workflow_failure_safety.py": "A",
         "tests/test_reconcile_phase5_failed_promotion.py": "M",
     },
 )
@@ -823,7 +839,7 @@ def _validate_failed_phase5_retry(
     )
     _expect(
         pin.get("head_sha"),
-        FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        FAILED_PHASE5_RETRY_CONTROL_REVISION,
         "failed Phase 5 retry revision",
     )
     artifact_pin = _require_object(pin.get("artifact"), "failed Phase 5 retry artifact pin")
@@ -832,7 +848,7 @@ def _validate_failed_phase5_retry(
         artifact_metadata,
         artifact_pin,
         producer_run_id=FAILED_PHASE5_RETRY_RUN_ID,
-        producer_head_sha=FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        producer_head_sha=FAILED_PHASE5_RETRY_CONTROL_REVISION,
     )
     forbidden = {"phase5-complete.json", "phase5-complete.sha256", "terminal-manifest.json"}
     present_basenames = {PurePosixPath(name).name for name in members}
@@ -924,8 +940,12 @@ def _validate_failed_phase5_retry(
         cycles=1,
         runtime_source_revision=RUNTIME_SOURCE_REVISION,
     )
+    successor_pin = _require_object(
+        descriptor.get("failed_phase5_retry_successor"),
+        "failed Phase 5 retry successor pin",
+    )
     expected_heads = _require_object(
-        descriptor.get("expected_continuation_heads"), "expected continuation heads"
+        successor_pin.get("baseline_heads"), "failed retry successor baseline heads"
     )
     _same_heads(final_heads, expected_heads, "failed Phase 5 retry continuation heads")
     pinned_terminal_heads = _require_object(
@@ -1071,7 +1091,7 @@ def _validate_failed_phase5_retry(
     dispatches = _require_list(dispatch.get("workflows"), "failed retry recovery workflows")
     layer_two_pins = _require_list(
         descriptor.get("frozen_legacy_successors"), "frozen successor pins"
-    )[2:]
+    )[2:4]
     if len(dispatches) != 2 or len(layer_two_pins) != 2:
         _fail("failed retry recovery dispatch does not contain exactly two layer-two runs")
     for role, value, successor_pin in zip(("legislative", "executive"), dispatches, layer_two_pins):
@@ -1083,7 +1103,7 @@ def _validate_failed_phase5_retry(
             "workflow_id": _require_object(
                 successor_pin.get("workflow"), f"{role} successor workflow pin"
             ).get("id"),
-            "control_revision": FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+            "control_revision": FAILED_PHASE5_RETRY_CONTROL_REVISION,
             "dispatch_attempted": True,
             "run_id": successor_pin.get("run_id"),
             "status": "completed",
@@ -1113,6 +1133,494 @@ def _validate_failed_phase5_retry(
         "final_heads": _head_summary(final_heads),
         "legacy_global_one_writer_verified": True,
         "runtime_execution_set_verified": True,
+        "rollback_verified": True,
+        "production_authority_transferred": False,
+        "phase6_started": False,
+    }
+
+
+def _validate_failed_phase5_retry_successor(
+    descriptor: Mapping[str, Any],
+    run_metadata: Mapping[str, Any],
+    artifact_metadata: Mapping[str, Any],
+    jobs_metadata: Mapping[str, Any],
+    archive: Path,
+    prefix: Mapping[str, Any],
+    predecessor: Mapping[str, Any],
+    frozen_successors: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Validate the second sealed retry without collapsing the first retry's lineage."""
+
+    pin = _require_object(
+        descriptor.get("failed_phase5_retry_successor"),
+        "failed Phase 5 retry successor pin",
+    )
+    job = _validate_run_job_metadata(
+        pin,
+        run_metadata,
+        jobs_metadata,
+        expected_run_id=FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        expected_path=PHASE5_RETRY_WORKFLOW_PATH,
+        expected_conclusion="failure",
+        expected_job_name="reconcile-and-retry",
+    )
+    _expect(
+        pin.get("head_sha"),
+        FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+        "failed Phase 5 retry successor revision",
+    )
+    artifact_pin = _require_object(
+        pin.get("artifact"), "failed Phase 5 retry successor artifact pin"
+    )
+    members = _load_pinned_artifact(
+        archive,
+        artifact_metadata,
+        artifact_pin,
+        producer_run_id=FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        producer_head_sha=FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+    )
+    forbidden = {"phase5-complete.json", "phase5-complete.sha256", "terminal-manifest.json"}
+    present_basenames = {PurePosixPath(name).name for name in members}
+    if forbidden & present_basenames:
+        _fail("failed Phase 5 retry successor artifact unexpectedly contains completion evidence")
+    for marker in ("live-mutation-started", "route-touched", "retry-rollback-complete"):
+        if marker not in present_basenames:
+            _fail(f"failed Phase 5 retry successor artifact is missing {marker}")
+
+    replay_bytes = _unique_basename(members, "failed-prefix-replay.json")
+    replay_sha = _sha256_bytes(replay_bytes)
+    _expect(
+        replay_sha,
+        pin.get("predecessor_replay_sha256"),
+        "failed Phase 5 retry successor predecessor replay digest",
+    )
+    replay_checksum = _parse_sha256_file(
+        _unique_basename(members, "failed-prefix-replay.sha256"),
+        "failed-prefix-replay.json",
+        "failed Phase 5 retry successor replay checksum",
+    )
+    _expect(replay_checksum, replay_sha, "failed Phase 5 retry successor replay checksum")
+    embedded_replay = _require_object(
+        _json_bytes(replay_bytes, "failed Phase 5 retry successor embedded replay"),
+        "failed Phase 5 retry successor embedded replay",
+    )
+    for key, expected in {
+        "result": "phase5_failed_promotion_reconciled",
+        "certification_eligible": False,
+        "descriptor_sha256": pin.get("predecessor_descriptor_sha256"),
+        "failed_phase5_retry": predecessor,
+        "continuation_heads": predecessor.get("final_heads"),
+        "current_heads_verified": True,
+        "current_latest_receipts_verified": True,
+    }.items():
+        _expect(
+            embedded_replay.get(key),
+            expected,
+            f"failed Phase 5 retry successor replay {key}",
+        )
+    expected_invalidated_prefix = {
+        "reason": "concurrent_legacy_ai_global_writer",
+        "certification_eligible": False,
+        "unique_successful_receipts": 4,
+        "executions": _require_list(prefix.get("receipts"), "failed Phase 5 prefix receipts"),
+        "baseline_heads": _head_summary(
+            _heads(_require_object(prefix.get("baseline"), "failed Phase 5 prefix baseline"))
+        ),
+        "final_heads": _head_summary(
+            _require_object(prefix.get("final_heads"), "failed Phase 5 prefix final heads")
+        ),
+    }
+    _expect(
+        embedded_replay.get("invalidated_smoke_prefix"),
+        expected_invalidated_prefix,
+        "failed Phase 5 retry successor embedded invalidated prefix",
+    )
+    embedded_successors = _require_list(
+        embedded_replay.get("frozen_legacy_successors"),
+        "failed Phase 5 retry successor embedded frozen successors",
+    )
+    predecessor_successor_count = 2 * (len(FROZEN_LEGACY_SUCCESSOR_REVISIONS) - 1)
+    _expect(
+        embedded_successors,
+        list(frozen_successors[:predecessor_successor_count]),
+        "failed Phase 5 retry successor embedded frozen successor chain",
+    )
+    embedded_reconciliation = _require_object(
+        embedded_replay.get("reconciliation"),
+        "failed Phase 5 retry successor replay reconciliation",
+    )
+    _required_true(
+        embedded_reconciliation,
+        (
+            "failed_retry_intervening_attempt_verified",
+            "intervening_runtime_producer_execution_performed",
+            "full_snapshot_chain_preserved",
+        ),
+        "failed Phase 5 retry successor replay reconciliation",
+    )
+    _expect(
+        embedded_reconciliation.get("intervening_runtime_producer_execution_count"),
+        4,
+        "failed Phase 5 retry successor replay execution count",
+    )
+    for key in (
+        "additional_runtime_producer_execution_performed",
+        "production_authority_transferred",
+        "phase6_started",
+    ):
+        _expect(
+            embedded_reconciliation.get(key),
+            False,
+            f"failed Phase 5 retry successor replay {key}",
+        )
+
+    baseline = dict(
+        _require_object(
+            _json_bytes(
+                _unique_basename(members, "terminal-baseline.json"),
+                "failed Phase 5 retry successor terminal baseline",
+            ),
+            "failed Phase 5 retry successor terminal baseline",
+        )
+    )
+    predecessor_heads = _require_object(
+        predecessor.get("final_heads"), "failed Phase 5 retry predecessor heads"
+    )
+    predecessor_receipts = _require_list(
+        predecessor.get("executions"), "failed Phase 5 retry predecessor receipts"
+    )
+    _same_heads(_heads(baseline), predecessor_heads, "failed Phase 5 retry successor baseline")
+    _assert_current_runtime_state(baseline, predecessor_heads, predecessor_receipts)
+    pinned_baseline_heads = _require_object(
+        pin.get("baseline_heads"), "failed Phase 5 retry successor baseline pins"
+    )
+    _same_heads(_heads(baseline), pinned_baseline_heads, "failed retry successor pinned baseline")
+
+    observations = _observations_from_ndjson(
+        _unique_basename(members, "observations.ndjson"),
+        "failed Phase 5 retry successor observations.ndjson",
+    )
+    status_members = _require_list(
+        pin.get("status_members"), "failed Phase 5 retry successor status member pins"
+    )
+    expected_status_members = [
+        f"retry-smoke-sequence-{index}-{role}-status.json"
+        for index, role in enumerate(NAMESPACES, start=1)
+    ]
+    _expect(
+        status_members,
+        expected_status_members,
+        "failed Phase 5 retry successor status member list",
+    )
+    if len(observations) != len(status_members):
+        _fail("failed Phase 5 retry successor observation/status count mismatch")
+    for index, (observation, name, role) in enumerate(
+        zip(observations, status_members, NAMESPACES), start=1
+    ):
+        for key, expected in {"cycle": 1, "sequence": index, "job": role}.items():
+            _expect(
+                observation.get(key),
+                expected,
+                f"failed retry successor observation {index} {key}",
+            )
+        status = _json_bytes(
+            _unique_basename(members, str(name)),
+            f"failed Phase 5 retry successor artifact {name}",
+        )
+        _expect(
+            observation.get("status"),
+            status,
+            f"failed retry successor observation {index} status file",
+        )
+
+    final_heads, receipts = _validate_sequence(
+        baseline=baseline,
+        observations=observations,
+        expected_mode="production",
+        expected_trigger="phase5_smoke",
+        cycles=1,
+        runtime_source_revision=RUNTIME_SOURCE_REVISION,
+    )
+    expected_heads = _require_object(
+        descriptor.get("expected_continuation_heads"), "expected continuation heads"
+    )
+    _same_heads(final_heads, expected_heads, "failed Phase 5 retry successor continuation heads")
+    pinned_terminal_heads = _require_object(
+        pin.get("terminal_heads"), "failed Phase 5 retry successor terminal head pins"
+    )
+    _same_heads(
+        final_heads, pinned_terminal_heads, "failed Phase 5 retry successor terminal heads"
+    )
+    terminal_confirmation = _json_bytes(
+        _unique_basename(members, "terminal-confirmation.json"),
+        "failed Phase 5 retry successor terminal confirmation",
+    )
+    _expect(
+        terminal_confirmation,
+        observations[-1].get("status"),
+        "failed Phase 5 retry successor terminal confirmation",
+    )
+
+    all_predecessor_receipts = [
+        *_require_list(prefix.get("receipts"), "failed Phase 5 prefix receipts"),
+        *predecessor_receipts,
+    ]
+    predecessor_ids = {item.get("run_id") for item in all_predecessor_receipts}
+    predecessor_executions = {
+        item.get("cloud_run_execution") for item in all_predecessor_receipts
+    }
+    if any(item.get("run_id") in predecessor_ids for item in receipts):
+        _fail("failed Phase 5 retry successor reused a predecessor Runtime receipt")
+    if any(item.get("cloud_run_execution") in predecessor_executions for item in receipts):
+        _fail("failed Phase 5 retry successor reused a predecessor Cloud Run execution")
+    predecessor_finish = max(
+        _parse_time(item.get("finished_at"), "failed retry predecessor finished_at")
+        for item in predecessor_receipts
+    )
+    successor_start = min(
+        _parse_time(item.get("started_at"), "failed retry successor started_at")
+        for item in receipts
+    )
+    if successor_start <= predecessor_finish:
+        _fail("failed Phase 5 retry successor overlaps its predecessor retry")
+
+    interval_start_text = _unique_basename(members, "fresh-cycle-started-at.txt").decode(
+        "ascii"
+    ).strip()
+    interval_finish_text = _unique_basename(members, "fresh-cycle-finished-at.txt").decode(
+        "ascii"
+    ).strip()
+    interval_start = _parse_time(
+        interval_start_text, "failed retry successor fresh-cycle started_at"
+    )
+    interval_finish = _parse_time(
+        interval_finish_text, "failed retry successor fresh-cycle finished_at"
+    )
+    if interval_finish < interval_start:
+        _fail("failed retry successor fresh-cycle interval finished before it started")
+
+    legacy_run_inventories = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/legacy-{role}-runs-terminal.json"),
+                f"failed retry successor {role} run inventory",
+            ),
+            f"failed retry successor {role} run inventory",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES
+    ]
+    legacy_workflow_states = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/legacy-{role}-workflow-terminal.json"),
+                f"failed retry successor {role} workflow state",
+            ),
+            f"failed retry successor {role} workflow state",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES
+    ]
+    runtime_execution_inventories = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/runtime-{role}-executions-terminal.json"),
+                f"failed retry successor {role} Runtime inventory",
+            ),
+            f"failed retry successor {role} Runtime inventory",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES
+    ]
+    evidence_files = {
+        "legacy_run_inventories": [
+            f"incident/legacy-{role}-runs-terminal.json" for role in LEGACY_HIGH_WATER_ROLES
+        ],
+        "legacy_workflow_states": [
+            f"incident/legacy-{role}-workflow-terminal.json"
+            for role in LEGACY_HIGH_WATER_ROLES
+        ],
+        "runtime_execution_inventories": [
+            f"incident/runtime-{role}-executions-terminal.json"
+            for role in LEGACY_HIGH_WATER_ROLES
+        ],
+    }
+    evidence_digests = {
+        field: [_sha256_bytes(_member(members, name)) for name in names]
+        for field, names in evidence_files.items()
+    }
+    one_writer = {
+        "fresh_cycle_interval": {
+            "started_at": interval_start_text,
+            "finished_at": interval_finish_text,
+        },
+        "overlapping_legacy_run_count": 0,
+        "unexpected_runtime_execution_count": 0,
+        "expected_runtime_execution_count": 4,
+    }
+    for field, digests in evidence_digests.items():
+        one_writer[f"{field}_sha256"] = dict(zip(LEGACY_HIGH_WATER_ROLES, digests))
+    predecessor_layer = len(FROZEN_LEGACY_SUCCESSOR_REVISIONS) - 2
+    _validate_terminal_one_writer(
+        descriptor=descriptor,
+        replay=embedded_replay,
+        manifest={"one_writer_evidence": one_writer},
+        receipts=receipts,
+        legacy_run_inventories=legacy_run_inventories,
+        legacy_workflow_states=legacy_workflow_states,
+        runtime_execution_inventories=runtime_execution_inventories,
+        evidence_digests=evidence_digests,
+        successor_layer=predecessor_layer,
+    )
+    legacy_artifact_inventories = [
+        _require_object(
+            _json_bytes(
+                _member(members, f"incident/legacy-{role}-artifacts-terminal.json"),
+                f"failed retry successor {role} artifact inventory",
+            ),
+            f"failed retry successor {role} artifact inventory",
+        )
+        for role in LEGACY_HIGH_WATER_ROLES[:3]
+    ]
+    _validate_high_water_artifact_inventories(
+        descriptor, legacy_artifact_inventories, successor_layer=predecessor_layer
+    )
+
+    rollback = _require_object(
+        _json_bytes(
+            _unique_basename(members, "retry-rollback.json"),
+            "failed Phase 5 retry successor rollback receipt",
+        ),
+        "failed Phase 5 retry successor rollback receipt",
+    )
+    for key, expected in {
+        "schema_version": 1,
+        "result": "phase5_failed_promotion_retry_rolled_back",
+        "runtime_schedulers_paused": True,
+        "web_public": False,
+        "runtime_mode": "shadow",
+        "observed_legacy_route_kind": "historic_active",
+        "legacy_route_restored": True,
+        "legacy_recovery_required": True,
+        "legacy_recovery_action_complete": True,
+        "temporary_execution_authority_removed": True,
+        "temporary_service_account_user_removed": True,
+        "temporary_private_web_invoker_removed": True,
+        "temporary_scheduler_activation_authority_removed": True,
+        "temporary_role_viewer_authority_removed": True,
+        "cloud_sql_private_only": True,
+        "vault_scheduler_state": "PAUSED",
+    }.items():
+        _expect(rollback.get(key), expected, f"failed Phase 5 retry successor rollback {key}")
+
+    invalidation = _require_object(
+        _json_bytes(
+            _unique_basename(members, "phase5-completion-invalidation.json"),
+            "failed Phase 5 retry successor completion invalidation",
+        ),
+        "failed Phase 5 retry successor completion invalidation",
+    )
+    for key, expected in {
+        "schema_version": 1,
+        "result": "phase5_completion_evidence_invalidated",
+        "certification_eligible": False,
+        "phase5_completion_claim_valid": False,
+        "production_cutover_certified": False,
+        "trigger": "workflow_failure_or_cancellation",
+        "run_id": str(FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID),
+        "run_attempt": str(pin.get("run_attempt")),
+        "control_revision": FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+        "affirmative_completion_evidence_absent_before_rollback_artifact_upload": True,
+    }.items():
+        _expect(
+            invalidation.get(key),
+            expected,
+            f"failed Phase 5 retry successor invalidation {key}",
+        )
+    invalidated_files = _require_list(
+        invalidation.get("invalidated_files"),
+        "failed Phase 5 retry successor invalidated files",
+    )
+    expected_invalidated_paths = [
+        "phase5-complete.json",
+        "phase5-complete.sha256",
+        "terminal-manifest.json",
+    ]
+    if len(invalidated_files) != len(expected_invalidated_paths):
+        _fail("failed Phase 5 retry successor invalidation file inventory is incomplete")
+    for value, expected_path in zip(invalidated_files, expected_invalidated_paths):
+        row = _require_object(value, f"failed retry successor invalidation {expected_path}")
+        for key, expected in {
+            "path": expected_path,
+            "existed_before_invalidation": False,
+            "prior_sha256": None,
+            "disposition": "not_created",
+        }.items():
+            _expect(row.get(key), expected, f"failed retry successor invalidation {key}")
+
+    dispatch = _require_object(
+        _json_bytes(
+            _unique_basename(members, "legacy-recovery-dispatch.json"),
+            "failed Phase 5 retry successor recovery dispatch",
+        ),
+        "failed Phase 5 retry successor recovery dispatch",
+    )
+    _expect(
+        dispatch.get("result"),
+        "legacy_recovery_runs_succeeded",
+        "failed retry successor recovery",
+    )
+    dispatches = _require_list(
+        dispatch.get("workflows"), "failed retry successor recovery workflows"
+    )
+    layer_three_pins = _require_list(
+        descriptor.get("frozen_legacy_successors"), "frozen successor pins"
+    )[-2:]
+    if len(dispatches) != 2 or len(layer_three_pins) != 2:
+        _fail("failed retry successor recovery dispatch does not contain exactly two layer-three runs")
+    for role, value, successor_pin in zip(
+        ("legislative", "executive"), dispatches, layer_three_pins
+    ):
+        row = _require_object(value, f"failed retry successor {role} recovery dispatch")
+        expected_workflow = PurePosixPath(RECOVERY_PATHS[role]).name
+        for key, expected in {
+            "result": "legacy_recovery_run_succeeded",
+            "workflow": expected_workflow,
+            "workflow_id": _require_object(
+                successor_pin.get("workflow"), f"{role} layer-three successor workflow pin"
+            ).get("id"),
+            "control_revision": FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+            "dispatch_attempted": True,
+            "run_id": successor_pin.get("run_id"),
+            "status": "completed",
+            "conclusion": "success",
+            "run_attempt": successor_pin.get("run_attempt"),
+        }.items():
+            _expect(
+                row.get(key), expected, f"failed retry successor {role} recovery dispatch {key}"
+            )
+        if _parse_time(
+            _require_object(
+                successor_pin.get("job"), f"{role} layer-three successor job pin"
+            ).get("started_at"),
+            f"{role} layer-three rollback recovery started_at",
+        ) <= interval_finish:
+            _fail(f"{role} layer-three rollback recovery did not begin after the fresh cycle")
+
+    return {
+        "run_id": FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        "predecessor_run_id": FAILED_PHASE5_RETRY_RUN_ID,
+        "artifact_id": artifact_pin.get("id"),
+        "head_sha": pin.get("head_sha"),
+        "job_id": job.get("id"),
+        "conclusion": "failure",
+        "result": "clean_cycle_rolled_back_noncertifying",
+        "certification_eligible": False,
+        "unique_successful_smoke_receipts": 4,
+        "executions": receipts,
+        "baseline_heads": _head_summary(_heads(baseline)),
+        "final_heads": _head_summary(final_heads),
+        "predecessor_replay_sha256": replay_sha,
+        "legacy_global_one_writer_verified": True,
+        "runtime_execution_set_verified": True,
+        "completion_evidence_invalidated": True,
         "rollback_verified": True,
         "production_authority_transferred": False,
         "phase6_started": False,
@@ -1607,7 +2115,9 @@ def _validate_frozen_legacy_successors(
     _verify_frozen_legacy_successor_revision(repository_root)
     result: list[dict[str, Any]] = []
     roles = ("legislative", "executive") * len(FROZEN_LEGACY_SUCCESSOR_REVISIONS)
-    expected_events = ("schedule", "schedule", "workflow_dispatch", "workflow_dispatch")
+    expected_events = ("schedule", "schedule") + ("workflow_dispatch",) * (
+        expected_count - 2
+    )
     for offset, (pin_value, run, jobs, artifact_metadata, archive, output_metadata, output_archive) in enumerate(
         zip(
             successor_pins,
@@ -2200,7 +2710,7 @@ def _validate_failed_retry_replay_summary(
     for key, expected in {
         "run_id": FAILED_PHASE5_RETRY_RUN_ID,
         "artifact_id": artifact_pin.get("id"),
-        "head_sha": FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        "head_sha": FAILED_PHASE5_RETRY_CONTROL_REVISION,
         "job_id": job_pin.get("id"),
         "conclusion": "failure",
         "result": "clean_cycle_rolled_back_noncertifying",
@@ -2222,8 +2732,12 @@ def _validate_failed_retry_replay_summary(
     )
     pinned_baseline = _require_object(pin.get("baseline_heads"), "failed retry baseline pins")
     pinned_terminal = _require_object(pin.get("terminal_heads"), "failed retry terminal pins")
+    successor_pin = _require_object(
+        descriptor.get("failed_phase5_retry_successor"),
+        "failed Phase 5 retry successor pin",
+    )
     expected_continuation = _require_object(
-        descriptor.get("expected_continuation_heads"), "descriptor continuation heads"
+        successor_pin.get("baseline_heads"), "failed retry successor baseline heads"
     )
     _same_heads(invalidated_final_heads, pinned_baseline, "failed retry pinned baseline")
     _same_heads(baseline_heads, pinned_baseline, "replay failed retry baseline")
@@ -2267,6 +2781,121 @@ def _validate_failed_retry_replay_summary(
     )
     if retry_start <= invalidated_finish:
         _fail("failed Phase 5 retry overlaps the invalidated prefix")
+    return receipts
+
+
+def _validate_failed_retry_successor_replay_summary(
+    descriptor: Mapping[str, Any],
+    replay: Mapping[str, Any],
+    predecessor_receipts: Sequence[Mapping[str, Any]],
+    predecessor_final_heads: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    pin = _require_object(
+        descriptor.get("failed_phase5_retry_successor"),
+        "failed Phase 5 retry successor pin",
+    )
+    failed_retry = _require_object(
+        replay.get("failed_phase5_retry_successor"),
+        "replay failed Phase 5 retry successor",
+    )
+    artifact_pin = _require_object(
+        pin.get("artifact"), "failed Phase 5 retry successor artifact pin"
+    )
+    job_pin = _require_object(pin.get("job"), "failed Phase 5 retry successor job pin")
+    for key, expected in {
+        "run_id": FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        "predecessor_run_id": FAILED_PHASE5_RETRY_RUN_ID,
+        "artifact_id": artifact_pin.get("id"),
+        "head_sha": FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+        "job_id": job_pin.get("id"),
+        "conclusion": "failure",
+        "result": "clean_cycle_rolled_back_noncertifying",
+        "certification_eligible": False,
+        "unique_successful_smoke_receipts": 4,
+        "predecessor_replay_sha256": pin.get("predecessor_replay_sha256"),
+        "legacy_global_one_writer_verified": True,
+        "runtime_execution_set_verified": True,
+        "completion_evidence_invalidated": True,
+        "rollback_verified": True,
+        "production_authority_transferred": False,
+        "phase6_started": False,
+    }.items():
+        _expect(
+            failed_retry.get(key), expected, f"replay failed Phase 5 retry successor {key}"
+        )
+
+    baseline_heads = _require_object(
+        failed_retry.get("baseline_heads"),
+        "failed Phase 5 retry successor baseline heads",
+    )
+    terminal_heads = _require_object(
+        failed_retry.get("final_heads"), "failed Phase 5 retry successor final heads"
+    )
+    pinned_baseline = _require_object(
+        pin.get("baseline_heads"), "failed retry successor baseline pins"
+    )
+    pinned_terminal = _require_object(
+        pin.get("terminal_heads"), "failed retry successor terminal pins"
+    )
+    expected_continuation = _require_object(
+        descriptor.get("expected_continuation_heads"), "descriptor continuation heads"
+    )
+    _same_heads(
+        predecessor_final_heads,
+        pinned_baseline,
+        "failed retry successor pinned baseline",
+    )
+    _same_heads(baseline_heads, pinned_baseline, "replay failed retry successor baseline")
+    _same_heads(
+        terminal_heads, pinned_terminal, "replay failed retry successor terminal heads"
+    )
+    _same_heads(
+        terminal_heads,
+        expected_continuation,
+        "replay failed retry successor continuation heads",
+    )
+
+    receipts = _validate_receipt_summary(
+        _require_list(
+            failed_retry.get("executions"), "failed Phase 5 retry successor executions"
+        ),
+        cycles=1,
+        label="failed Phase 5 retry successor",
+    )
+    terminal_receipts = {item["job"]: item for item in receipts}
+    for role in NAMESPACES:
+        head = _require_object(
+            terminal_heads.get(role), f"failed retry successor final {role} head"
+        )
+        _expect(
+            head.get("generation"),
+            terminal_receipts[role].get("generation"),
+            f"failed retry successor {role} generation",
+        )
+        _expect(
+            head.get("snapshot_sha256"),
+            terminal_receipts[role].get("snapshot_sha256"),
+            f"failed retry successor {role} snapshot digest",
+        )
+
+    predecessor_ids = {item.get("run_id") for item in predecessor_receipts}
+    predecessor_executions = {
+        item.get("cloud_run_execution") for item in predecessor_receipts
+    }
+    if any(item.get("run_id") in predecessor_ids for item in receipts):
+        _fail("failed Phase 5 retry successor reused a predecessor Runtime receipt")
+    if any(item.get("cloud_run_execution") in predecessor_executions for item in receipts):
+        _fail("failed Phase 5 retry successor reused a predecessor Cloud Run execution")
+    predecessor_finish = max(
+        _parse_time(item.get("finished_at"), "failed retry predecessor finished_at")
+        for item in predecessor_receipts
+    )
+    successor_start = min(
+        _parse_time(item.get("started_at"), "failed retry successor started_at")
+        for item in receipts
+    )
+    if successor_start <= predecessor_finish:
+        _fail("failed Phase 5 retry successor overlaps its predecessor retry")
     return receipts
 
 
@@ -2341,8 +2970,17 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
             f"invalidated {role} snapshot digest",
         )
 
-    _retry_receipts = _validate_failed_retry_replay_summary(
+    retry_receipts = _validate_failed_retry_replay_summary(
         descriptor, replay, receipts, final_heads
+    )
+    retry_summary = _require_object(
+        replay.get("failed_phase5_retry"), "replay failed Phase 5 retry"
+    )
+    retry_final_heads = _require_object(
+        retry_summary.get("final_heads"), "replay failed Phase 5 retry final heads"
+    )
+    _validate_failed_retry_successor_replay_summary(
+        descriptor, replay, [*receipts, *retry_receipts], retry_final_heads
     )
     continuation = _require_object(replay.get("continuation_heads"), "replay continuation heads")
     expected_continuation = _require_object(
@@ -2583,6 +3221,7 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
             "legacy_ai_artifact_quarantined",
             "frozen_legacy_successors_verified",
             "failed_retry_intervening_attempt_verified",
+            "failed_retry_successor_intervening_attempt_verified",
             "intervening_runtime_producer_execution_performed",
             "legacy_high_water_verified",
             "full_snapshot_chain_preserved",
@@ -2591,7 +3230,7 @@ def _validate_replay_receipt(descriptor: Mapping[str, Any], replay: Mapping[str,
     )
     _expect(
         reconciliation.get("intervening_runtime_producer_execution_count"),
-        4,
+        8,
         "replay reconciliation intervening Runtime execution count",
     )
     for key in (
@@ -2613,6 +3252,7 @@ def reconcile_failed_phase5(
     phase4_source: Mapping[str, Any],
     failed_source: Mapping[str, Any],
     failed_retry_source: Mapping[str, Any],
+    failed_retry_successor_source: Mapping[str, Any],
     legacy_ai_source: Mapping[str, Any],
     recovery_run_metadatas: Sequence[Mapping[str, Any]],
     recovery_jobs_metadatas: Sequence[Mapping[str, Any]],
@@ -2708,10 +3348,35 @@ def reconcile_failed_phase5(
         Path(failed_retry_source["archive"]),
         prefix,
     )
+    failed_retry_successor = _validate_failed_phase5_retry_successor(
+        descriptor,
+        _require_object(
+            failed_retry_successor_source.get("run"),
+            "failed Phase 5 retry successor run metadata",
+        ),
+        _require_object(
+            failed_retry_successor_source.get("artifact"),
+            "failed Phase 5 retry successor artifact metadata",
+        ),
+        _require_object(
+            failed_retry_successor_source.get("jobs"),
+            "failed Phase 5 retry successor jobs metadata",
+        ),
+        Path(failed_retry_successor_source["archive"]),
+        prefix,
+        failed_retry,
+        frozen_successors,
+    )
     _assert_current_runtime_state(
         current_status,
-        _require_object(failed_retry.get("final_heads"), "failed Phase 5 retry final heads"),
-        _require_list(failed_retry.get("executions"), "failed Phase 5 retry executions"),
+        _require_object(
+            failed_retry_successor.get("final_heads"),
+            "failed Phase 5 retry successor final heads",
+        ),
+        _require_list(
+            failed_retry_successor.get("executions"),
+            "failed Phase 5 retry successor executions",
+        ),
     )
     high_water_runs, high_water_run_digests = _validate_high_water_run_inventories(
         descriptor, legacy_run_inventories, label="replay"
@@ -2750,7 +3415,8 @@ def reconcile_failed_phase5(
             "final_heads": _head_summary(prefix["final_heads"]),
         },
         "failed_phase5_retry": failed_retry,
-        "continuation_heads": failed_retry["final_heads"],
+        "failed_phase5_retry_successor": failed_retry_successor,
+        "continuation_heads": failed_retry_successor["final_heads"],
         "current_heads_verified": True,
         "current_latest_receipts_verified": True,
         "concurrent_legacy_ai": legacy,
@@ -2772,8 +3438,9 @@ def reconcile_failed_phase5(
             "legacy_ai_artifact_quarantined": True,
             "frozen_legacy_successors_verified": True,
             "failed_retry_intervening_attempt_verified": True,
+            "failed_retry_successor_intervening_attempt_verified": True,
             "intervening_runtime_producer_execution_performed": True,
-            "intervening_runtime_producer_execution_count": 4,
+            "intervening_runtime_producer_execution_count": 8,
             "legacy_high_water_verified": True,
             "legacy_artifact_merge_or_import_authorized": False,
             "rebaseline_performed": False,
@@ -3594,6 +4261,7 @@ def _validate_completion_manifest(
             "legacy_ai_artifact_quarantined",
             "frozen_legacy_successors_verified",
             "failed_retry_intervening_attempt_verified",
+            "failed_retry_successor_intervening_attempt_verified",
             "legacy_runs_drained",
             "legacy_workflows_disabled",
             "continuation_heads_verified",
@@ -3765,7 +4433,9 @@ def _validate_completion_manifest(
         "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
         "failed_phase5_run_id": FAILED_PHASE5_RUN_ID,
         "failed_retry_run_id": FAILED_PHASE5_RETRY_RUN_ID,
+        "failed_retry_successor_run_id": FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
         "intervening_retry_certification_eligible": False,
+        "intervening_retry_successor_certification_eligible": False,
         "failed_prefix_replay_result": "phase5_failed_promotion_reconciled",
         "invalidated_smoke_prefix_certification_eligible": False,
         "concurrent_legacy_ai_successor_quarantined": True,
@@ -3837,13 +4507,23 @@ def complete_phase5(
     )
     if len(retry_receipts) != 4:
         _fail("failed Phase 5 retry does not contain exactly four receipts")
+    failed_retry_successor = _require_object(
+        replay.get("failed_phase5_retry_successor"),
+        "replay failed Phase 5 retry successor",
+    )
+    retry_successor_receipts = _require_list(
+        failed_retry_successor.get("executions"),
+        "failed Phase 5 retry successor executions",
+    )
+    if len(retry_successor_receipts) != 4:
+        _fail("failed Phase 5 retry successor does not contain exactly four receipts")
     latest = _latest_runs(terminal_baseline)
     if set(latest) != set(NAMESPACES):
-        _fail("clean-cycle baseline lacks exact latest failed-retry receipts")
-    for item in retry_receipts:
+        _fail("clean-cycle baseline lacks exact latest failed-retry-successor receipts")
+    for item in retry_successor_receipts:
         run = latest.get(str(item.get("job")))
         if run is None:
-            _fail("clean-cycle baseline lost a failed-retry receipt")
+            _fail("clean-cycle baseline lost a failed-retry-successor receipt")
         for key, value in {
             "run_id": item.get("run_id"),
             "status": "success",
@@ -3873,7 +4553,7 @@ def complete_phase5(
         cycles=1,
         runtime_source_revision=RUNTIME_SOURCE_REVISION,
     )
-    prior_receipts = [*prefix_receipts, *retry_receipts]
+    prior_receipts = [*prefix_receipts, *retry_receipts, *retry_successor_receipts]
     old_ids = {item.get("run_id") for item in prior_receipts}
     old_executions = {item.get("cloud_run_execution") for item in prior_receipts}
     if any(item.get("run_id") in old_ids for item in receipts):
@@ -3882,7 +4562,7 @@ def complete_phase5(
         _fail("fresh smoke cycle reused an invalidated Cloud Run execution")
     old_finish = max(
         _parse_time(item.get("finished_at"), "failed retry smoke finished_at")
-        for item in retry_receipts
+        for item in retry_successor_receipts
     )
     new_start = min(_parse_time(item.get("started_at"), "fresh smoke started_at") for item in receipts)
     if new_start <= old_finish:
@@ -3941,6 +4621,7 @@ def complete_phase5(
             "failed_phase5": replay["failed_phase5"],
             "invalidated_smoke_prefix": prefix,
             "failed_phase5_retry": failed_retry,
+            "failed_phase5_retry_successor": failed_retry_successor,
             "concurrent_legacy_ai": legacy,
             "recovery_runs": replay["recovery_runs"],
             "frozen_legacy_successors": replay["frozen_legacy_successors"],
@@ -3990,6 +4671,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_metadata_source(replay, "phase4")
     _add_metadata_source(replay, "failed")
     _add_metadata_source(replay, "failed_retry")
+    _add_metadata_source(replay, "failed_retry_successor")
     _add_metadata_source(replay, "legacy_ai", archive=False)
     for label in ("predecessor", "state", "output"):
         replay.add_argument(f"--legacy-ai-{label}-artifact-metadata", type=Path, required=True)
@@ -4083,6 +4765,7 @@ def main(argv: list[str] | None = None) -> int:
             phase4_source=_source(args, "phase4"),
             failed_source=_source(args, "failed"),
             failed_retry_source=_source(args, "failed_retry"),
+            failed_retry_successor_source=_source(args, "failed_retry_successor"),
             legacy_ai_source={
                 "run": _load_object(args.legacy_ai_run_metadata),
                 "jobs": _load_object(args.legacy_ai_jobs_metadata),
