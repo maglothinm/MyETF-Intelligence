@@ -1,0 +1,162 @@
+name: Finalize Runtime v2 production recovery status
+
+on:
+  push:
+    branches:
+      - statusmirror
+    paths:
+      - ".github/workflows/runtime_v2_statusmirror_finalizer.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+
+concurrency:
+  group: runtime-v2-statusmirror-finalizer
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/statusmirror'
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: statusmirror
+          fetch-depth: 0
+
+      - name: Wait for exact terminal recovery run
+        id: terminal
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          terminal=false
+          for attempt in $(seq 1 210); do
+            runs="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/runs?per_page=20")"
+            run="$(jq -c \
+              '[.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")][0] // empty' \
+              <<<"${runs}")"
+            if [[ -z "${run}" ]]; then
+              sleep 60
+              continue
+            fi
+            status="$(jq -r '.status' <<<"${run}")"
+            if [[ "${status}" != "completed" ]]; then
+              sleep 60
+              continue
+            fi
+
+            run_id="$(jq -r '.id' <<<"${run}")"
+            conclusion="$(jq -r '.conclusion // "unknown"' <<<"${run}")"
+            jobs="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")"
+            artifacts="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+
+            jq -n \
+              --arg finalized_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --argjson run "${run}" \
+              --argjson jobs "${jobs}" \
+              --argjson artifacts "${artifacts}" \
+              '{
+                schema_version:1,
+                finalized_at:$finalized_at,
+                result:(if $run.conclusion == "success" then
+                  "runtime_v2_production_recovery_certified"
+                else "runtime_v2_production_recovery_failed" end),
+                run:{id:$run.id,name:$run.name,status:$run.status,
+                     conclusion:$run.conclusion,head_sha:$run.head_sha,
+                     head_branch:$run.head_branch,created_at:$run.created_at,
+                     run_started_at:$run.run_started_at,updated_at:$run.updated_at,
+                     html_url:$run.html_url},
+                jobs:[$jobs.jobs[] | {id,name,status,conclusion,started_at,completed_at,
+                      html_url,failed_steps:[.steps[]? | select(.conclusion == "failure") |
+                      {number,name,status,conclusion}]}],
+                artifacts:[$artifacts.artifacts[]? | {id,name,size_in_bytes,
+                           expired,created_at,expires_at,digest}]
+              }' > ops/runtime-v2-recovery-terminal.json
+
+            echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+            echo "conclusion=${conclusion}" >> "${GITHUB_OUTPUT}"
+            echo "run_url=$(jq -r '.html_url' <<<"${run}")" >> "${GITHUB_OUTPUT}"
+            terminal=true
+            break
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "No terminal recovery run appeared within the bounded finalizer window." >&2
+            exit 1
+          }
+
+      - name: Publish terminal receipt on isolated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ops/runtime-v2-recovery-terminal.json
+          git diff --cached --check
+          git commit -m "Record Runtime v2 production recovery terminal receipt"
+          git push origin HEAD:statusmirror
+
+      - name: Disable one-time controllers after certified success
+        if: steps.terminal.outputs.conclusion == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for workflow in \
+            runtime_v2_production_recovery.yml \
+            runtime_v2_production_recovery_trigger.yml; do
+            state="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')"
+            if [[ "${state}" == "active" ]]; then
+              gh api --method PUT \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/disable"
+            fi
+            state="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')"
+            [[ "${state}" == "disabled_manually" ]] || {
+              echo "${workflow} was not disabled after certification." >&2
+              exit 1
+            }
+          done
+
+      - name: Record terminal result as a GitHub issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.terminal.outputs.run_id }}
+          CONCLUSION: ${{ steps.terminal.outputs.conclusion }}
+          RUN_URL: ${{ steps.terminal.outputs.run_url }}
+        run: |
+          set -euo pipefail
+          if [[ "${CONCLUSION}" == "success" ]]; then
+            title="Runtime v2 production recovery certified — run ${RUN_ID}"
+          else
+            title="Runtime v2 production recovery requires repair — run ${RUN_ID}"
+          fi
+          existing="$(gh issue list --state all --search "${title} in:title" --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" | head -n1)"
+          [[ -z "${existing}" ]] || exit 0
+          {
+            echo "Terminal conclusion: **${CONCLUSION}**"
+            echo
+            echo "Recovery run: ${RUN_URL}"
+            echo
+            echo 'The complete run, job, failed-step, and artifact receipt is retained at:'
+            echo '`ops/runtime-v2-recovery-terminal.json` on branch `statusmirror`.'
+            if [[ "${CONCLUSION}" == "success" ]]; then
+              echo
+              echo 'The one-time production recovery and dispatch workflows were disabled after certification.'
+            fi
+          } > "${RUNNER_TEMP}/terminal-issue.md"
+          gh issue create --title "${title}" --body-file "${RUNNER_TEMP}/terminal-issue.md"
