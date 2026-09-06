@@ -74,8 +74,19 @@ jobs:
         run: python -m pytest -q tests/test_runtime_v2*.py
 
       - name: Initialize and validate Terraform
+        shell: bash
         run: |
-          terraform -chdir=deploy/runtime-v2/terraform init -backend=false -lockfile=readonly
+          set -euo pipefail
+          init_ok=false
+          for attempt in 1 2 3; do
+            if terraform -chdir=deploy/runtime-v2/terraform init -backend=false -lockfile=readonly; then
+              init_ok=true
+              break
+            fi
+            echo "Terraform registry init attempt ${attempt} failed; retrying transient network failure."
+            sleep $((attempt * 5))
+          done
+          [[ "${init_ok}" == "true" ]]
           terraform -chdir=deploy/runtime-v2/terraform validate
 
       - name: Remove temporary repair controls
