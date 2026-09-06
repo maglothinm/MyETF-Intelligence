@@ -1,0 +1,106 @@
+name: Validate Runtime v2 natural AI certification
+
+on:
+  push:
+    branches:
+      - certify/runtime-v2-natural-ai
+    paths:
+      - ".github/workflows/runtime_v2_natural_ai_certification_lint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: certify/runtime-v2-natural-ai
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install validation dependencies
+        run: python -m pip install PyYAML==6.0.3 pytest==9.0.2
+      - name: Parse workflow, Bash, and embedded Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          import yaml
+
+          path = Path('.github/workflows/runtime_v2_natural_ai_certification.yml')
+          text = path.read_text(encoding='utf-8')
+          workflow = yaml.safe_load(text)
+          if not isinstance(workflow, dict) or 'jobs' not in workflow:
+              raise SystemExit('Natural certification is not valid workflow YAML')
+          job = workflow['jobs'].get('certify') or {}
+          scripts = []
+          python_blocks = []
+          for step in job.get('steps', []):
+              script = step.get('run')
+              if not isinstance(script, str):
+                  continue
+              scripts.append((step.get('name', '<unnamed>'), script))
+              lines = script.splitlines()
+              index = 0
+              while index < len(lines):
+                  if "<<'PY'" not in lines[index]:
+                      index += 1
+                      continue
+                  start = index + 1
+                  end = start
+                  while end < len(lines) and lines[end] != 'PY':
+                      end += 1
+                  if end == len(lines):
+                      raise SystemExit(f'Unclosed Python heredoc in {step.get("name")}')
+                  python_blocks.append((step.get('name', '<unnamed>'), '\n'.join(lines[start:end]) + '\n'))
+                  index = end + 1
+          if not scripts or len(python_blocks) < 2:
+              raise SystemExit('Natural certification executable content is incomplete')
+          for index, (name, script) in enumerate(scripts, 1):
+              with tempfile.NamedTemporaryFile('w', suffix='.sh', delete=False) as handle:
+                  handle.write(script)
+                  script_path = handle.name
+              result = subprocess.run(['bash', '-n', script_path], text=True, capture_output=True)
+              if result.returncode:
+                  raise SystemExit(f'Bash syntax failure in step {index} {name}: {result.stderr}')
+          for index, (name, source) in enumerate(python_blocks, 1):
+              try:
+                  compile(source, f'<{name}:{index}>', 'exec')
+              except SyntaxError as exc:
+                  raise SystemExit(f'Python syntax failure in {name}: {exc}') from exc
+          print(f'Validated {len(scripts)} Bash scripts and {len(python_blocks)} Python blocks')
+          PY
+      - name: Verify certification and cleanup invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/runtime_v2_natural_ai_certification.yml
+          grep -Fq 'ACTIVATION_TIME: "2026-09-06T16:45:54Z"' "$workflow"
+          grep -Fq 'CERTIFICATION_NOT_BEFORE: "2026-09-06T18:08:00Z"' "$workflow"
+          grep -Fq 'verify_producer_scheduler_state ENABLED' "$workflow"
+          grep -Fq 'verify_vault_scheduler_paused' "$workflow"
+          grep -Fq 'phase5_retry_verify_scheduler_control_removed' "$workflow"
+          grep -Fq 'phase5_retry_verify_role_viewer_removed' "$workflow"
+          grep -Fq 'len(ai_writers) < 2' "$workflow"
+          grep -Fq 'dashboard_created <= second_ai_completed' "$workflow"
+          grep -Fq 'provenance.get("trigger_source") != "external_scheduler"' "$workflow"
+          grep -Fq 'remove_execution_authority || status=1' "$workflow"
+          grep -Fq 'temporary_execution_authority_removed = true' "$workflow"
+          ! grep -Eq -- 'gcloud scheduler jobs (pause|resume|update)|gcloud run jobs update|terraform[[:space:]]+apply|--allow-unauthenticated|allUsers' "$workflow"
+      - name: Run existing Runtime v2 and Phase 5 safety tests
+        run: |
+          python -m pytest -q \
+            tests/test_runtime_v2_scheduler_concurrency.py \
+            tests/test_phase5_failed_promotion_retry.py \
+            tests/test_phase5_scheduler_resume_receipt.py \
+            tests/test_phase5_retry_workflow_failure_safety.py
+      - name: Verify repository safety contract
+        run: bash verify.sh
