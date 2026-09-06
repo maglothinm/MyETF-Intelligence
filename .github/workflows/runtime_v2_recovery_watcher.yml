@@ -1,0 +1,207 @@
+name: Classify Runtime v2 production recovery terminal state
+
+on:
+  push:
+    branches:
+      - recoverywatch
+    paths:
+      - ".github/workflows/runtime_v2_recovery_watcher.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: runtime-v2-recovery-terminal-classifier
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/recoverywatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Wait for exact terminal recovery run and validate it
+        id: recovery
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          terminal=false
+          for attempt in $(seq 1 225); do
+            runs="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/runs?per_page=20")"
+            run="$(jq -c \
+              '[.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")][0] // empty' \
+              <<<"${runs}")"
+            if [[ -z "${run}" ]]; then
+              echo "Production recovery run has not appeared (${attempt}/225)."
+              sleep 60
+              continue
+            fi
+            status="$(jq -r '.status' <<<"${run}")"
+            if [[ "${status}" != "completed" ]]; then
+              echo "Production recovery remains ${status} (${attempt}/225)."
+              sleep 60
+              continue
+            fi
+
+            run_id="$(jq -r '.id' <<<"${run}")"
+            conclusion="$(jq -r '.conclusion // "unknown"' <<<"${run}")"
+            head_sha="$(jq -r '.head_sha' <<<"${run}")"
+            run_url="$(jq -r '.html_url' <<<"${run}")"
+            [[ "${head_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Recovery run has an invalid source SHA." >&2
+              exit 1
+            }
+
+            jobs="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")"
+            artifacts="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+
+            jq -n \
+              --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --argjson run "${run}" \
+              --argjson jobs "${jobs}" \
+              --argjson artifacts "${artifacts}" \
+              '{
+                schema_version:1,
+                observed_at:$observed_at,
+                run:{id:$run.id,name:$run.name,event:$run.event,status:$run.status,
+                     conclusion:$run.conclusion,head_branch:$run.head_branch,
+                     head_sha:$run.head_sha,run_attempt:$run.run_attempt,
+                     created_at:$run.created_at,run_started_at:$run.run_started_at,
+                     updated_at:$run.updated_at,html_url:$run.html_url},
+                jobs:[$jobs.jobs[] | {id,name,status,conclusion,started_at,completed_at,
+                      html_url,failed_steps:[.steps[]? | select(.conclusion == "failure") |
+                      {number,name,status,conclusion}]}],
+                artifacts:[$artifacts.artifacts[]? | {id,name,size_in_bytes,expired,
+                           created_at,expires_at,digest}]
+              }' > "${RUNNER_TEMP}/runtime-v2-recovery-terminal.json"
+
+            if [[ "${conclusion}" == "success" ]]; then
+              jq -e '
+                (.run.status == "completed" and .run.conclusion == "success") and
+                (.jobs | length > 0 and all(.[]; .status == "completed" and .conclusion == "success")) and
+                (.artifacts | length > 0 and any(.[]; .expired == false))
+              ' "${RUNNER_TEMP}/runtime-v2-recovery-terminal.json" >/dev/null || {
+                echo "Recovery reported success without complete job/artifact evidence." >&2
+                conclusion="failure"
+              }
+            fi
+
+            echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+            echo "conclusion=${conclusion}" >> "${GITHUB_OUTPUT}"
+            echo "head_sha=${head_sha}" >> "${GITHUB_OUTPUT}"
+            echo "run_url=${run_url}" >> "${GITHUB_OUTPUT}"
+            terminal=true
+            break
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Recovery did not become terminal inside the bounded watcher window." >&2
+            exit 1
+          }
+
+      - name: Create immutable terminal sentinel ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONCLUSION: ${{ steps.recovery.outputs.conclusion }}
+          HEAD_SHA: ${{ steps.recovery.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${CONCLUSION}" == "success" ]]; then
+            ref_name="runtime-v2-recovery-certified"
+            state="success"
+            description="Runtime v2 production recovery certified"
+          else
+            ref_name="runtime-v2-recovery-failed"
+            state="failure"
+            description="Runtime v2 production recovery requires repair"
+          fi
+
+          existing_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${ref_name}" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -z "${existing_sha}" ]]; then
+            gh api --method POST \
+              "/repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field "ref=refs/heads/${ref_name}" \
+              --raw-field "sha=${HEAD_SHA}" >/dev/null
+          elif [[ "${existing_sha}" != "${HEAD_SHA}" ]]; then
+            echo "Terminal sentinel ${ref_name} already points to a different SHA." >&2
+            exit 1
+          fi
+
+          gh api --method POST \
+            "/repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            --raw-field "state=${state}" \
+            --raw-field 'context=polititrack/runtime-v2-production-recovery' \
+            --raw-field "description=${description}" >/dev/null
+
+      - name: Disable one-time production controllers after certified success
+        if: steps.recovery.outputs.conclusion == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for workflow in \
+            runtime_v2_production_recovery.yml \
+            runtime_v2_production_recovery_trigger.yml; do
+            state="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')"
+            if [[ "${state}" == "active" ]]; then
+              gh api --method PUT \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/disable"
+            fi
+            state="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')"
+            [[ "${state}" == "disabled_manually" ]] || {
+              echo "${workflow} was not disabled after recovery certification." >&2
+              exit 1
+            }
+          done
+
+      - name: Create terminal result issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.recovery.outputs.run_id }}
+          CONCLUSION: ${{ steps.recovery.outputs.conclusion }}
+          RUN_URL: ${{ steps.recovery.outputs.run_url }}
+          HEAD_SHA: ${{ steps.recovery.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${CONCLUSION}" == "success" ]]; then
+            title="Runtime v2 production recovery certified — run ${RUN_ID}"
+          else
+            title="Runtime v2 production recovery requires repair — run ${RUN_ID}"
+          fi
+          existing="$(gh issue list --state all --search "${title} in:title" --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" | head -n1)"
+          [[ -z "${existing}" ]] || exit 0
+          {
+            echo "Terminal conclusion: **${CONCLUSION}**"
+            echo
+            echo "Recovery source: \`${HEAD_SHA}\`"
+            echo
+            echo "Recovery run: ${RUN_URL}"
+            echo
+            if [[ "${CONCLUSION}" == "success" ]]; then
+              echo 'The ordered Legislative → Executive → AI → Dashboard recovery, natural-schedule observation, and cleanup gate completed successfully.'
+              echo
+              echo 'Sentinel branch: `runtime-v2-recovery-certified`.'
+              echo
+              echo 'The one-time recovery and dispatch workflows were disabled.'
+            else
+              echo 'The terminal watcher classified this recovery as failed. Inspect the recovery run jobs and artifacts before any retry.'
+              echo
+              echo 'Sentinel branch: `runtime-v2-recovery-failed`.'
+            fi
+          } > "${RUNNER_TEMP}/terminal-issue.md"
+          gh issue create --title "${title}" --body-file "${RUNNER_TEMP}/terminal-issue.md"
