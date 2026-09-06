@@ -33,6 +33,8 @@ jobs:
       ACTIVATION_TIME: "2026-09-06T16:45:54Z"
       CERTIFICATION_NOT_BEFORE: "2026-09-06T18:08:00Z"
       EVIDENCE_DIR: runtime-v2-natural-ai-certification
+      CONTROL_REVISION: ${{ github.sha }}
+      PRIVATE_WEB_AUDIENCE: https://polititrack-web-497412818801.us-central1.run.app
       GH_TOKEN: ${{ github.token }}
 
     steps:
@@ -409,8 +411,8 @@ jobs:
 
           if [[ -f "${EVIDENCE_DIR}/execution-authority-attempted" ]]; then
             remove_execution_authority || status=1
+            verify_execution_authority_removed || status=1
           fi
-          verify_execution_authority_removed || status=1
           phase5_retry_verify_scheduler_control_removed || status=1
           phase5_retry_verify_role_viewer_removed || status=1
 
