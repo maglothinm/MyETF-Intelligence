@@ -1,0 +1,295 @@
+name: Complete Runtime v2 recovery classification and functional audit
+
+on:
+  push:
+    branches: [recoverywatch]
+    paths: [".github/workflows/runtime_v2_recovery_full_watcher.yml"]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: runtime-v2-complete-recovery-watcher
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/recoverywatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    outputs:
+      run_id: ${{ steps.wait.outputs.run_id }}
+      conclusion: ${{ steps.wait.outputs.conclusion }}
+      head_sha: ${{ steps.wait.outputs.head_sha }}
+      run_url: ${{ steps.wait.outputs.run_url }}
+    steps:
+      - name: Wait for terminal production recovery
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=false
+          for attempt in $(seq 1 225); do
+            run="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/runs?per_page=20" \
+              --jq '.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")' | head -n1)"
+            if [[ -z "${run}" ]]; then
+              echo "Recovery run not visible (${attempt}/225)."
+              sleep 60
+              continue
+            fi
+            status="$(jq -r '.status' <<<"${run}")"
+            if [[ "${status}" != "completed" ]]; then
+              echo "Recovery is ${status} (${attempt}/225)."
+              sleep 60
+              continue
+            fi
+            run_id="$(jq -r '.id' <<<"${run}")"
+            conclusion="$(jq -r '.conclusion // "unknown"' <<<"${run}")"
+            head_sha="$(jq -r '.head_sha' <<<"${run}")"
+            run_url="$(jq -r '.html_url' <<<"${run}")"
+            jobs="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")"
+            artifacts="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100")"
+            if [[ "${conclusion}" == "success" ]]; then
+              jq -e '
+                (.jobs | length > 0 and all(.[]; .status == "completed" and .conclusion == "success"))
+              ' <<<"${jobs}" >/dev/null || conclusion="failure"
+              jq -e '
+                (.artifacts | length > 0 and any(.[]; .expired == false))
+              ' <<<"${artifacts}" >/dev/null || conclusion="failure"
+            fi
+            echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+            echo "conclusion=${conclusion}" >> "${GITHUB_OUTPUT}"
+            echo "head_sha=${head_sha}" >> "${GITHUB_OUTPUT}"
+            echo "run_url=${run_url}" >> "${GITHUB_OUTPUT}"
+            terminal=true
+            break
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Recovery did not become terminal in the bounded window." >&2
+            exit 1
+          }
+
+      - name: Publish terminal classification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.wait.outputs.run_id }}
+          CONCLUSION: ${{ steps.wait.outputs.conclusion }}
+          HEAD_SHA: ${{ steps.wait.outputs.head_sha }}
+          RUN_URL: ${{ steps.wait.outputs.run_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${CONCLUSION}" == "success" ]]; then
+            ref_name=runtime-v2-recovery-certified
+            state=success
+            label=certified
+          else
+            ref_name=runtime-v2-recovery-failed
+            state=failure
+            label=requires-repair
+          fi
+          existing="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${ref_name}" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -z "${existing}" ]]; then
+            gh api --method POST "/repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field "ref=refs/heads/${ref_name}" --raw-field "sha=${HEAD_SHA}" >/dev/null
+          elif [[ "${existing}" != "${HEAD_SHA}" ]]; then
+            echo "Conflicting terminal sentinel ${ref_name}." >&2
+            exit 1
+          fi
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            --raw-field "state=${state}" \
+            --raw-field 'context=polititrack/runtime-v2-production-recovery' \
+            --raw-field "description=Runtime v2 recovery ${label}" \
+            --raw-field "target_url=${RUN_URL}" >/dev/null
+          title="Runtime v2 production recovery ${label} — run ${RUN_ID}"
+          gh issue list --state all --search "${title} in:title" --json title --jq '.[].title' | grep -Fxq "${title}" || \
+            gh issue create --title "${title}" \
+              --body "Terminal conclusion: **${CONCLUSION}**. Source: \`${HEAD_SHA}\`. Recovery run: ${RUN_URL}. Sentinel: \`${ref_name}\`."
+
+      - name: Disable one-time controllers after recovery success
+        if: steps.wait.outputs.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for workflow in runtime_v2_production_recovery.yml runtime_v2_production_recovery_trigger.yml; do
+            state="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')"
+            if [[ "${state}" == "active" ]]; then
+              gh api --method PUT "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/disable"
+            fi
+            [[ "$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}" --jq '.state')" == "disabled_manually" ]]
+          done
+
+  functional-audit:
+    needs: classify
+    if: needs.classify.outputs.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      RUNTIME_V2_TEST_POSTGRES: "1"
+      RECOVERY_SHA: ${{ needs.classify.outputs.head_sha }}
+      RECOVERY_RUN_ID: ${{ needs.classify.outputs.run_id }}
+      RECOVERY_RUN_URL: ${{ needs.classify.outputs.run_url }}
+      DASHBOARD_URL: https://polititrack-web-s6icmprjvq-uc.a.run.app
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: runtime-v2-test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out exact certified source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RECOVERY_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-runtime-v2.txt
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+      - name: Install complete PolitiTrack dependencies
+        run: python -m pip install --requirement requirements-runtime-v2.txt
+      - name: Compile all Python sources
+        run: python -m compileall -q runtime_v2 backend scripts tests
+      - name: Validate Runtime v2 Terraform
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform fmt -check
+          ready=false
+          for attempt in 1 2 3; do
+            if terraform -chdir=deploy/runtime-v2/terraform init -backend=false -lockfile=readonly; then
+              ready=true
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          [[ "${ready}" == "true" ]]
+          terraform -chdir=deploy/runtime-v2/terraform validate
+      - name: Run complete repository test suite
+        run: python -m pytest -q
+      - name: Verify repository safety contract
+        run: bash verify.sh
+      - name: Verify critical feature surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in \
+            runtime_v2/runner.py runtime_v2/store.py runtime_v2/web.py \
+            scripts/ai_filing_analyst.py scripts/publish_trade_dashboard.py \
+            scripts/run_legislative_sources_resilient.py; do
+            [[ -s "${path}" ]] || { echo "Missing ${path}" >&2; exit 1; }
+          done
+          grep -Rqs 'INVESTOR_EDGE_ENABLED' runtime_v2 scripts backend
+          grep -Rqs 'AI_ANALYSIS_ENABLED' runtime_v2 scripts backend
+          grep -Rqs 'pending-review' runtime_v2 scripts backend
+      - name: Probe live dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 60 \
+            "${DASHBOARD_URL}/" > /tmp/polititrack-dashboard.html
+          [[ -s /tmp/polititrack-dashboard.html ]]
+          grep -Eqi 'PolitiTrack|Signals|Records|Operations|Investor Edge|AI' /tmp/polititrack-dashboard.html
+      - name: Publish full functionality status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_RESULT: ${{ job.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${AUDIT_RESULT}" == "success" ]]; then
+            ref_name=runtime-v2-full-functionality-certified
+            state=success
+            title="PolitiTrack post-recovery functional audit passed — run ${GITHUB_RUN_ID}"
+          else
+            ref_name=runtime-v2-postrecovery-audit-failed
+            state=failure
+            title="PolitiTrack post-recovery functional audit failed — run ${GITHUB_RUN_ID}"
+          fi
+          existing="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${ref_name}" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -z "${existing}" ]]; then
+            gh api --method POST "/repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field "ref=refs/heads/${ref_name}" --raw-field "sha=${RECOVERY_SHA}" >/dev/null
+          fi
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/statuses/${RECOVERY_SHA}" \
+            --raw-field "state=${state}" \
+            --raw-field 'context=polititrack/post-recovery-functional-audit' \
+            --raw-field "description=Post-recovery audit ${AUDIT_RESULT}" \
+            --raw-field "target_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+          gh issue list --state all --search "${title} in:title" --json title --jq '.[].title' | grep -Fxq "${title}" || \
+            gh issue create --title "${title}" \
+              --body "Audit result: **${AUDIT_RESULT}**. Certified recovery: ${RECOVERY_RUN_URL}. Audit workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+
+  failure-diagnostics:
+    needs: classify
+    if: needs.classify.outputs.conclusion != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RECOVERY_RUN_ID: ${{ needs.classify.outputs.run_id }}
+      RECOVERY_SHA: ${{ needs.classify.outputs.head_sha }}
+      RECOVERY_RUN_URL: ${{ needs.classify.outputs.run_url }}
+    steps:
+      - name: Collect failed jobs and logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostics
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RECOVERY_RUN_ID}" > diagnostics/run.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RECOVERY_RUN_ID}/jobs?per_page=100" > diagnostics/jobs.json
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RECOVERY_RUN_ID}/artifacts?per_page=100" > diagnostics/artifacts.json
+          gh run view "${RECOVERY_RUN_ID}" --log-failed > diagnostics/failed.log 2>&1 || true
+          jq '{failed_jobs:[.jobs[] | select(.conclusion != "success") |
+            {id,name,status,conclusion,html_url,failed_steps:[.steps[]? |
+              select(.conclusion == "failure") | {number,name,status,conclusion}]}]}' \
+            diagnostics/jobs.json > diagnostics/summary.json
+          cat diagnostics/summary.json
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: runtime-v2-production-recovery-failure-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Publish diagnostic issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="Runtime v2 recovery diagnostic — run ${RECOVERY_RUN_ID}"
+          gh issue list --state all --search "${title} in:title" --json title --jq '.[].title' | grep -Fxq "${title}" && exit 0
+          failed="$(jq -r '.failed_jobs[] | .name as $job | .failed_steps[]? | "- " + $job + ": " + .name' diagnostics/summary.json)"
+          {
+            echo "Recovery source: \`${RECOVERY_SHA}\`"
+            echo
+            echo "Recovery run: ${RECOVERY_RUN_URL}"
+            echo
+            echo "Failed steps:"
+            [[ -n "${failed}" ]] && printf '%s\n' "${failed}" || echo '- No failed step reported; inspect the diagnostics artifact.'
+            echo
+            echo 'Artifact: `runtime-v2-production-recovery-failure-diagnostics`.'
+          } > /tmp/issue.md
+          gh issue create --title "${title}" --body-file /tmp/issue.md
