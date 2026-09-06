@@ -1082,3 +1082,15 @@ The next retry must bind that exact artifact and recovery layer, exclude all
 sixteen prior Runtime receipts, and certify only four new executions. The jq
 binding correction does not authorize rebaseline, state rewind, legacy
 merge/import, or Phase 6.
+
+## D-2026-09-06-045 — Reconcile recovery certification with the deployed schedule
+
+**Decision:** Preserve the deployed Dashboard UTC schedule and correct the natural-certification assertion that incorrectly required America/New_York. Keep AI's approved half-hour cadence. Query execution logs from the recorded recovery activation timestamp so delayed certification can still bind the exact original natural cycles.
+
+**Reason:** Failed canonical run `34047080001` stopped after runtime/IAM preflight without producing a certificate. Its expected Dashboard timezone contradicted both canonical Terraform and a fresh Cloud Scheduler read. Natural AI success logs independently show durable generations 63 and 64; changing the production schedule would not fix this evidence-validation defect.
+
+**Validation:** PR #151 merged as `db080d413b5e804a335f575071a62d48a9d4083b`. YAML, four embedded Bash scripts, embedded Python syntax, 14 Phase 5 safety tests, and `verify.sh` passed locally. One POSIX-only test is skipped on Windows. No PR-triggered workflow ran for this path-only change. Canonical natural-certification run `34059488724` provides the live acceptance gate.
+
+**Boundary:** This decision does not alter state authority, immutable runtime bytes, production scheduling, rollback assets, or Phase 6 scope. The original Phase 5 certificate was independently downloaded and checksum-verified; it remains the original transfer receipt, while repaired-runtime certification is separate.
+
+**Release verification:** Canonical run `34059488724`, attempt 1, job `101557337973`, succeeded. Artifact `9997087643` and both internal evidence hashes were independently verified. The final certificate records two scheduled AI writers, a following Dashboard writer, AI generation 70, Dashboard generation 79, enabled producer schedulers, paused Filing Vault, and completed temporary execution/logging cleanup. Independent GCP reads confirmed Scheduler creator identity and approved image for the exact three executions, and absence of temporary project logging/Scheduler/IAM-role-viewer grants. The public Dashboard 79 snapshot matched the durable status captured by the certification run. The repaired Runtime v2 recovery is certified; Phase 6 remains outside scope.
