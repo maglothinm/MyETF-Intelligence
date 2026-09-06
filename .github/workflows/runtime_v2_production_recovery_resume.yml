@@ -1,0 +1,444 @@
+name: Resume Runtime v2 production recovery from submitted build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_production_recovery_resume.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: acdaa3ae-b4ca-42c4-a71d-c8954f83e299
+      RUNTIME_SOURCE_REVISION: 72c1ca8c74a7af4b11f2e677c7a296d5e2358578
+      RUNTIME_TAG: 72c1ca8c74a7
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: runtime-v2-production-recovery-resume
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as isolated builder
+        id: builder-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest submitted build and bind immutable image
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}/build"
+
+          terminal=false
+          for attempt in $(seq 1 120); do
+            gcloud builds describe "${BUILD_ID}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format=json > "${EVIDENCE_DIR}/build/build.json"
+            status="$(jq -r '.status // empty' "${EVIDENCE_DIR}/build/build.json")"
+            printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${status}" \
+              >> "${EVIDENCE_DIR}/build/status-history.tsv"
+            case "${status}" in
+              SUCCESS)
+                terminal=true
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "Submitted Cloud Build ended with ${status}." >&2
+                exit 1
+                ;;
+              QUEUED|PENDING|WORKING)
+                sleep 10
+                ;;
+              *)
+                echo "Unexpected Cloud Build status ${status:-empty}." >&2
+                exit 1
+                ;;
+            esac
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Submitted Cloud Build did not reach SUCCESS in the bounded poll window." >&2
+            exit 1
+          }
+
+          jq -e --arg source "${RUNTIME_SOURCE_REVISION}" \
+            '.status == "SUCCESS" and .substitutions._SOURCE_REVISION == $source' \
+            "${EVIDENCE_DIR}/build/build.json" >/dev/null || {
+              echo "Build is not a successful exact-source Runtime v2 build." >&2
+              exit 1
+            }
+
+          tagged_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${RUNTIME_TAG}"
+          digest="$(gcloud artifacts docker images describe "${tagged_image}" \
+            --project "${PROJECT_ID}" --format='value(image_summary.digest)')"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "Successful build did not produce a resolvable immutable digest." >&2
+            exit 1
+          }
+          immutable_image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}@${digest}"
+          gcloud artifacts docker images describe "${immutable_image}" \
+            --project "${PROJECT_ID}" --format=none
+
+          echo "immutable_image=${immutable_image}" >> "${GITHUB_OUTPUT}"
+          jq -n \
+            --arg build_id "${BUILD_ID}" \
+            --arg source_revision "${RUNTIME_SOURCE_REVISION}" \
+            --arg immutable_image "${immutable_image}" \
+            --arg image_digest "${digest}" \
+            '{schema_version:1,result:"runtime_v2_submitted_build_harvested",
+              build_id:$build_id,source_revision:$source_revision,
+              immutable_image:$immutable_image,image_digest:$image_digest}' \
+            > "${EVIDENCE_DIR}/build/receipt.json"
+
+      - name: Authenticate as constrained deployer for rollout
+        id: deployer-rollout
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Deploy repaired image and run ordered live smoke
+        id: rollout
+        shell: bash
+        env:
+          APPROVED_IMAGE: ${{ steps.build.outputs.immutable_image }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}/smoke"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+
+          verify_canonical_context
+          verify_project_boundary
+          verify_cloud_sql_private
+          verify_vault_scheduler_paused
+          verify_legacy_workflows_state disabled_manually
+          verify_producer_scheduler_state ENABLED
+
+          pause_producer_schedulers
+          touch "${EVIDENCE_DIR}/producer-schedulers-paused"
+          verify_producer_scheduler_state PAUSED
+
+          drained=false
+          for attempt in $(seq 1 180); do
+            all_done=true
+            for job in "${PRODUCER_JOBS[@]}"; do
+              latest="$(gcloud run jobs describe "${job}" \
+                --project "${PROJECT_ID}" --region "${REGION}" \
+                --format='value(status.latestCreatedExecution.name)')"
+              [[ -n "${latest}" ]] || continue
+              completed="$(gcloud run jobs executions describe "${latest}" \
+                --project "${PROJECT_ID}" --region "${REGION}" \
+                --format='value(status.completionTime)' 2>/dev/null || true)"
+              [[ -n "${completed}" ]] || all_done=false
+            done
+            if [[ "${all_done}" == "true" ]]; then
+              drained=true
+              break
+            fi
+            sleep 10
+          done
+          [[ "${drained}" == "true" ]] || {
+            echo "Existing producer executions did not drain after scheduler pause." >&2
+            exit 1
+          }
+
+          configure_runtime production
+          verify_runtime_configuration production
+
+          gcloud scheduler jobs update http polititrack-ai \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --schedule "14,44 * * * *" --time-zone "America/New_York" --quiet
+          [[ "$(gcloud scheduler jobs describe polititrack-ai \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(schedule)')" == "14,44 * * * *" ]]
+
+          grant_execution_authority
+          touch "${EVIDENCE_DIR}/execution-authority-granted"
+          capture_status "${EVIDENCE_DIR}/smoke/baseline.json" recovery-resume-baseline
+
+          execute_producer legislative post-phase5-recovery recovery-resume-smoke
+          execute_producer executive post-phase5-recovery recovery-resume-smoke
+          execute_producer ai post-phase5-recovery recovery-resume-smoke
+          execute_producer dashboard post-phase5-recovery recovery-resume-smoke
+          capture_status "${EVIDENCE_DIR}/smoke/after.json" recovery-resume-after
+
+          python - \
+            "${EVIDENCE_DIR}/smoke/baseline.json" \
+            "${EVIDENCE_DIR}/smoke/after.json" \
+            "${RUNTIME_SOURCE_REVISION}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          before = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          after = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          revision = sys.argv[3]
+          before_heads = {row["namespace"]: row for row in before["heads"]}
+          after_heads = {row["namespace"]: row for row in after["heads"]}
+          latest = {row["job_name"]: row for row in after["latest_runs"]}
+          for name in ("legislative", "executive", "ai", "dashboard"):
+              if after_heads[name]["generation"] <= before_heads[name]["generation"]:
+                  raise SystemExit(f"{name} head did not advance in ordered smoke")
+              run = latest[name]
+              if run["status"] != "success":
+                  raise SystemExit(f"{name} latest run is not successful")
+              if run["runtime_mode"] != "production":
+                  raise SystemExit(f"{name} latest run is not production")
+              if run["source_revision"] != revision:
+                  raise SystemExit(f"{name} latest run is not bound to repaired source")
+          PY
+
+          resume_producer_schedulers
+          verify_producer_scheduler_state ENABLED
+          date -u +%Y-%m-%dT%H:%M:%SZ > "${EVIDENCE_DIR}/schedulers-resumed-at.txt"
+
+      - name: Refresh deployer credentials for natural-schedule observation
+        id: deployer-monitor
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Certify two natural AI cycles and following Dashboard publication
+        shell: bash
+        env:
+          APPROVED_IMAGE: ${{ steps.build.outputs.immutable_image }}
+        run: |
+          set -euo pipefail
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          resumed_at="$(cat "${EVIDENCE_DIR}/schedulers-resumed-at.txt")"
+          mkdir -p "${EVIDENCE_DIR}/natural"
+
+          successful_execution_names_since() {
+            local job="$1" since="$2" output="$3"
+            gcloud run jobs executions list --job "${job}" \
+              --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+              > "${output}.json"
+            python - "${output}.json" "${since}" <<'PY'
+          import datetime as dt
+          import json
+          import sys
+          from pathlib import Path
+
+          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          since = dt.datetime.fromisoformat(sys.argv[2].replace("Z", "+00:00"))
+          accepted = []
+          for row in data:
+              meta = row.get("metadata") or {}
+              status = row.get("status") or {}
+              created_raw = meta.get("creationTimestamp") or ""
+              completed_raw = status.get("completionTime") or ""
+              if not created_raw or not completed_raw:
+                  continue
+              created = dt.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+              if created < since:
+                  continue
+              completed_condition = any(
+                  str(c.get("type")) == "Completed" and str(c.get("status")) == "True"
+                  for c in status.get("conditions") or []
+                  if isinstance(c, dict)
+              )
+              if not completed_condition:
+                  continue
+              name = meta.get("name") or ""
+              if name:
+                  accepted.append((created, completed_raw, name))
+          for created, completed, name in sorted(accepted):
+              print(f"{name}\t{created.isoformat()}\t{completed}")
+          PY
+          }
+
+          accepted_ai="${EVIDENCE_DIR}/natural/accepted-ai.tsv"
+          : > "${accepted_ai}"
+          for attempt in $(seq 1 90); do
+            candidates="${EVIDENCE_DIR}/natural/ai-candidates"
+            successful_execution_names_since polititrack-ai "${resumed_at}" "${candidates}" \
+              > "${candidates}.tsv"
+            : > "${accepted_ai}.tmp"
+            while IFS=$'\t' read -r execution created completed; do
+              [[ -n "${execution}" ]] || continue
+              logs="${EVIDENCE_DIR}/natural/${execution}-logs.json"
+              gcloud logging read \
+                "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"polititrack-ai\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+                --project "${PROJECT_ID}" --freshness=3h --limit=1000 --order=asc \
+                --format=json > "${logs}"
+              if grep -q 'writer_already_running' "${logs}"; then
+                continue
+              fi
+              printf '%s\t%s\t%s\n' "${execution}" "${created}" "${completed}" \
+                >> "${accepted_ai}.tmp"
+            done < "${candidates}.tsv"
+            mv "${accepted_ai}.tmp" "${accepted_ai}"
+            if (( $(wc -l < "${accepted_ai}") >= 2 )); then
+              break
+            fi
+            sleep 60
+          done
+          (( $(wc -l < "${accepted_ai}") >= 2 )) || {
+            echo "Two natural non-coalesced AI writer executions were not observed." >&2
+            exit 1
+          }
+
+          second_ai_completion="$(sed -n '2p' "${accepted_ai}" | cut -f3)"
+          accepted_dashboard="${EVIDENCE_DIR}/natural/accepted-dashboard.tsv"
+          : > "${accepted_dashboard}"
+          for attempt in $(seq 1 30); do
+            candidates="${EVIDENCE_DIR}/natural/dashboard-candidates"
+            successful_execution_names_since polititrack-dashboard "${second_ai_completion}" "${candidates}" \
+              > "${candidates}.tsv"
+            : > "${accepted_dashboard}.tmp"
+            while IFS=$'\t' read -r execution created completed; do
+              [[ -n "${execution}" ]] || continue
+              logs="${EVIDENCE_DIR}/natural/${execution}-logs.json"
+              gcloud logging read \
+                "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"polititrack-dashboard\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+                --project "${PROJECT_ID}" --freshness=3h --limit=1000 --order=asc \
+                --format=json > "${logs}"
+              if grep -q 'writer_already_running' "${logs}"; then
+                continue
+              fi
+              printf '%s\t%s\t%s\n' "${execution}" "${created}" "${completed}" \
+                >> "${accepted_dashboard}.tmp"
+            done < "${candidates}.tsv"
+            mv "${accepted_dashboard}.tmp" "${accepted_dashboard}"
+            [[ -s "${accepted_dashboard}" ]] && break
+            sleep 60
+          done
+          [[ -s "${accepted_dashboard}" ]] || {
+            echo "No natural Dashboard writer completed after the second AI writer." >&2
+            exit 1
+          }
+
+          capture_status "${EVIDENCE_DIR}/natural/certified-status.json" recovery-resume-certified
+          python - \
+            "${EVIDENCE_DIR}/smoke/after.json" \
+            "${EVIDENCE_DIR}/natural/certified-status.json" \
+            "${RUNTIME_SOURCE_REVISION}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          smoke = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          current = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          revision = sys.argv[3]
+          old_heads = {row["namespace"]: row for row in smoke["heads"]}
+          heads = {row["namespace"]: row for row in current["heads"]}
+          latest = {row["job_name"]: row for row in current["latest_runs"]}
+          if heads["ai"]["generation"] < old_heads["ai"]["generation"] + 2:
+              raise SystemExit("AI head did not advance through two natural writer cycles")
+          if heads["dashboard"]["generation"] <= old_heads["dashboard"]["generation"]:
+              raise SystemExit("Dashboard did not publish after natural AI execution")
+          for name in ("ai", "dashboard"):
+              run = latest[name]
+              if run["status"] != "success" or run["runtime_mode"] != "production":
+                  raise SystemExit(f"{name} natural latest run is not a successful production run")
+              if run["trigger_source"] != "external_scheduler":
+                  raise SystemExit(f"{name} natural latest run was not scheduler-originated")
+              if run["source_revision"] != revision:
+                  raise SystemExit(f"{name} natural latest run is not bound to repaired source")
+          PY
+
+          jq -n \
+            --arg build_id "${BUILD_ID}" \
+            --arg source_revision "${RUNTIME_SOURCE_REVISION}" \
+            --arg resumed_at "${resumed_at}" \
+            --rawfile ai "${accepted_ai}" \
+            --rawfile dashboard "${accepted_dashboard}" \
+            '{schema_version:1,result:"runtime_v2_natural_schedule_certified",
+              build_id:$build_id,source_revision:$source_revision,
+              schedulers_resumed_at:$resumed_at,
+              ai_executions:$ai,dashboard_executions:$dashboard}' \
+            > "${EVIDENCE_DIR}/CERTIFICATE.json"
+
+      - name: Refresh deployer credentials for fail-closed cleanup
+        if: always()
+        id: deployer-cleanup
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Remove temporary authority and leave schedulers safe
+        if: always()
+        shell: bash
+        env:
+          APPROVED_IMAGE: ${{ steps.build.outputs.immutable_image || 'unavailable' }}
+        run: |
+          set +e
+          status=0
+          mkdir -p "${EVIDENCE_DIR}/cleanup"
+
+          if [[ -f "${EVIDENCE_DIR}/producer-schedulers-paused" ]]; then
+            for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard; do
+              current="$(gcloud scheduler jobs describe "${scheduler}" \
+                --project "${PROJECT_ID}" --location "${REGION}" \
+                --format='value(state)' 2>/dev/null)"
+              if [[ "${current}" != "ENABLED" ]]; then
+                gcloud scheduler jobs resume "${scheduler}" \
+                  --project "${PROJECT_ID}" --location "${REGION}" --quiet || status=1
+              fi
+            done
+          fi
+
+          if [[ -f "${EVIDENCE_DIR}/execution-authority-granted" ]]; then
+            source deploy/runtime-v2/runtime_promotion_control.sh
+            remove_execution_authority || status=1
+          fi
+
+          for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard; do
+            final_state="$(gcloud scheduler jobs describe "${scheduler}" \
+              --project "${PROJECT_ID}" --location "${REGION}" \
+              --format='value(state)' 2>/dev/null)"
+            printf '%s\t%s\n' "${scheduler}" "${final_state}" \
+              >> "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+            [[ "${final_state}" == "ENABLED" ]] || status=1
+          done
+          final_vault="$(gcloud scheduler jobs describe polititrack-vault-lifecycle \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+            --format='value(state)' 2>/dev/null)"
+          printf '%s\t%s\n' polititrack-vault-lifecycle "${final_vault}" \
+            >> "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
+          [[ "${final_vault}" == "PAUSED" ]] || status=1
+          exit "${status}"
+
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-v2-production-recovery-resume-${{ github.run_id }}
+          path: runtime-v2-production-recovery-resume/
+          if-no-files-found: warn
+          retention-days: 90
