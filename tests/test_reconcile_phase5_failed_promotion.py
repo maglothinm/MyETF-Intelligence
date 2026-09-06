@@ -632,7 +632,9 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     item.frozen_successor_output_archives = []
     item.frozen_successor_artifact_metadatas = []
     item.frozen_successor_output_artifact_metadatas = []
-    successor_roles = ("legislative", "executive", "legislative", "executive")
+    successor_roles = ("legislative", "executive") * len(
+        validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS
+    )
     for index, (role, run_id) in enumerate(
         zip(successor_roles, validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
     ):
@@ -655,7 +657,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         )
         revision = validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[layer_index]
         event = "schedule" if layer_index == 0 else "workflow_dispatch"
-        hour = 18 if layer_index == 0 else 20
+        hour = (18, 20, 23)[layer_index]
+        minute = (10 + index % 2) if layer_index < 2 else (55 + index % 2)
         successor_pin = _run_pin(
             run_id,
             validator.RECOVERY_PATHS[role],
@@ -663,8 +666,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             head=revision,
             job_id=800 + index,
             job_name="track",
-            start=f"2026-09-05T{hour}:1{index % 2}:00Z",
-            finish=f"2026-09-05T{hour}:1{index % 2}:30Z",
+            start=f"2026-09-05T{hour}:{minute:02d}:00Z",
+            finish=f"2026-09-05T{hour}:{minute:02d}:30Z",
             run_number=200 + index,
         ) | {"role": role}
         successor_pin["event"] = event
@@ -672,12 +675,12 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             successor_members = {name: bundle.read(name) for name in bundle.namelist()}
         with zipfile.ZipFile(predecessor_output_source) as bundle:
             successor_result = json.loads(bundle.read(validator.RECOVERY_RESULT_MEMBERS[role]))
-        successor_result["started_utc"] = f"2026-09-05T{hour}:1{index % 2}:05Z"
-        successor_result["finished_utc"] = f"2026-09-05T{hour}:1{index % 2}:20Z"
+        successor_result["started_utc"] = f"2026-09-05T{hour}:{minute:02d}:05Z"
+        successor_result["finished_utc"] = f"2026-09-05T{hour}:{minute:02d}:20Z"
         state = json.loads(successor_members["state.json"])
         state["last_attempt_utc"] = successor_result["started_utc"]
         state["last_success_utc"] = (
-            f"2026-09-05T{hour}:1{index % 2}:19Z"
+            f"2026-09-05T{hour}:{minute:02d}:19Z"
             if layer_index == 1 and role == "legislative"
             else successor_result["finished_utc"]
         )
@@ -720,7 +723,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             validator.RECOVERY_ARTIFACT_NAMES[role],
             run_id,
             revision,
-            created_at=f"2026-09-05T{hour}:20:00Z",
+            created_at=f"2026-09-05T{hour}:{minute:02d}:25Z",
         )
         output_name = (
             f"legislative-purchase-output-{run_id}-1"
@@ -733,7 +736,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             output_name,
             run_id,
             revision,
-            created_at=f"2026-09-05T{hour}:20:00Z",
+            created_at=f"2026-09-05T{hour}:{minute:02d}:25Z",
         )
         predecessor_pin = copy.deepcopy(predecessor_pin_source["artifact"])
         predecessor_pin.update(
@@ -750,6 +753,53 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         item.frozen_successor_output_archives.append(successor_output_archive)
         item.frozen_successor_artifact_metadatas.append(artifact_metadata)
         item.frozen_successor_output_artifact_metadatas.append(output_metadata)
+
+    frozen_successor_summaries = []
+    for index, (role, pin) in enumerate(zip(successor_roles, frozen_successor_pins)):
+        layer_index = index // 2
+        predecessor_run_pin = (
+            recovery_pins[index % 2]
+            if layer_index == 0
+            else frozen_successor_pins[index - 2]
+        )
+        with zipfile.ZipFile(item.frozen_successor_output_archives[index]) as bundle:
+            result = json.loads(bundle.read(validator.RECOVERY_RESULT_MEMBERS[role]))
+        predecessor_artifact = pin["predecessor_artifact"]
+        protected_artifact = pin["artifact"]
+        output_artifact = pin["output_artifact"]
+        frozen_successor_summaries.append(
+            {
+                "role": role,
+                "run_id": pin["run_id"],
+                "run_attempt": pin["run_attempt"],
+                "head_sha": pin["head_sha"],
+                "job_id": pin["job"]["id"],
+                "conclusion": "success",
+                "successor_layer": layer_index + 1,
+                "incident_only_revision_allowlist_verified": True,
+                "predecessor_run_id": predecessor_run_pin["run_id"],
+                "predecessor_artifact_id": predecessor_artifact["id"],
+                "predecessor_artifact_sha256": predecessor_artifact["digest"].removeprefix(
+                    "sha256:"
+                ),
+                "protected_artifact_id": protected_artifact["id"],
+                "protected_artifact_sha256": protected_artifact["digest"].removeprefix(
+                    "sha256:"
+                ),
+                "output_artifact_id": output_artifact["id"],
+                "output_artifact_sha256": output_artifact["digest"].removeprefix(
+                    "sha256:"
+                ),
+                "result_started_at": result["started_utc"],
+                "result_finished_at": result["finished_utc"],
+                "protected_domain_data_unchanged": True,
+                "protected_domain_member_count": len(
+                    validator.RECOVERY_PROTECTED_DOMAIN_MEMBERS[role]
+                ),
+                "run_receipt_appended_count": 1,
+                "state_change_keys": ["last_attempt_utc", "last_success_utc"],
+            }
+        )
 
     phase4_artifact, item.phase4_artifact_metadata = _artifact_pin(
         item.phase4_archive, 7001, "phase4-readiness", validator.PHASE4_RUN_ID, validator.CERTIFIED_CONTROL_REVISION
@@ -813,7 +863,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         validator.FAILED_PHASE5_RETRY_RUN_ID,
         validator.PHASE5_RETRY_WORKFLOW_PATH,
         "failure",
-        head=validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        head=validator.FAILED_PHASE5_RETRY_CONTROL_REVISION,
         job_id=505,
         job_name="reconcile-and-retry",
         start="2026-09-05T18:50:00Z",
@@ -979,14 +1029,16 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
                         "result": "legacy_recovery_run_succeeded",
                         "workflow": Path(validator.RECOVERY_PATHS[role]).name,
                         "workflow_id": pin["workflow"]["id"],
-                        "control_revision": validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+                        "control_revision": validator.FAILED_PHASE5_RETRY_CONTROL_REVISION,
                         "dispatch_attempted": True,
                         "run_id": pin["run_id"],
                         "status": "completed",
                         "conclusion": "success",
                         "run_attempt": 1,
                     }
-                    for role, pin in zip(("legislative", "executive"), frozen_successor_pins[2:])
+                    for role, pin in zip(
+                        ("legislative", "executive"), frozen_successor_pins[2:4]
+                    )
                 ],
             }
         ),
@@ -1023,7 +1075,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         7006,
         f"phase5-failed-promotion-retry-rollback-{validator.FAILED_PHASE5_RUN_ID}",
         validator.FAILED_PHASE5_RETRY_RUN_ID,
-        validator.FROZEN_LEGACY_SUCCESSOR_REVISIONS[-1],
+        validator.FAILED_PHASE5_RETRY_CONTROL_REVISION,
         created_at="2026-09-05T20:04:00Z",
     )
     failed_retry_pin.update(
@@ -1049,6 +1101,346 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
             for head in retry_terminal_status["heads"]
         },
     )
+
+    retry_final_heads, retry_receipts = validator._validate_sequence(
+        baseline=failed_retry_baseline,
+        observations=retry_observations,
+        expected_mode="production",
+        expected_trigger="phase5_smoke",
+        cycles=1,
+        runtime_source_revision=validator.RUNTIME_SOURCE_REVISION,
+    )
+    predecessor_retry_summary = {
+        "run_id": validator.FAILED_PHASE5_RETRY_RUN_ID,
+        "artifact_id": failed_retry_artifact["id"],
+        "head_sha": failed_retry_pin["head_sha"],
+        "job_id": failed_retry_pin["job"]["id"],
+        "conclusion": "failure",
+        "result": "clean_cycle_rolled_back_noncertifying",
+        "certification_eligible": False,
+        "unique_successful_smoke_receipts": 4,
+        "executions": retry_receipts,
+        "baseline_heads": {
+            head["namespace"]: {
+                "generation": head["generation"],
+                "snapshot_sha256": head["snapshot_sha256"],
+            }
+            for head in failed_retry_baseline["heads"]
+        },
+        "final_heads": validator._head_summary(retry_final_heads),
+        "legacy_global_one_writer_verified": True,
+        "runtime_execution_set_verified": True,
+        "rollback_verified": True,
+        "production_authority_transferred": False,
+        "phase6_started": False,
+    }
+    layer_two_high_water_pins = [
+        frozen_successor_pins[2],
+        frozen_successor_pins[3],
+        legacy_pin,
+        dashboard_pin,
+    ]
+    old_final_heads, old_receipts = validator._validate_sequence(
+        baseline=base,
+        observations=old_observations,
+        expected_mode="production",
+        expected_trigger="phase5_smoke",
+        cycles=1,
+        runtime_source_revision=validator.RUNTIME_SOURCE_REVISION,
+    )
+    predecessor_replay = {
+        "result": "phase5_failed_promotion_reconciled",
+        "certification_eligible": False,
+        "descriptor_sha256": _digest("pre-successor-descriptor"),
+        "failed_phase5_retry": predecessor_retry_summary,
+        "continuation_heads": predecessor_retry_summary["final_heads"],
+        "current_heads_verified": True,
+        "current_latest_receipts_verified": True,
+        "invalidated_smoke_prefix": {
+            "reason": "concurrent_legacy_ai_global_writer",
+            "certification_eligible": False,
+            "unique_successful_receipts": 4,
+            "executions": old_receipts,
+            "baseline_heads": validator._head_summary(validator._heads(base)),
+            "final_heads": validator._head_summary(old_final_heads),
+        },
+        "frozen_legacy_successors": frozen_successor_summaries[:4],
+        "legacy_high_water": {
+            "runs": [
+                {
+                    "role": role,
+                    "run_id": pin["run_id"],
+                    "workflow_id": pin["workflow"]["id"],
+                    "workflow_name": pin["workflow"]["name"],
+                    "workflow_path": pin["workflow"]["path"],
+                    "created_at": pin["created_at"],
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+                for role, pin in zip(
+                    validator.LEGACY_HIGH_WATER_ROLES, layer_two_high_water_pins
+                )
+            ]
+        },
+        "reconciliation": {
+            "failed_retry_intervening_attempt_verified": True,
+            "intervening_runtime_producer_execution_performed": True,
+            "intervening_runtime_producer_execution_count": 4,
+            "full_snapshot_chain_preserved": True,
+            "additional_runtime_producer_execution_performed": False,
+            "production_authority_transferred": False,
+            "phase6_started": False,
+        },
+    }
+    predecessor_replay_bytes = _json_bytes(predecessor_replay)
+    predecessor_replay_sha = hashlib.sha256(predecessor_replay_bytes).hexdigest()
+
+    retry_successor_baseline = copy.deepcopy(item.current_status)
+    retry_successor_observations, retry_successor_terminal_status = _observations(
+        retry_successor_baseline,
+        clock=datetime(2026, 9, 5, 23, 20, tzinfo=timezone.utc),
+        run_prefix="retry5",
+    )
+    item.current_status = retry_successor_terminal_status
+    failed_retry_successor_pin = _run_pin(
+        validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        validator.PHASE5_RETRY_WORKFLOW_PATH,
+        "failure",
+        head=validator.FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+        job_id=506,
+        job_name="reconcile-and-retry",
+        start="2026-09-05T23:10:00Z",
+        finish="2026-09-06T00:01:24Z",
+        run_number=5,
+    )
+    retry_successor_run_inventories = [
+        {"total_count": 1, "workflow_runs": [_run_api(pin)]}
+        for pin in layer_two_high_water_pins
+    ]
+    retry_successor_artifact_inventories = [
+        {"total_count": 1, "artifacts": [metadata]}
+        for metadata in (
+            item.frozen_successor_artifact_metadatas[2],
+            item.frozen_successor_artifact_metadatas[3],
+            item.state_artifact_metadata,
+        )
+    ]
+    retry_successor_workflow_states = [
+        {
+            "id": pin["workflow"]["id"],
+            "name": pin["workflow"]["name"],
+            "path": pin["workflow"]["path"],
+            "state": "disabled_manually",
+        }
+        for pin in layer_two_high_water_pins
+    ]
+    retry_successor_runtime_inventories: list[dict[str, Any]] = []
+    for observation in retry_successor_observations:
+        role = observation["job"]
+        latest = next(
+            row
+            for row in observation["status"]["latest_runs"]
+            if row["job_name"] == role
+        )
+        app_start = datetime.fromisoformat(latest["started_at"].replace("Z", "+00:00"))
+        app_finish = datetime.fromisoformat(latest["finished_at"].replace("Z", "+00:00"))
+        job_name = f"polititrack-{role}"
+        retry_successor_runtime_inventories.append(
+            {
+                "job": role,
+                "capture_limit": 1000,
+                "returned_count": 1,
+                "executions": [
+                    {
+                        "metadata": {
+                            "name": observation["cloud_run_execution"],
+                            "creationTimestamp": (app_start - timedelta(seconds=5))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                            "labels": {"run.googleapis.com/job": job_name},
+                            "ownerReferences": [{"kind": "Job", "name": job_name}],
+                        },
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "containers": [
+                                        {
+                                            "image": IMAGE,
+                                            "env": [
+                                                {
+                                                    "name": "POLITITRACK_TRIGGER_SOURCE",
+                                                    "value": "phase5_smoke",
+                                                },
+                                                {
+                                                    "name": "SOURCE_REVISION",
+                                                    "value": validator.RUNTIME_SOURCE_REVISION,
+                                                },
+                                                {
+                                                    "name": "POLITITRACK_MODE",
+                                                    "value": "production",
+                                                },
+                                            ],
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "status": {
+                            "startTime": (app_start - timedelta(seconds=5))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                            "completionTime": (app_finish + timedelta(seconds=5))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                            "conditions": [{"type": "Completed", "status": "True"}],
+                            "succeededCount": 1,
+                        },
+                    }
+                ],
+            }
+        )
+    retry_successor_members: dict[str, bytes | str] = {
+        "failed-prefix-replay.json": predecessor_replay_bytes,
+        "failed-prefix-replay.sha256": (
+            f"{predecessor_replay_sha}  failed-prefix-replay.json\n"
+        ),
+        "terminal-baseline.json": _json_bytes(retry_successor_baseline),
+        "terminal-confirmation.json": _json_bytes(retry_successor_terminal_status),
+        "observations.ndjson": _jsonl(retry_successor_observations),
+        "fresh-cycle-started-at.txt": "2026-09-05T23:19:50Z\n",
+        "fresh-cycle-finished-at.txt": "2026-09-05T23:22:00Z\n",
+        "live-mutation-started": "\n",
+        "route-touched": "\n",
+        "retry-rollback-complete": "\n",
+        "retry-rollback.json": _json_bytes(
+            {
+                "schema_version": 1,
+                "result": "phase5_failed_promotion_retry_rolled_back",
+                "runtime_schedulers_paused": True,
+                "web_public": False,
+                "runtime_mode": "shadow",
+                "observed_legacy_route_kind": "historic_active",
+                "legacy_route_restored": True,
+                "legacy_recovery_required": True,
+                "legacy_recovery_action_complete": True,
+                "temporary_execution_authority_removed": True,
+                "temporary_service_account_user_removed": True,
+                "temporary_private_web_invoker_removed": True,
+                "temporary_scheduler_activation_authority_removed": True,
+                "temporary_role_viewer_authority_removed": True,
+                "cloud_sql_private_only": True,
+                "vault_scheduler_state": "PAUSED",
+            }
+        ),
+        "phase5-completion-invalidation.json": _json_bytes(
+            {
+                "schema_version": 1,
+                "result": "phase5_completion_evidence_invalidated",
+                "certification_eligible": False,
+                "phase5_completion_claim_valid": False,
+                "production_cutover_certified": False,
+                "trigger": "workflow_failure_or_cancellation",
+                "invalidated_at": "2026-09-06T00:01:17Z",
+                "run_id": str(validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID),
+                "run_attempt": "1",
+                "control_revision": validator.FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+                "affirmative_completion_evidence_absent_before_rollback_artifact_upload": True,
+                "invalidated_files": [
+                    {
+                        "path": path,
+                        "existed_before_invalidation": False,
+                        "prior_sha256": None,
+                        "disposition": "not_created",
+                    }
+                    for path in (
+                        "phase5-complete.json",
+                        "phase5-complete.sha256",
+                        "terminal-manifest.json",
+                    )
+                ],
+            }
+        ),
+        "legacy-recovery-dispatch.json": _json_bytes(
+            {
+                "result": "legacy_recovery_runs_succeeded",
+                "workflows": [
+                    {
+                        "result": "legacy_recovery_run_succeeded",
+                        "workflow": Path(validator.RECOVERY_PATHS[role]).name,
+                        "workflow_id": pin["workflow"]["id"],
+                        "control_revision": (
+                            validator.FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION
+                        ),
+                        "dispatch_attempted": True,
+                        "run_id": pin["run_id"],
+                        "status": "completed",
+                        "conclusion": "success",
+                        "run_attempt": 1,
+                    }
+                    for role, pin in zip(
+                        ("legislative", "executive"), frozen_successor_pins[4:6]
+                    )
+                ],
+            }
+        ),
+    }
+    for index, (role, observation) in enumerate(
+        zip(validator.NAMESPACES, retry_successor_observations), start=1
+    ):
+        retry_successor_members[
+            f"retry-smoke-sequence-{index}-{role}-status.json"
+        ] = _json_bytes(observation["status"])
+    for role, inventory, workflow_state, runtime_inventory in zip(
+        validator.LEGACY_HIGH_WATER_ROLES,
+        retry_successor_run_inventories,
+        retry_successor_workflow_states,
+        retry_successor_runtime_inventories,
+    ):
+        retry_successor_members[
+            f"incident/legacy-{role}-runs-terminal.json"
+        ] = _json_bytes(inventory)
+        retry_successor_members[
+            f"incident/legacy-{role}-workflow-terminal.json"
+        ] = _json_bytes(workflow_state)
+        retry_successor_members[
+            f"incident/runtime-{role}-executions-terminal.json"
+        ] = _json_bytes(runtime_inventory)
+    for role, inventory in zip(
+        validator.LEGACY_HIGH_WATER_ROLES[:3], retry_successor_artifact_inventories
+    ):
+        retry_successor_members[
+            f"incident/legacy-{role}-artifacts-terminal.json"
+        ] = _json_bytes(inventory)
+    item.failed_retry_successor_archive = tmp_path / "failed-retry-successor.zip"
+    _zip(item.failed_retry_successor_archive, retry_successor_members)
+    (
+        failed_retry_successor_artifact,
+        item.failed_retry_successor_artifact_metadata,
+    ) = _artifact_pin(
+        item.failed_retry_successor_archive,
+        7007,
+        f"phase5-failed-promotion-retry-rollback-{validator.FAILED_PHASE5_RUN_ID}",
+        validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        validator.FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+        created_at="2026-09-06T00:01:25Z",
+    )
+    failed_retry_successor_pin.update(
+        artifact=failed_retry_successor_artifact,
+        predecessor_replay_sha256=predecessor_replay_sha,
+        predecessor_descriptor_sha256=predecessor_replay["descriptor_sha256"],
+        status_members=[
+            f"retry-smoke-sequence-{index}-{role}-status.json"
+            for index, role in enumerate(validator.NAMESPACES, start=1)
+        ],
+        baseline_heads=predecessor_retry_summary["final_heads"],
+        terminal_heads={
+            head["namespace"]: {
+                "generation": head["generation"],
+                "snapshot_sha256": head["snapshot_sha256"],
+            }
+            for head in retry_successor_terminal_status["heads"]
+        },
+    )
     item.descriptor = {
         "schema_version": 1,
         "result": "phase5_failed_promotion_reconciliation_authorized",
@@ -1070,6 +1462,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "phase4": phase4_pin,
         "failed_phase5": failed_pin,
         "failed_phase5_retry": failed_retry_pin,
+        "failed_phase5_retry_successor": failed_retry_successor_pin,
         "concurrent_legacy_ai": legacy_pin,
         "recovery_runs": recovery_pins,
         "frozen_legacy_successors": frozen_successor_pins,
@@ -1093,6 +1486,12 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "artifact": item.failed_retry_artifact_metadata,
         "archive": item.failed_retry_archive,
     }
+    item.failed_retry_successor_source = {
+        "run": _run_api(failed_retry_successor_pin),
+        "jobs": _jobs_api(failed_retry_successor_pin),
+        "artifact": item.failed_retry_successor_artifact_metadata,
+        "archive": item.failed_retry_successor_archive,
+    }
     item.legacy_source = {
         "run": _run_api(legacy_pin),
         "jobs": _jobs_api(legacy_pin),
@@ -1114,8 +1513,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     item.legacy_run_inventories = [
         {"total_count": 1, "workflow_runs": [_run_api(pin)]}
         for pin in (
-            frozen_successor_pins[2],
-            frozen_successor_pins[3],
+            frozen_successor_pins[-2],
+            frozen_successor_pins[-1],
             legacy_pin,
             dashboard_pin,
         )
@@ -1123,8 +1522,8 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
     item.legacy_artifact_inventories = [
         {"total_count": 1, "artifacts": [metadata]}
         for metadata in (
-            item.frozen_successor_artifact_metadatas[2],
-            item.frozen_successor_artifact_metadatas[3],
+            item.frozen_successor_artifact_metadatas[-2],
+            item.frozen_successor_artifact_metadatas[-1],
             item.state_artifact_metadata,
         )
     ]
@@ -1146,6 +1545,7 @@ def evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Evidence:
         "phase4_source": item.phase4_source,
         "failed_source": item.failed_source,
         "failed_retry_source": item.failed_retry_source,
+        "failed_retry_successor_source": item.failed_retry_successor_source,
         "legacy_ai_source": item.legacy_source,
         "recovery_run_metadatas": item.recovery_run_metadatas,
         "recovery_jobs_metadatas": item.recovery_jobs_metadatas,
@@ -1176,8 +1576,11 @@ def _replay(evidence: Evidence) -> dict[str, Any]:
 def _terminal(
     replay: dict[str, Any], evidence: Evidence
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    baseline = copy.deepcopy(replay["failed_phase5_retry"]["final_heads"])
-    old_by_job = {item["job"]: item for item in replay["failed_phase5_retry"]["executions"]}
+    baseline = copy.deepcopy(replay["failed_phase5_retry_successor"]["final_heads"])
+    old_by_job = {
+        item["job"]: item
+        for item in replay["failed_phase5_retry_successor"]["executions"]
+    }
     baseline_status = {
         "heads": [
             {
@@ -1210,12 +1613,12 @@ def _terminal(
     }
     observations, _final = _observations(
         baseline_status,
-        clock=datetime(2026, 9, 5, 21, 0, tzinfo=timezone.utc),
+        clock=datetime(2026, 9, 6, 1, 0, tzinfo=timezone.utc),
         run_prefix="fresh",
     )
     dashboard = observations[-1]["status"]["heads"][-1]["snapshot_sha256"]
-    interval_start = datetime(2026, 9, 5, 20, 59, 50, tzinfo=timezone.utc)
-    interval_finish = datetime(2026, 9, 5, 21, 2, 0, tzinfo=timezone.utc)
+    interval_start = datetime(2026, 9, 6, 0, 59, 50, tzinfo=timezone.utc)
+    interval_finish = datetime(2026, 9, 6, 1, 2, 0, tzinfo=timezone.utc)
     runtime_inventories = []
     for observation in observations:
         role = observation["job"]
@@ -1281,8 +1684,8 @@ def _terminal(
             "state": "disabled_manually",
         }
         for pin in (
-            evidence.descriptor["frozen_legacy_successors"][2],
-            evidence.descriptor["frozen_legacy_successors"][3],
+            evidence.descriptor["frozen_legacy_successors"][-2],
+            evidence.descriptor["frozen_legacy_successors"][-1],
             evidence.descriptor["concurrent_legacy_ai"],
             evidence.descriptor["legacy_dashboard"],
         )
@@ -1326,6 +1729,7 @@ def _terminal(
             "legacy_ai_artifact_quarantined": True,
             "frozen_legacy_successors_verified": True,
             "failed_retry_intervening_attempt_verified": True,
+            "failed_retry_successor_intervening_attempt_verified": True,
             "legacy_runs_drained": True,
             "legacy_workflows_disabled": True,
             "continuation_heads_verified": True,
@@ -1703,7 +2107,11 @@ def _terminal(
             "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
             "failed_phase5_run_id": validator.FAILED_PHASE5_RUN_ID,
             "failed_retry_run_id": validator.FAILED_PHASE5_RETRY_RUN_ID,
+            "failed_retry_successor_run_id": (
+                validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID
+            ),
             "intervening_retry_certification_eligible": False,
+            "intervening_retry_successor_certification_eligible": False,
             "failed_prefix_replay_result": "phase5_failed_promotion_reconciled",
             "invalidated_smoke_prefix_certification_eligible": False,
             "concurrent_legacy_ai_successor_quarantined": True,
@@ -1764,6 +2172,17 @@ def test_replay_is_forensic_and_invalidates_old_four(evidence: Evidence) -> None
     assert receipt["failed_phase5_retry"]["unique_successful_smoke_receipts"] == 4
     assert receipt["failed_phase5_retry"]["certification_eligible"] is False
     assert receipt["failed_phase5_retry"]["rollback_verified"] is True
+    assert (
+        receipt["failed_phase5_retry_successor"]["run_id"]
+        == validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID
+    )
+    assert receipt["failed_phase5_retry_successor"]["predecessor_run_id"] == (
+        validator.FAILED_PHASE5_RETRY_RUN_ID
+    )
+    assert receipt["failed_phase5_retry_successor"]["unique_successful_smoke_receipts"] == 4
+    assert receipt["failed_phase5_retry_successor"]["certification_eligible"] is False
+    assert receipt["failed_phase5_retry_successor"]["completion_evidence_invalidated"] is True
+    assert receipt["reconciliation"]["intervening_runtime_producer_execution_count"] == 8
     assert receipt["continuation_heads"] == evidence.descriptor["expected_continuation_heads"]
     continuation_dashboard = receipt["continuation_heads"]["dashboard"]["snapshot_sha256"]
     historic_conflict = evidence.descriptor["concurrent_legacy_ai"]["conflict"][
@@ -1822,6 +2241,9 @@ def test_completion_certifies_only_a_fresh_clean_cycle(evidence: Evidence) -> No
     assert [
         item["run_id"] for item in receipt["reconciliation"]["frozen_legacy_successors"]
     ] == list(validator.FROZEN_LEGACY_SUCCESSOR_RUN_IDS)
+    assert receipt["reconciliation"]["failed_phase5_retry_successor"][
+        "run_id"
+    ] == validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID
     assert receipt["production_authority_transferred"] is True
     assert receipt["temporary_scheduler_activation_authority_removed"] is True
     assert receipt["temporary_role_inspection_authority_removed"] is True
@@ -2145,6 +2567,65 @@ def test_observation_must_equal_its_status_file(evidence: Evidence, tmp_path: Pa
     bad["descriptor"]["failed_phase5"]["artifact"] = pin
     bad["failed_source"]["artifact"] = metadata
     with pytest.raises(validator.PromotionValidationError, match="status file mismatch"):
+        validator.reconcile_failed_phase5(**bad)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("embedded", "replay failed_phase5_retry mismatch"),
+        ("status", "status file mismatch"),
+        ("invalidation", "invalidation certification_eligible mismatch"),
+        ("dispatch", "recovery dispatch run_id mismatch"),
+    ],
+)
+def test_retry_successor_artifact_is_fully_bound(
+    evidence: Evidence, tmp_path: Path, mutation: str, message: str
+) -> None:
+    with zipfile.ZipFile(evidence.failed_retry_successor_archive) as bundle:
+        members = {info.filename: bundle.read(info) for info in bundle.infolist()}
+    if mutation == "embedded":
+        embedded = json.loads(members["failed-prefix-replay.json"])
+        embedded["failed_phase5_retry"]["run_id"] += 1
+        members["failed-prefix-replay.json"] = _json_bytes(embedded)
+        replay_sha = hashlib.sha256(members["failed-prefix-replay.json"]).hexdigest()
+        members["failed-prefix-replay.sha256"] = (
+            f"{replay_sha}  failed-prefix-replay.json\n".encode()
+        )
+    elif mutation == "status":
+        name = "retry-smoke-sequence-1-legislative-status.json"
+        status = json.loads(members[name])
+        status["unexpected"] = True
+        members[name] = _json_bytes(status)
+    elif mutation == "invalidation":
+        invalidation = json.loads(members["phase5-completion-invalidation.json"])
+        invalidation["certification_eligible"] = True
+        members["phase5-completion-invalidation.json"] = _json_bytes(invalidation)
+    else:
+        dispatch = json.loads(members["legacy-recovery-dispatch.json"])
+        dispatch["workflows"][0]["run_id"] += 1
+        members["legacy-recovery-dispatch.json"] = _json_bytes(dispatch)
+
+    changed = tmp_path / f"changed-retry-successor-{mutation}.zip"
+    _zip(changed, members)
+    bad = copy.deepcopy(evidence.replay_kwargs)
+    bad["descriptor"] = copy.deepcopy(bad["descriptor"])
+    successor_pin = bad["descriptor"]["failed_phase5_retry_successor"]
+    pin, metadata = _artifact_pin(
+        changed,
+        successor_pin["artifact"]["id"],
+        successor_pin["artifact"]["name"],
+        validator.FAILED_PHASE5_RETRY_SUCCESSOR_RUN_ID,
+        validator.FAILED_PHASE5_RETRY_SUCCESSOR_CONTROL_REVISION,
+        created_at="2026-09-06T00:01:25Z",
+    )
+    successor_pin["artifact"] = pin
+    if mutation == "embedded":
+        successor_pin["predecessor_replay_sha256"] = replay_sha
+    bad["failed_retry_successor_source"] = dict(bad["failed_retry_successor_source"])
+    bad["failed_retry_successor_source"]["artifact"] = metadata
+    bad["failed_retry_successor_source"]["archive"] = changed
+    with pytest.raises(validator.PromotionValidationError, match=message):
         validator.reconcile_failed_phase5(**bad)
 
 
@@ -2489,6 +2970,16 @@ def test_frozen_successor_revision_has_only_incident_control_paths() -> None:
         "tests/test_phase5_failed_promotion_retry.py": "M",
         "tests/test_reconcile_phase5_failed_promotion.py": "M",
     }
+    assert validator.FROZEN_LEGACY_SUCCESSOR_DIFFS[2] == {
+        ".github/workflows/phase5_failed_promotion_retry.yml": "M",
+        ".github/workflows/runtime_v2_tests.yml": "M",
+        "deploy/runtime-v2/phase5-retry-evidence-33979778020.json": "M",
+        "deploy/runtime-v2/phase5_failed_promotion_retry_control.sh": "M",
+        "deploy/runtime-v2/reconcile_phase5_failed_promotion.py": "M",
+        "tests/test_phase5_failed_promotion_retry.py": "M",
+        "tests/test_phase5_retry_workflow_failure_safety.py": "A",
+        "tests/test_reconcile_phase5_failed_promotion.py": "M",
+    }
 
 
 def test_replay_rejects_later_legacy_run_and_newer_protected_artifact(
@@ -2508,7 +2999,7 @@ def test_replay_rejects_later_legacy_run_and_newer_protected_artifact(
     bad = copy.deepcopy(evidence.replay_kwargs)
     newer = copy.deepcopy(bad["legacy_artifact_inventories"][0]["artifacts"][0])
     newer["id"] += 999
-    newer["created_at"] = "2026-09-05T21:00:00Z"
+    newer["created_at"] = "2026-09-06T01:00:00Z"
     bad["legacy_artifact_inventories"][0]["artifacts"].append(newer)
     bad["legacy_artifact_inventories"][0]["total_count"] = 2
     with pytest.raises(
@@ -2640,7 +3131,14 @@ def test_completion_rejects_baseline_drift_and_old_receipt_reuse(evidence: Evide
 
 @pytest.mark.parametrize(
     "missing",
-    ["phase4_certificate", "failed_phase5", "recovery_runs", "frozen_legacy_successors"],
+    [
+        "phase4_certificate",
+        "failed_phase5",
+        "failed_phase5_retry",
+        "failed_phase5_retry_successor",
+        "recovery_runs",
+        "frozen_legacy_successors",
+    ],
 )
 def test_completion_requires_full_semantic_replay(
     evidence: Evidence, missing: str
@@ -2715,8 +3213,8 @@ def test_completion_derives_global_one_writer_from_raw_inventories(
     )
     overlapping["id"] += 77
     overlapping["created_at"] = "2026-09-05T08:00:00Z"
-    overlapping["run_started_at"] = "2026-09-05T21:00:00Z"
-    overlapping["updated_at"] = "2026-09-05T21:01:00Z"
+    overlapping["run_started_at"] = "2026-09-06T01:00:00Z"
+    overlapping["updated_at"] = "2026-09-06T01:01:00Z"
     terminal_inputs["terminal_legacy_run_inventories"][0]["workflow_runs"].append(overlapping)
     terminal_inputs["terminal_legacy_run_inventories"][0]["total_count"] = 2
     _rehash_terminal_input(manifest, terminal_inputs, "terminal_legacy_run_inventories", 0)
@@ -2838,11 +3336,29 @@ def test_completion_replay_checksum_is_bound_by_manifest(evidence: Evidence) -> 
             control_revision="5" * 40,
             **terminal_inputs,
         )
+
+
+@pytest.mark.parametrize(
+    "predecessor_key",
+    ("invalidated_smoke_prefix", "failed_phase5_retry", "failed_phase5_retry_successor"),
+)
+@pytest.mark.parametrize("identity_field", ("run_id", "cloud_run_execution"))
+def test_completion_rejects_receipt_reuse_from_every_noncertifying_cycle(
+    evidence: Evidence, predecessor_key: str, identity_field: str
+) -> None:
+    replay = _replay(evidence)
     baseline, manifest, terminal_inputs = _terminal(replay, evidence)
-    manifest["executions"][0]["status"]["latest_runs"][0]["run_id"] = replay[
-        "invalidated_smoke_prefix"
-    ]["executions"][0]["run_id"]
-    with pytest.raises(validator.PromotionValidationError, match="reused an invalidated Runtime receipt"):
+    old_identity = replay[predecessor_key]["executions"][0][identity_field]
+    if identity_field == "run_id":
+        manifest["executions"][0]["status"]["latest_runs"][0][identity_field] = old_identity
+    else:
+        manifest["executions"][0][identity_field] = old_identity
+    expected = (
+        "reused an invalidated Runtime receipt"
+        if identity_field == "run_id"
+        else "reused an invalidated Cloud Run execution"
+    )
+    with pytest.raises(validator.PromotionValidationError, match=expected):
         validator.complete_phase5(
             descriptor=evidence.descriptor,
             replay=replay,
@@ -2879,6 +3395,11 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         "failed_retry_run": evidence.failed_retry_source["run"],
         "failed_retry_artifact": evidence.failed_retry_source["artifact"],
         "failed_retry_jobs": evidence.failed_retry_source["jobs"],
+        "failed_retry_successor_run": evidence.failed_retry_successor_source["run"],
+        "failed_retry_successor_artifact": evidence.failed_retry_successor_source[
+            "artifact"
+        ],
+        "failed_retry_successor_jobs": evidence.failed_retry_successor_source["jobs"],
         "legacy_run": evidence.legacy_source["run"],
         "legacy_jobs": evidence.legacy_source["jobs"],
         "predecessor_artifact": evidence.legacy_source["predecessor_artifact"],
@@ -2963,6 +3484,14 @@ def test_cli_round_trip_replay_and_complete(evidence: Evidence, tmp_path: Path) 
         "--failed-retry-artifact-metadata", str(files["failed_retry_artifact"]),
         "--failed-retry-jobs-metadata", str(files["failed_retry_jobs"]),
         "--failed-retry-archive", str(evidence.failed_retry_archive),
+        "--failed-retry-successor-run-metadata", str(files["failed_retry_successor_run"]),
+        "--failed-retry-successor-artifact-metadata", str(
+            files["failed_retry_successor_artifact"]
+        ),
+        "--failed-retry-successor-jobs-metadata", str(
+            files["failed_retry_successor_jobs"]
+        ),
+        "--failed-retry-successor-archive", str(evidence.failed_retry_successor_archive),
         "--legacy-ai-run-metadata", str(files["legacy_run"]),
         "--legacy-ai-jobs-metadata", str(files["legacy_jobs"]),
         "--legacy-ai-predecessor-artifact-metadata", str(files["predecessor_artifact"]),

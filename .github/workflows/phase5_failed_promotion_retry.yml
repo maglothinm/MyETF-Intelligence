@@ -171,6 +171,10 @@ jobs:
               --failed-retry-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-artifact.json" \
               --failed-retry-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-jobs.json" \
               --failed-retry-archive "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry.zip" \
+              --failed-retry-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-successor-run.json" \
+              --failed-retry-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-successor-artifact.json" \
+              --failed-retry-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-successor-jobs.json" \
+              --failed-retry-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/failed-retry-successor.zip" \
               --legacy-ai-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-run.json" \
               --legacy-ai-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-jobs.json" \
               --legacy-ai-predecessor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/concurrent-legacy-ai-predecessor-artifact.json" \
@@ -199,26 +203,38 @@ jobs:
               --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-run.json" \
               --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-run.json" \
               --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-run.json" \
+              --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-legislative-run.json" \
+              --frozen-successor-run-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-executive-run.json" \
               --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-jobs.json" \
               --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-jobs.json" \
               --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-jobs.json" \
               --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-jobs.json" \
+              --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-legislative-jobs.json" \
+              --frozen-successor-jobs-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-executive-jobs.json" \
               --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-artifact.json" \
               --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-artifact.json" \
               --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-artifact.json" \
               --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-artifact.json" \
+              --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-legislative-artifact.json" \
+              --frozen-successor-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-executive-artifact.json" \
               --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative.zip" \
               --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive.zip" \
               --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative.zip" \
               --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive.zip" \
+              --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-legislative.zip" \
+              --frozen-successor-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-executive.zip" \
               --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-output-artifact.json" \
               --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-output-artifact.json" \
               --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-output-artifact.json" \
               --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-output-artifact.json" \
+              --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-legislative-output-artifact.json" \
+              --frozen-successor-output-artifact-metadata "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-executive-output-artifact.json" \
               --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-legislative-output.zip" \
               --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor-executive-output.zip" \
               --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-legislative-output.zip" \
               --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor2-executive-output.zip" \
+              --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-legislative-output.zip" \
+              --frozen-successor-output-archive "${PHASE5_RETRY_INCIDENT_DIR}/frozen-successor3-executive-output.zip" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-legislative-runs-${inventory_suffix}.json" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-executive-runs-${inventory_suffix}.json" \
               --legacy-run-inventory "${PHASE5_RETRY_INCIDENT_DIR}/legacy-ai-runs-${inventory_suffix}.json" \
@@ -240,7 +256,9 @@ jobs:
                .reconciliation.legacy_ai_artifact_quarantined == true and
                .reconciliation.frozen_legacy_successors_verified == true and
                .reconciliation.failed_retry_intervening_attempt_verified == true and
+               .reconciliation.failed_retry_successor_intervening_attempt_verified == true and
                .failed_phase5_retry.certification_eligible == false and
+               .failed_phase5_retry_successor.certification_eligible == false and
                .reconciliation.legacy_high_water_verified == true' \
               "${replay}" >/dev/null
           }
@@ -653,7 +671,9 @@ jobs:
                   "kind": "failed_phase5_retry_with_fresh_smoke_cycle",
                   "failed_phase5_run_id": failed_run_id,
                   "failed_retry_run_id": 33990741282,
+                  "failed_retry_successor_run_id": 33998014996,
                   "intervening_retry_certification_eligible": False,
+                  "intervening_retry_successor_certification_eligible": False,
                   "failed_prefix_replay_result": replay["result"],
                   "failed_prefix_replay_sha256": sha256(root / "failed-prefix-replay.json"),
                   "invalidated_smoke_prefix_certification_eligible": False,
@@ -673,6 +693,7 @@ jobs:
                   "phase4_certificate_verified": True,
                   "failed_promotion_replay_verified": True,
                   "failed_retry_intervening_attempt_verified": True,
+                  "failed_retry_successor_intervening_attempt_verified": True,
                   "concurrent_writer_incident_acknowledged": True,
                   "old_smoke_prefix_invalidated": True,
                   "legacy_ai_artifact_quarantined": True,
@@ -866,8 +887,9 @@ jobs:
              .reconciliation.additional_runtime_producer_execution_performed == true and
              (.executions | length) == 4 and
              (.reconciliation.invalidated_smoke_prefix.executions | length) == 4 and
-             (.reconciliation.frozen_legacy_successors | length) == 4 and
+             (.reconciliation.frozen_legacy_successors | length) == 6 and
              .reconciliation.failed_phase5_retry.certification_eligible == false and
+             .reconciliation.failed_phase5_retry_successor.certification_eligible == false and
              .reconciliation.invalidated_smoke_prefix.certification_eligible == false and
              .phase6_started == false' \
             "${EVIDENCE_DIR}/phase5-complete.json" >/dev/null

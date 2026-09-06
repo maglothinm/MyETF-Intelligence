@@ -246,6 +246,9 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
         "33990741282",
         "33992770754",
         "33992772006",
+        "33998014996",
+        "33999935395",
+        "33999936212",
     ):
         assert run_id in control
     for descriptor_path in (
@@ -275,8 +278,16 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
         ".frozen_legacy_successors[3]",
         ".frozen_legacy_successors[3].artifact",
         ".frozen_legacy_successors[3].output_artifact",
+        ".frozen_legacy_successors[4]",
+        ".frozen_legacy_successors[4].artifact",
+        ".frozen_legacy_successors[4].output_artifact",
+        ".frozen_legacy_successors[5]",
+        ".frozen_legacy_successors[5].artifact",
+        ".frozen_legacy_successors[5].output_artifact",
         ".failed_phase5_retry",
         ".failed_phase5_retry.artifact",
+        ".failed_phase5_retry_successor",
+        ".failed_phase5_retry_successor.artifact",
         ".legacy_dashboard",
     ):
         assert descriptor_path in control
@@ -306,6 +317,10 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
         "--failed-retry-jobs-metadata",
         "--failed-retry-artifact-metadata",
         "--failed-retry-archive",
+        "--failed-retry-successor-run-metadata",
+        "--failed-retry-successor-jobs-metadata",
+        "--failed-retry-successor-artifact-metadata",
+        "--failed-retry-successor-archive",
         "--current-status",
         "--current-ai-analyses",
     )
@@ -319,12 +334,12 @@ def test_retry_binds_every_exact_incident_source_from_descriptor() -> None:
     assert workflow.count("--recovery-archive") == 2
     assert workflow.count("--recovery-output-artifact-metadata") == 2
     assert workflow.count("--recovery-output-archive") == 2
-    assert workflow.count("--frozen-successor-run-metadata") == 4
-    assert workflow.count("--frozen-successor-jobs-metadata") == 4
-    assert workflow.count("--frozen-successor-artifact-metadata") == 4
-    assert workflow.count("--frozen-successor-archive") == 4
-    assert workflow.count("--frozen-successor-output-artifact-metadata") == 4
-    assert workflow.count("--frozen-successor-output-archive") == 4
+    assert workflow.count("--frozen-successor-run-metadata") == 6
+    assert workflow.count("--frozen-successor-jobs-metadata") == 6
+    assert workflow.count("--frozen-successor-artifact-metadata") == 6
+    assert workflow.count("--frozen-successor-archive") == 6
+    assert workflow.count("--frozen-successor-output-artifact-metadata") == 6
+    assert workflow.count("--frozen-successor-output-archive") == 6
     assert workflow.count("--failed-retry-run-metadata") == 1
     assert workflow.count("--failed-retry-jobs-metadata") == 1
     assert workflow.count("--failed-retry-artifact-metadata") == 1
@@ -342,8 +357,10 @@ def test_frozen_successor_descriptor_identity_binds_every_exact_field() -> None:
         control.index("phase5_retry_verify_frozen_context()")
     ]
 
-    assert len(successors) == 4
+    assert len(successors) == 6
     assert [item["role"] for item in successors] == [
+        "legislative",
+        "executive",
         "legislative",
         "executive",
         "legislative",
@@ -354,13 +371,15 @@ def test_frozen_successor_descriptor_identity_binds_every_exact_field() -> None:
         33987130349,
         33992770754,
         33992772006,
+        33999935395,
+        33999936212,
     ]
     assert ".frozen_legacy_successors == [" in identity
     assert identity.count("producer_run_id:.recovery_runs[") == 2
     assert identity.count("producer_head_sha:.recovery_runs[") == 2
-    assert identity.count("producer_run_id:.frozen_legacy_successors[") == 2
-    assert identity.count("producer_head_sha:.frozen_legacy_successors[") == 2
-    assert identity.count(".predecessor_artifact ==") == 4
+    assert identity.count("producer_run_id:.frozen_legacy_successors[") == 4
+    assert identity.count("producer_head_sha:.frozen_legacy_successors[") == 4
+    assert identity.count(".predecessor_artifact ==") == 6
 
     # The jq array equality is exact (including key set). Ensure every checked-in
     # scalar pin is also present in the literal or its incident-specific constant.
@@ -383,7 +402,7 @@ def test_frozen_successor_descriptor_identity_binds_every_exact_field() -> None:
 def test_retry3_is_pinned_as_clean_noncertifying_continuation_evidence() -> None:
     descriptor = json.loads(Path(DESCRIPTOR).read_text(encoding="utf-8"))
     retry = descriptor["failed_phase5_retry"]
-    heads = descriptor["expected_continuation_heads"]
+    heads = retry["terminal_heads"]
     control = _control()
     workflow = _workflow()
 
@@ -448,6 +467,49 @@ def test_retry3_is_pinned_as_clean_noncertifying_continuation_evidence() -> None
     ]
     assert ".failed_phase5_retry" in replay_check
     assert "certification_eligible == false" in replay_check
+
+
+def test_retry5_is_pinned_as_the_second_noncertifying_continuation() -> None:
+    descriptor = json.loads(Path(DESCRIPTOR).read_text(encoding="utf-8"))
+    retry3 = descriptor["failed_phase5_retry"]
+    retry5 = descriptor["failed_phase5_retry_successor"]
+    heads = descriptor["expected_continuation_heads"]
+    control = _control()
+    workflow = _workflow()
+
+    assert retry5["run_id"] == 33998014996
+    assert retry5["run_number"] == 5
+    assert retry5["head_sha"] == "093bc9c5ad9100e7bf4474f56bdac58d1079129a"
+    assert retry5["conclusion"] == "failure"
+    assert retry5["job"]["id"] == 101391822369
+    assert retry5["artifact"]["id"] == 9979244591
+    assert retry5["artifact"]["digest"] == (
+        "sha256:0eaee36eeec8aa02edec63334859b366845e5f413da01d868d97f1a6e5d67ed7"
+    )
+    assert retry5["predecessor_replay_sha256"] == (
+        "db6ffc20a7b8b81d3880f4151ab387e286621071b383ad76d207bf42a2b6ee93"
+    )
+    assert retry5["baseline_heads"] == retry3["terminal_heads"]
+    assert retry5["terminal_heads"] == heads
+    assert [item["run_id"] for item in descriptor["frozen_legacy_successors"][-2:]] == [
+        33999935395,
+        33999936212,
+    ]
+
+    identity = control[
+        control.index("phase5_retry_verify_descriptor_identity()") :
+        control.index("phase5_retry_verify_frozen_context()")
+    ]
+    assert ".failed_phase5_retry_successor ==" in identity
+    assert 'PHASE5_RETRY_FAILED_RETRY_SUCCESSOR_RUN_ID="33998014996"' in control
+    assert retry5["artifact"]["digest"] in identity
+    for flag in (
+        "--failed-retry-successor-run-metadata",
+        "--failed-retry-successor-jobs-metadata",
+        "--failed-retry-successor-artifact-metadata",
+        "--failed-retry-successor-archive",
+    ):
+        assert workflow.count(flag) == 1
 
 
 def test_legacy_high_water_is_replayed_again_after_disable_and_before_route_transfer() -> None:
@@ -1754,7 +1816,7 @@ date() {
 }
 sleep() { printf 'sleep\n' >> "${EVIDENCE_DIR}/sleeps"; }
 phase5_retry_resume_scheduler_with_propagation polititrack-legislative
-[[ "$(<"${MOCK_COUNTER}")" == '2' ]]
+[[ "$(<"${MOCK_COUNTER}")" == '3' ]]
 [[ "$(wc -l < "${EVIDENCE_DIR}/sleeps")" == '1' ]]
 [[ "$(wc -l < "${PHASE5_RETRY_SCHEDULER_ATTEMPTS}")" == '2' ]]
 '''
@@ -1875,8 +1937,9 @@ def test_complete_validator_is_the_only_certificate_path_and_phase6_is_not_start
     assert 'deployer_member in role_members(granted_policy, "roles/run.invoker")' in text
     assert 'deployer_member not in role_members(removed_policy, "roles/run.invoker")' in text
     assert 'raise SystemExit("Temporary private Runtime invocation evidence is incomplete.")' in text
-    assert '(.reconciliation.frozen_legacy_successors | length) == 4' in text
+    assert '(.reconciliation.frozen_legacy_successors | length) == 6' in text
     assert '.reconciliation.failed_phase5_retry.certification_eligible == false' in text
+    assert '.reconciliation.failed_phase5_retry_successor.certification_eligible == false' in text
     assert '.result == "phase5_complete"' in text
     assert '.phase6_started == false' in text
     assert '"phase6_started": False' in text
