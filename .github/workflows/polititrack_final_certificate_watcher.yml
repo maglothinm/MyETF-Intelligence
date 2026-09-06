@@ -1,0 +1,97 @@
+name: Verify final PolitiTrack production certificate
+
+on:
+  push:
+    branches: [recoverywatch]
+    paths: [".github/workflows/polititrack_final_certificate_watcher.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: polititrack-final-certificate-watcher
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/recoverywatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Wait for and verify canonical certificate
+        id: certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate_path=docs/runtime-v2/certificates/production-functionality-20260906.json
+          found=false
+          for attempt in $(seq 1 225); do
+            content="$(gh api "/repos/${GITHUB_REPOSITORY}/contents/${certificate_path}?ref=main" --jq '.content' 2>/dev/null || true)"
+            if [[ -z "${content}" ]]; then
+              echo "Final certificate not present (${attempt}/225)."
+              sleep 60
+              continue
+            fi
+            printf '%s' "${content}" | base64 --decode > /tmp/certificate.json
+            jq -e '
+              .schema_version == 1 and
+              .result == "polititrack_production_functionality_certified" and
+              .repository == "maglothinm/MyETF-Intelligence" and
+              .repository_id == 1349678672 and
+              (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+              .recovery.conclusion == "success" and
+              .recovery.ordered_recovery == ["legislative","executive","ai","dashboard"] and
+              .recovery.natural_ai_cycles_verified >= 2 and
+              .recovery.following_dashboard_publication_verified == true and
+              .recovery.temporary_authority_removed == true and
+              .audits.repository_test_suite == "success" and
+              .audits.runtime_v2_terraform_validation == "success" and
+              .audits.repository_safety_contract == "success" and
+              .audits.production_dashboard_probe == "success" and
+              .audits.browser_navigation_audit == "success" and
+              .audits.ai_not_reported_down == true and
+              .controls.recovery_workflow_disabled == true and
+              .controls.dispatch_bridge_disabled == true
+            ' /tmp/certificate.json >/dev/null
+            source_sha="$(jq -r '.source_revision' /tmp/certificate.json)"
+            main_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+            echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+            echo "main_sha=${main_sha}" >> "${GITHUB_OUTPUT}"
+            found=true
+            break
+          done
+          [[ "${found}" == "true" ]] || {
+            echo "Final certificate was not issued inside the bounded window." >&2
+            exit 1
+          }
+
+      - name: Create immutable final certification sentinel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.certificate.outputs.main_sha }}
+          SOURCE_SHA: ${{ steps.certificate.outputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_name=polititrack-production-certified-final
+          existing="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/${ref_name}" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -z "${existing}" ]]; then
+            gh api --method POST "/repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field "ref=refs/heads/${ref_name}" --raw-field "sha=${MAIN_SHA}" >/dev/null
+          elif [[ "${existing}" != "${MAIN_SHA}" ]]; then
+            echo "Final certification sentinel already points elsewhere." >&2
+            exit 1
+          fi
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/statuses/${MAIN_SHA}" \
+            --raw-field state=success \
+            --raw-field 'context=polititrack/production-functionality-certificate' \
+            --raw-field 'description=PolitiTrack production functionality certified' >/dev/null
+          title="PolitiTrack final production certificate verified — ${SOURCE_SHA:0:12}"
+          gh issue list --state all --search "${title} in:title" --json title --jq '.[].title' | grep -Fxq "${title}" || \
+            gh issue create --title "${title}" \
+              --body "The canonical production certificate was independently verified. Final sentinel: \`${ref_name}\`. Main certificate commit: \`${MAIN_SHA}\`. Certified runtime source: \`${SOURCE_SHA}\`."
