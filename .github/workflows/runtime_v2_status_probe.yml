@@ -1,0 +1,73 @@
+name: Probe Runtime v2 production recovery status
+
+on:
+  push:
+    branches:
+      - ops/runtime-v2-status-mirror
+    paths:
+      - ".github/workflows/runtime_v2_status_probe.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/ops/runtime-v2-status-mirror'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ops/runtime-v2-status-mirror
+          fetch-depth: 0
+      - name: Capture current recovery state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          runs="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/runs?per_page=20")"
+          run="$(jq -c \
+            '[.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch")][0] // empty' \
+            <<<"${runs}")"
+          [[ -n "${run}" ]] || {
+            jq -n --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{schema_version:1, checked_at:$checked_at, result:"recovery_run_not_found"}' \
+              > ops/runtime-v2-recovery-probe.json
+            exit 0
+          }
+          run_id="$(jq -r '.id' <<<"${run}")"
+          jobs="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")"
+          jq -n \
+            --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson run "${run}" \
+            --argjson jobs "${jobs}" \
+            '{
+              schema_version:1,
+              checked_at:$checked_at,
+              result:"recovery_run_observed",
+              run:{id:$run.id,name:$run.name,event:$run.event,status:$run.status,
+                   conclusion:$run.conclusion,head_branch:$run.head_branch,
+                   head_sha:$run.head_sha,created_at:$run.created_at,
+                   run_started_at:$run.run_started_at,updated_at:$run.updated_at,
+                   html_url:$run.html_url},
+              jobs:[$jobs.jobs[] | {id,name,status,conclusion,started_at,completed_at,
+                    html_url,steps:[.steps[]? | {number,name,status,conclusion}]}]
+            }' > ops/runtime-v2-recovery-probe.json
+      - name: Publish probe to isolated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ops/runtime-v2-recovery-probe.json
+          git diff --cached --check
+          git commit -m "Record current Runtime v2 recovery status probe"
+          git push origin HEAD:ops/runtime-v2-status-mirror
