@@ -68,6 +68,7 @@ jobs:
           verify_producer_scheduler_state PAUSED
           phase5_retry_verify_scheduler_control_removed
 
+          touch "${EVIDENCE_DIR}/live-mutation-started"
           phase5_retry_capture_scheduler_snapshot before
           phase5_retry_grant_scheduler_control
           touch "${EVIDENCE_DIR}/scheduler-control-granted"
@@ -91,7 +92,8 @@ jobs:
               producer_schedulers:["polititrack-legislative","polititrack-executive","polititrack-ai","polititrack-dashboard"],
               producer_state:"ENABLED",vault_scheduler:"polititrack-vault-lifecycle",
               vault_state:"PAUSED",reactivated_at:$resumed_at,
-              temporary_scheduler_admin_removed:true}' \
+              temporary_scheduler_admin_removed:true,
+              temporary_role_viewer_removed:true}' \
             > "${EVIDENCE_DIR}/CERTIFICATE.json"
 
       - name: Refresh credentials for fail-closed cleanup
@@ -116,6 +118,10 @@ jobs:
             phase5_retry_remove_scheduler_control || status=1
           fi
           phase5_retry_verify_scheduler_control_removed || status=1
+          if [[ -s "${PHASE5_RETRY_ROLE_VIEWER_CONDITION}" ]]; then
+            phase5_retry_remove_role_viewer || status=1
+          fi
+          phase5_retry_verify_role_viewer_removed || status=1
 
           : > "${EVIDENCE_DIR}/cleanup/final-schedulers.tsv"
           for scheduler in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard; do
