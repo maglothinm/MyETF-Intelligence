@@ -56,3 +56,4 @@ jobs:
             test-output/
           retention-days: 14
           if-no-files-found: error
+          include-hidden-files: true # Include the TEST dashboard .nojekyll checksum entry.
