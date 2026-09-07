@@ -144,6 +144,9 @@ class LockedNamespace:
             expected_sha256=head.snapshot_sha256,
             expected_manifest=dict(_json(row[6]) or {}),
         )
+        if self.namespace == "ai":
+            from scripts.opportunity_state import validate_directory
+            validate_directory(destination)
         return head
 
     def commit(
@@ -156,6 +159,9 @@ class LockedNamespace:
         allow_initial: bool = False,
         successful_run_id: str | None = None,
     ) -> SnapshotHead:
+        if self.namespace == "ai":
+            from scripts.opportunity_state import validate_directory
+            validate_directory(source)
         packed = pack_directory(source)
         provenance_payload = dict(provenance)
         previous_autocommit = self.connection.autocommit

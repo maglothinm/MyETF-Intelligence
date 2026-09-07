@@ -1,2 +1,5 @@
 -r requirements-tracker.txt
 openai>=2.45.0,<3
+exchange-calendars>=4.11,<5
+jsonschema>=4.23,<5
+tzdata>=2026.1

@@ -26,6 +26,12 @@ except ImportError:  # pragma: no cover - direct execution path
     import ai_filing_analyst as legacy  # type: ignore
 
 LOGGER = logging.getLogger("polititrack-ai-analyst")
+if __package__:
+    from . import opportunity_runtime
+else:  # Runtime v2 executes this through the compatibility script.
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts import opportunity_runtime
 REPOSITORY_ID = 1349678672
 DEFAULT_OUTPUT_TOKENS = 4_000
 ESCALATED_OUTPUT_TOKENS = 8_000
@@ -426,6 +432,8 @@ def _deferred_candidate(
 
 
 def _pending_channels(delivery: Mapping[str, Any]) -> set[str]:
+    if delivery.get("opportunity_superseded"):
+        return set()
     requested = {
         str(channel)
         for channel in (delivery.get("requested_channels") or [])
@@ -490,6 +498,7 @@ def _deliver_pending_candidate_alerts(
     result: AnalystRunResult,
     state: legacy.AIState,
     state_path: Path,
+    *, opportunity_live: bool = False,
 ) -> None:
     """Deliver queued alerts with a durable pre-send uncertainty boundary.
 
@@ -501,6 +510,13 @@ def _deliver_pending_candidate_alerts(
 
     if config.suppress_alerts:
         return
+    if opportunity_live:
+        analyses = {str(r.get("analysis_id")): r for r in legacy.read_jsonl(config.ai_dir / "analyses.jsonl")}
+        for delivery in state.candidate_alert_deliveries.values():
+            analysis = analyses.get(str(delivery.get("analysis_id"))) or {}
+            if analysis.get("signal_direction") not in {"bearish", "neutral"}:
+                delivery["opportunity_superseded"] = "primary bullish alerts now require Current Opportunity gates"
+        legacy.save_state(state_path, state)
     pending_ids = [
         delivery_id
         for delivery_id in sorted(state.candidate_alert_deliveries)
@@ -522,6 +538,8 @@ def _deliver_pending_candidate_alerts(
             "message": str(alert_value.get("message") or ""),
             "url": str(alert_value.get("url") or ""),
         }
+        if opportunity_live:
+            alert["title"] = "Filing information — " + alert["title"]
         delivered_value = delivery.get("delivered_channels") or {}
         delivered = (
             dict(delivered_value) if isinstance(delivered_value, Mapping) else {}
@@ -800,6 +818,7 @@ def run_analyst(
     config.ai_dir.mkdir(parents=True, exist_ok=True)
     state_path = config.ai_dir / "state.json"
     try:
+        opportunity = opportunity_runtime.prepare(config)
         state, _ = legacy.load_state(state_path)
     except Exception as exc:  # State is not safe to overwrite or promote.
         result.errors.append(
@@ -870,6 +889,11 @@ def run_analyst(
             config.repository_url or "PolitiTrack AI filing analyst"
         )
 
+        if opportunity is not None:
+            telemetry = opportunity.evaluate(session)
+            if telemetry.get("overdue_count") or telemetry.get("reason_counts"):
+                result.warnings.append("Current Opportunity review: " + json.dumps(telemetry, sort_keys=True))
+
         investor_edge: Any = None
         try:
             investor_edge = legacy.InvestorEdgeRuntime.create(
@@ -889,10 +913,16 @@ def run_analyst(
                 f"Investor Edge disabled: {type(exc).__name__}: "
                 f"{_safe_error(exc, config)}"
             )
+            if opportunity is not None:
+                opportunity.restore_edge_after_failure()
         maintenance_ok = legacy.maintain_investor_edge(
-            investor_edge, historical_transactions, result.warnings
+            investor_edge, historical_transactions, result.warnings,
+            **({"allow_backfill": False} if opportunity is not None else {}),
         )
-        if maintenance_ok is False:
+        if maintenance_ok is False and opportunity is not None:
+            opportunity.restore_edge_after_failure()
+            result.warnings.append("Investor Edge context maintenance failed; retained predecessor preserved")
+        elif maintenance_ok is False:
             result.investor_edge_maintenance_status = "failed"
             result.errors.append(
                 "Investor Edge global maintenance/persistence failed; protected "
@@ -970,7 +1000,8 @@ def run_analyst(
                 )
                 if upgraded:
                     result.market_signal_upgrades += 1
-                    legacy._queue_candidate_alert(config, refreshed, state)
+                    if opportunity is None or opportunity.rules["mode"] != "live" or refreshed.get("signal_direction") != "bullish":
+                        legacy._queue_candidate_alert(config, refreshed, state)
                 opened = legacy.open_paper_position(refreshed, state, rules)
                 if opened:
                     opened["event_id"] = legacy.stable_id(
@@ -1060,7 +1091,8 @@ def run_analyst(
                 else:
                     result.archive_count += 1
                 if classification in {"high_priority", "watchlist"}:
-                    legacy._queue_candidate_alert(config, record, state)
+                    if opportunity is None or opportunity.rules["mode"] != "live" or record.get("signal_direction") != "bullish":
+                        legacy._queue_candidate_alert(config, record, state)
                 opened = legacy.open_paper_position(record, state, rules)
                 if opened:
                     opened["event_id"] = legacy.stable_id(
@@ -1160,7 +1192,10 @@ def run_analyst(
             if maintenance_ok is None
             else "complete"
         )
-        if result.investor_edge_maintenance_status == "failed":
+        if result.investor_edge_maintenance_status == "failed" and opportunity is not None:
+            opportunity.restore_edge_after_failure()
+            result.warnings.append("Investor Edge context is stale; its predecessor remains retained")
+        elif result.investor_edge_maintenance_status == "failed":
             result.errors.append(
                 "Investor Edge global maintenance/persistence failed; protected "
                 "state must not be promoted"
@@ -1168,7 +1203,8 @@ def run_analyst(
 
         if not result.errors:
             _deliver_pending_candidate_alerts(
-                config, result, state, state_path
+                config, result, state, state_path,
+                opportunity_live=opportunity is not None and opportunity.rules["mode"] == "live",
             )
         return _finish_analyst_run(config, result, state, state_path)
     except Exception as exc:  # Unscoped failures are state-integrity failures.

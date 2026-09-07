@@ -1094,3 +1094,25 @@ merge/import, or Phase 6.
 **Boundary:** This decision does not alter state authority, immutable runtime bytes, production scheduling, rollback assets, or Phase 6 scope. The original Phase 5 certificate was independently downloaded and checksum-verified; it remains the original transfer receipt, while repaired-runtime certification is separate.
 
 **Release verification:** Canonical run `34059488724`, attempt 1, job `101557337973`, succeeded. Artifact `9997087643` and both internal evidence hashes were independently verified. The final certificate records two scheduled AI writers, a following Dashboard writer, AI generation 70, Dashboard generation 79, enabled producer schedulers, paused Filing Vault, and completed temporary execution/logging cleanup. Independent GCP reads confirmed Scheduler creator identity and approved image for the exact three executions, and absence of temporary project logging/Scheduler/IAM-role-viewer grants. The public Dashboard 79 snapshot matched the durable status captured by the certification run. The repaired Runtime v2 recovery is certified; Phase 6 remains outside scope.
+
+
+## D-2026-09-07-001 - Current Opportunity v1, off by default
+
+**Decision:** Implement independent meaningful-buying, current-entry, current-evidence
+and required-data gates inside the hardened analyst, with Investor Edge used only
+as supplementary context. Persist an additive immutable opportunity journal and
+projection through the existing Runtime v2 AI snapshot owner. Preserve legacy
+scores, incident reference, paper portfolios and retired producer boundaries.
+
+**Reason:** Transaction-age and aggregate-score rules cannot answer whether
+sufficient disclosed buying still has an acceptable current entry after delay.
+Due work must continue without new filings, while stale or incomplete evidence
+must not preserve an actionable badge or pass a queued alert through unchanged.
+
+**Consequence:** Issue #153 / branch `codex/current-opportunity-v1` contains the
+implementation, deterministic TEST replay, fake delivery/restart boundaries,
+source dashboard, configuration/schema and activation/rollback runbook.
+Default mode remains off. PR tests and local fixtures are not deployment or
+investment-performance proof. Entitlement/identity/coverage verification,
+deployed shadow observation and explicit live approval remain separate gates.
+See `docs/CURRENT_OPPORTUNITY.md` and `docs/validation/current-opportunity-v1.md`.
