@@ -42,7 +42,7 @@ from these CI results.
 | 8. Delivery semantics | `opportunity_notifications`, hardened legacy routing, existing owner checkpoints; notification tests inject stale data, rejected/unknown sends and process death at each boundary |
 | 9. Dashboard/alerts | `opportunity_dashboard`, owning `build_trade_dashboard`, source assets, DOM tests; desktop/mobile rendered checks with axe and overflow checks |
 | 10. Modes/migration/rollback | `prepare`, explicit `authorize`, activation baseline and off rollback tests; runbook preserves old and additive state, no backward-head restore |
-| 11. Acceptance fixtures | Seven focused Python suites plus DOM tests and `opportunity_shadow_fixture.py`; full chained state restore and separate accepted/stale send branches |
+| 11. Acceptance fixtures | Six focused Python suites plus DOM tests and `opportunity_shadow_fixture.py`; full chained state restore and separate accepted/stale send branches |
 | 12. Deliverables | Implemented branch/issue/PR, TEST shadow comparison JSON/Markdown, HTML preview and exports, validation receipts, feature/runbook and append-only decision entry |
 
 ## Thirteen acceptance groups
@@ -108,3 +108,23 @@ PostgreSQL service or cloud deployment was run locally; transport fakes invoke
 real archive/validation/commit code, and separately reported CI may exercise
 its isolated PostgreSQL service. Passing tests does not authorize production
 activation. See [activation/rollback runbook](../CURRENT_OPPORTUNITY.md).
+
+
+## Recorded implementation validation
+
+Implementation tree at `47c97455e12cbc5cb42934666e83ebbd3087d0c2`:
+338 local regression cases passed, including 87 opportunity cases; four DOM
+cases passed. All exact-head PR runs completed successfully at attempt 1:
+
+- [Current Opportunity, Python 3.11/3.12](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/34131567152): 329 Python cases and four DOM cases on each interpreter.
+- [Runtime v2 safety](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/34131567128): 436 cases; PostgreSQL service and repository verification passed.
+- [Investor Edge integration](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/34131567153): 628 Python cases plus six filing-resolution and eleven scheduler DOM cases; repository verification passed.
+
+Downloaded TEST artifacts were verified against GitHub's archive digest and all
+299 entries in each fixture checksum inventory. Python 3.12 artifact
+`10022300647`: `92923d6c865e5454ef558f91dc5554904a9e38f41dfd74d84a36f4712c5522d0`.
+Python 3.11 artifact `10022299097`:
+`f1e8e8baea854132edd46626868df8338cf2b627b552d3f7924c8a90740fb2fc`.
+The earlier artifact upload omitted `.nojekyll`; the corrected upload includes
+all checksummed TEST files. This entry records the tested implementation tree,
+not a production certificate or a claim about later commits.
