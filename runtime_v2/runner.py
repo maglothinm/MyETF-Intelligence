@@ -72,6 +72,8 @@ def _require_success_state(directory: Path) -> dict:
         raise RuntimeJobError("producer did not leave a readable state.json") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("last_success_utc"), str):
         raise RuntimeJobError("producer state has no successful-state marker")
+    from scripts.opportunity_state import validate_directory
+    validate_directory(directory)
     return payload
 
 
@@ -140,6 +142,7 @@ class JobRunner:
                     "POLITITRACK_TRIGGER_SOURCE", "external_scheduler"
                 ),
                 "SOURCE_REVISION": self.source_revision,
+                "POLITITRACK_OPPORTUNITY_OWNER": "runtime_v2_ai",
             }
         )
         if self.mode.is_shadow:
@@ -347,6 +350,18 @@ class JobRunner:
                 side_effects_possible = not self.mode.is_shadow
                 self._execute(command)
                 state = _require_success_state(ai_dir)
+                if self._env().get("OPPORTUNITY_MODE") == "live" and not self._alerts_suppressed():
+                    from scripts.opportunity_runtime import deliver_runtime, analyst_config
+                    def checkpoint():
+                        nonlocal parent
+                        _require_success_state(ai_dir)
+                        parent = locked.commit(
+                            ai_dir, expected_parent_sha256=parent.snapshot_sha256,
+                            source_revision=self.source_revision,
+                            provenance={"authority": "runtime_v2", "job": "ai", "mode": self.mode.value,
+                                        "trigger_source": trigger, "phase": "opportunity_delivery_checkpoint"},
+                        )
+                    deliver_runtime(analyst_config(command, self._env()), self._env(), checkpoint)
                 snapshot = locked.commit(
                     ai_dir,
                     expected_parent_sha256=parent.snapshot_sha256,

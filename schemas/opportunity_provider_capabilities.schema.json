@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["version", "verified_at", "valid_until", "verification_reference", "finnhub_realtime_verified", "alphavantage_daily_adjusted_verified", "securities", "filers_by_report"],
+  "properties": {
+    "version": {"const": 1},
+    "verified_at": {"type": "string"}, "valid_until": {"type": "string"},
+    "verification_reference": {"type": "string", "minLength": 1},
+    "finnhub_realtime_verified": {"type": "boolean"},
+    "alphavantage_daily_adjusted_verified": {"type": "boolean"},
+    "securities": {"type": "object", "additionalProperties": {
+      "type": "object", "additionalProperties": false,
+      "required": ["security_id", "share_class", "currency", "exchange", "source_url", "valid_from", "valid_through"],
+      "properties": {
+        "security_id": {"type": "string", "minLength": 1}, "share_class": {"type": "string", "minLength": 1},
+        "currency": {"const": "USD"}, "exchange": {"enum": ["XNYS", "XNAS"]},
+        "source_url": {"type": "string", "pattern": "^https://"},
+        "valid_from": {"type": "string"}, "valid_through": {"type": "string"}, "cik": {"type": "string", "pattern": "^[0-9]+$"}
+      }
+    }},
+    "filers_by_report": {"type": "object", "additionalProperties": {
+      "type": "object", "additionalProperties": false, "required": ["filer_id", "source_url"],
+      "properties": {"filer_id": {"type": "string", "minLength": 1}, "source_url": {"type": "string", "pattern": "^https://"}}
+    }}
+  }
+}

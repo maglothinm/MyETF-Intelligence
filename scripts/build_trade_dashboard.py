@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+if not __package__:  # Keep package-owned opportunity imports valid in the deployed script CLI.
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 try:  # Support both package and direct-script execution.
     from .dashboard_branding import copy_branding_assets
     from .investor_edge import build_dashboard_addon
@@ -373,6 +377,7 @@ def load_branch(directory: Path | None, branch: str) -> dict[str, Any]:
 
 
 def load_ai(directory: Path | None) -> dict[str, Any]:
+    from scripts.opportunity_dashboard import load_projection
     if directory is None or not directory.exists():
         return {"analyses": [], "portfolio": [], "runs": [], "state": {}}
 
@@ -391,6 +396,7 @@ def load_ai(directory: Path | None) -> dict[str, Any]:
         "portfolio": list(portfolio.values()),
         "runs": runs,
         "state": state,
+        "opportunities": load_projection(directory),
     }
 
 
@@ -751,6 +757,7 @@ def build_payload(
         "ai_runs": ai_runs,
         "simulation": simulation,
         "workflow_evidence": dict(workflow_evidence or {}),
+        "opportunities": ai.get("opportunities", {"schema_version": 1, "mode": "off", "records": [], "telemetry": {}}),
     }
 
 
@@ -766,6 +773,7 @@ WALLBOARD_JS = _SHARED_JS + "\n" + (ASSET_DIR / "wallboard.js").read_text(encodi
 
 
 def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
+    from scripts.opportunity_dashboard import write_exports, integrate_index
     # Public projection only; never publish private delivery payloads or modify inputs.
     payload = public_payload(payload)
     payload["reviews"] = review_rows(payload)
@@ -799,8 +807,10 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
         write_csv(data_dir / "ai-analyses.csv", payload["analyses"], ANALYSIS_FIELDS)
         write_csv(data_dir / "paper-portfolio.csv", payload["portfolio"], PORTFOLIO_FIELDS)
         write_csv(data_dir / "ai-runs.csv", payload["ai_runs"], AI_RUN_FIELDS)
-        (temp_dir / "index.html").write_text(INDEX_HTML, encoding="utf-8")
-        (temp_dir / "404.html").write_text(INDEX_HTML, encoding="utf-8")
+        opportunity_projection = payload.get("opportunities", {"mode": "off", "records": []})
+        write_exports(opportunity_projection, temp_dir, ASSET_DIR)
+        (temp_dir / "index.html").write_text(integrate_index(INDEX_HTML, opportunity_projection), encoding="utf-8")
+        (temp_dir / "404.html").write_text(integrate_index(INDEX_HTML, opportunity_projection), encoding="utf-8")
         (temp_dir / "styles.css").write_text(STYLES_CSS, encoding="utf-8")
         (temp_dir / "app.js").write_text(APP_JS, encoding="utf-8")
         (temp_dir / "wallboard.html").write_text(WALLBOARD_HTML, encoding="utf-8")

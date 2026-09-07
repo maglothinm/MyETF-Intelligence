@@ -4,6 +4,22 @@ Updated: **2026-09-06 21:03 UTC**
 
 Canonical repository: **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
+## Current Opportunity implementation branch — not deployed
+
+Issue #153 / branch `codex/current-opportunity-v1` implements Current Opportunity
+v1 from main `061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f`. Defaults remain **off**.
+The feature uses the hardened analyst and existing Runtime v2 AI snapshot owner;
+no scheduler, production job, notification, paper-trading contract or live head
+was changed in this task. The recovery receipt below remains historical evidence,
+not certification of this feature. See [feature/runbook](CURRENT_OPPORTUNITY.md)
+and [requirement-to-test mapping](validation/current-opportunity-v1.md).
+
+The branch includes offline regression/fixture validation and gated live delivery
+tested with fakes. Production provider entitlement, mapping/coverage and latency
+verification, deployed shadow observation, and live activation each require the
+separate approval and evidence gates in that runbook. Preserve the additive
+namespace on rollback; do not reset state or re-enable legacy producers.
+
 ## Completed task
 
 Runtime v2 / AI Analyst production recovery is certified. PR #151 corrected the natural-certification Dashboard timezone assertion and delayed-log window, merging as `db080d413b5e804a335f575071a62d48a9d4083b`. The existing controller passed on canonical main: run `34059488724`, attempt 1, job `101557337973`, all steps successful including temporary-authority cleanup.
