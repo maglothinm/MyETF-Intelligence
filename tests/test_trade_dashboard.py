@@ -367,6 +367,38 @@ def test_published_review_inventory_matches_overview_without_preview_truncation(
     assert csv_rows[0]["filing_status"] == "review_required"
 
 
+@pytest.mark.parametrize("reason_on_filing", [False, True])
+def test_legacy_house_paper_review_category_is_stable_across_publication_passes(tmp_path: Path, reason_on_filing: bool) -> None:
+    """A retained paper/scanned PTR must agree in JSON, CSV and insights."""
+    payload = build_payload(load_branch(None, "legislative"), load_branch(None, "executive"),
+                            repository_url="https://github.com/example/PolitiTrack")
+    reason = "House filing is a paper/scanned PTR; checkbox semantics require review"
+    filing = {"filing_key": "house|retained-paper", "source": "house", "report_id": "retained-paper",
+              "status": "review_required", "access_mode": "direct"}
+    review = {"review_id": "retained-evidence", "source": "house", "report_id": "retained-paper",
+              "observed_at_utc": "2026-09-07T17:22:22Z"}
+    if reason_on_filing:
+        filing["review_reason"] = reason
+    else:
+        review["reason"] = reason
+    payload["filings"] = [filing]
+    payload["reviews"] = [review]
+    original = copy.deepcopy(payload)
+    output = tmp_path / "site"
+    build_site(payload, output)
+    assert payload == original
+    rows = json.loads((output / "data/pending-reviews.json").read_text(encoding="utf-8"))
+    model = json.loads((output / "data/dashboard-insights.json").read_text(encoding="utf-8"))
+    with (output / "data/pending-reviews.csv").open(encoding="utf-8", newline="") as handle:
+        csv_rows = list(csv.DictReader(handle))
+    assert rows[0]["category"] == csv_rows[0]["category"] == "manual_exception"
+    assert rows[0]["review_id"] == csv_rows[0]["review_id"] == review["review_id"]
+    assert model["reviews"]["manual_exception"] == model["reviews"]["total"] == 1
+    assert model["reviews"]["other"] == 0
+    assert model["reviews"]["manual_exception_ids"] == [review["review_id"]]
+    assert model["reviews"]["manual_exception_identities"] == {review["review_id"]: rows[0]["logical_review_id"]}
+
+
 def test_dashboard_handles_missing_branch_artifacts(tmp_path: Path) -> None:
     missing = load_branch(tmp_path / "does-not-exist", "executive")
     assert missing["filings"] == []

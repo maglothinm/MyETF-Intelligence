@@ -1,63 +1,26 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-08**
+Updated **2026-09-08 15:33 UTC**. Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
-Canonical repository: **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+## Active authorized task
 
-## Active task
+Complete the owner's merge/deploy/go-live request for issue #155. PR #156 merged as `140944de3d0da9b76e6318714babad75212dab32`, but its first publication failed live acceptance: JSON classified two retained House paper/scanned PTRs as `other`, then insights reclassified them as `manual_exception` after identity enrichment. The corrective branch `fix/parser-review-category-stability` classifies from normalized exception fields on the first pass, keeping exported JSON, CSV and insights consistent. PR #154 remains excluded.
 
-Implement [issue #155](https://github.com/maglothinm/MyETF-Intelligence/issues/155):
-Manual Parser Exception acknowledgements returning after refresh/publication.
-Work is isolated on `fix/parser-acknowledgement-persistence`, based on
-`061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f`. PR #154's unrelated Current Opportunity
-feature branch was not used or changed.
+The correction preserves evidence IDs, source rows, timestamps, logical identities and strict acknowledgement validation. The manual inventory will correctly contain four entries: the two original Senate exceptions plus two retained House paper PTRs. Verify that legacy acknowledgements for only the Senate IDs remain recognized while House stays active.
 
-## Implementation and local evidence
+## Verification and recovery evidence
 
-- Publication absence no longer clears browser acknowledgement history.
-- Structured exception codes and logical identities exclude mutable reason text.
-- Retained evidence IDs and JSONL remain intact; reprocessing avoids duplicate
-  review rows/notifications by logical identity.
-- Legacy v1 browser storage learns stable identities; Restore removes matching
-  aliases, and a materially changed logical identity remains active.
-- Full identity inventory is published with the JSON/CSV/model. Existing count,
-  category and evidence-ID validation remains; identity validation is additive.
-- The 500-entry retention policy, acknowledged inventory and retained evidence
-  semantics are documented in `docs/parser-review-acknowledgements.md`.
-- CI now runs dashboard DOM regressions and watches the shared identity module.
+- Regression assertions cover all four legacy message families and two complete-site cases (reason on review versus inherited from filing). They reproduced three failures before correction.
+- Corrected canonical suite: **1,159 passed, 2 skipped**. Optional PostgreSQL cases require CI. A preliminary rerun lacked `jq` on PATH; after restoring the existing tool path the complete suite passed.
+- Original build `4f8408c8-e543-4e7e-bc9f-4ca7c509e539`, image `sha256:574974380e800fc49a0074dc793a803ae3230465ec6b470ec5dfea9e4468686d`, failed live publication acceptance despite successful Executive/AI/Dashboard executions.
+- Rejected snapshot `e1f43a632e28ba6ff4005cb079e4b713153ec12fff1071d5090e1722d992eca5` remains retained. No head was rewound and no history deleted.
+- All six resources are restored to image `sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd`, with producer source restored to `72c1ca8c74a7af4b11f2e677c7a296d5e2358578`.
+- Dashboard `polititrack-dashboard-jktkd` appended valid publication `8286a37ad8db2657fe11244098e708c3b4196f462296b7b5e21e721488974f5b`; served bundle matches retained source, and JSON/insights agree at manual 2 / other 2 / access-required 1501. The original four schedules resumed at 15:33 UTC. Vault remains paused, SQL private-only, legacy producers disabled.
 
-`python -m pytest -q tests`: **1,157 passed, 2 skipped**, including all three
-required tracker/dashboard Python suites and 74 generated-dashboard DOM tests.
-`bash verify.sh`: **passed**. `git diff --check`: **passed**.
-Four AI scoring test failures reproduced on untouched main were corrected with
-a test-only fixed scoring clock; production scoring rules are unchanged.
+## Separate Legislative incident
 
-Unrestricted root `pytest -q` also collects four historical `backend/tests` files
-that fail to import `api`. Their legacy database module opens an external database
-at import and their tests delete database rows. They were not redirected to live
-data or altered for this parser fix. Canonical offline/CI suites are under `tests/`.
-The two skipped optional integration cases require environment support beyond
-this Windows test run; canonical Actions supplies its configured environment.
-
-## Production evidence and boundary
-
-Read-only public `/readyz` returned ready with snapshot
-`a3b9ac81339d558f751f0a35d864c6218d1d2926648bba4ac5a2fe1c3db247ff` during this task.
-The two live review IDs were `review:26d3a33b8b6c3b4b0018eabd672efcda` and
-`review:69bba9ad5c91225a4ba4ed56fd7e30d4`; both use the old Senate image-viewer
-message covered by the compatibility classifier. These reads establish the old
-publication's shape, not deployment of this fix.
-
-Existing recovery certificate artifact `9997087643`, run `34059488724` attempt 1,
-remains unexpired with API digest
-`6b35663482221d972f0967f0d2fba5eb68865609541c5693d29c093d4369c58f`.
-Its historical production certificate remains separate from this code change;
-no new protected artifact was written and no production continuity mutation occurred.
+Runtime run `065d5330-abca-4eda-b683-64e85f2dcbe7`, execution `polititrack-legislative-gnkrk`, failed at 10:41 UTC on the old image after Senate HTTP 403 and incomplete-source validation. Its `side_effects_possible=true` guard remains intact; Legislative generation 232 remains accepted. See [the incident record](incidents/2026-09-08-legislative-retry-guard.md) and issue #8. Do not clear the flag, force a retry, delete evidence or replace a baseline.
 
 ## Next safe action
 
-Review the implementation PR and its canonical Actions checks. After merge,
-release through the existing Runtime v2 procedure, then exercise the two-exception
-acknowledge / refresh / zero-publication / return / restore sequence against the
-deployed build. No merge, deployment, state reset, rebaseline, scheduler change,
-or live acknowledgement mutation is represented as complete by this handoff.
+Merge the corrective PR after canonical checks, build exact merged source, and repeat the bounded existing-resource rollout. Validate the full served publication before resuming schedules. In isolated browser storage seed only the two real legacy Senate IDs, verify two House entries stay active, then acknowledge all four, refresh/reload and Restore. Replay missing/returning publications locally using served assets. Update final release evidence only after acceptance passes.
