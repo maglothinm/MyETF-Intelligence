@@ -273,8 +273,10 @@ def review_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
         if enriched.get("filing_status") in (None, "") and filing.get("status") not in (None, ""):
             enriched["filing_status"] = filing["status"]
         enriched["filing_available"] = bool(filing)
-        enriched["category"] = review_category(row, filing)
         enriched["exception_code"] = exception_code(enriched)
+        # Classify from the same normalized identity fields on every pass;
+        # build_site publishes these rows and build_insights enriches them again.
+        enriched["category"] = review_category(enriched, filing)
         enriched["logical_review_id"] = logical_review_id(enriched)
         enriched["is_synthetic_test"] = is_test(row)
         result.append(enriched)

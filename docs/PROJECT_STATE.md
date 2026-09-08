@@ -1,12 +1,16 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-06 21:00 UTC
+**Current as of:** 2026-09-08 15:33 UTC
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
 **Recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
 ## Production authority
+
+**September 8 release hold:** PR #156 merged as `140944de3d0da9b76e6318714babad75212dab32`, but live acceptance found a category mismatch between review JSON and insights for two retained House paper PTRs. The rollout was held. All six resources were restored to the retained image below, and Dashboard execution `polititrack-dashboard-jktkd` appended a valid publication with hash `8286a37ad8db2657fe11244098e708c3b4196f462296b7b5e21e721488974f5b`; the rejected publication remains retained in history. Four original producer schedulers were re-enabled at 15:33 UTC. A classification-order correction passes 1,159 tests and awaits corrective PR CI/deployment. Issue #155 is not yet accepted live.
+
+Legislative has a separate pre-existing retry guard after Senate HTTP 403 at 10:41 UTC. Its accepted generation 232 and blocked-run evidence remain intact. See [the incident record](incidents/2026-09-08-legislative-retry-guard.md). Historical September 6 success evidence below does not imply current Legislative health. PR #154 remains unmerged and excluded.
 
 Runtime v2 is the production authority. The earlier shadow/blocked description in this file was stale. Phase 5 completed in canonical run `34005780266`, attempt 1, at `9f4303623cf21c3dff434fbb7240c07e6d255174`. Artifact `9981508660` has archive SHA-256 `c5094a1677712e413425e118f29dd0fc1f870c5bc712879fbc2223f2b9c2f7d0`. Its `phase5-complete.json` independently matches checksum `0006ed72a2a42308c21084bee236c45f4e9e17df4803c244caf03a520028dcb7` and result `phase5_complete`.
 

@@ -1126,3 +1126,9 @@ those expectations deterministic without changing production scoring.
 **Boundary:** This is implementation and regression evidence, not a Runtime v2
 release certificate. No production state, protected artifact, scheduler, alert,
 legacy route, deployment, or live browser acknowledgement was changed.
+
+## 2026-09-08 — Classify reviews after identity normalization
+
+**Decision:** Normalize exception codes before selecting the publication category. Complete exports and insights must classify from the same enriched fields, including retained wording inherited from a matched filing.
+
+**Evidence and consequence:** Live acceptance of PR #156 found two House paper/scanned PTRs switching from `other` to `manual_exception` between enrichment passes. Tests reproduced the defect before correction. JSON, CSV and insights now agree on the four retained manual exceptions; the original Senate IDs retain their logical identity and legacy acknowledgement mapping. Validation remains strict. The rejected publication was retained and a valid old-image publication appended through the existing Dashboard writer; no snapshot or history was rewound or deleted.

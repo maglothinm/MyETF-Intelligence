@@ -181,6 +181,8 @@ def test_all_legacy_producer_messages_match_new_structured_identity(source, reas
     assert row["logical_review_id"] == new.logical_review_id
     assert row["exception_code"] == code
     assert row["review_id"] == old["review_id"]
+    assert row["category"] == ("access_required" if code == "disclosure_access_required" else "manual_exception")
+    assert review_rows(payload(reviews=[row])) == [row]
 
 
 def test_review_projection_uses_exact_unique_identity_without_guessing_ids_or_timestamps():
