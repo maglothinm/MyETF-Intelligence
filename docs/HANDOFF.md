@@ -1,26 +1,21 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-08 15:33 UTC**. Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+Updated **2026-09-08T16:03:23.170520+00:00**. Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
-## Active authorized task
+## Completed owner request
 
-Complete the owner's merge/deploy/go-live request for issue #155. PR #156 merged as `140944de3d0da9b76e6318714babad75212dab32`, but its first publication failed live acceptance: JSON classified two retained House paper/scanned PTRs as `other`, then insights reclassified them as `manual_exception` after identity enrichment. The corrective branch `fix/parser-review-category-stability` classifies from normalized exception fields on the first pass, keeping exported JSON, CSV and insights consistent. PR #154 remains excluded.
+Issue #155 is merged and live through PR #156 plus corrective PR #157. Runtime source `19e894ef1262a86d4e54e24a8a34f6b7f230f688`, build `cea78696-8521-45d4-98b8-bdea9e45fc09`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6a458b64fc9b3517f460b49eb82cf7e1e0d5d200a051ee907031c2e1b737d300` on all six resources. The final documentation commit is separate from runtime source. PR #154 remains unmerged and excluded.
 
-The correction preserves evidence IDs, source rows, timestamps, logical identities and strict acknowledgement validation. The manual inventory will correctly contain four entries: the two original Senate exceptions plus two retained House paper PTRs. Verify that legacy acknowledgements for only the Senate IDs remain recognized while House stays active.
+See [the accepted release report](releases/2026-09-08-parser-acknowledgements.md) for exact CI, execution, asset and snapshot evidence. Canonical tests: 1,159 passed, 2 local PostgreSQL skips; Runtime CI passed. Live acceptance seeded only the two actual Senate legacy IDs and verified two Senate acknowledged / two House active. In the same isolated context, acknowledging all four, three refresh requests, reload and Restore passed. The user's storage was never modified. Missing/returning publication cycles passed 74 tests with served assets in isolated replay; they are not future-production-cycle claims.
 
-## Verification and recovery evidence
+## Current production boundary
 
-- Regression assertions cover all four legacy message families and two complete-site cases (reason on review versus inherited from filing). They reproduced three failures before correction.
-- Corrected canonical suite: **1,159 passed, 2 skipped**. Optional PostgreSQL cases require CI. A preliminary rerun lacked `jq` on PATH; after restoring the existing tool path the complete suite passed.
-- Original build `4f8408c8-e543-4e7e-bc9f-4ca7c509e539`, image `sha256:574974380e800fc49a0074dc793a803ae3230465ec6b470ec5dfea9e4468686d`, failed live publication acceptance despite successful Executive/AI/Dashboard executions.
-- Rejected snapshot `e1f43a632e28ba6ff4005cb079e4b713153ec12fff1071d5090e1722d992eca5` remains retained. No head was rewound and no history deleted.
-- All six resources are restored to image `sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd`, with producer source restored to `72c1ca8c74a7af4b11f2e677c7a296d5e2358578`.
-- Dashboard `polititrack-dashboard-jktkd` appended valid publication `8286a37ad8db2657fe11244098e708c3b4196f462296b7b5e21e721488974f5b`; served bundle matches retained source, and JSON/insights agree at manual 2 / other 2 / access-required 1501. The original four schedules resumed at 15:33 UTC. Vault remains paused, SQL private-only, legacy producers disabled.
+The final fenced Dashboard run advanced one generation with exact parent continuity. Legislative, Executive and AI heads remained unchanged during this publication-only correction. Earlier Executive/AI controlled smokes passed on PR #156; those executable paths did not change in PR #157. Four schedules are enabled at original settings, Vault paused, SQL private-only and legacy producers disabled.
 
-## Separate Legislative incident
+Live acceptance initially exposed a classification-order defect, which was reproduced, fixed and re-released. The rejected snapshot was retained; a valid old-image publication was appended before the corrected release. No state rewind, initialization, rebaseline, history deletion, guard bypass, IAM grant or alternate writer occurred.
 
-Runtime run `065d5330-abca-4eda-b683-64e85f2dcbe7`, execution `polititrack-legislative-gnkrk`, failed at 10:41 UTC on the old image after Senate HTTP 403 and incomplete-source validation. Its `side_effects_possible=true` guard remains intact; Legislative generation 232 remains accepted. See [the incident record](incidents/2026-09-08-legislative-retry-guard.md) and issue #8. Do not clear the flag, force a retry, delete evidence or replace a baseline.
+## Remaining incident and next safe action
 
-## Next safe action
+Legislative generation 232 remains accepted and its old-image failed run `065d5330-abca-4eda-b683-64e85f2dcbe7` remains retry-blocked after Senate HTTP 403 at 10:41 UTC. Do not report all pipelines healthy. [Incident record](incidents/2026-09-08-legislative-retry-guard.md), [issue #8](https://github.com/maglothinm/MyETF-Intelligence/issues/8). Next: audited source-access and side-effect-evidence recovery, preserving the failed run and accepted state, before one controlled complete-source retry. The current CLI has no reviewed production adjudication command; do not clear a flag or replace a baseline.
 
-Merge the corrective PR after canonical checks, build exact merged source, and repeat the bounded existing-resource rollout. Validate the full served publication before resuming schedules. In isolated browser storage seed only the two real legacy Senate IDs, verify two House entries stay active, then acknowledge all four, refresh/reload and Restore. Replay missing/returning publications locally using served assets. Update final release evidence only after acceptance passes.
+Historical certificate artifact 9997087643 (run 34059488724, attempt 1; SHA-256 `6b35663482221d972f0967f0d2fba5eb68865609541c5693d29c093d4369c58f`) is retained. It is not a new certificate for this release. Runtime v2 PostgreSQL snapshots remain production authority.

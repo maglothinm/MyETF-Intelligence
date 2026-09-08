@@ -1132,3 +1132,9 @@ legacy route, deployment, or live browser acknowledgement was changed.
 **Decision:** Normalize exception codes before selecting the publication category. Complete exports and insights must classify from the same enriched fields, including retained wording inherited from a matched filing.
 
 **Evidence and consequence:** Live acceptance of PR #156 found two House paper/scanned PTRs switching from `other` to `manual_exception` between enrichment passes. Tests reproduced the defect before correction. JSON, CSV and insights now agree on the four retained manual exceptions; the original Senate IDs retain their logical identity and legacy acknowledgement mapping. Validation remains strict. The rejected publication was retained and a valid old-image publication appended through the existing Dashboard writer; no snapshot or history was rewound or deleted.
+
+## 2026-09-08 — Accept the corrected acknowledgement publication before resuming schedules
+
+**Decision:** Release corrected source `19e894ef1262a86d4e54e24a8a34f6b7f230f688` on all six existing Runtime v2 resources and run the changed Dashboard producer under the established writer contract. Require live publication consistency, the exact legacy-Senate/four-record browser sequence, and served-bundle replay before schedule resume.
+
+**Consequence:** Dashboard advanced with exact parent continuity while the other namespace heads and Legislative incident guard remained intact. All original schedules were restored. The rejected publication remains in history and its rollback was a new valid publication, not a head rewind. Issue #155 is accepted live; the separate Senate access/retry incident remains unresolved. This is feature-release evidence, not new Phase 5 or all-pipeline certification. See [the release report](releases/2026-09-08-parser-acknowledgements.md).
