@@ -344,6 +344,7 @@ def test_published_review_inventory_matches_overview_without_preview_truncation(
     exceptions = [row for row in production if row["category"] == "manual_exception"]
     assert len(exceptions) == model["reviews"]["manual_exception"] == 12
     assert model["reviews"]["manual_exception_ids"] == sorted(row["review_id"] for row in exceptions)
+    assert model["reviews"]["manual_exception_identities"] == {row["review_id"]: row["logical_review_id"] for row in exceptions}
     assert len(production) == model["reviews"]["total"] == 14
     assert len(model["reviews"]["latest"]) == 8
     assert model["reviews"]["access_required"] == model["reviews"]["other"] == 1
@@ -359,6 +360,8 @@ def test_published_review_inventory_matches_overview_without_preview_truncation(
         csv_rows = list(csv.DictReader(handle))
     assert len(csv_rows) == len(rows)
     assert [row["review_id"] for row in csv_rows] == [row["review_id"] for row in rows]
+    assert [row["logical_review_id"] for row in csv_rows] == [row["logical_review_id"] for row in rows]
+    assert [row["exception_code"] for row in csv_rows] == [row["exception_code"] for row in rows]
     assert sum(row["category"] == "manual_exception" and row["is_synthetic_test"] == "False" for row in csv_rows) == 12
     assert csv_rows[0]["filing_key"] == "senate|retained:0"
     assert csv_rows[0]["filing_status"] == "review_required"

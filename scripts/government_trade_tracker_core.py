@@ -28,6 +28,7 @@ from bs4 import BeautifulSoup
 from requests import Response, Session
 
 try:  # Support both ``python -m scripts...`` and direct script execution.
+    from .review_identity import ACCESS_REQUIRED, PAPER_REVIEW, UNPARSEABLE_TABLE, logical_review_id
     from .run_trigger import trigger_source
     from .monitor_disclosures import (
         DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -53,6 +54,7 @@ try:  # Support both ``python -m scripts...`` and direct script execution.
         utc_now,
     )
 except ImportError:  # pragma: no cover - direct execution path
+    from review_identity import ACCESS_REQUIRED, PAPER_REVIEW, UNPARSEABLE_TABLE, logical_review_id
     from run_trigger import trigger_source
     from monitor_disclosures import (  # type: ignore
         DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -189,6 +191,10 @@ class NotificationError(MonitorError):
 class PaperFilingError(MonitorError):
     """Raised for a known paper filing that requires a human review."""
 
+    def __init__(self, message: str, *, exception_code: str = PAPER_REVIEW) -> None:
+        super().__init__(message)
+        self.exception_code = exception_code
+
 
 @dataclass(frozen=True)
 class Trade:
@@ -255,6 +261,8 @@ class PendingReview:
     reason: str
     title: str = ""
     agency: str = ""
+    exception_code: str = ""
+    logical_review_id: str = ""
 
 
 @dataclass
@@ -1067,7 +1075,8 @@ def parse_generic_transactions_text(
         buffer = []
 
     if not parsed and paper_is_pending:
-        raise PaperFilingError("Filing text does not preserve enough row structure for reliable parsing")
+        raise PaperFilingError("Filing text does not preserve enough row structure for reliable parsing",
+                               exception_code=UNPARSEABLE_TABLE)
     if not parsed:
         raise SourceChangedError("Electronic filing contains no parseable transaction rows")
     return parsed
@@ -1379,6 +1388,7 @@ def scan_house_report(session: Session, report: Report, config: TrackerConfig) -
             filed_date=report.filed_date,
             source_url=report.url,
             reason=str(exc),
+            exception_code=exc.exception_code,
         )
         return [], review
 
@@ -1453,6 +1463,7 @@ def _parse_senate_report_response(
                 filed_date=report.filed_date,
                 source_url=report.url,
                 reason=str(exc),
+                exception_code=exc.exception_code,
             )
 
         try:
@@ -1474,6 +1485,7 @@ def _parse_senate_report_response(
                 filed_date=report.filed_date,
                 source_url=report.url,
                 reason=str(exc),
+                exception_code=exc.exception_code,
             )
 
     html = data.decode(response.encoding or "utf-8", errors="replace")
@@ -1491,10 +1503,16 @@ def make_pending_review(
     reason: str,
     title: str = "",
     agency: str = "",
+    exception_code: str = PAPER_REVIEW,
 ) -> PendingReview:
-    review_id = stable_id("review", (source, report_id, filer, source_url, reason))
+    if not exception_code.strip():
+        raise ValueError("Pending reviews require a structured exception code")
+    identity = logical_review_id({"source": source, "report_id": report_id,
+                                  "source_url": source_url, "exception_code": exception_code})
+    if not identity:
+        raise ValueError("Pending reviews require a stable source record identity")
     return PendingReview(
-        review_id=review_id,
+        review_id=identity,
         observed_at_utc=iso_utc(),
         branch=branch,
         source=source,
@@ -1505,6 +1523,8 @@ def make_pending_review(
         reason=normalize_text(reason),
         title=normalize_text(title),
         agency=normalize_text(agency),
+        exception_code=exception_code,
+        logical_review_id=identity,
     )
 
 
@@ -1586,6 +1606,7 @@ def scan_oge_listing(
             filed_date=filed_date,
             source_url=source_url,
             reason="OGE Form 278-T is listed, but access requires an OGE Form 201 request or no direct PDF was published",
+            exception_code=ACCESS_REQUIRED,
             title=str(listing.get("title") or ""),
             agency=str(listing.get("agency") or ""),
         )
@@ -1608,6 +1629,7 @@ def scan_oge_listing(
             filed_date=filed_date,
             source_url=source_url,
             reason=str(exc),
+            exception_code=exc.exception_code,
             title=str(listing.get("title") or ""),
             agency=str(listing.get("agency") or ""),
         )
@@ -1792,6 +1814,17 @@ def commit_filing_outcome(
     review: PendingReview | None,
     filing_index: dict[str, dict[str, Any]],
 ) -> None:
+    # Reprocessing a retained filing must not create a second exception or alert
+    # merely because diagnostic wording changed. Keep the original evidence ID,
+    # including pre-migration IDs, and leave the append-only ledger untouched.
+    retained_review = None
+    if review:
+        identity = logical_review_id(asdict(review))
+        retained_review = next((row for row in read_jsonl(config.pending_path)
+                                if row.get("review_id") and logical_review_id(row) == identity), None)
+        if retained_review:
+            review = replace(review, review_id=str(retained_review["review_id"]))
+    new_review = bool(review and not retained_review and review.review_id not in state.seen_reviews)
     fresh_transactions = [trade for trade in trades if trade.trade_id not in state.seen_trades]
     fresh_purchases = purchases_only(fresh_transactions)
     alerted = False
@@ -1802,7 +1835,7 @@ def commit_filing_outcome(
             filing_label,
             fresh_transactions,
         )
-    if review and review.review_id not in state.seen_reviews:
+    if new_review:
         alerted = send_pending_notification(session, config, review) or alerted
 
     timestamp = iso_utc()
@@ -1825,7 +1858,7 @@ def commit_filing_outcome(
             result.purchase_counts.get(source, 0) + len(fresh_purchases)
         )
 
-    if review and review.review_id not in state.seen_reviews:
+    if new_review:
         append_jsonl(config.pending_path, (asdict(review),))
         state.seen_reviews[review.review_id] = timestamp
         result.pending_reviews.append(asdict(review))

@@ -44,6 +44,58 @@ def house_report(doc_id: str = "20035289") -> Report:
     )
 
 
+def test_pending_review_identity_uses_source_filing_and_code_not_display_text() -> None:
+    fields = dict(branch="legislative", source="senate", report_id="senate:retained",
+                  filer="Original Filer", filed_date="2026-09-01", source_url="https://example.test/old",
+                  reason="Paper filing requires manual review", exception_code="paper_filing_manual_review")
+    first = tracker.make_pending_review(**fields)
+    revised = tracker.make_pending_review(**{**fields, "reason": "Paper-format filing requires manual parser review",
+                                            "filer": "Reformatted Filer", "source_url": "https://example.test/new"})
+    assert first.logical_review_id == revised.logical_review_id == first.review_id == revised.review_id
+    assert first.reason != revised.reason
+    for changed in ({"exception_code": "unparseable_transaction_table"}, {"report_id": "senate:new"}, {"source": "house"}):
+        other = tracker.make_pending_review(**{**fields, **changed})
+        assert other.logical_review_id != first.logical_review_id
+    with pytest.raises(ValueError, match="structured exception code"):
+        tracker.make_pending_review(**{**fields, "exception_code": ""})
+
+
+def test_reprocessing_legacy_pending_review_preserves_evidence_without_duplicate_alert(tmp_path: Path, monkeypatch) -> None:
+    config = replace(_tracker_config(tmp_path, initialize=True), branch="legislative")
+    report = house_report()
+    fields = dict(branch="legislative", source="house", report_id=report.report_id,
+                  filer=report.filer, filed_date=report.filed_date, source_url=report.url,
+                  reason="House filing is a paper/scanned PTR; checkbox semantics require review")
+    legacy_id = tracker.stable_id("review", (fields["source"], fields["report_id"], fields["filer"], fields["source_url"], fields["reason"]))
+    tracker.append_jsonl(config.pending_path, [{**fields, "review_id": legacy_id}])
+    original = config.pending_path.read_bytes()
+    state = TrackerState()  # Even if the bounded seen-ID index has pruned this ID.
+    result = TrackerResult(branch="legislative", started_utc="2026-09-08T00:00:00Z")
+    session = Mock(spec=Session)
+    session.post.side_effect = AssertionError("retained exception must not notify again")
+    notify = Mock(return_value=False)
+    monkeypatch.setattr(tracker, "send_pending_notification", notify)
+    index = {}
+    for reason in (fields["reason"], "Reworded diagnostic without the old paper keywords"):
+        review = tracker.make_pending_review(**{**fields, "reason": reason})
+        commit_filing_outcome(session=session, config=config, state=state, result=result, source="house",
+                              filing=report, filing_id=report.report_id, filing_label="House PTR",
+                              trades=[], review=review, filing_index=index)
+    assert config.pending_path.read_bytes() == original
+    assert result.pending_reviews == []
+    session.post.assert_not_called()
+    notify.assert_not_called()
+    # A different defect in the same filing is retained and reported as new.
+    changed = tracker.make_pending_review(**fields, exception_code="unparseable_transaction_table")
+    commit_filing_outcome(session=session, config=config, state=state, result=result, source="house",
+                          filing=report, filing_id=report.report_id, filing_label="House PTR",
+                          trades=[], review=changed, filing_index=index)
+    rows = tracker.read_jsonl(config.pending_path)
+    assert [row["review_id"] for row in rows] == [legacy_id, changed.review_id]
+    assert len(result.pending_reviews) == 1
+    notify.assert_called_once()
+
+
 def test_parse_house_electronic_ptr_extracts_all_rows_and_purchases() -> None:
     text = """
     P T R

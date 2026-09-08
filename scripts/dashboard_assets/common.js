@@ -194,6 +194,8 @@ window.PT = (() => {
     if(!m || m.version!==1 || !m.notifications || !Array.isArray(m.signals) || !Array.isArray(m.health?.branches) || !Array.isArray(m.latest_filings) || !Array.isArray(m.reviews?.latest) || !m.simulation || !m.paper || !m.synthetic)throw new Error("Unsupported or incomplete dashboard view model");
     for(const [section,keys] of [["coverage",["filings","transactions","analyses","cataloged_only","processed","review_required","qualifying_signals"]],["reviews",["manual_exception","access_required","other","total"]],["composition",["population","purchases","sales","other"]]])for(const key of keys)if(numeric(m[section]?.[key])===null || m[section][key]<0)throw new Error("Malformed published counts");
     if(!Array.isArray(m.reviews.manual_exception_ids)||m.reviews.manual_exception_ids.length!==m.reviews.manual_exception||new Set(m.reviews.manual_exception_ids).size!==m.reviews.manual_exception_ids.length||m.reviews.manual_exception_ids.some(id=>typeof id!=="string"||!id||id.length>500))throw new Error("Malformed manual review identity inventory");
+    const identities=m.reviews.manual_exception_identities;
+    if(identities!==undefined&&(!identities||typeof identities!=="object"||Array.isArray(identities)||Object.keys(identities).length!==m.reviews.manual_exception_ids.length||m.reviews.manual_exception_ids.some(id=>!Object.hasOwn(identities,id)||typeof identities[id]!=="string"||!identities[id]||identities[id].length>500)))throw new Error("Malformed logical review identity inventory");
     if(m.health.branches.length!==3 || m.health.branches.some(b=>!b||!Array.isArray(b.errors)||!Array.isArray(b.timeline)))throw new Error("Malformed run evidence");
     return m;
   }

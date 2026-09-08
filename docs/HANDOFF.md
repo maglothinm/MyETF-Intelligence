@@ -1,31 +1,63 @@
 # PolitiTrack active handoff
 
-Updated: **2026-09-06 21:03 UTC**
+Updated: **2026-09-08**
 
 Canonical repository: **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
-## Completed task
+## Active task
 
-Runtime v2 / AI Analyst production recovery is certified. PR #151 corrected the natural-certification Dashboard timezone assertion and delayed-log window, merging as `db080d413b5e804a335f575071a62d48a9d4083b`. The existing controller passed on canonical main: run `34059488724`, attempt 1, job `101557337973`, all steps successful including temporary-authority cleanup.
+Implement [issue #155](https://github.com/maglothinm/MyETF-Intelligence/issues/155):
+Manual Parser Exception acknowledgements returning after refresh/publication.
+Work is isolated on `fix/parser-acknowledgement-persistence`, based on
+`061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f`. PR #154's unrelated Current Opportunity
+feature branch was not used or changed.
 
-Recovery artifact: `9997087643`; archive SHA-256 `6b35663482221d972f0967f0d2fba5eb68865609541c5693d29c093d4369c58f`. Result: `runtime_v2_natural_ai_schedule_certified`. Both internal evidence hashes match. The certificate binds AI executions `polititrack-ai-rss97` and `polititrack-ai-db5vt`, followed by Dashboard execution `polititrack-dashboard-vl4p6`; independent GCP reads confirmed their Scheduler identity and approved immutable image.
+## Implementation and local evidence
 
-Runtime source: `72c1ca8c74a7af4b11f2e677c7a296d5e2358578`.
-Image digest: `sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd`.
-Certified heads: Legislative 82, Executive 46, AI 70, Dashboard 79.
+- Publication absence no longer clears browser acknowledgement history.
+- Structured exception codes and logical identities exclude mutable reason text.
+- Retained evidence IDs and JSONL remain intact; reprocessing avoids duplicate
+  review rows/notifications by logical identity.
+- Legacy v1 browser storage learns stable identities; Restore removes matching
+  aliases, and a materially changed logical identity remains active.
+- Full identity inventory is published with the JSON/CSV/model. Existing count,
+  category and evidence-ID validation remains; identity validation is additive.
+- The 500-entry retention policy, acknowledged inventory and retained evidence
+  semantics are documented in `docs/parser-review-acknowledgements.md`.
+- CI now runs dashboard DOM regressions and watches the shared identity module.
 
-The original Phase 5 transfer is separately proven by successful run `34005780266`, artifact `9981508660`, archive SHA-256 `c5094a1677712e413425e118f29dd0fc1f870c5bc712879fbc2223f2b9c2f7d0`, and the verified `phase5-complete.json` checksum. Do not mistake that original-image certificate for the recovery certificate.
+`python -m pytest -q tests`: **1,157 passed, 2 skipped**, including all three
+required tracker/dashboard Python suites and 74 generated-dashboard DOM tests.
+`bash verify.sh`: **passed**. `git diff --check`: **passed**.
+Four AI scoring test failures reproduced on untouched main were corrected with
+a test-only fixed scoring clock; production scoring rules are unchanged.
 
-## Terminal boundary
+Unrestricted root `pytest -q` also collects four historical `backend/tests` files
+that fail to import `api`. Their legacy database module opens an external database
+at import and their tests delete database rows. They were not redirected to live
+data or altered for this parser fix. Canonical offline/CI suites are under `tests/`.
+The two skipped optional integration cases require environment support beyond
+this Windows test run; canonical Actions supplies its configured environment.
 
-Four producer schedulers enabled; Filing Vault paused; private-only Cloud SQL; legacy producer workflows retained and disabled; repaired immutable runtime; public `/readyz` ready and `/` HTTP 200 with the certified Dashboard snapshot. Temporary observation execution/logging permissions were removed. Pre-existing permanent deployer roles were preserved.
+## Production evidence and boundary
 
-No state reset, rewind, rebaseline, alternate writer, replatform, or Phase 6 action was performed. Existing legacy artifacts and recovery evidence remain retained.
+Read-only public `/readyz` returned ready with snapshot
+`a3b9ac81339d558f751f0a35d864c6218d1d2926648bba4ac5a2fe1c3db247ff` during this task.
+The two live review IDs were `review:26d3a33b8b6c3b4b0018eabd672efcda` and
+`review:69bba9ad5c91225a4ba4ed56fd7e30d4`; both use the old Senate image-viewer
+message covered by the compatibility classifier. These reads establish the old
+publication's shape, not deployment of this fix.
 
-## Verification and remaining scope
+Existing recovery certificate artifact `9997087643`, run `34059488724` attempt 1,
+remains unexpired with API digest
+`6b35663482221d972f0967f0d2fba5eb68865609541c5693d29c093d4369c58f`.
+Its historical production certificate remains separate from this code change;
+no new protected artifact was written and no production continuity mutation occurred.
 
-Workflow YAML, all four embedded Bash scripts, embedded Python syntax, 14 Phase 5 tests, and repository `verify.sh` passed locally. One POSIX-specific test was skipped on Windows; the canonical live certification then passed all steps. No credential or external approval was needed.
+## Next safe action
 
-Older status-mirror/recoverywatch runs predate this task and watch the obsolete initial recovery workflow/event. They are not certification authority. No new monitor or retry was created. Phase 5 issue #100 and historical issue administration were not changed by this task.
-
-Next safe action: use the successful recovery run and artifact as the current receipt; retain the existing production schedules. Phase 6 decommissioning, rebaseline, and new notification guarantees require separately scoped work.
+Review the implementation PR and its canonical Actions checks. After merge,
+release through the existing Runtime v2 procedure, then exercise the two-exception
+acknowledge / refresh / zero-publication / return / restore sequence against the
+deployed build. No merge, deployment, state reset, rebaseline, scheduler change,
+or live acknowledgement mutation is represented as complete by this handoff.
