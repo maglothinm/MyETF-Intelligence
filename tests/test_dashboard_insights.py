@@ -139,6 +139,50 @@ def test_complete_review_projection_inherits_metadata_and_preserves_retained_fie
     assert review_rows({**source, "reviews": [row]}) == [row]
 
 
+def test_legacy_review_identity_survives_reason_changes_without_rewriting_evidence():
+    first = {"review_id": "retained-old-id", "source": "senate", "report_id": "retained-filing",
+             "reason": "Paper filing requires manual review"}
+    revised = {**first, "review_id": "another-historical-id",
+               "reason": "Paper-format filing requires manual parser review"}
+    explicit = {**first, "review_id": "new-code-id", "exception_code": "unparseable_transaction_table",
+                "reason": "Changed wording without parser keywords"}
+    source = payload(reviews=[first, revised, explicit])
+    before = copy.deepcopy(source)
+    rows = review_rows(source)
+    assert rows[0]["logical_review_id"] == rows[1]["logical_review_id"]
+    assert rows[2]["logical_review_id"] != rows[0]["logical_review_id"]
+    assert all(row["category"] == "manual_exception" for row in rows)
+    assert [row["review_id"] for row in rows] == ["retained-old-id", "another-historical-id", "new-code-id"]
+    assert source == before
+    model = build_insights(source)
+    assert model["reviews"]["manual_exception_identities"] == {row["review_id"]: row["logical_review_id"] for row in rows}
+
+
+def test_unclassified_legacy_reviews_do_not_merge_unrelated_exceptions():
+    rows = review_rows(payload(reviews=[
+        {"review_id": key, "source": "senate", "report_id": "same", "reason": "Unknown manual exception"}
+        for key in ("unknown-one", "unknown-two")]))
+    assert [row["logical_review_id"] for row in rows] == ["unknown-one", "unknown-two"]
+
+
+@pytest.mark.parametrize("source,reason,code", [
+    ("senate", "Senate paper PTR is rendered as page images and exposes no direct PDF; manual review is required", "paper_filing_manual_review"),
+    ("house", "House filing is a paper/scanned PTR; checkbox semantics require review", "paper_filing_manual_review"),
+    ("senate", "Filing text does not preserve enough row structure for reliable parsing", "unparseable_transaction_table"),
+    ("oge", "OGE Form 278-T is listed, but access requires an OGE Form 201 request or no direct PDF was published", "disclosure_access_required"),
+])
+def test_all_legacy_producer_messages_match_new_structured_identity(source, reason, code):
+    from scripts.government_trade_tracker_core import make_pending_review
+    old = {"review_id": "legacy-evidence", "source": source, "report_id": "retained-filing", "reason": reason}
+    new = make_pending_review(branch="executive" if source == "oge" else "legislative", source=source,
+                              report_id=old["report_id"], filer="Official", filed_date="2026-09-01",
+                              source_url="https://example.test/filing", reason="Different display wording", exception_code=code)
+    row = review_rows(payload(reviews=[old]))[0]
+    assert row["logical_review_id"] == new.logical_review_id
+    assert row["exception_code"] == code
+    assert row["review_id"] == old["review_id"]
+
+
 def test_review_projection_uses_exact_unique_identity_without_guessing_ids_or_timestamps():
     source = payload(
         filings=[

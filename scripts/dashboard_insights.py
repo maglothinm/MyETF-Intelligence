@@ -18,9 +18,11 @@ from typing import Any, Callable, Mapping
 from urllib.parse import parse_qsl, urlsplit
 
 try:
+    from .review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
     from .collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                       nonproduction_evidence, overall_status, production_run, trigger_source)
 except ImportError:  # pragma: no cover - direct-script execution
+    from review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
     from collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                      nonproduction_evidence, overall_status, production_run, trigger_source)
 
@@ -189,6 +191,11 @@ def _filing_identity(row: Mapping[str, Any]) -> tuple[str, str]:
 
 def review_category(row: Mapping[str, Any], filing: Mapping[str, Any] | None = None) -> str:
     """Separate request inventory from parser exceptions using retained fields."""
+    code = row.get("exception_code")
+    if code == ACCESS_REQUIRED:
+        return "access_required"
+    if code in PARSER_CODES:
+        return "manual_exception"
     filing = _mapping(filing)
     access = str(_first(row.get("access_mode"), filing.get("access_mode")) or "").casefold().replace("-", "_")
     reason = " ".join(str(value or "") for value in (row.get("reason"), row.get("review_reason"), filing.get("review_reason"))).casefold()
@@ -267,6 +274,8 @@ def review_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             enriched["filing_status"] = filing["status"]
         enriched["filing_available"] = bool(filing)
         enriched["category"] = review_category(row, filing)
+        enriched["exception_code"] = exception_code(enriched)
+        enriched["logical_review_id"] = logical_review_id(enriched)
         enriched["is_synthetic_test"] = is_test(row)
         result.append(enriched)
     return result
@@ -303,7 +312,7 @@ def _flat_record(row: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, A
 
 
 _FILING_PUBLIC = ("filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "status", "access_mode")
-_REVIEW_PUBLIC = ("review_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
+_REVIEW_PUBLIC = ("review_id", "logical_review_id", "exception_code", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
 _SIGNAL_PUBLIC = ("analysis_id", "trade_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "owner", "ticker", "asset", "amount", "transaction_type", "classification")
 
 
@@ -685,6 +694,11 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
                 for row in categories
                 if row["category"] == "manual_exception" and row.get("review_id")
             ),
+            "manual_exception_identities": {
+                str(row["review_id"]): row["logical_review_id"]
+                for row in categories
+                if row["category"] == "manual_exception" and row.get("review_id")
+            },
             "other": review_counts["other"],
             "total": len(reviews),
             "latest": categories[:8],

@@ -35,33 +35,45 @@
   });
   function get(row,path){return path.split(".").reduce((v,k)=>v&&typeof v==="object"?v[k]:undefined,row);}
   function normalizeReviewAcknowledgements(value){
-    if(!value||value.version!==1||!Array.isArray(value.acknowledged))return {};
-    const normalized={};
+    if(!value||value.version!==1||!Array.isArray(value.acknowledged))return Object.create(null);
+    const normalized=Object.create(null);
     for(const record of value.acknowledged.slice(-REVIEW_ACK_LIMIT)){
       if(!record||typeof record.id!=="string"||!record.id||record.id.length>500||typeof record.acknowledged_at_utc!=="string"||!Number.isFinite(Date.parse(record.acknowledged_at_utc)))continue;
-      normalized[record.id]=record.acknowledged_at_utc;
+      normalized[record.id]={acknowledged_at_utc:record.acknowledged_at_utc,
+        logical_review_id:typeof record.logical_review_id==="string"&&record.logical_review_id.length<=500?record.logical_review_id:""};
     }
     return normalized;
   }
   function readReviewAcknowledgements(){
-    try{const raw=localStorage.getItem(REVIEW_ACK_STORAGE_KEY);return raw?normalizeReviewAcknowledgements(JSON.parse(raw)):{};}
-    catch{reviewAcknowledgementStorageAvailable=false;return {};}
+    try{const raw=localStorage.getItem(REVIEW_ACK_STORAGE_KEY);return raw?normalizeReviewAcknowledgements(JSON.parse(raw)):Object.create(null);}
+    catch{reviewAcknowledgementStorageAvailable=false;return Object.create(null);}
   }
   function saveReviewAcknowledgements(){
-    const acknowledged=Object.entries(reviewAcknowledgements).sort((a,b)=>Date.parse(a[1])-Date.parse(b[1])).slice(-REVIEW_ACK_LIMIT).map(([id,acknowledged_at_utc])=>({id,acknowledged_at_utc}));
-    reviewAcknowledgements=Object.fromEntries(acknowledged.map(record=>[record.id,record.acknowledged_at_utc]));
+    // Deliberate retention: keep the 500 most recently acknowledged records.
+    const acknowledged=Object.entries(reviewAcknowledgements).sort((a,b)=>Date.parse(a[1].acknowledged_at_utc)-Date.parse(b[1].acknowledged_at_utc)).slice(-REVIEW_ACK_LIMIT).map(([id,record])=>({id,...record}));
+    reviewAcknowledgements=normalizeReviewAcknowledgements({version:1,acknowledged});
     try{localStorage.setItem(REVIEW_ACK_STORAGE_KEY,JSON.stringify({version:1,acknowledged}));reviewAcknowledgementStorageAvailable=true;return true;}
     catch{reviewAcknowledgementStorageAvailable=false;return false;}
   }
   function reconcileReviewAcknowledgements(model){
-    const current=new Set(model?.reviews?.manual_exception_ids||[]);let changed=false;
-    for(const id of Object.keys(reviewAcknowledgements))if(!current.has(id)){delete reviewAcknowledgements[id];changed=true;}
+    // Publication absence is not an eviction policy. Learn stable identities for
+    // old v1 acknowledgements while retaining their original IDs for old builds.
+    let changed=false;
+    for(const [id,identity] of Object.entries(model?.reviews?.manual_exception_identities||{})){
+      const record=reviewAcknowledgements[id];
+      if(record&&!record.logical_review_id){record.logical_review_id=identity;changed=true;}
+    }
     if(changed)saveReviewAcknowledgements();if(!manualReviewStats(model).acknowledged)state.showAcknowledgedReviews=false;
   }
-  const reviewAcknowledgedAt=row=>row?.category==="manual_exception"&&typeof row.review_id==="string"?reviewAcknowledgements[row.review_id]||"":"";
+  function acknowledgementFor(id,identity){
+    const direct=reviewAcknowledgements[id];
+    if(direct&&(!identity||!direct.logical_review_id||direct.logical_review_id===identity))return direct;
+    return identity?Object.values(reviewAcknowledgements).find(record=>record.logical_review_id===identity):undefined;
+  }
+  const reviewAcknowledgedAt=row=>row?.category==="manual_exception"?acknowledgementFor(row.review_id,row.logical_review_id||state.model?.reviews?.manual_exception_identities?.[row.review_id])?.acknowledged_at_utc||"":"";
   function manualReviewStats(model=state.model){
     const ids=Array.isArray(model?.reviews?.manual_exception_ids)?model.reviews.manual_exception_ids:[];
-    const acknowledged=ids.filter(id=>reviewAcknowledgements[id]).length;
+    const acknowledged=ids.filter(id=>acknowledgementFor(id,model.reviews.manual_exception_identities?.[id])).length;
     return {total:ids.length,acknowledged,active:Math.max(0,ids.length-acknowledged)};
   }
   const activeReviewBrief=(model,changes,active)=>brief({...model,reviews:{...model.reviews,manual_exception:active}},changes,active);
@@ -83,7 +95,9 @@
   }
   function setReviewAcknowledged(id,acknowledged){
     if(!state.model?.reviews?.manual_exception_ids?.includes(id))return;
-    if(acknowledged)reviewAcknowledgements[id]=new Date().toISOString();else delete reviewAcknowledgements[id];
+    const identity=state.model.reviews.manual_exception_identities?.[id]||"";
+    if(acknowledged)reviewAcknowledgements[id]={acknowledged_at_utc:new Date().toISOString(),logical_review_id:identity};
+    else for(const [key,record] of Object.entries(reviewAcknowledgements))if(key===id||(identity&&record.logical_review_id===identity))delete reviewAcknowledgements[key];
     saveReviewAcknowledgements();if(!manualReviewStats().acknowledged)state.showAcknowledgedReviews=false;renderReviewAcknowledgementViews(id);
   }
   const dateLabel=key=>({filed_date:"Filing date",transaction_date:"Transaction date",observed_at_utc:"PolitiTrack observation date",first_seen_utc:"First observed date",analyzed_at_utc:"Analysis date",opened_at_utc:"Position opened date",last_updated_utc:"Valuation date",finished_utc:"Run finished date",started_utc:"Run started date"}[key]||title(key));
@@ -118,6 +132,8 @@
     const manualIds=production.filter(r=>r.category==="manual_exception").map(r=>r.review_id).sort();
     if(production.some(r=>!Object.hasOwn(reviewLabels,r.category))||production.length!==model.reviews.total||Object.keys(reviewLabels).some(category=>production.filter(r=>r.category===category).length!==model.reviews[category])||JSON.stringify(manualIds)!==JSON.stringify(model.reviews.manual_exception_ids))
       throw new Error("Review data and dashboard counts belong to different publications. Refresh data to retry");
+    if(model.reviews.manual_exception_identities&&production.some(r=>r.category==="manual_exception"&&r.logical_review_id!==model.reviews.manual_exception_identities[r.review_id]))
+      throw new Error("Review identities belong to different publications. Refresh data to retry");
   }
   function initTables(){for(const [key,def] of Object.entries(definitions)){
     state.tables[key]={query:"",filters:{},page:0,sort:def.date,descending:true,dateBasis:def.date,from:"",to:"",selected:""};
@@ -284,7 +300,7 @@
   }
   async function notificationAction(action){try{await action();renderNotifications();return true;}catch{el("notification-storage-note").hidden=false;el("notification-storage-note").textContent="This browser-local change could not be saved. Try again; external alert settings are unchanged.";return false;}}
   async function loadData(){if(state.loading)return;state.loading=true;el("refresh-button").disabled=true;try{
-    const model=PT.validateModel(await checkedJson("data/dashboard-insights.json"));reconcileReviewAcknowledgements(model);
+    const model=PT.validateModel(await checkedJson("data/dashboard-insights.json"));
     // Stage open datasets as well; a partial fetch never advances the browser baseline.
     const staged={};
     // Navigation can finish a first lazy load during any await below. Include
@@ -292,6 +308,7 @@
     for(;;){const key=Object.keys(state.data).find(key=>!Object.hasOwn(staged,key));if(!key)break;staged[key]=await fetchTable(key);}
     if(staged.reviews)validateReviews(staged.reviews,model);
     const change=notifications.prepare(model),previous=state.model,oldData=state.data; if(change.olderSnapshot)throw new Error("Older publication rejected; keeping the last successful review");
+    reconcileReviewAcknowledgements(model);
     try{state.model=model;renderModel(model,change);state.data={...state.data,...staged};for(const key of Object.keys(staged)){populateFilters(key);renderTable(key);}}
     catch(e){state.model=previous;state.data=oldData;if(previous){renderModel(previous,{changes:{},firstVisit:false});for(const key of Object.keys(oldData)){populateFilters(key);renderTable(key);}}throw e;}
     state.model=model;state.changes=change.changes||{};state.renderedAt=Date.now();state.nextRefreshAt=Date.now()+300000;state.refreshError=false;el("error-banner").hidden=true;refreshHealth();

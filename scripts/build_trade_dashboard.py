@@ -88,6 +88,8 @@ TRANSACTION_FIELDS = (
 
 REVIEW_FIELDS = (
     "review_id",
+    "logical_review_id",
+    "exception_code",
     "observed_at_utc",
     "branch",
     "source",

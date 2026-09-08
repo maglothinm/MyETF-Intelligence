@@ -1094,3 +1094,35 @@ merge/import, or Phase 6.
 **Boundary:** This decision does not alter state authority, immutable runtime bytes, production scheduling, rollback assets, or Phase 6 scope. The original Phase 5 certificate was independently downloaded and checksum-verified; it remains the original transfer receipt, while repaired-runtime certification is separate.
 
 **Release verification:** Canonical run `34059488724`, attempt 1, job `101557337973`, succeeded. Artifact `9997087643` and both internal evidence hashes were independently verified. The final certificate records two scheduled AI writers, a following Dashboard writer, AI generation 70, Dashboard generation 79, enabled producer schedulers, paused Filing Vault, and completed temporary execution/logging cleanup. Independent GCP reads confirmed Scheduler creator identity and approved image for the exact three executions, and absence of temporary project logging/Scheduler/IAM-role-viewer grants. The public Dashboard 79 snapshot matched the durable status captured by the certification run. The repaired Runtime v2 recovery is certified; Phase 6 remains outside scope.
+
+## D-2026-09-08-046 — Preserve parser acknowledgement history by logical identity
+
+**Decision:** Issue #155 supersedes the absence-based discard rule in
+D-2026-09-01-037. Current-publication absence never erases acknowledgement history.
+Acknowledgements remain browser-local and reversible; deliberate storage retention
+keeps the 500 most recently acknowledged records.
+
+**Identity:** New pending reviews carry a structured exception code and versioned
+logical identity derived from source and stable filing identity, excluding reason
+and other display text. Retained evidence IDs and JSONL bytes remain intact.
+Reprocessing checks retained logical identities before appending or notifying.
+Publication adds the same identity map to complete reviews and compact insights;
+existing count/category/ID consistency validation remains mandatory.
+
+**Migration:** Existing version-1 browser IDs and timestamps are preserved and
+learn logical identities from successful publications. All matching stored aliases
+are removed by Restore to active review. A known changed logical identity is active
+even when an evidence ID is reused. Unclassified legacy records retain their own
+identity rather than being guessed into a shared exception. See
+[the acknowledgement contract](parser-review-acknowledgements.md).
+
+**Verification:** 1,157 canonical Python tests passed locally, with two optional
+integration skips; this includes the generated dashboard's 74 DOM tests and all
+required tracker/dashboard suites. Repository verify.sh passed. Four pre-existing
+AI test failures were reproduced on untouched main: fixed August sample trades
+were scored against wall-clock time. A test-only scoring-clock fixture makes
+those expectations deterministic without changing production scoring.
+
+**Boundary:** This is implementation and regression evidence, not a Runtime v2
+release certificate. No production state, protected artifact, scheduler, alert,
+legacy route, deployment, or live browser acknowledgement was changed.
