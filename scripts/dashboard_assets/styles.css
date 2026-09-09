@@ -77,3 +77,11 @@ html.app-shell {
 @media(max-width:420px) {
   .health-facts {gap:12px 10px}
 }
+
+.review-account-dialog {width:min(480px,calc(100vw - 32px));max-height:90dvh;overflow:auto}
+.review-account-dialog form {display:grid;gap:18px;margin-top:22px}
+.review-account-dialog label {display:grid;gap:8px}
+.review-account-dialog input {width:100%;box-sizing:border-box}
+.review-account-dialog .chart-note {margin:0}
+#review-account-button {max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#review-legacy-import {margin:20px 0;padding:16px;border:1px solid var(--line);border-radius:10px}

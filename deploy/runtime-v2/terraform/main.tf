@@ -743,6 +743,14 @@ resource "google_cloud_run_v2_service" "web" {
         }
       }
       env {
+        name  = "RUNTIME_PERSONAL_REVIEWS_ENABLED"
+        value = tostring(var.personal_reviews_enabled)
+      }
+      env {
+        name  = "RUNTIME_REVIEW_ORIGIN"
+        value = var.personal_review_origin
+      }
+      env {
         name  = "VAULT_ENABLED"
         value = tostring(var.vault_enabled)
       }

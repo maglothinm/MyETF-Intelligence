@@ -6,20 +6,30 @@
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
-## September 9 acknowledgement recurrence investigation
+## September 9 durable personal acknowledgement repair — issue #159
 
-Read-only checks confirmed the September 8 image, served application bytes and
-all four logical review identities remain unchanged. The user's Chrome storage
-retains an older record of all four valid acknowledgements, followed by a deletion
-of the acknowledgement key, notification history and site metadata in a bulk
-clear involving 15 origins. The initiating browser action or cleanup program is
-unidentified. This is distinct from the repaired publication-reconciliation bug.
+The owner confirmed browser clearing is routine and requested separate
+acknowledgements per person. The browser-only recovery workaround is superseded.
+Branch `codex/durable-personal-review-acknowledgements` implements private
+PostgreSQL accounts and review history, authenticated same-origin APIs, explicit
+legacy import, and a sign-in interface. Password recovery preserves identity;
+Restore tombstones prevent old imports from undoing later choices. The four
+recovered original records are ready for owner-account migration with timestamps
+preserved. See [the contract](parser-review-acknowledgements.md).
 
-Recovered acknowledgement data passes isolated replay against today's served
-application: 0 active / 4 acknowledged through refresh and recreated-page reload.
-Restoration in the user's Chrome tab remains pending because that tab is not
-exposed by the available browser control. No production or browser setting was
-changed. See [the investigation](incidents/2026-09-09-browser-acknowledgement-deletion.md).
+This entry records implementation in progress, not a deployed feature. Local
+database and generated-DOM checks are passing; final full checks, canonical CI,
+merge, schema migration, owner recovery, and live acceptance remain required.
+The separate Legislative repair task explicitly transferred the next bounded
+shared release slot to #159 while its larger notification-isolation fix continues
+in isolation. No #159 production configuration, scheduler, account, or database
+mutation has occurred. Return exact release receipts before transferring ownership
+back; preserve the Legislative failed-run/guard state throughout this release.
+
+The [read-only investigation](incidents/2026-09-09-browser-acknowledgement-deletion.md)
+proved the original four acknowledgements existed before Chrome storage deletion.
+The initiating cleanup action is unverified and is no longer needed to establish
+the durable-storage design. September 8 release evidence below remains historical.
 
 ## Production authority
 

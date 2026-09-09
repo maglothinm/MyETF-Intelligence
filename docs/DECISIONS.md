@@ -1138,3 +1138,28 @@ legacy route, deployment, or live browser acknowledgement was changed.
 **Decision:** Release corrected source `19e894ef1262a86d4e54e24a8a34f6b7f230f688` on all six existing Runtime v2 resources and run the changed Dashboard producer under the established writer contract. Require live publication consistency, the exact legacy-Senate/four-record browser sequence, and served-bundle replay before schedule resume.
 
 **Consequence:** Dashboard advanced with exact parent continuity while the other namespace heads and Legislative incident guard remained intact. All original schedules were restored. The rejected publication remains in history and its rollback was a new valid publication, not a head rewind. Issue #155 is accepted live; the separate Senate access/retry incident remains unresolved. This is feature-release evidence, not new Phase 5 or all-pipeline certification. See [the release report](releases/2026-09-08-parser-acknowledgements.md).
+
+## D-2026-09-09-047 — Keep acknowledgements in each person's durable account
+
+**Decision:** The owner explicitly rejected browser-only storage because browser
+data is regularly cleared and selected separate acknowledgements per person.
+Issue #159 supersedes the storage/500-record eviction portions of D-2026-09-08-046.
+Stable logical review identity and retained evidence rules remain unchanged.
+
+**Implementation:** Use additive tables in the existing private PostgreSQL
+database, a stable account UUID, password sign-in, hashed single-use invitations
+and sessions, same-origin protected writes, and no-store personal responses.
+Serialize changes per account with revision checks and idempotent request IDs;
+commit state and audit together before showing success. Restores leave tombstones.
+No publication, browser clear, deployment, or password recovery erases history.
+
+**Migration:** Import legacy browser data only after a signed-in person's explicit
+action. Recover the owner's four verified original acknowledgements into only the
+owner's account, preserving timestamps. Imports never overwrite existing state,
+including Restore tombstones. Personal rows never enter public exports or producer
+snapshots. Public dashboard reading remains available without sign-in.
+
+**Release:** Default the feature off until the additive schema is ready. Use
+existing database networking/credentials without IAM expansion. Coordinate the
+shared release with the Legislative repair owner; local tests are not deployment
+evidence. Owner password setup remains a user action through a private link.

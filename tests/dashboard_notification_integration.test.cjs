@@ -46,6 +46,7 @@ function page(file, options = {}) {
   vm.createContext(context);
   const folder = path.resolve(__dirname, '../scripts/dashboard_assets');
   vm.runInContext(fs.readFileSync(path.join(folder, 'common.js'), 'utf8'), context, {filename: 'common.js'});
+  if (file === 'app.js') vm.runInContext(fs.readFileSync(path.join(folder, 'personal-reviews.js'), 'utf8'), context, {filename: 'personal-reviews.js'});
   vm.runInContext(fs.readFileSync(path.join(folder, file), 'utf8'), context, {filename: file});
   return {nodes, calls, saved, listeners, context};
 }
