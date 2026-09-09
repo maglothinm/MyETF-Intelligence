@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -130,6 +131,21 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("job", choices=("legislative", "executive", "ai", "dashboard"))
     status = commands.add_parser("status", help="Print current heads and latest job conclusions")
     status.add_argument("--pretty", action="store_true")
+    commands.add_parser("review-init-db", help="Create only the additive personal account/review tables")
+    invite = commands.add_parser("review-invite", help="Invite one durable review account without printing a credential")
+    invite.add_argument("--username", required=True)
+    invite.add_argument("--invitation-sha256", required=True)
+    reset = commands.add_parser("review-reset", help="Issue account recovery without replacing its identity or reviews")
+    reset.add_argument("--username", required=True)
+    reset.add_argument("--account-id", required=True)
+    reset.add_argument("--invitation-sha256", required=True)
+    review_status = commands.add_parser("review-status", help="Read one account's durable acknowledgement state")
+    review_status.add_argument("--account-id", required=True)
+    recover = commands.add_parser("review-import", help="Import owner-authorized recovered acknowledgements")
+    recover.add_argument("--account-id", required=True)
+    recover.add_argument("--payload-base64", required=True)
+    disable = commands.add_parser("review-disable", help="Disable an account and revoke its sessions; retain its history")
+    disable.add_argument("--username", required=True)
     ingest = commands.add_parser("import-directory", help="Import one provenance-verified GitHub artifact")
     ingest.add_argument("namespace", choices=tuple(sorted(PROTECTED_NAMESPACES)))
     ingest.add_argument("directory", type=Path)
@@ -177,6 +193,34 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     selected_mode = resolve_runtime_mode() if args.command == "run" else None
     store = PostgresSnapshotStore()
+    if args.command.startswith("review-"):
+        from .review_accounts import PersonalReviewStore, ReviewError
+        from .review_api import publication_identities
+        from .web import DashboardCache
+
+        personal = PersonalReviewStore()
+        if args.command == "review-init-db":
+            personal.initialize_schema()
+            result = {"result": "personal_review_schema_created", "protected_state_changed": False}
+        elif args.command == "review-invite":
+            result = personal.invite(args.username, args.invitation_sha256)
+        elif args.command == "review-reset":
+            result = personal.reset_invitation(args.username, args.account_id, args.invitation_sha256)
+        elif args.command == "review-status":
+            result = personal.read(args.account_id)
+        elif args.command == "review-disable":
+            personal.disable(args.username)
+            result = {"result": "review_account_disabled", "username": args.username, "history_retained": True}
+        else:
+            if len(args.payload_base64) > 350000:
+                raise ReviewError("INVALID_IMPORT", "Recovery data is too large.")
+            payload = json.loads(base64.b64decode(args.payload_base64, validate=True))
+            if not isinstance(payload, dict) or payload.get("version") != 1:
+                raise ReviewError("INVALID_IMPORT", "Recovery data must use the existing version-1 format.")
+            identities = publication_identities(DashboardCache(store).refresh())
+            result = personal.import_legacy(args.account_id, payload.get("acknowledged"), identities, source="owner_recovery")
+        print(json.dumps(result, sort_keys=True))
+        return 0
     if args.command == "init-db":
         store.initialize_schema()
         if args.with_vault:

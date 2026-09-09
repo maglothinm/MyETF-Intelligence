@@ -13,6 +13,7 @@ const axe = require(path.join(toolModules, 'axe-core'));
 const build = process.env.POLITITRACK_TEST_BUILD || path.resolve(__dirname, '../.remediation/ui-preview');
 const builtModel = JSON.parse(fs.readFileSync(path.join(build, 'data/dashboard-insights.json'), 'utf8'));
 const KEY = 'polititrack.notifications.v1';
+const createReviewServer = require('./personal_review_fixture.cjs');
 const copy = value => JSON.parse(JSON.stringify(value));
 const tick = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -139,9 +140,11 @@ async function dashboard(options = {}) {
   window.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new window.Event('close')); };
   window.addEventListener('error', event => errors.push(event.error?.message || event.message));
   window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
-  window.fetch = async value => {
+  const reviewServer=options.reviewServer||createReviewServer(),reviewSession={account:options.signedOut?null:options.reviewAccount||'alice'};
+  window.fetch = async (value, fetchOptions = {}) => {
     const url = new URL(value, window.location.href);
     assert.equal(url.origin, window.location.origin, 'No external browser requests permitted');
+    if(url.pathname.includes('/api/reviews/'))return reviewServer.handle(url.pathname.split('/api/reviews/')[1],fetchOptions,reviewSession,data['dashboard-insights']);
     const match = url.pathname.match(/\/data\/([\w-]+)\.json$/);
     assert.ok(match, 'Only published JSON fixtures may be fetched');
     const name = match[1]; requests.push(name);
@@ -168,7 +171,7 @@ async function dashboard(options = {}) {
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
   }
-  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh,
+  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, reviewServer, reviewSession,
     advanceTime(milliseconds, {wall = true} = {}) { if(wall)now += milliseconds;elapsedNow += milliseconds;intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     setWallTime(value) { now=Date.parse(value);intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     close: () => {
@@ -1196,223 +1199,149 @@ test('parser links survive reload and history; chip and clear filters restore no
   assert.equal(env.window.location.hash, '#records/reviews');
 });
 
-test('manual parser acknowledgement clears local attention, persists, and remains reversible', async t => {
-  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', appSourceTransform: withCachedBriefFormatter}); t.after(env.close);
-  await waitFor(() => env.byId('reviews-body').children.length === 1, 'active parser exception');
-  assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), true);
-  assert.match(env.byId('situation-brief').textContent, /1 manual parsing exception/);
-  env.byId('reviews-body').querySelector('.record-link').click();
-  await waitFor(() => env.byId('selected-filings-title'), 'retained filing detail');
-  const acknowledge = env.doc.querySelector('[data-review-ack]');
-  assert.equal(acknowledge.textContent, 'Acknowledge manual review');
-  acknowledge.click();
-  await waitFor(() => env.byId('attention-exceptions').textContent === '0', 'acknowledged attention count');
-  assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), false);
-  assert.doesNotMatch(env.byId('situation-brief').textContent, /manual parsing exception/);
-  assert.match(env.byId('filings-body').textContent, /Acknowledged on this browser/);
-  assert.equal(env.doc.activeElement.textContent, 'Restore to active review');
-  const stored = env.window.localStorage.getItem('polititrack.manual-review-acknowledgements.v1');
-  assert.match(stored, /review:paper/);
-
-  await env.navigate('#records/reviews?category=manual_exception', () => env.byId('reviews-count-label').textContent.includes('No unacknowledged'));
-  assert.equal(env.doc.querySelector('#panel-reviews .table-wrap').hidden, true);
-  assert.match(env.byId('review-categories').textContent, /0 active/);
-  assert.match(env.byId('review-categories').textContent, /1 acknowledged on this browser/);
-  env.byId('toggle-acknowledged-reviews').click();
-  assert.equal(env.byId('reviews-body').children.length, 1);
-  assert.match(env.byId('reviews-body').textContent, /Acknowledged here/);
-
-  const reload = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', appSourceTransform: withCachedBriefFormatter, beforeScript(window) {
-    window.localStorage.setItem('polititrack.manual-review-acknowledgements.v1', stored);
-  }}); t.after(reload.close);
-  await waitFor(() => reload.byId('attention-exceptions').textContent === '0', 'persisted acknowledgement');
-  reload.byId('toggle-acknowledged-reviews').click();
-  reload.byId('reviews-body').querySelector('.record-link').click();
-  await waitFor(() => reload.doc.querySelector('[data-review-ack]'), 'restore control');
-  reload.doc.querySelector('[data-review-ack]').click();
-  await waitFor(() => reload.byId('attention-exceptions').textContent === '1', 'restored active count');
-  assert.equal(reload.byId('attention-exceptions').classList.contains('attention-active'), true);
-  assert.match(reload.byId('situation-brief').textContent, /1 manual parsing exception/);
-  assert.equal(reload.doc.activeElement.textContent, 'Acknowledge manual review');
-  assert.equal(JSON.parse(reload.window.localStorage.getItem('polititrack.manual-review-acknowledgements.v1')).acknowledged.length, 0);
-  assert.equal(reload.data['pending-reviews'].filter(row => row.category === 'manual_exception' && !row.is_synthetic_test).length, 1);
-  assert.deepEqual(env.errors, []); assert.deepEqual(reload.errors, []);
-});
-
 const REVIEW_KEY = 'polititrack.manual-review-acknowledgements.v1';
-const savedReviews = env => JSON.parse(env.window.localStorage.getItem(REVIEW_KEY)).acknowledged;
+const savedReviews = env => env.reviewServer.state(env.reviewSession.account || 'alice').acknowledged;
 
 function publishReviews(data, rows, stable = true) {
   data['pending-reviews'] = copy(rows);
-  const production = rows.filter(row => !row.is_synthetic_test);
-  const manual = production.filter(row => row.category === 'manual_exception');
-  Object.assign(data['dashboard-insights'].reviews, {
-    manual_exception: manual.length, manual_exception_ids: manual.map(row => row.review_id).sort(),
-    access_required: production.filter(row => row.category === 'access_required').length,
-    other: production.filter(row => row.category === 'other').length, total: production.length,
-    latest: copy(production.slice(0, 8))
-  });
-  if (stable) data['dashboard-insights'].reviews.manual_exception_identities = Object.fromEntries(manual.map(row => [row.review_id, row.logical_review_id]));
+  const production=rows.filter(row=>!row.is_synthetic_test),manual=production.filter(row=>row.category==='manual_exception');
+  Object.assign(data['dashboard-insights'].reviews,{manual_exception:manual.length,manual_exception_ids:manual.map(row=>row.review_id).sort(),
+    access_required:production.filter(row=>row.category==='access_required').length,other:production.filter(row=>row.category==='other').length,
+    total:production.length,latest:copy(production.slice(0,8))});
+  if(stable)data['dashboard-insights'].reviews.manual_exception_identities=Object.fromEntries(manual.map(row=>[row.review_id,row.logical_review_id]));
   else delete data['dashboard-insights'].reviews.manual_exception_identities;
 }
 
-function stableReviewFixture(data, count = 1) {
-  reviewFixture(data, count);
-  // Use orphan review details so each button addresses exactly one exception.
-  const rows = data['pending-reviews'].slice(0, count).map((row, i) => ({...row,
-    filing_available: false, filing_key: '', report_id: 'retained-' + i,
-    logical_review_id: 'review-logical-v1:fixture-' + i, exception_code: 'paper_filing_manual_review'}));
-  publishReviews(data, rows);
+function stableReviewFixture(data,count=1){
+  reviewFixture(data,count);
+  publishReviews(data,data['pending-reviews'].slice(0,count).map((row,i)=>({...row,filing_available:false,filing_key:'',report_id:'retained-'+i,
+    logical_review_id:'review-logical-v1:'+String(i+1).padStart(32,'0'),exception_code:'paper_filing_manual_review'})));
 }
 
-async function acknowledgeReview(env, id) {
-  await env.navigate('#records/reviews?category=manual_exception&review=' + encodeURIComponent(id),
-    () => env.doc.querySelector('[data-review-ack]')?.dataset.reviewAck === id);
-  env.doc.querySelector('[data-review-ack]').click();
-  assert.ok(savedReviews(env).some(record => record.id === id));
+async function selectReview(env,id){
+  await env.navigate('#records/reviews?category=manual_exception',()=>!env.byId('records').hidden);
+  const toggle=env.byId('toggle-acknowledged-reviews');
+  if(toggle?.textContent.startsWith('Show'))toggle.click();
+  await env.navigate('#records/reviews?category=manual_exception&review='+encodeURIComponent(id),()=>env.doc.querySelector('[data-review-ack]')?.dataset.reviewAck===id);
+  return env.doc.querySelector('[data-review-ack]');
+}
+async function acknowledgeReview(env,id){
+  (await selectReview(env,id)).click();
+  await waitFor(()=>savedReviews(env).some(record=>record.id===id)&&!env.doc.querySelector('[data-review-ack]')?.disabled,'server acknowledgement');
+}
+async function signIn(env,name='alice'){
+  env.byId('review-account-button').click();env.byId('review-username').value=name;env.byId('review-password').value='test fixture password only';
+  env.byId('review-account-form').dispatchEvent(new env.window.Event('submit',{bubbles:true,cancelable:true}));
+  await waitFor(()=>env.byId('review-account-button').textContent===name&&!env.byId('review-account-submit').disabled,'sign in');
 }
 
-test('acknowledgement survives zero publication, reload, returning exception, and genuinely new exception', async t => {
-  const env = await dashboard({change: stableReviewFixture}); t.after(env.close);
-  const retained = copy(env.data['pending-reviews']);
-  await acknowledgeReview(env, retained[0].review_id);
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-  assert.equal(savedReviews(env).length, 1);
-  const stored = env.window.localStorage.getItem(REVIEW_KEY);
-  publishReviews(env.data, []);
-  await env.refresh();
-  assert.equal(env.byId('error-banner').hidden, true);
-  assert.equal(env.window.localStorage.getItem(REVIEW_KEY), stored);
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-
-  const reload = await dashboard({change: data => publishReviews(data, []), beforeScript(window) {
-    window.localStorage.setItem(REVIEW_KEY, stored);
-  }}); t.after(reload.close);
-  assert.equal(reload.window.localStorage.getItem(REVIEW_KEY), stored);
-  publishReviews(reload.data, retained);
-  await reload.refresh();
-  assert.equal(reload.byId('attention-exceptions').textContent, '0');
-  assert.match(reload.byId('attention-review-note').textContent, /1 acknowledged here/);
-  assert.doesNotMatch(reload.byId('exceptions-list').textContent, /Manual Parser Exception/);
-
-  publishReviews(reload.data, [...retained, {...retained[0], review_id: 'new-defect',
-    logical_review_id: 'review-logical-v1:new-defect', exception_code: 'unparseable_transaction_table'}]);
-  await reload.refresh();
-  assert.equal(reload.byId('attention-exceptions').textContent, '1');
-  assert.match(reload.byId('attention-review-note').textContent, /1 acknowledged here/);
-  await reload.navigate('#records/reviews?category=manual_exception', () => reload.byId('reviews-body').children.length === 1);
-  assert.match(reload.byId('reviews-body').querySelector('.record-link').href, /new-defect/);
-  assert.deepEqual(env.errors, []); assert.deepEqual(reload.errors, []);
+test('account acknowledgement survives clearing all browser storage, reload and signing in again',async t=>{
+  const server=createReviewServer();
+  const env=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(env.close);
+  const id=env.data['pending-reviews'][0].review_id;
+  await acknowledgeReview(env,id);
+  assert.equal(env.byId('attention-exceptions').textContent,'0');
+  assert.match(env.byId('review-categories').textContent,/1 acknowledged by you/);
+  assert.equal(env.window.localStorage.getItem(REVIEW_KEY),null,'The browser is not the acknowledgement authority');
+  env.window.localStorage.clear();env.window.dispatchEvent(new env.window.StorageEvent('storage',{key:null}));
+  assert.equal(savedReviews(env).length,1);
+  const reload=await dashboard({change:stableReviewFixture,reviewServer:server,signedOut:true,hash:'#records/reviews?category=manual_exception'});t.after(reload.close);
+  assert.equal(reload.byId('attention-exceptions').textContent,'—');
+  assert.match(reload.byId('review-categories').textContent,/Sign in to see your review status/);
+  assert.doesNotMatch(reload.byId('review-categories').textContent,/0 acknowledged/);
+  await signIn(reload);
+  assert.equal(reload.byId('attention-exceptions').textContent,'0');
+  assert.equal(reload.byId('review-password').value,'');
+  assert.deepEqual(env.errors,[]);assert.deepEqual(reload.errors,[]);
 });
 
-test('two acknowledgements survive repeated 2 -> 0 -> 1 -> 2 publication cycles', async t => {
-  const env = await dashboard({change: data => stableReviewFixture(data, 2)}); t.after(env.close);
-  const retained = copy(env.data['pending-reviews']);
-  for (const row of retained) await acknowledgeReview(env, row.review_id);
-  const stored = env.window.localStorage.getItem(REVIEW_KEY);
-  assert.equal(savedReviews(env).length, 2);
-  for (const count of [0, 1, 2, 0, 1, 2, 2]) {
-    publishReviews(env.data, retained.slice(0, count));
-    await env.refresh();
-    assert.equal(env.byId('error-banner').hidden, true);
-    assert.equal(env.byId('attention-exceptions').textContent, '0');
-    assert.match(env.byId('attention-review-note').textContent, new RegExp(count + ' acknowledged here'));
-    assert.equal(env.window.localStorage.getItem(REVIEW_KEY), stored);
-  }
-  await env.navigate('#records/reviews?category=manual_exception');
-  env.byId('toggle-acknowledged-reviews').click();
-  assert.equal(env.byId('reviews-body').children.length, 2);
-  assert.match(env.byId('review-categories').textContent, /0 active/);
-  assert.match(env.byId('review-categories').textContent, /2 acknowledged on this browser/);
+test('two accounts have separate acknowledgement and restore state',async t=>{
+  const server=createReviewServer(),alice=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(alice.close);
+  const id=alice.data['pending-reviews'][0].review_id;await acknowledgeReview(alice,id);
+  const bob=await dashboard({change:stableReviewFixture,reviewServer:server,reviewAccount:'bob'});t.after(bob.close);
+  assert.equal(bob.byId('attention-exceptions').textContent,'1');
+  assert.equal(alice.byId('attention-exceptions').textContent,'0');
+  (await selectReview(alice,id)).click();await waitFor(()=>alice.byId('attention-exceptions').textContent==='1','restore');
+  assert.equal(server.state('alice').acknowledged.length,0);assert.equal(server.state('bob').acknowledged.length,0);
+  assert.equal(alice.doc.activeElement.textContent,'Acknowledge manual review');
 });
 
-test('legacy v1 acknowledgement learns stable identity across evidence-ID and wording changes; restore clears aliases', async t => {
-  let original;
-  const env = await dashboard({change(data) {
-    stableReviewFixture(data); original = copy(data['pending-reviews'][0]);
-    publishReviews(data, [original, {...original, review_id: 'legacy-alias'}]);
-  }, beforeScript(window) {
-    window.localStorage.setItem(REVIEW_KEY, JSON.stringify({version: 1,
-      acknowledged: [original.review_id, 'legacy-alias'].map(id => ({id, acknowledged_at_utc: '2026-08-30T12:00:00Z'}))}));
-  }}); t.after(env.close);
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-  assert.equal(savedReviews(env)[0].id, original.review_id);
-  assert.equal(savedReviews(env)[0].logical_review_id, original.logical_review_id);
-  assert.equal(savedReviews(env)[1].logical_review_id, original.logical_review_id);
-  const revised = {...original, review_id: 'revised-evidence-id', reason: 'Paper-format filing requires manual parser review'};
-  publishReviews(env.data, [revised]);
-  await env.refresh();
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-  assert.match(env.byId('attention-review-note').textContent, /1 acknowledged here/);
-  // The old publication remains compatible after stable-identity migration.
-  publishReviews(env.data, [original], false);
-  await env.refresh();
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-  publishReviews(env.data, [revised]);
-  await env.refresh();
-  await env.navigate('#records/reviews?review=' + revised.review_id,
-    () => env.doc.querySelector('[data-review-ack]'));
-  assert.equal(env.doc.querySelector('[data-review-ack]').textContent, 'Restore to active review');
-  env.doc.querySelector('[data-review-ack]').click();
-  assert.equal(savedReviews(env).length, 0);
-  assert.equal(env.byId('attention-exceptions').textContent, '1');
-  assert.equal(env.data['pending-reviews'].length, 1);
-  assert.match(env.byId('reviews-body').textContent, /Paper-format filing requires manual parser review/);
-  await env.refresh();
-  assert.equal(env.byId('attention-exceptions').textContent, '1');
-  assert.equal(savedReviews(env).length, 0);
-  publishReviews(env.data, [original, {...original, review_id: 'legacy-alias'}]);
-  await env.refresh();
-  assert.equal(env.byId('attention-exceptions').textContent, '2');
-  assert.equal(savedReviews(env).length, 0);
+test('durable acknowledgements survive repeated zero, partial and returning publications',async t=>{
+  const env=await dashboard({change:data=>stableReviewFixture(data,2)});t.after(env.close);
+  const rows=copy(env.data['pending-reviews']);for(const row of rows)await acknowledgeReview(env,row.review_id);
+  const stored=copy(savedReviews(env));
+  for(const count of [0,1,2,0,2]){publishReviews(env.data,rows.slice(0,count));await env.refresh();
+    assert.equal(env.byId('attention-exceptions').textContent,'0');assert.deepEqual(savedReviews(env),stored);}
+  publishReviews(env.data,[...rows,{...rows[0],review_id:'new-defect',logical_review_id:'review-logical-v1:'+'f'.repeat(32)}]);await env.refresh();
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(savedReviews(env).length,2);
 });
 
-test('identity mismatch rejects publication without changing acknowledgements or active counts', async t => {
-  const env = await dashboard({change: stableReviewFixture}); t.after(env.close);
-  const original = copy(env.data['pending-reviews'][0]);
-  await acknowledgeReview(env, original.review_id);
-  const stored = env.window.localStorage.getItem(REVIEW_KEY);
-  env.data['dashboard-insights'].reviews.manual_exception_identities[original.review_id] = 'different-logical-defect';
-  await env.refresh();
-  assert.equal(env.byId('error-banner').hidden, false);
-  assert.match(env.byId('error-banner').textContent, /different publications/);
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-  assert.equal(env.window.localStorage.getItem(REVIEW_KEY), stored);
-  env.data['pending-reviews'][0].logical_review_id = 'different-logical-defect';
-  await env.refresh();
-  assert.equal(env.byId('error-banner').hidden, true);
-  assert.equal(env.byId('attention-exceptions').textContent, '1');
-  assert.equal(env.window.localStorage.getItem(REVIEW_KEY), stored);
+test('wording and evidence aliases retain acknowledgement while a different logical identity remains active',async t=>{
+  const env=await dashboard({change:stableReviewFixture});t.after(env.close);
+  const original=copy(env.data['pending-reviews'][0]);await acknowledgeReview(env,original.review_id);
+  const alias={...original,review_id:'new-evidence-alias',reason:'New display wording'};
+  publishReviews(env.data,[alias]);await env.refresh();assert.equal(env.byId('attention-exceptions').textContent,'0');
+  publishReviews(env.data,[original],false);await env.refresh();assert.equal(env.byId('attention-exceptions').textContent,'0');
+  publishReviews(env.data,[{...alias,logical_review_id:'review-logical-v1:'+'e'.repeat(32)}]);await env.refresh();
+  assert.equal(env.byId('attention-exceptions').textContent,'1');
 });
 
-test('old publications never purge acknowledgements via refresh or cross-tab storage events', async t => {
-  const env = await dashboard({change: reviewFixture}); t.after(env.close);
-  const original = copy(env.data['pending-reviews']);
-  const id = original[0].review_id;
-  await acknowledgeReview(env, id);
-  const stored = env.window.localStorage.getItem(REVIEW_KEY);
-  publishReviews(env.data, [], false);
-  await env.refresh();
-  env.window.dispatchEvent(new env.window.StorageEvent('storage', {key: REVIEW_KEY, newValue: stored}));
-  assert.equal(env.window.localStorage.getItem(REVIEW_KEY), stored);
-  publishReviews(env.data, original, false);
-  await env.refresh();
-  assert.equal(env.byId('attention-exceptions').textContent, '0');
-  assert.match(env.byId('attention-review-note').textContent, /1 acknowledged here/);
+test('saving waits for server commit and a failed save leaves the prior count unchanged',async t=>{
+  const server=createReviewServer(),env=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(env.close);
+  let release;server.beforeSave=()=>new Promise(resolve=>{release=resolve;});server.failSave=true;
+  (await selectReview(env,env.data['pending-reviews'][0].review_id)).click();await waitFor(()=>release,'pending save');
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(env.doc.querySelector('[data-review-ack]').textContent,'Saving…');
+  release();await waitFor(()=>!env.byId('review-save-note').hidden,'save failure');
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(savedReviews(env).length,0);
+  assert.match(env.byId('review-save-note').textContent,/unavailable/);assert.doesNotMatch(env.byId('review-save-note').textContent,/SQL/);
 });
 
-test('acknowledgement retention deliberately evicts the oldest entry only at the 500-record limit', async t => {
-  const env = await dashboard({change: stableReviewFixture, beforeScript(window) {
-    window.localStorage.setItem(REVIEW_KEY, JSON.stringify({version: 1,
-      acknowledged: Array.from({length: 500}, (_, i) => ({id: 'retention-' + i,
-        acknowledged_at_utc: new Date(Date.parse('2026-08-01T00:00:00Z') + i * 1000).toISOString()}))}));
-  }}); t.after(env.close);
-  assert.equal(savedReviews(env).length, 500);
-  assert.equal(savedReviews(env)[0].id, 'retention-0');
-  await acknowledgeReview(env, env.data['pending-reviews'][0].review_id);
-  assert.equal(savedReviews(env).length, 500);
-  assert.ok(!savedReviews(env).some(record => record.id === 'retention-0'));
-  assert.ok(savedReviews(env).some(record => record.id === 'retention-1'));
+test('unavailable personal service does not masquerade as zero acknowledged records',async t=>{
+  const server=createReviewServer();server.failRead=true;
+  const env=await dashboard({change:stableReviewFixture,reviewServer:server,hash:'#records/reviews?category=manual_exception'});t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent,'—');assert.match(env.byId('review-categories').textContent,/Saved review status unavailable/);
+  assert.doesNotMatch(env.byId('review-categories').textContent,/0 acknowledged/);
+  assert.equal(env.byId('error-banner').hidden,true,'Public source data remains independently available');
+});
+
+test('browser migration is explicit and cannot revive a restored account acknowledgement',async t=>{
+  let original;const env=await dashboard({change:data=>{stableReviewFixture(data);original=copy(data['pending-reviews'][0]);},beforeScript(window){
+    window.localStorage.setItem(REVIEW_KEY,JSON.stringify({version:1,acknowledged:[{id:original.review_id,acknowledged_at_utc:'2026-08-29T12:00:00Z'}]}));
+  }});t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(savedReviews(env).length,0);
+  env.byId('review-account-button').click();assert.match(env.byId('review-legacy-note').textContent,/only if they belong to you/);
+  env.byId('review-import-button').click();await waitFor(()=>savedReviews(env).length===1,'explicit import');
+  assert.equal(savedReviews(env)[0].acknowledged_at_utc,'2026-08-29T12:00:00Z');
+  env.byId('review-account-dialog').close();(await selectReview(env,original.review_id)).click();await waitFor(()=>savedReviews(env).length===0,'restore imported review');
+  env.byId('review-import-button').click();await waitFor(()=>!env.byId('review-import-button').disabled,'repeat import');
+  assert.equal(savedReviews(env).length,0);assert.equal(env.byId('attention-exceptions').textContent,'1');
+});
+
+test('a different account cookie in a stale tab cannot receive the previous account action',async t=>{
+  const env=await dashboard({change:stableReviewFixture});t.after(env.close);
+  const button=await selectReview(env,env.data['pending-reviews'][0].review_id);env.reviewSession.account='bob';button.click();
+  await waitFor(()=>!env.byId('review-save-note').hidden,'account change message');
+  assert.match(env.byId('review-save-note').textContent,/account changed/);assert.equal(env.byId('review-account-button').textContent,'bob');
+  assert.equal(env.reviewServer.state('alice').acknowledged.length,0);assert.equal(env.reviewServer.state('bob').acknowledged.length,0);
+});
+
+test('server acknowledgement history is not evicted by the old 500 browser-record limit',async t=>{
+  const server=createReviewServer();let rows;
+  const env=await dashboard({reviewServer:server,change:data=>{stableReviewFixture(data,501);rows=data['pending-reviews'];
+    for(const row of rows)server.people.get('alice').rows.set(row.logical_review_id,{id:row.review_id,logical_review_id:row.logical_review_id,acknowledged_at_utc:'2026-08-29T12:00:00Z'});
+  }});t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent,'0');assert.equal(savedReviews(env).length,501);
+});
+
+test('activation token leaves the URL and is sent only in the account setup request',async t=>{
+  const token='fixture-activation-token-only',env=await dashboard({signedOut:true,hash:'#review-account?activate='+token});t.after(env.close);
+  await waitFor(()=>env.byId('review-account-dialog').open,'activation form');
+  assert.ok(!env.window.location.href.includes(token));assert.equal(env.byId('review-username-field').hidden,true);
+  assert.equal(env.byId('review-password').autocomplete,'new-password');
+  env.byId('review-password').value='test fixture new password';env.byId('review-account-form').dispatchEvent(new env.window.Event('submit',{bubbles:true,cancelable:true}));
+  await waitFor(()=>env.byId('review-account-button').textContent==='alice','activation');
+  assert.equal(env.reviewServer.requests.find(r=>r.route==='activate').body.invitation,token);
+  assert.equal(env.window.localStorage.getItem(REVIEW_KEY),null);
 });
 
 test('complete parser collection is paginated beyond the compact eight-row overview', async t => {

@@ -6,6 +6,31 @@
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
+## September 9 durable personal acknowledgement repair — issue #159
+
+The owner confirmed browser clearing is routine and requested separate
+acknowledgements per person. The browser-only recovery workaround is superseded.
+Branch `codex/durable-personal-review-acknowledgements` implements private
+PostgreSQL accounts and review history, authenticated same-origin APIs, explicit
+legacy import, and a sign-in interface. Password recovery preserves identity;
+Restore tombstones prevent old imports from undoing later choices. The four
+recovered original records are ready for owner-account migration with timestamps
+preserved. See [the contract](parser-review-acknowledgements.md).
+
+This entry records implementation in progress, not a deployed feature. Local
+database and generated-DOM checks are passing; final full checks, canonical CI,
+merge, schema migration, owner recovery, and live acceptance remain required.
+The separate Legislative repair task explicitly transferred the next bounded
+shared release slot to #159 while its larger notification-isolation fix continues
+in isolation. No #159 production configuration, scheduler, account, or database
+mutation has occurred. Return exact release receipts before transferring ownership
+back; preserve the Legislative failed-run/guard state throughout this release.
+
+The [read-only investigation](incidents/2026-09-09-browser-acknowledgement-deletion.md)
+proved the original four acknowledgements existed before Chrome storage deletion.
+The initiating cleanup action is unverified and is no longer needed to establish
+the durable-storage design. September 8 release evidence below remains historical.
+
 ## Production authority
 
 **September 8 accepted release:** Issue #155 is live after PR #156 and corrective PR #157. Runtime source `19e894ef1262a86d4e54e24a8a34f6b7f230f688`, Cloud Build `cea78696-8521-45d4-98b8-bdea9e45fc09`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6a458b64fc9b3517f460b49eb82cf7e1e0d5d200a051ee907031c2e1b737d300`. All six resources use that digest; producer configurations persist the corrected source. Dashboard `polititrack-dashboard-68f7j` committed generation 250 and passed real isolated-browser acceptance before schedules resumed. [Full release evidence](releases/2026-09-08-parser-acknowledgements.md).
