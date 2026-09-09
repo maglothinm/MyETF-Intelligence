@@ -2,6 +2,16 @@
 
 Updated **2026-09-09 — Legislative recovery implementation**. Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
+## Additional active owner request — Operations Run now controls
+
+Issue #164 is implemented on `codex/operations-run-now`, pending exact-head CI and
+a coordinated release after Legislative recovery acceptance. The owner can start
+the three existing jobs using the existing signed-in account; public/ordinary
+review accounts cannot dispatch. Additive receipts survive refresh and browser
+clearing. Production images, schedules, IAM and schemas have not changed for #164.
+See [the implementation and activation contract](operations-manual-runs.md).
+Preserve the owner's user-completed sign-in; never reset their password or session.
+
 ## Active owner request — Legislative recovery
 
 The owner requires a permanent fix: failures, including ambiguous old alert

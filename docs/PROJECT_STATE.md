@@ -28,6 +28,16 @@ with exact parent continuity. No protected state or personal history was deleted
 The separate Legislative repair may resume release ownership after receiving this
 receipt. The September 8 records below are historical, not current image evidence.
 
+## Operations manual controls in preparation — issue #164
+
+The owner requested Run now buttons in the Legislative, Executive and AI tiles.
+Implementation adds owner-authorized dispatch of the existing jobs, durable
+request receipts and truthful live completion status. The feature is default off.
+Local full regression: 1,208 passed, 36 skipped; final focused checks and exact-head
+CI remain required. No production control or permission is enabled by this entry.
+The Legislative recovery task retains production release ownership.
+[Manual run contract](operations-manual-runs.md).
+
 ## Production authority
 
 **September 9 recovery in progress:** Official Senate access succeeds from the production network. The permanent repair separates collection from per-record delivery for Legislative, Executive and AI. Failed or ambiguous old attempts cannot latch later collection; individual uncertain alerts retain duplicate protection. The original Legislative failed row and generation 232 snapshot remain intact. [Recovery diagnosis and contract](incidents/2026-09-09-legislative-recovery.md). Deployment and a natural scheduled successor remain required; no live recovery is claimed here. Coordinate production ownership with issue #159 and preserve its merged source and data.

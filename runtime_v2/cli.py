@@ -133,6 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", help="Print current heads and latest job conclusions")
     status.add_argument("--pretty", action="store_true")
     commands.add_parser("review-init-db", help="Create only the additive personal account/review tables")
+    commands.add_parser("operations-init-db", help="Create only additive manual run request receipts")
     invite = commands.add_parser("review-invite", help="Invite one durable review account without printing a credential")
     invite.add_argument("--username", required=True)
     invite.add_argument("--invitation-sha256", required=True)
@@ -194,6 +195,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     selected_mode = resolve_runtime_mode() if args.command == "run" else None
     store = PostgresSnapshotStore()
+    if args.command == "operations-init-db":
+        from .operations import OperationStore
+        OperationStore().initialize_schema()
+        print(json.dumps({"result": "operation_schema_created", "protected_state_changed": False}))
+        return 0
     if args.command.startswith("review-"):
         from .review_accounts import PersonalReviewStore, ReviewError
         from .review_api import publication_identities

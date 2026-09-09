@@ -763,7 +763,7 @@ STYLES_CSS = (ASSET_DIR / "styles.css").read_text(encoding="utf-8")
 WALLBOARD_HTML = (ASSET_DIR / "wallboard.html").read_text(encoding="utf-8")
 WALLBOARD_CSS = (ASSET_DIR / "wallboard.css").read_text(encoding="utf-8")
 _SHARED_JS = "\n".join((ASSET_DIR / name).read_text(encoding="utf-8") for name in ("notifications.js", "common.js"))
-APP_JS = _SHARED_JS + "\n" + "\n".join((ASSET_DIR / name).read_text(encoding="utf-8") for name in ("personal-reviews.js", "app.js"))
+APP_JS = _SHARED_JS + "\n" + "\n".join((ASSET_DIR / name).read_text(encoding="utf-8") for name in ("personal-reviews.js", "operations.js", "app.js"))
 WALLBOARD_JS = _SHARED_JS + "\n" + (ASSET_DIR / "wallboard.js").read_text(encoding="utf-8")
 
 
