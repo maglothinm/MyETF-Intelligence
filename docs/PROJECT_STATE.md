@@ -1,32 +1,55 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-09T12:52:47.404970+00:00 — personal reviews accepted; Legislative recovery pending.
+**Current as of:** 2026-09-09T13:41:35.684561+00:00 — Legislative recovery accepted; personal review data preserved.
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
+## September 9 permanent Legislative recovery — current release
+
+Runtime source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301`, build `9ad52cb8-5875-4e08-a86c-ea90e512247c`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1` is verified on
+all six existing resources. Web revision `polititrack-web-00039-ps5` serves 100% traffic.
+PRs #161/#162 passed final exact-head CI, including real PostgreSQL failure,
+restart and concurrency scenarios, and were accepted through the live production path.
+
+Legislative completed House 894 / Senate 85, passed complete-source validation
+and appended generation 233 to the preserved generation 232 parent. Executive,
+AI and Dashboard also published successfully. Natural scheduled Legislative
+execution `polititrack-legislative-nmt57` succeeded afterward. The live dashboard reports success.
+All four original schedules are ENABLED and Filing Vault remains PAUSED.
+
+The original Legislative failed run, its side-effect flag and all pre-release snapshot metadata
+remain unchanged. Current snapshot payloads/manifests verify. Personal account
+identities and eight retained acknowledgement rows match their pre-release hashes.
+No rebaseline, rewind, IAM expansion or unrelated feature activation occurred.
+[Exact release evidence](releases/2026-09-09-legislative-recovery.md).
+
+Collection is independent of per-record notification uncertainty. Pushover
+credentials remain absent; successful external alert delivery is not claimed.
+Only outbox-compatible images may follow this release. Prior certificates and
+the following release records remain historical evidence.
+
 ## September 9 durable personal acknowledgement release — issue #159
 
 PR #160 is merged and accepted live. Runtime source `c0eaeb430aa7f665283f9ee560cf72fbe9c257cf`,
-build `c84e6510-9825-4c84-b512-cf82d18ed627`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:5428e1333ceff18b7c2e1f7fd46f3e82652b6c2cb7b94d1fbee20b099fa19ec6` is on all six existing
-resources. Web revision `polititrack-web-r159-persist-0909` serves the accepted dashboard.
+build `c84e6510-9825-4c84-b512-cf82d18ed627`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:5428e1333ceff18b7c2e1f7fd46f3e82652b6c2cb7b94d1fbee20b099fa19ec6` was accepted on all six existing
+resources. Its web revision was `polititrack-web-r159-persist-0909`; the current release is recorded above.
 See [the exact release evidence](releases/2026-09-09-personal-review-acknowledgements.md).
 
 Each person's acknowledgement history is stored in the existing private
 PostgreSQL database. Clearing browser data requires signing in again. The owner's
 four original acknowledgements have been recovered with timestamps preserved;
-the owner must choose their own password using the privately delivered setup link.
+password setup was pending at that checkpoint. The owner has since completed sign-in; this recovery did not change credentials or sessions.
 Two independent test accounts passed live cookie clearing, renewed sign-in,
 Restore/import protections and a fresh web revision, then were disabled.
 
-All original producer schedules are ENABLED and Filing Vault remains PAUSED.
-Legislative generation 232 and its original failed-run/guard state are unchanged.
+At the #159 acceptance checkpoint, all original producer schedules were ENABLED and Filing Vault remained PAUSED.
+Legislative generation 232 and its original failed-run/guard state were unchanged.
 Executive and AI heads were unchanged through the fenced cutover; Dashboard
 advanced 332 -> 333
 with exact parent continuity. No protected state or personal history was deleted.
-The separate Legislative repair may resume release ownership after receiving this
-receipt. The September 8 records below are historical, not current image evidence.
+That receipt returned ownership to the Legislative repair, now accepted above. The September 8 records below are historical, not current image evidence.
 
 ## Operations manual controls in preparation — issue #164
 
@@ -35,18 +58,18 @@ Implementation adds owner-authorized dispatch of the existing jobs, durable
 request receipts and truthful live completion status. The feature is default off.
 Local full regression: 1,208 passed, 36 skipped; final focused checks and exact-head
 CI remain required. No production control or permission is enabled by this entry.
-The Legislative recovery task retains production release ownership.
+The Legislative recovery is now accepted. Manual-control activation requires the explicit handoff and a fresh production baseline.
 [Manual run contract](operations-manual-runs.md).
 
 ## Production authority
 
-**September 9 recovery in progress:** Official Senate access succeeds from the production network. The permanent repair separates collection from per-record delivery for Legislative, Executive and AI. Failed or ambiguous old attempts cannot latch later collection; individual uncertain alerts retain duplicate protection. The original Legislative failed row and generation 232 snapshot remain intact. [Recovery diagnosis and contract](incidents/2026-09-09-legislative-recovery.md). Deployment and a natural scheduled successor remain required; no live recovery is claimed here. Coordinate production ownership with issue #159 and preserve its merged source and data.
+**September 9 recovery accepted:** The current production image and evidence are recorded above and in [the recovery release](releases/2026-09-09-legislative-recovery.md). Runtime v2 remains the sole production authority. Original failure evidence is retained; per-record delivery uncertainty no longer obstructs collection.
 
-**September 8 accepted release:** Issue #155 is live after PR #156 and corrective PR #157. Runtime source `19e894ef1262a86d4e54e24a8a34f6b7f230f688`, Cloud Build `cea78696-8521-45d4-98b8-bdea9e45fc09`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6a458b64fc9b3517f460b49eb82cf7e1e0d5d200a051ee907031c2e1b737d300`. All six resources use that digest; producer configurations persist the corrected source. Dashboard `polititrack-dashboard-68f7j` committed generation 250 and passed real isolated-browser acceptance before schedules resumed. [Full release evidence](releases/2026-09-08-parser-acknowledgements.md).
+**September 8 accepted release:** Issue #155 is live after PR #156 and corrective PR #157. Runtime source `19e894ef1262a86d4e54e24a8a34f6b7f230f688`, Cloud Build `cea78696-8521-45d4-98b8-bdea9e45fc09`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6a458b64fc9b3517f460b49eb82cf7e1e0d5d200a051ee907031c2e1b737d300`. At that historical acceptance, all six resources used that digest and producer configurations persisted the corrected source. Dashboard `polititrack-dashboard-68f7j` committed generation 250 and passed real isolated-browser acceptance before schedules resumed. [Full release evidence](releases/2026-09-08-parser-acknowledgements.md).
 
 The corrected inventory has four manual exceptions: two original Senate and two retained House paper PTRs. Seeding only the real Senate legacy IDs left Senate acknowledged and House active; acknowledge-all, three real refreshes, reload and Restore passed. The served bundle also passed 74 isolated publication-replay tests. The user's browser storage was not changed.
 
-Legislative remains blocked at generation 232 after a pre-existing Senate HTTP 403 run at 10:41 UTC. Its guard and history remain intact; [incident evidence](incidents/2026-09-08-legislative-retry-guard.md). All four original producer schedules are enabled; Vault remains paused, SQL private-only, legacy producers disabled. PR #154 remains excluded. Historical certificates below are not certification of the new image or current all-pipeline health.
+At the September 8 checkpoint, Legislative was blocked at generation 232 after the Senate HTTP 403 run at 10:41 UTC. Its original evidence remains intact; the September 9 release above restores collection; [incident evidence](incidents/2026-09-08-legislative-retry-guard.md). All four original producer schedules are enabled; Vault remains paused, SQL private-only, legacy producers disabled. PR #154 remains excluded. Historical certificates below are not certification of the new image or current all-pipeline health.
 
 Runtime v2 is the production authority. The earlier shadow/blocked description in this file was stale. Phase 5 completed in canonical run `34005780266`, attempt 1, at `9f4303623cf21c3dff434fbb7240c07e6d255174`. Artifact `9981508660` has archive SHA-256 `c5094a1677712e413425e118f29dd0fc1f870c5bc712879fbc2223f2b9c2f7d0`. Its `phase5-complete.json` independently matches checksum `0006ed72a2a42308c21084bee236c45f4e9e17df4803c244caf03a520028dcb7` and result `phase5_complete`.
 

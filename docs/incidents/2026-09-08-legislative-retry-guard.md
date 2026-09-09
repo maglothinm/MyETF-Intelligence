@@ -1,5 +1,12 @@
 # Legislative retry guard after Senate access failure
 
+**Resolved on September 9:** The permanent collection/outbox release passed
+controlled and natural scheduled Legislative acceptance, preserving the exact
+failed row, side-effect flag and generation 232 parent. See the
+[accepted recovery](../releases/2026-09-09-legislative-recovery.md) and
+[new contract](2026-09-09-legislative-recovery.md). The account below, including
+its next-action guidance, is the retained September 8 incident record.
+
 Observed during the 2026-09-08 release of [issue #155](https://github.com/maglothinm/MyETF-Intelligence/issues/155), in canonical repository ID **1349678672**. Related source-access incident: [issue #8](https://github.com/maglothinm/MyETF-Intelligence/issues/8).
 
 ## Verified sequence

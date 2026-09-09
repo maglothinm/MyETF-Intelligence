@@ -1,0 +1,570 @@
+{
+  "result": "legislative_recovery_accepted",
+  "at": "2026-09-09T13:41:35.684561+00:00",
+  "database_observed_at": "2026-09-09T13:40:08.823666+00:00",
+  "repository": "maglothinm/MyETF-Intelligence",
+  "repository_id": 1349678672,
+  "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+  "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1",
+  "build_id": "9ad52cb8-5875-4e08-a86c-ea90e512247c",
+  "pull_requests": [
+    161,
+    162
+  ],
+  "tested_head": "8d309f75acfa776f90fc1d8d5bc3c58ed05e6bce",
+  "tested_tree": "d457f4480818f913fbe5c4714e6c78e667f15ea4",
+  "ci": {
+    "runtime": {
+      "run_id": 34353185272,
+      "job_id": 102471231222,
+      "passed": 506,
+      "skipped": 1,
+      "postgresql_integration": true
+    },
+    "investor_edge": {
+      "run_id": 34353185434,
+      "job_id": 102471232418,
+      "passed": 712
+    },
+    "local": {
+      "passed": 1195,
+      "skipped": 31
+    }
+  },
+  "baseline_heads": [
+    {
+      "generation": 196,
+      "namespace": "ai",
+      "snapshot_id": "c2abf0a0-2747-4a0c-932a-e641932e58b5",
+      "snapshot_sha256": "651f332c8375ddcf01686ae59e2cd075b23e0b4d4238c88e7e0b1f4343ccd908",
+      "updated_at": "2026-09-09T12:19:17.799598+00:00"
+    },
+    {
+      "generation": 333,
+      "namespace": "dashboard",
+      "snapshot_id": "69304db1-8b0f-40d2-a553-f3f5f4c620f7",
+      "snapshot_sha256": "3dc7853a8e616d008891ba9f26e8d22ad3391ae2a4ceec0302562885d6ce4c60",
+      "updated_at": "2026-09-09T12:47:55.060935+00:00"
+    },
+    {
+      "generation": 169,
+      "namespace": "executive",
+      "snapshot_id": "4737e320-469c-446e-9fc5-c2bd0650e4ff",
+      "snapshot_sha256": "a3c5f584b77000c07b4dbcd427d0d22e1203e5c43cb0848115290870868df752",
+      "updated_at": "2026-09-09T12:14:43.09762+00:00"
+    },
+    {
+      "generation": 232,
+      "namespace": "legislative",
+      "snapshot_id": "13d95d99-94bc-4e12-be9c-e08f0b9254b5",
+      "snapshot_sha256": "7fda615a19c31165fefa91b2501ffab8f2c677325aeffdc35b7ff444c2d609df",
+      "updated_at": "2026-09-08T10:25:04.521231+00:00"
+    }
+  ],
+  "controlled_heads": [
+    {
+      "generation": 197,
+      "namespace": "ai",
+      "snapshot_id": "1efd1f15-ac09-4dc4-9e3c-a22a5586ac85",
+      "snapshot_sha256": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+      "updated_at": "2026-09-09T13:24:00.130438+00:00"
+    },
+    {
+      "generation": 334,
+      "namespace": "dashboard",
+      "snapshot_id": "4674f3d7-4284-436d-b53d-283269db8928",
+      "snapshot_sha256": "e420bd9155279c155321fb8d1d64dd77e923d3a91edaafb214214f0714ed7f38",
+      "updated_at": "2026-09-09T13:26:54.36426+00:00"
+    },
+    {
+      "generation": 170,
+      "namespace": "executive",
+      "snapshot_id": "c273a121-de86-4a5a-8979-9e89107e5bf2",
+      "snapshot_sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+      "updated_at": "2026-09-09T13:17:24.022153+00:00"
+    },
+    {
+      "generation": 233,
+      "namespace": "legislative",
+      "snapshot_id": "009da653-dbc3-4a37-8322-638773267487",
+      "snapshot_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018",
+      "updated_at": "2026-09-09T13:19:04.55477+00:00"
+    }
+  ],
+  "accepted_heads": [
+    {
+      "generation": 197,
+      "namespace": "ai",
+      "snapshot_id": "1efd1f15-ac09-4dc4-9e3c-a22a5586ac85",
+      "snapshot_sha256": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+      "updated_at": "2026-09-09T13:24:00.130438+00:00"
+    },
+    {
+      "generation": 335,
+      "namespace": "dashboard",
+      "snapshot_id": "3550ba2f-31bc-4ad5-8bc7-c7864c3a104f",
+      "snapshot_sha256": "fdc932fce2ff7003b30e4ff3dddf996fd3bc0cc9109324d0e35653f4627494b0",
+      "updated_at": "2026-09-09T13:36:01.680896+00:00"
+    },
+    {
+      "generation": 170,
+      "namespace": "executive",
+      "snapshot_id": "c273a121-de86-4a5a-8979-9e89107e5bf2",
+      "snapshot_sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+      "updated_at": "2026-09-09T13:17:24.022153+00:00"
+    },
+    {
+      "generation": 234,
+      "namespace": "legislative",
+      "snapshot_id": "ec829fe8-8d54-4b78-ba80-2aa82fe9f60f",
+      "snapshot_sha256": "1a3ed0592ccecc68a4e2db785fb01f6d2a00eb969c4a13bc4e79ae792db77b09",
+      "updated_at": "2026-09-09T13:40:07.320248+00:00"
+    }
+  ],
+  "head_verification": [
+    {
+      "file_count": 961,
+      "manifest_sha256": "d0bc2f53d7dcb178f38f866cbb707a3d8d5bf799c5c64023cb1e50a41cd40daa",
+      "namespace": "ai",
+      "parent_sha256": "651f332c8375ddcf01686ae59e2cd075b23e0b4d4238c88e7e0b1f4343ccd908",
+      "payload_verified": true,
+      "sha256": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+      "size_bytes": 3447596,
+      "snapshot_id": "1efd1f15-ac09-4dc4-9e3c-a22a5586ac85",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "inputs": {
+          "executive": {
+            "generation": 170,
+            "snapshot_sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e"
+          },
+          "legislative": {
+            "generation": 233,
+            "snapshot_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018"
+          }
+        },
+        "job": "ai",
+        "last_success_utc": "2026-09-09T13:23:57Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "issue-8-recovery"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301"
+    },
+    {
+      "file_count": 251,
+      "manifest_sha256": "ea3c543ba813cde2ff9b63df7754a5f3556da5a0ce1ccfcd98a5a1698a3e8cf8",
+      "namespace": "dashboard",
+      "parent_sha256": "e420bd9155279c155321fb8d1d64dd77e923d3a91edaafb214214f0714ed7f38",
+      "payload_verified": true,
+      "sha256": "fdc932fce2ff7003b30e4ff3dddf996fd3bc0cc9109324d0e35653f4627494b0",
+      "size_bytes": 9203429,
+      "snapshot_id": "3550ba2f-31bc-4ad5-8bc7-c7864c3a104f",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "inputs": {
+          "ai": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+          "executive": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+          "legislative": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018"
+        },
+        "job": "dashboard",
+        "mode": "production",
+        "trigger_source": "external_scheduler"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301"
+    },
+    {
+      "file_count": 4,
+      "manifest_sha256": "90b1b2059634f740a1e5af8cbbfe9786e538749404ede143bb8674c7f32f6497",
+      "namespace": "executive",
+      "parent_sha256": "a3c5f584b77000c07b4dbcd427d0d22e1203e5c43cb0848115290870868df752",
+      "payload_verified": true,
+      "sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+      "size_bytes": 521159,
+      "snapshot_id": "c273a121-de86-4a5a-8979-9e89107e5bf2",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "job": "executive",
+        "last_success_utc": "2026-09-09T13:17:23Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "issue-8-recovery"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301"
+    },
+    {
+      "file_count": 8,
+      "manifest_sha256": "d89f5c39718ee8ab34f9921d68b1af2f8668c9c687f8b076e04e5fb98ec82671",
+      "namespace": "legislative",
+      "parent_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018",
+      "payload_verified": true,
+      "sha256": "1a3ed0592ccecc68a4e2db785fb01f6d2a00eb969c4a13bc4e79ae792db77b09",
+      "size_bytes": 1435202,
+      "snapshot_id": "ec829fe8-8d54-4b78-ba80-2aa82fe9f60f",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "job": "legislative",
+        "last_success_utc": "2026-09-09T13:40:06Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "external_scheduler"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301"
+    }
+  ],
+  "preserved_snapshot_history": {
+    "ai": {
+      "count": 196,
+      "metadata_sha256": "048fd06e6cec0d159249d56c80ca667d7eadc241e1d986f025fbb29431493066",
+      "through_generation": 196
+    },
+    "dashboard": {
+      "count": 333,
+      "metadata_sha256": "e382eacaf534d2b52d6ba1e155ef6ca8aa843182b1e5bf294098034b90081eea",
+      "through_generation": 333
+    },
+    "executive": {
+      "count": 169,
+      "metadata_sha256": "8480e668b5ea94082099ac4462684f84b0485a44fa5f2c3df3a9ae500da1a721",
+      "through_generation": 169
+    },
+    "legislative": {
+      "count": 232,
+      "metadata_sha256": "5da45fdacf31219b61f76f753bf1e5db46bd65ff384d5481b8eae098b592a845",
+      "through_generation": 232
+    }
+  },
+  "original_failed_run": {
+    "error_code": "CalledProcessError",
+    "finished_at": "2026-09-08T10:41:24.714055+00:00",
+    "job_name": "legislative",
+    "namespace": "legislative",
+    "run_id": "065d5330-abca-4eda-b683-64e85f2dcbe7",
+    "runtime_mode": "production",
+    "runtime_mode_evidence": {
+      "kind": "runner_explicit",
+      "mode": "production",
+      "schema_version": 1
+    },
+    "side_effects_possible": true,
+    "snapshot_id": null,
+    "snapshot_sha256": null,
+    "source_revision": "72c1ca8c74a7af4b11f2e677c7a296d5e2358578",
+    "started_at": "2026-09-08T10:37:33.311733+00:00",
+    "status": "failure",
+    "trigger_source": "external_scheduler"
+  },
+  "original_parent_payload_verified": true,
+  "pinned_no_delivery_receipt_sha256": "778865518665e1447907b2d51b643b80cc89afed00c955a4c2f30f3e44583fb0",
+  "controlled_executions": {
+    "legislative": {
+      "execution": "polititrack-legislative-6whgv",
+      "completed_at": "2026-09-09T13:19:09.002926Z"
+    },
+    "executive": {
+      "execution": "polititrack-executive-gw6n4",
+      "completed_at": "2026-09-09T13:17:27.471410Z"
+    },
+    "ai": {
+      "execution": "polititrack-ai-s5s7p",
+      "completed_at": "2026-09-09T13:24:05.345843Z"
+    },
+    "dashboard": {
+      "execution": "polititrack-dashboard-gl989",
+      "completed_at": "2026-09-09T13:26:59.564956Z"
+    }
+  },
+  "release_runs": [
+    {
+      "error_code": "",
+      "finished_at": "2026-09-09T13:19:04.55477+00:00",
+      "job_name": "legislative",
+      "namespace": "legislative",
+      "parent_sha256": "7fda615a19c31165fefa91b2501ffab8f2c677325aeffdc35b7ff444c2d609df",
+      "run_id": "acc82faa-f24b-4c12-9246-299908568826",
+      "runtime_mode": "production",
+      "runtime_mode_evidence": {
+        "kind": "snapshot_provenance",
+        "mode": "production",
+        "schema_version": 1,
+        "snapshot_id": "009da653-dbc3-4a37-8322-638773267487",
+        "snapshot_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018"
+      },
+      "side_effects_possible": false,
+      "snapshot_generation": 233,
+      "snapshot_id": "009da653-dbc3-4a37-8322-638773267487",
+      "snapshot_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "job": "legislative",
+        "last_success_utc": "2026-09-09T13:19:02Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "issue-8-recovery"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+      "started_at": "2026-09-09T13:15:50.533878+00:00",
+      "status": "success",
+      "trigger_source": "issue-8-recovery"
+    },
+    {
+      "error_code": "",
+      "finished_at": "2026-09-09T13:17:24.022153+00:00",
+      "job_name": "executive",
+      "namespace": "executive",
+      "parent_sha256": "a3c5f584b77000c07b4dbcd427d0d22e1203e5c43cb0848115290870868df752",
+      "run_id": "ccc7fc36-83d7-4d75-875f-8acb06632fca",
+      "runtime_mode": "production",
+      "runtime_mode_evidence": {
+        "kind": "snapshot_provenance",
+        "mode": "production",
+        "schema_version": 1,
+        "snapshot_id": "c273a121-de86-4a5a-8979-9e89107e5bf2",
+        "snapshot_sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e"
+      },
+      "side_effects_possible": false,
+      "snapshot_generation": 170,
+      "snapshot_id": "c273a121-de86-4a5a-8979-9e89107e5bf2",
+      "snapshot_sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "job": "executive",
+        "last_success_utc": "2026-09-09T13:17:23Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "issue-8-recovery"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+      "started_at": "2026-09-09T13:15:54.530695+00:00",
+      "status": "success",
+      "trigger_source": "issue-8-recovery"
+    },
+    {
+      "error_code": "",
+      "finished_at": "2026-09-09T13:24:00.130438+00:00",
+      "job_name": "ai",
+      "namespace": "ai",
+      "parent_sha256": "651f332c8375ddcf01686ae59e2cd075b23e0b4d4238c88e7e0b1f4343ccd908",
+      "run_id": "c17e92b8-da2d-49c2-828e-b9652c5b8da1",
+      "runtime_mode": "production",
+      "runtime_mode_evidence": {
+        "kind": "snapshot_provenance",
+        "mode": "production",
+        "schema_version": 1,
+        "snapshot_id": "1efd1f15-ac09-4dc4-9e3c-a22a5586ac85",
+        "snapshot_sha256": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5"
+      },
+      "side_effects_possible": false,
+      "snapshot_generation": 197,
+      "snapshot_id": "1efd1f15-ac09-4dc4-9e3c-a22a5586ac85",
+      "snapshot_sha256": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "inputs": {
+          "executive": {
+            "generation": 170,
+            "snapshot_sha256": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e"
+          },
+          "legislative": {
+            "generation": 233,
+            "snapshot_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018"
+          }
+        },
+        "job": "ai",
+        "last_success_utc": "2026-09-09T13:23:57Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "issue-8-recovery"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+      "started_at": "2026-09-09T13:21:51.74584+00:00",
+      "status": "success",
+      "trigger_source": "issue-8-recovery"
+    },
+    {
+      "error_code": "",
+      "finished_at": "2026-09-09T13:26:54.36426+00:00",
+      "job_name": "dashboard",
+      "namespace": "dashboard",
+      "parent_sha256": "3dc7853a8e616d008891ba9f26e8d22ad3391ae2a4ceec0302562885d6ce4c60",
+      "run_id": "6ce2ee05-9cf0-48e7-a0ca-eced364b8222",
+      "runtime_mode": "production",
+      "runtime_mode_evidence": {
+        "kind": "snapshot_provenance",
+        "mode": "production",
+        "schema_version": 1,
+        "snapshot_id": "4674f3d7-4284-436d-b53d-283269db8928",
+        "snapshot_sha256": "e420bd9155279c155321fb8d1d64dd77e923d3a91edaafb214214f0714ed7f38"
+      },
+      "side_effects_possible": false,
+      "snapshot_generation": 334,
+      "snapshot_id": "4674f3d7-4284-436d-b53d-283269db8928",
+      "snapshot_sha256": "e420bd9155279c155321fb8d1d64dd77e923d3a91edaafb214214f0714ed7f38",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "inputs": {
+          "ai": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+          "executive": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+          "legislative": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018"
+        },
+        "job": "dashboard",
+        "mode": "production",
+        "trigger_source": "issue-8-recovery"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+      "started_at": "2026-09-09T13:26:26.175031+00:00",
+      "status": "success",
+      "trigger_source": "issue-8-recovery"
+    },
+    {
+      "error_code": "",
+      "finished_at": "2026-09-09T13:36:01.680896+00:00",
+      "job_name": "dashboard",
+      "namespace": "dashboard",
+      "parent_sha256": "e420bd9155279c155321fb8d1d64dd77e923d3a91edaafb214214f0714ed7f38",
+      "run_id": "e61adee3-6de3-4354-80ae-88fbefe1e4f2",
+      "runtime_mode": "production",
+      "runtime_mode_evidence": {
+        "kind": "snapshot_provenance",
+        "mode": "production",
+        "schema_version": 1,
+        "snapshot_id": "3550ba2f-31bc-4ad5-8bc7-c7864c3a104f",
+        "snapshot_sha256": "fdc932fce2ff7003b30e4ff3dddf996fd3bc0cc9109324d0e35653f4627494b0"
+      },
+      "side_effects_possible": false,
+      "snapshot_generation": 335,
+      "snapshot_id": "3550ba2f-31bc-4ad5-8bc7-c7864c3a104f",
+      "snapshot_sha256": "fdc932fce2ff7003b30e4ff3dddf996fd3bc0cc9109324d0e35653f4627494b0",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "inputs": {
+          "ai": "0e503dd985a2333df35d8c77892cd01b173821eae1fcce8a3992050ab2400fc5",
+          "executive": "2b91b9b6e37b7ce3b9e1d5852fd7aae45fa4909c5a7ad02c94399a7ea1472c0e",
+          "legislative": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018"
+        },
+        "job": "dashboard",
+        "mode": "production",
+        "trigger_source": "external_scheduler"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+      "started_at": "2026-09-09T13:35:32.050848+00:00",
+      "status": "success",
+      "trigger_source": "external_scheduler"
+    },
+    {
+      "error_code": "",
+      "finished_at": "2026-09-09T13:40:07.320248+00:00",
+      "job_name": "legislative",
+      "namespace": "legislative",
+      "parent_sha256": "a1e3cccc33d551e68da5573043dcf8cd5fd47f1790fc1cbd631b9997f06de018",
+      "run_id": "fbf6853e-3b0c-4590-8980-e70ef17d1891",
+      "runtime_mode": "production",
+      "runtime_mode_evidence": {
+        "kind": "snapshot_provenance",
+        "mode": "production",
+        "schema_version": 1,
+        "snapshot_id": "ec829fe8-8d54-4b78-ba80-2aa82fe9f60f",
+        "snapshot_sha256": "1a3ed0592ccecc68a4e2db785fb01f6d2a00eb969c4a13bc4e79ae792db77b09"
+      },
+      "side_effects_possible": false,
+      "snapshot_generation": 234,
+      "snapshot_id": "ec829fe8-8d54-4b78-ba80-2aa82fe9f60f",
+      "snapshot_sha256": "1a3ed0592ccecc68a4e2db785fb01f6d2a00eb969c4a13bc4e79ae792db77b09",
+      "source_provenance": {
+        "authority": "runtime_v2",
+        "job": "legislative",
+        "last_success_utc": "2026-09-09T13:40:06Z",
+        "mode": "production",
+        "notification_contract": "durable_outbox_v1",
+        "notification_intent_count": 0,
+        "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "trigger_source": "external_scheduler"
+      },
+      "source_revision": "9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301",
+      "started_at": "2026-09-09T13:37:18.081075+00:00",
+      "status": "success",
+      "trigger_source": "external_scheduler"
+    }
+  ],
+  "natural_execution": {
+    "name": "polititrack-legislative-nmt57",
+    "created_at": "2026-09-09T13:35:01.378277Z",
+    "annotations": {
+      "run.googleapis.com/creator": "polititrack-scheduler-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com",
+      "run.googleapis.com/lastModifier": "polititrack-scheduler-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com"
+    },
+    "completed_at": "2026-09-09T13:40:12.570017Z"
+  },
+  "schedules": [
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-executive",
+      "schedule": "11,41 * * * *",
+      "timeZone": "Etc/UTC",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-ai",
+      "schedule": "14,44 * * * *",
+      "timeZone": "America/New_York",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-dashboard",
+      "schedule": "2,17,32,47 * * * *",
+      "timeZone": "Etc/UTC",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-legislative",
+      "schedule": "5,20,35,50 * * * *",
+      "timeZone": "Etc/UTC",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-vault-lifecycle",
+      "schedule": "17 3 * * *",
+      "timeZone": "Etc/UTC",
+      "state": "PAUSED"
+    }
+  ],
+  "web_revision": "polititrack-web-00039-ps5",
+  "schema_migration": {
+    "execution": "polititrack-admin-gkzbp",
+    "completion_time": "2026-09-09T13:11:30.715078Z",
+    "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1",
+    "schema_result": [
+      {
+        "protected_state_changed": false,
+        "result": "runtime_v2_schema_created"
+      }
+    ]
+  },
+  "no_rebaseline_or_rewind": true,
+  "iam_unchanged": true,
+  "phase5_certificate_replaced": false,
+  "personal_review_data_preserved": true,
+  "notification_status": {
+    "contract": "durable_outbox_v1",
+    "counts": [],
+    "legacy_fences": [
+      {
+        "cutoff_at": "2026-09-08T10:41:24.714055+00:00",
+        "failed_run_id": "065d5330-abca-4eda-b683-64e85f2dcbe7",
+        "finding": "no_delivery",
+        "namespace": "legislative"
+      }
+    ]
+  }
+}
