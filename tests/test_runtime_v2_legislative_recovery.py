@@ -71,13 +71,16 @@ def test_actual_tracker_stages_without_external_delivery(monkeypatch, tmp_path, 
     assert len(intents.read_intents(path, namespace)) == 1
 
 
-def test_ai_queues_channels_without_claiming_delivery_and_has_stable_retry_identity(monkeypatch, tmp_path):
+@pytest.mark.parametrize('with_credentials', [True, False])
+def test_ai_queues_channels_without_claiming_delivery_and_has_stable_retry_identity(monkeypatch, tmp_path, with_credentials):
     from scripts import ai_filing_analyst as entrypoint
     from scripts import ai_filing_analyst_hardened as ai
     assert entrypoint.run_analyst is ai.run_analyst
     from test_ai_filing_analyst_hardened import _config
     path = staging(monkeypatch, tmp_path, 'ai')
-    cfg = replace(_config(tmp_path), suppress_alerts=False, **{'pushover_api_token': 'token', 'pushover_user_key': 'user'})
+    cfg = replace(_config(tmp_path), suppress_alerts=False, require_pushover=True,
+                  pushover_api_token='token' if with_credentials else '',
+                  pushover_user_key='user' if with_credentials else '')
     delivery = {'trade_id': 'trade', 'analysis_id': 'analysis', 'analysis_revision': 1,
                 'filed_date': '2026-09-09', 'requested_channels': ['pushover', 'gmail'],
                 'delivered_channels': {}, 'alert': dict(PAYLOAD)}
@@ -104,6 +107,34 @@ def test_ai_queues_channels_without_claiming_delivery_and_has_stable_retry_ident
     state.candidate_alert_deliveries['new-revision'] = {**copy.deepcopy(delivery), 'analysis_revision': 2}
     ai._deliver_pending_candidate_alerts(cfg, result, state, state_path)
     assert len({r['delivery_id'] for r in intents.read_intents(path, 'ai')}) == 4
+
+
+@pytest.mark.parametrize('runtime_mode', [True, False])
+def test_required_notification_credentials_do_not_gate_runtime_collection(monkeypatch, tmp_path, runtime_mode):
+    from scripts import government_trade_tracker_core as tracker
+    from test_government_trade_tracker import _tracker_config
+    cfg=replace(_tracker_config(tmp_path,initialize=False),no_notify=False,require_pushover=True)
+    tracker.save_state(cfg.state_path,tracker.TrackerState())
+    if runtime_mode:
+        path=staging(monkeypatch,tmp_path,'executive')
+    else:
+        monkeypatch.delenv(intents.MODE_KEY,raising=False)
+    collected=[]
+    class NoNetwork:
+        def post(self,*args,**kwargs):
+            pytest.fail('missing credentials must never reach provider')
+    def collect(config,state,result,session,filing_index):
+        collected.append(True)
+        assert tracker._pushover_post(session,config,**PAYLOAD,notification_key='new-filing',filed_date='2026-09-09') is False
+    monkeypatch.setattr(tracker,'run_executive',collect)
+    if runtime_mode:
+        result=tracker.run_tracker(cfg,session=NoNetwork())
+        assert result.success and collected==[True]
+        assert intents.read_intents(path,'executive') == [intent('new-filing',namespace='executive')]
+    else:
+        with pytest.raises(tracker.NotificationError,match='REQUIRE_PUSHOVER'):
+            tracker.run_tracker(cfg,session=NoNetwork())
+        assert not collected
 
 
 @pytest.mark.parametrize('field,value', [('namespace','ai'), ('delivery_id','bad'), ('available_on','yesterday'), ('payload',{'token':'secret'})])
