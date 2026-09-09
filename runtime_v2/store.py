@@ -272,6 +272,8 @@ class LockedNamespace:
         trigger_source: str,
         source_revision: str,
         runtime_mode: str,
+        *,
+        retry_adjudication: Mapping[str, Any] | None = None,
     ) -> str:
         if runtime_mode not in RUNTIME_MODES:
             raise StateStoreError("invalid Runtime v2 mode")
@@ -281,6 +283,8 @@ class LockedNamespace:
             "kind": "runner_explicit",
             "mode": runtime_mode,
         }
+        if retry_adjudication is not None:
+            mode_evidence["retry_adjudication"] = dict(retry_adjudication)
         with closing(self.connection.cursor()) as cursor:
             cursor.execute(
                 "INSERT INTO runtime_job_runs "

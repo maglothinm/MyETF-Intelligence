@@ -128,6 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--with-vault", action="store_true", help="Also create the existing Filing Vault schema")
     run = commands.add_parser("run", help="Run one independently scheduled producer")
     run.add_argument("job", choices=("legislative", "executive", "ai", "dashboard"))
+    run.add_argument("--retry-adjudication", help="Exact reviewed Legislative recovery case; never a general retry override")
     status = commands.add_parser("status", help="Print current heads and latest job conclusions")
     status.add_argument("--pretty", action="store_true")
     ingest = commands.add_parser("import-directory", help="Import one provenance-verified GitHub artifact")
@@ -194,10 +195,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "run":
         try:
-            head = JobRunner(store, mode=selected_mode).run(args.job)
+            options = {"retry_adjudication": args.retry_adjudication} if args.retry_adjudication else {}
+            head = JobRunner(store, mode=selected_mode, **options).run(args.job)
         except NamespaceBusy as exc:
             trigger = str(os.environ.get("POLITITRACK_TRIGGER_SOURCE") or "external_scheduler")
-            if trigger != "external_scheduler":
+            if trigger != "external_scheduler" or args.retry_adjudication:
                 raise
             print(
                 json.dumps(

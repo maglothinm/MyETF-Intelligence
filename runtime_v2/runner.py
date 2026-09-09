@@ -95,8 +95,10 @@ class JobRunner:
         source_revision: str | None = None,
         environment: Mapping[str, str] | None = None,
         mode: RuntimeMode | str | None = None,
+        retry_adjudication: str | None = None,
     ):
         self.store = store
+        self.retry_adjudication = retry_adjudication
         self.root = (repository_root or Path(__file__).resolve().parents[1]).resolve()
         self.environment = dict(os.environ if environment is None else environment)
         self.mode = resolve_runtime_mode(self.environment) if mode is None else _coerce_mode(mode)
@@ -165,6 +167,8 @@ class JobRunner:
         )
 
     def run(self, job_name: str) -> SnapshotHead:
+        if self.retry_adjudication and (job_name != "legislative" or self.mode.is_shadow):
+            raise RuntimeJobError("reviewed Legislative recovery requires Legislative production mode")
         if job_name in {"legislative", "executive"}:
             return self._run_tracker(job_name)
         if job_name == "ai":
@@ -222,6 +226,19 @@ class JobRunner:
             command.append("--no-notify")
         return command
 
+    def _tracker_delivery_possible(self) -> bool:
+        """Match the tracker's sole external notification transport preconditions.
+
+        Missing either credential makes _pushover_post return before HTTP. Keep
+        the conservative guard whenever both exist, regardless of result counts.
+        This applies only to trackers; AI has additional delivery transports.
+        """
+        environment = self._env()
+        return not self._notifications_suppressed() and all(
+            str(environment.get(key) or "").strip()
+            for key in ("PUSHOVER_API_TOKEN", "PUSHOVER_USER_KEY")
+        )
+
     def _ai_command(
         self,
         legislative: Path,
@@ -258,15 +275,20 @@ class JobRunner:
         with self.store.locked(branch) as locked, tempfile.TemporaryDirectory(
             prefix=f"polititrack-{branch}-"
         ) as raw:
-            locked.assert_retry_safe()
+            adjudication = None
+            if self.retry_adjudication:
+                from .legislative_recovery import assert_adjudicated_retry_safe
+
+                adjudication = assert_adjudicated_retry_safe(locked, self.retry_adjudication)
+            else:
+                locked.assert_retry_safe()
             workspace = Path(raw)
             state_dir, output_dir = workspace / "state", workspace / "output"
             output_dir.mkdir()
             parent = locked.restore(state_dir)
             _require_success_state(state_dir)
-            run_id = locked.start_run(
-                branch, trigger, self.source_revision, self.mode.value
-            )
+            run_options = {"retry_adjudication": adjudication} if adjudication else {}
+            run_id = locked.start_run(branch, trigger, self.source_revision, self.mode.value, **run_options)
             side_effects_possible = False
             try:
                 command = self._tracker_command(branch, state_dir, output_dir)
@@ -283,7 +305,7 @@ class JobRunner:
                         ]
                     )
                     command.extend(["--oge-listings-file", str(listings)])
-                side_effects_possible = not self.mode.is_shadow
+                side_effects_possible = self._tracker_delivery_possible()
                 self._execute(command)
                 if branch == "legislative":
                     self._execute(
@@ -307,6 +329,7 @@ class JobRunner:
                         "mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
+                        **({"retry_adjudication": adjudication} if adjudication else {}),
                     },
                 )
                 return snapshot
