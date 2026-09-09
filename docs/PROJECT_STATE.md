@@ -6,6 +6,21 @@
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
+## September 9 acknowledgement recurrence investigation
+
+Read-only checks confirmed the September 8 image, served application bytes and
+all four logical review identities remain unchanged. The user's Chrome storage
+retains an older record of all four valid acknowledgements, followed by a deletion
+of the acknowledgement key, notification history and site metadata in a bulk
+clear involving 15 origins. The initiating browser action or cleanup program is
+unidentified. This is distinct from the repaired publication-reconciliation bug.
+
+Recovered acknowledgement data passes isolated replay against today's served
+application: 0 active / 4 acknowledged through refresh and recreated-page reload.
+Restoration in the user's Chrome tab remains pending because that tab is not
+exposed by the available browser control. No production or browser setting was
+changed. See [the investigation](incidents/2026-09-09-browser-acknowledgement-deletion.md).
+
 ## Production authority
 
 **September 8 accepted release:** Issue #155 is live after PR #156 and corrective PR #157. Runtime source `19e894ef1262a86d4e54e24a8a34f6b7f230f688`, Cloud Build `cea78696-8521-45d4-98b8-bdea9e45fc09`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6a458b64fc9b3517f460b49eb82cf7e1e0d5d200a051ee907031c2e1b737d300`. All six resources use that digest; producer configurations persist the corrected source. Dashboard `polititrack-dashboard-68f7j` committed generation 250 and passed real isolated-browser acceptance before schedules resumed. [Full release evidence](releases/2026-09-08-parser-acknowledgements.md).
