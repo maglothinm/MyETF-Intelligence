@@ -72,7 +72,9 @@ def test_actual_tracker_stages_without_external_delivery(monkeypatch, tmp_path, 
 
 
 def test_ai_queues_channels_without_claiming_delivery_and_has_stable_retry_identity(monkeypatch, tmp_path):
+    from scripts import ai_filing_analyst as entrypoint
     from scripts import ai_filing_analyst_hardened as ai
+    assert entrypoint.run_analyst is ai.run_analyst
     from test_ai_filing_analyst_hardened import _config
     path = staging(monkeypatch, tmp_path, 'ai')
     cfg = replace(_config(tmp_path), suppress_alerts=False, **{'pushover_api_token': 'token', 'pushover_user_key': 'user'})
