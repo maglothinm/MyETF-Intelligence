@@ -15,13 +15,17 @@
   const allLabel=field=>field==="source"?"All Sources":field==="category"?"All review statuses":`All ${title(field).toLowerCase()}`;
   const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",showAcknowledgedReviews:false,nextRefreshAt:Date.now()+300000,renderedAt:null,healthViewKey:null,changes:{},refreshError:false};
   let reviewAcknowledgements=[],reviewSavePending=false,reviewMessage="";
+  let runControls=null,runAccountId=null;
   let reviewActivation=new URLSearchParams(location.hash.startsWith("#review-account?")?location.hash.split("?",2)[1]:"").get("activate")||"";
   if(reviewActivation)history.replaceState(null,"","#records/reviews?category=manual_exception");
   const personalReviews=new PolitiTrackPersonalReviews({onChange:value=>{
     reviewAcknowledgements=value.acknowledged;
+    const accountId=value.status==="ready"?value.account.id:null;
+    if(runControls&&accountId!==runAccountId){runAccountId=accountId;runControls.changedAccount();if(state.section==="operations")runControls.load();}
     if(value.status!=="ready")state.showAcknowledgedReviews=false;
     renderReviewAccount();if(state.model)renderReviewAcknowledgementViews();
   }});
+  runControls=new PolitiTrackOperations({account:()=>personalReviews.state,onChange:()=>runControls.render(el("operations-health")),onComplete:()=>loadData()});
   const healthClock=PT.createHealthClock();
   const openDialog=PT.setupDialogsAndTooltips();
   const notifications=new PolitiTrackNotifications({onChange:()=>renderNotifications()});
@@ -250,6 +254,7 @@
     const focusKey=focused?{href:focused.getAttribute("href"),label:focused.getAttribute("aria-label"),text:focused.textContent}:null;
     const offsets=[...host.querySelectorAll(".timeline")].map(node=>node.scrollLeft);
     host.innerHTML=healthCards(m,detailed);
+    if(detailed)runControls.render(host);
     if(preserveHistory)host.querySelectorAll(".timeline").forEach((node,index)=>{node.scrollLeft=offsets[index]||0;});
     if(focusKey)[...host.querySelectorAll("a,button")].find(node=>node.getAttribute("href")===focusKey.href&&node.getAttribute("aria-label")===focusKey.label&&node.textContent===focusKey.text)?.focus({preventScroll:true});
   }
@@ -318,9 +323,12 @@
     await change.commit();renderNotifications();if(state.section==="investor-edge")await loadEdge();if(change.events.length){document.querySelectorAll(".attention-card").forEach(n=>n.classList.add("changed"));setTimeout(()=>document.querySelectorAll(".attention-card").forEach(n=>n.classList.remove("changed")),1200);}
   }catch(e){el("error-banner").textContent=`Refresh unavailable — ${e.message}. ${state.model?"Last successfully rendered data remains visible; this view may be stale.":"No successful data load yet. Status is Unknown."}`;state.refreshError=true;el("error-banner").hidden=false;if(state.model)renderHealth(healthClock(state.model),state.changes);else{el("overall-state").textContent="! Refresh unavailable";el("overall-state").className="status unknown";}state.nextRefreshAt=Date.now()+300000;}finally{state.loading=false;el("refresh-button").disabled=false;}}
   function clock(){el("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});const s=Math.max(0,Math.ceil((state.nextRefreshAt-Date.now())/1000));el("refresh-countdown").textContent=`Next refresh ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;refreshHealth(false);}
-  initTables();window.addEventListener("hashchange",()=>navigate());el("refresh-button").onclick=loadData;
+  initTables();window.addEventListener("hashchange",()=>{navigate();if(state.section==="operations")runControls.load();});el("refresh-button").onclick=loadData;
   document.addEventListener("click",e=>{
     if(e.defaultPrevented)return;
+    const run=e.target.closest("[data-run-now]");
+    if(run){if(personalReviews.state.status!=="ready")openDialog("review-account-dialog");else runControls.start(run.dataset.runNow);}
+    if(e.target.closest("[data-operation-refresh]"))runControls.load();
     const row=e.target.closest(".review-row");
     if(row&&!e.target.closest("a,button,input,select")&&!window.getSelection()?.toString())location.hash=row.querySelector(".record-link").getAttribute("href");
     const same=e.target.closest('a[href^="#records/"]');if(same&&same.getAttribute("href")===location.hash)navigate();
@@ -347,8 +355,8 @@
     try{const result=await personalReviews.importLegacy(value);reviewMessage=`${result.imported} acknowledgements imported into your account. Existing account history was preserved.`;}
     catch(error){reviewMessage=error.message;}finally{button.disabled=false;renderReviewAccount();}
   };
-  setInterval(clock,1000);setInterval(loadData,300000);clock();renderNotifications();renderReviewAccount();
-  loadData().then(()=>{navigate(true);if(reviewActivation)openDialog("review-account-dialog");});
+  setInterval(clock,1000);setInterval(loadData,300000);setInterval(()=>{if(state.section==="operations"&&document.visibilityState==="visible")runControls.load();},15000);clock();renderNotifications();renderReviewAccount();
+  loadData().then(()=>{navigate(true);if(state.section==="operations")runControls.load();if(reviewActivation)openDialog("review-account-dialog");});
   document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){refreshHealth();personalReviews.load();}});
   window.addEventListener("pageshow",()=>{refreshHealth();personalReviews.load();});
   window.addEventListener("storage",event=>{if(event.key===REVIEW_ACK_STORAGE_KEY||event.key===null)renderReviewAccount();});

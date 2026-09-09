@@ -14,6 +14,7 @@ const build = process.env.POLITITRACK_TEST_BUILD || path.resolve(__dirname, '../
 const builtModel = JSON.parse(fs.readFileSync(path.join(build, 'data/dashboard-insights.json'), 'utf8'));
 const KEY = 'polititrack.notifications.v1';
 const createReviewServer = require('./personal_review_fixture.cjs');
+const createOperationsServer = require('./operations_fixture.cjs');
 const copy = value => JSON.parse(JSON.stringify(value));
 const tick = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -96,7 +97,7 @@ function fixtures() {
     health: {status: 'success', as_of_utc: '2026-08-30T12:00:00Z', required_branches: ['legislative', 'executive', 'ai'], policy: {
       legislative: {expected_interval_minutes: 15, stale_after_minutes: 30},
       executive: {expected_interval_minutes: 30, stale_after_minutes: 60},
-      ai: {expected_interval_minutes: 15, stale_after_minutes: 75, cadence_label: 'After collector success (about every 15m)'}},
+      ai: {expected_interval_minutes: 30, stale_after_minutes: 75, cadence_label: 'Every 30 minutes'}},
     branches: runs.map(row => ({branch: row.branch, status: 'success', last_run_utc: row.at, last_attempt_utc: row.started_utc, last_success_utc: row.at,
       latest_run_success: true, latest_conclusion: 'success', trigger_source: 'schedule', evidence_incomplete: false,
       error_count: 0, errors: [], new_record_count: 0, run_url: row.run_url, timeline: [row]}))},
@@ -141,9 +142,11 @@ async function dashboard(options = {}) {
   window.addEventListener('error', event => errors.push(event.error?.message || event.message));
   window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
   const reviewServer=options.reviewServer||createReviewServer(),reviewSession={account:options.signedOut?null:options.reviewAccount||'alice'};
+  const operationsServer=options.operationsServer||createOperationsServer();
   window.fetch = async (value, fetchOptions = {}) => {
     const url = new URL(value, window.location.href);
     assert.equal(url.origin, window.location.origin, 'No external browser requests permitted');
+    if(url.pathname.startsWith('/api/operations'))return operationsServer.handle(url.pathname.slice('/api/operations'.length),fetchOptions,reviewSession,reviewServer);
     if(url.pathname.includes('/api/reviews/'))return reviewServer.handle(url.pathname.split('/api/reviews/')[1],fetchOptions,reviewSession,data['dashboard-insights']);
     const match = url.pathname.match(/\/data\/([\w-]+)\.json$/);
     assert.ok(match, 'Only published JSON fixtures may be fetched');
@@ -171,7 +174,7 @@ async function dashboard(options = {}) {
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
   }
-  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, reviewServer, reviewSession,
+  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, reviewServer, reviewSession, operationsServer,
     advanceTime(milliseconds, {wall = true} = {}) { if(wall)now += milliseconds;elapsedNow += milliseconds;intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     setWallTime(value) { now=Date.parse(value);intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     close: () => {
@@ -201,6 +204,60 @@ test('Overview loads only compact insights; sections fetch their ledgers lazily'
   await env.navigate('#operations', () => env.requests.includes('ai-runs'));
   assert.ok(env.requests.includes('runs'));
   assert.deepEqual(env.errors, []);
+});
+
+test('Operations exposes one run button above each service and tracks real completion', async t => {
+  const env=await dashboard({hash:'#operations'});t.after(env.close);
+  await waitFor(()=>[...env.doc.querySelectorAll('[data-run-now]')].every(button=>!button.disabled),'owner run controls');
+  const buttons=[...env.doc.querySelectorAll('[data-run-now]')];assert.equal(buttons.length,3);
+  for(const button of buttons){assert.ok(button.closest('article').querySelector('header').compareDocumentPosition(button)&env.window.Node.DOCUMENT_POSITION_PRECEDING);}
+  let release;env.operationsServer.beforeStart=()=>new Promise(resolve=>{release=resolve;});
+  const button=env.doc.querySelector('[data-run-now="legislative"]');button.click();button.click();
+  assert.equal(button.disabled,true);assert.equal(env.operationsServer.requests.length,1);
+  release();await waitFor(()=>button.textContent.includes('progress'),'accepted request');
+  const group=button.closest('[data-run-control]');assert.doesNotMatch(group.textContent,/completed successfully/);
+  const request=env.operationsServer.requests[0];assert.equal(request.options.headers['X-PolitiTrack-Operation-Request'],'1');
+  assert.equal(request.options.credentials,'same-origin');assert.equal(request.options.cache,'no-store');
+  env.operationsServer.jobs.legislative.latest_request.state='running';group.querySelector('[data-operation-refresh]').click();
+  await waitFor(()=>button.textContent==='Running…','running request');
+  Object.assign(env.operationsServer.jobs.legislative,{busy:false,latest_request:{...env.operationsServer.jobs.legislative.latest_request,state:'succeeded',finished_at:'2026-09-09T13:10:00Z'}});
+  group.querySelector('[data-operation-refresh]').click();
+  await waitFor(()=>env.doc.querySelector('[data-run-control="legislative"]').textContent.includes('completed successfully'),'successful completion');
+  assert.equal(env.operationsServer.requests.length,1);assert.deepEqual(env.errors,[]);
+});
+
+test('Operations requires sign-in and does not give ordinary review accounts run access', async t => {
+  const env=await dashboard({hash:'#operations',signedOut:true});t.after(env.close);
+  await waitFor(()=>env.doc.querySelector('[data-run-now]')?.textContent==='Sign in to run','signed-out controls');
+  env.doc.querySelector('[data-run-now]').click();assert.equal(env.byId('review-account-dialog').open,true);
+  assert.equal(env.operationsServer.requests.length,0);
+  const other=await dashboard({hash:'#operations',reviewAccount:'bob'});t.after(other.close);
+  await waitFor(()=>other.doc.querySelector('[data-run-control]')?.textContent.includes('Only the owner'),'restricted controls');
+  assert.ok([...other.doc.querySelectorAll('[data-run-now]')].every(button=>button.disabled));
+  assert.equal(other.operationsServer.requests.length,0);
+});
+
+test('Operations prevents starts during a scheduled run or unknown connection outcome', async t => {
+  const server=createOperationsServer();server.jobs.ai.busy=true;
+  const env=await dashboard({hash:'#operations',operationsServer:server});t.after(env.close);
+  await waitFor(()=>env.doc.querySelector('[data-run-control="ai"]').textContent.includes('scheduled run'),'scheduled busy state');
+  assert.equal(env.doc.querySelector('[data-run-now="ai"]').disabled,true);
+  server.failStart=true;env.doc.querySelector('[data-run-now="executive"]').click();
+  await waitFor(()=>env.doc.querySelector('[data-run-control="executive"]').textContent.includes('could not be confirmed'),'lost response');
+  assert.equal(server.requests.length,1);
+  assert.equal(env.doc.querySelector('[data-run-now="executive"]').disabled,true);
+  assert.doesNotMatch(env.doc.querySelector('[data-run-control="executive"]').textContent,/completed successfully/);
+  assert.deepEqual(env.errors,[]);
+});
+
+test('Operations failure remains visible through health re-render and permits a new request', async t => {
+  const server=createOperationsServer();server.jobs.executive.latest_request={request_id:'old-request',state:'failed',finished_at:'2026-09-09T13:10:00Z'};
+  const env=await dashboard({hash:'#operations',operationsServer:server});t.after(env.close);
+  await waitFor(()=>env.doc.querySelector('[data-run-control="executive"]').textContent.includes('Manual run failed'),'failed status');
+  env.advanceTime(60000);const button=env.doc.querySelector('[data-run-now="executive"]');
+  assert.equal(button.disabled,false);assert.match(button.closest('[data-run-control]').textContent,/Manual run failed/);
+  button.click();await waitFor(()=>server.requests.length===1,'retry click');assert.notEqual(server.requests[0].body.request_id,'old-request');
+  await waitFor(()=>button.textContent.includes('progress'),'retry dispatch response');
 });
 
 function setBranchAge(data, name, minutes, extra = {}) {

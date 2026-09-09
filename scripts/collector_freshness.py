@@ -28,13 +28,12 @@ FRESHNESS_POLICY = {
         "trigger_relationship": "Canonical collector schedule or authenticated dispatch",
     },
     "ai": {
-        "expected_interval_minutes": 15,
+        "expected_interval_minutes": 30,
         "stale_after_minutes": 75,
-        "cadence_label": "After collector success (about every 15 minutes)",
+        "cadence_label": "Every 30 minutes",
         "trigger_relationship": (
-            "workflow_run after successful collectors; 75-minute freshness bound "
-            "allows the Legislative 30-minute freshness window plus the AI job's "
-            "45-minute timeout. This is an input opportunity, not a separate AI cron."
+            "The existing AI schedule runs at minutes 14 and 44 of each hour, "
+            "using the latest verified collector snapshots. Manual runs use the same producer."
         ),
     },
 }
@@ -43,7 +42,7 @@ WORKFLOWS = {
     "executive": ("executive_trade_tracker.yml", "Executive purchase tracker"),
     "ai": ("ai_filing_analyst.yml", "AI filing analyst and paper portfolio"),
 }
-TRIGGER_SOURCES = frozenset({"schedule", "workflow_dispatch", "external_scheduler", "manual_test", "workflow_run"})
+TRIGGER_SOURCES = frozenset({"schedule", "workflow_dispatch", "external_scheduler", "dashboard_manual", "manual_test", "workflow_run"})
 _NONPRODUCTION = frozenset({"test", "testing", "synthetic", "simulation", "manual_test", "local", "publication", "publish", "pages"})
 
 

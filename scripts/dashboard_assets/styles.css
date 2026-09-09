@@ -85,3 +85,8 @@ html.app-shell {
 .review-account-dialog .chart-note {margin:0}
 #review-account-button {max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #review-legacy-import {margin:20px 0;padding:16px;border:1px solid var(--line);border-radius:10px}
+
+.run-control {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.run-control > p {flex-basis:100%;margin:0;color:var(--muted)}
+.run-control button {min-height:40px}
+.run-control .run-check {font-size:11px}

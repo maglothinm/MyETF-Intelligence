@@ -64,6 +64,8 @@ def create_app(
     *,
     store: PostgresSnapshotStore | None = None,
     review_store=None,
+    operation_store=None,
+    operation_cloud=None,
 ) -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config.update({key: value for key, value in os.environ.items() if key.startswith(("VAULT_", "RUNTIME_"))})
@@ -80,6 +82,8 @@ def create_app(
     personal_reviews = review_store or PersonalReviewStore()
     app.extensions["personal_reviews"] = personal_reviews
     app.register_blueprint(create_blueprint(personal_reviews, cache))
+    from .operations_api import create_blueprint as operations_blueprint
+    app.register_blueprint(operations_blueprint(personal_reviews, operation_store, operation_cloud))
 
     if _truthy(app.config.get("VAULT_ENABLED")):
         from backend.filing_vault import init_app

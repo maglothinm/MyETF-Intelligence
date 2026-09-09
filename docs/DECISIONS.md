@@ -1200,3 +1200,19 @@ unchanged. The Dashboard writer appended one valid publication with exact parent
 continuity; no protected producer or personal history was rewound or deleted.
 This is bounded feature acceptance, not all-pipeline certification. See
 [the release record](releases/2026-09-09-personal-review-acknowledgements.md).
+
+
+## 2026-09-09 — Let the owner request existing production jobs from Operations
+
+**Decision:** Add one Run now control per Legislative, Executive and AI tile.
+Reuse the existing personal-account identity, with an explicit stable-UUID operator
+allowlist, same-origin writes and durable request receipts. Start only the three
+existing jobs with a fixed manual trigger and request UUID. Preserve writer locks,
+complete-source validation, outbox guarantees and scheduled execution.
+
+**Outcome contract:** Dispatch acceptance is not completion. Show terminal success
+only from a completed, successful execution. Reconcile uncertain starts by UUID
+without resubmission; retain actor/history and block duplicate manual requests.
+Correct the AI cadence description to its existing twice-hourly schedule without
+changing schedules. Default controls off until the additive schema and narrow
+job-scoped service-account permissions are ready. See [issue #164 controls](operations-manual-runs.md).

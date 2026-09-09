@@ -733,6 +733,22 @@ resource "google_cloud_run_v2_service" "web" {
       image   = var.image
       command = ["gunicorn"]
       args    = ["--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "--timeout", "120", "runtime_v2.web:create_app()"]
+      env {
+        name  = "RUNTIME_OPERATIONS_ENABLED"
+        value = tostring(var.operations_enabled)
+      }
+      env {
+        name  = "RUNTIME_OPERATIONS_ACCOUNT_IDS"
+        value = join(",", var.operations_account_ids)
+      }
+      env {
+        name  = "RUNTIME_OPERATIONS_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "RUNTIME_OPERATIONS_REGION"
+        value = var.region
+      }
       ports {
         container_port = 8080
       }
