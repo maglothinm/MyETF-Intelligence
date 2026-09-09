@@ -178,6 +178,11 @@ class OperationStore:
                        "finished_at": execution.get("completionTime")}
             conn.execute(update(receipts).where(receipts.c.request_id == row["request_id"]).values(**changes))
             return {**row, **changes}
+        if row["state"] == "starting" and self.clock() - row["created_at"] > 120:
+            # A worker may have stopped after reserving but before recording the
+            # POST outcome. Do not leave that receipt looking like normal startup.
+            conn.execute(update(receipts).where(receipts.c.request_id == row["request_id"]).values(state="unconfirmed"))
+            return {**row, "state": "unconfirmed"}
         return row
 
     def status(self, job, cloud):

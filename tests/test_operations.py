@@ -77,6 +77,19 @@ def test_timeout_reconciles_exact_execution_without_redispatch(control):
     assert len(cloud.calls) == 1
 
 
+def test_worker_loss_before_start_response_does_not_look_like_normal_startup_forever(control):
+    cloud = Cloud(); request = str(uuid.uuid4())
+    control.start("ai", "owner", request, cloud)
+    cloud.items["ai"] = []
+    now = control.clock()
+    restarted = OperationStore(control.engine, clock=lambda: now + 121)
+    value = restarted.status("ai", cloud)
+    assert value["busy"] and value["latest_request"]["state"] == "unconfirmed"
+    cloud.items["ai"] = [execution("ai", request, "succeeded")]
+    assert restarted.status("ai", cloud)["latest_request"]["state"] == "succeeded"
+    assert len(cloud.calls) == 1
+
+
 def test_failure_can_be_retried_and_old_receipt_remains(control):
     cloud = Cloud(); request = str(uuid.uuid4())
     control.start("executive", "owner", request, cloud)
