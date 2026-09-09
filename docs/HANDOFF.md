@@ -1,9 +1,25 @@
 # PolitiTrack active handoff
 
-Updated September 9, 2026. Canonical repository **1349678672 —
-maglothinm/MyETF-Intelligence**, default branch **main**.
+Updated **2026-09-09 — Legislative recovery implementation**. Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
-## Active owner request
+## Active owner request — Legislative recovery
+
+The owner requires a permanent fix: failures, including ambiguous old alert
+attempts, must not obstruct later collection. Runtime Legislative, Executive and AI
+now stage alerts with the atomic successful snapshot; per-record delivery claims
+and uncertainty survive restart independently. The pinned September 8 no-delivery
+proof resolves only that exact legacy alert fence. No old flag or history is edited.
+Complete-source validation and writer locks remain mandatory.
+
+Finish exact-head CI including PostgreSQL regressions, integrate issue #159's
+merged source and wait for its production ownership handback. Then fence/drain the
+existing schedules, deploy the tested image, install the additive outbox schema,
+and verify controlled producers plus a later natural Legislative run. Do not use
+an old direct-send image after accepting queued-channel snapshots. Production
+recovery is not yet accepted. [Contract and evidence](incidents/2026-09-09-legislative-recovery.md).
+
+## Personal acknowledgement release in progress — issue #159
+
 
 Issue [#159](https://github.com/maglothinm/MyETF-Intelligence/issues/159): browser
 clearing must not erase acknowledgements; **each person has separate saved state**.
@@ -16,9 +32,10 @@ them again or treat another browser-local restoration as the fix.
 
 ## Current implementation and remaining work
 
-Local focused database and generated dashboard DOM checks pass. Full local
-validation and canonical PostgreSQL CI, review/merge, deployment, additive schema
-migration, original-timestamp recovery, and live two-account acceptance remain.
+PR #160 merged as `c0eaeb430aa7f665283f9ee560cf72fbe9c257cf` after exact-head
+Runtime and Investor Edge CI passed (runs 34351334909 and 34351334927). The #159
+owner is building and releasing it; schema migration, original-timestamp recovery
+and live two-account acceptance require that owner's final receipt.
 Owner password setup is a final user action through a private single-use link;
 never choose a real owner password or expose a credential in release evidence.
 See [the implementation and administration contract](parser-review-acknowledgements.md).

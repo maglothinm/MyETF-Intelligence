@@ -1,6 +1,6 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-08T16:03:23.170520+00:00
+**Current as of:** 2026-09-09 recovery implementation checkpoint; production acceptance pending.
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
@@ -32,6 +32,8 @@ The initiating cleanup action is unverified and is no longer needed to establish
 the durable-storage design. September 8 release evidence below remains historical.
 
 ## Production authority
+
+**September 9 recovery in progress:** Official Senate access succeeds from the production network. The permanent repair separates collection from per-record delivery for Legislative, Executive and AI. Failed or ambiguous old attempts cannot latch later collection; individual uncertain alerts retain duplicate protection. The original Legislative failed row and generation 232 snapshot remain intact. [Recovery diagnosis and contract](incidents/2026-09-09-legislative-recovery.md). Deployment and a natural scheduled successor remain required; no live recovery is claimed here. Coordinate production ownership with issue #159 and preserve its merged source and data.
 
 **September 8 accepted release:** Issue #155 is live after PR #156 and corrective PR #157. Runtime source `19e894ef1262a86d4e54e24a8a34f6b7f230f688`, Cloud Build `cea78696-8521-45d4-98b8-bdea9e45fc09`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6a458b64fc9b3517f460b49eb82cf7e1e0d5d200a051ee907031c2e1b737d300`. All six resources use that digest; producer configurations persist the corrected source. Dashboard `polititrack-dashboard-68f7j` committed generation 250 and passed real isolated-browser acceptance before schedules resumed. [Full release evidence](releases/2026-09-08-parser-acknowledgements.md).
 

@@ -4,6 +4,13 @@ on:
   pull_request:
     paths:
       - "runtime_v2/**"
+      - "scripts/runtime_notifications.py"
+      - "scripts/government_trade_tracker_core.py"
+      - "scripts/ai_filing_analyst_hardened.py"
+      - "scripts/ai_filing_analyst_legacy.py"
+      - "migrations/20260909_runtime_notification_outbox.sql"
+      - "config/runtime-retry-adjudications/**"
+      - "tests/test_runtime_v2_legislative_recovery.py"
       - "migrations/20260901_runtime_v2.sql"
       - "migrations/20260904_runtime_v2_mode_quarantine.sql"
       - "deploy/runtime-v2/**"
@@ -153,6 +160,7 @@ jobs:
             tests/test_runtime_v2.py \
             tests/test_personal_reviews.py \
             tests/test_runtime_v2_atomic_commit.py \
+            tests/test_runtime_v2_legislative_recovery.py \
             tests/test_runtime_v2_shadow_mode.py \
             tests/test_runtime_v2_mode_quarantine.py \
             tests/test_runtime_v2_bootstrap_safety.py \

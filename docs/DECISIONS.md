@@ -1163,3 +1163,25 @@ snapshots. Public dashboard reading remains available without sign-in.
 existing database networking/credentials without IAM expansion. Coordinate the
 shared release with the Legislative repair owner; local tests are not deployment
 evidence. Owner password setup remains a user action through a private link.
+
+## 2026-09-09 — Decouple collection from per-record notification delivery
+
+**Decision:** Legislative, Executive and AI stage alerts and commit them atomically
+with their successful state snapshot. A separate bounded dispatcher under the
+existing namespace lock durably claims each record/channel before sending.
+Uncertain delivery is retained per record and never automatically retried; later
+collection and genuinely new eligible alerts continue. No historical failed run
+is a namespace-wide collection latch.
+
+**Reason:** A transient Senate rejection was followed by a permanent outage because
+an old possible-alert flag prevented every later collection. Even genuinely
+ambiguous alert delivery must not permanently block source collection. The same
+send-before-publication structure affected Executive and AI.
+
+**Consequence:** Preserve original failed rows, flags, snapshots and parent hashes.
+Legacy ambiguous attempts hold only alerts whose official dates could precede
+those attempts. Later official dates remain eligible. The pinned September 8
+execution/image proof resolves only that exact run's notification uncertainty,
+not permission to collect. Completeness and writer locks remain strict. Schema
+installation precedes producer activation; after outbox snapshots exist, use only
+outbox-compatible rollback images. [Contract and evidence](incidents/2026-09-09-legislative-recovery.md).
