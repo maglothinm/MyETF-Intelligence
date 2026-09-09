@@ -1185,3 +1185,18 @@ execution/image proof resolves only that exact run's notification uncertainty,
 not permission to collect. Completeness and writer locks remain strict. Schema
 installation precedes producer activation; after outbox snapshots exist, use only
 outbox-compatible rollback images. [Contract and evidence](incidents/2026-09-09-legislative-recovery.md).
+
+## 2026-09-09 — Accept durable personal review history after live isolation checks
+
+**Decision:** Accept PR #160 at source `c0eaeb430aa7f665283f9ee560cf72fbe9c257cf` after
+additive schema migration, original-timestamp owner recovery, exact served-source
+verification, live two-account isolation/cookie-clearing/Restore tests, and a
+fresh web revision preserving history. Disable test accounts while retaining
+their audit data. Owner password setup remains a user action through a private
+single-use link. Restore the original schedules only after all acceptance checks.
+
+**Boundary:** Legislative generation 232 and its original failed-run/guard are
+unchanged. The Dashboard writer appended one valid publication with exact parent
+continuity; no protected producer or personal history was rewound or deleted.
+This is bounded feature acceptance, not all-pipeline certification. See
+[the release record](releases/2026-09-09-personal-review-acknowledgements.md).

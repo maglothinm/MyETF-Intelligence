@@ -1,35 +1,32 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-09 recovery implementation checkpoint; production acceptance pending.
+**Current as of:** 2026-09-09T12:52:47.404970+00:00 — personal reviews accepted; Legislative recovery pending.
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
-## September 9 durable personal acknowledgement repair — issue #159
+## September 9 durable personal acknowledgement release — issue #159
 
-The owner confirmed browser clearing is routine and requested separate
-acknowledgements per person. The browser-only recovery workaround is superseded.
-Branch `codex/durable-personal-review-acknowledgements` implements private
-PostgreSQL accounts and review history, authenticated same-origin APIs, explicit
-legacy import, and a sign-in interface. Password recovery preserves identity;
-Restore tombstones prevent old imports from undoing later choices. The four
-recovered original records are ready for owner-account migration with timestamps
-preserved. See [the contract](parser-review-acknowledgements.md).
+PR #160 is merged and accepted live. Runtime source `c0eaeb430aa7f665283f9ee560cf72fbe9c257cf`,
+build `c84e6510-9825-4c84-b512-cf82d18ed627`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:5428e1333ceff18b7c2e1f7fd46f3e82652b6c2cb7b94d1fbee20b099fa19ec6` is on all six existing
+resources. Web revision `polititrack-web-r159-persist-0909` serves the accepted dashboard.
+See [the exact release evidence](releases/2026-09-09-personal-review-acknowledgements.md).
 
-This entry records implementation in progress, not a deployed feature. Local
-database and generated-DOM checks are passing; final full checks, canonical CI,
-merge, schema migration, owner recovery, and live acceptance remain required.
-The separate Legislative repair task explicitly transferred the next bounded
-shared release slot to #159 while its larger notification-isolation fix continues
-in isolation. No #159 production configuration, scheduler, account, or database
-mutation has occurred. Return exact release receipts before transferring ownership
-back; preserve the Legislative failed-run/guard state throughout this release.
+Each person's acknowledgement history is stored in the existing private
+PostgreSQL database. Clearing browser data requires signing in again. The owner's
+four original acknowledgements have been recovered with timestamps preserved;
+the owner must choose their own password using the privately delivered setup link.
+Two independent test accounts passed live cookie clearing, renewed sign-in,
+Restore/import protections and a fresh web revision, then were disabled.
 
-The [read-only investigation](incidents/2026-09-09-browser-acknowledgement-deletion.md)
-proved the original four acknowledgements existed before Chrome storage deletion.
-The initiating cleanup action is unverified and is no longer needed to establish
-the durable-storage design. September 8 release evidence below remains historical.
+All original producer schedules are ENABLED and Filing Vault remains PAUSED.
+Legislative generation 232 and its original failed-run/guard state are unchanged.
+Executive and AI heads were unchanged through the fenced cutover; Dashboard
+advanced 332 -> 333
+with exact parent continuity. No protected state or personal history was deleted.
+The separate Legislative repair may resume release ownership after receiving this
+receipt. The September 8 records below are historical, not current image evidence.
 
 ## Production authority
 
