@@ -62,8 +62,10 @@ do not occupy the pending batch, so new eligible records continue to deliver.
 No credentials are stored in intents, snapshots or delivery events.
 
 AI queued channels remain distinct from accepted channels. A queued alert is not
-reported as delivered. Missing credentials leave existing pending deliveries
-unattempted and do not prevent collection. Existing explicit notification
+reported as delivered. Missing credentials leave pending deliveries unattempted
+and do not prevent collection, including when a tracker requires the alert
+channel. Required alerts are queued until that channel is configured; the legacy
+direct-send route retains its explicit credential requirement. Existing notification
 suppression and shadow-mode boundaries remain enforced. No new scheduler,
 provider, IAM grant or alternate writer is introduced.
 

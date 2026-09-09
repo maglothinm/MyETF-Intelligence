@@ -1668,15 +1668,16 @@ def _pushover_post(
     if config.no_notify:
         LOGGER.warning("Notification suppressed (--no-notify): %s — %s", title, message)
         return False
-    if not config.pushover_api_token or not config.pushover_user_key:
-        if config.require_pushover:
-            raise NotificationError("Pushover credentials are required but missing")
-        LOGGER.warning("Pushover credentials are absent; notification logged only: %s", title)
-        return False
     try:
-        from .runtime_notifications import stage_notification
+        from .runtime_notifications import deferred, stage_notification
     except ImportError:
-        from runtime_notifications import stage_notification
+        from runtime_notifications import deferred, stage_notification
+    if not config.pushover_api_token or not config.pushover_user_key:
+        if config.require_pushover and not deferred():
+            raise NotificationError("Pushover credentials are required but missing")
+        if not config.require_pushover:
+            LOGGER.warning("Pushover credentials are absent; notification logged only: %s", title)
+            return False
     if stage_notification(
         channel="pushover", key=notification_key, filed_date=filed_date,
         payload={"title": _truncate(title, 250), "message": _truncate(message, 1024), "url": url, "url_title": url_title},
@@ -2261,6 +2262,10 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
     result = TrackerResult(branch=config.branch, started_utc=started)
     session = session or build_session(config.user_agent)
     try:
+        try:
+            from .runtime_notifications import deferred
+        except ImportError:
+            from runtime_notifications import deferred
         if not config.terms_acknowledged:
             raise MonitorError(
                 "DISCLOSURE_TERMS_ACKNOWLEDGED is false. Review the statutory use restrictions, "
@@ -2270,6 +2275,7 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
             config.require_pushover
             and not config.no_notify
             and (not config.pushover_api_token or not config.pushover_user_key)
+            and not deferred()
         ):
             raise NotificationError(
                 "REQUIRE_PUSHOVER is enabled, but PUSHOVER_API_TOKEN/PUSHOVER_USER_KEY are missing"
