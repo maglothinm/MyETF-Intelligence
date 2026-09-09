@@ -15,7 +15,7 @@ no producer state. This proves current access; it does not establish the exact
 cause of the earlier rejection or guarantee that it cannot recur. No alternate
 source, proxy, user-agent impersonation, or completeness relaxation was used.
 
-The persistent outage is the retry guard after run
+The persistent outage was caused by the retry guard after run
 `065d5330-abca-4eda-b683-64e85f2dcbe7`, execution
 `polititrack-legislative-gnkrk`. The old runner marked every production tracker
 invocation `side_effects_possible=true`, including invocations unable to deliver
@@ -106,21 +106,26 @@ are bound by case receipt SHA-256
 The original image's final layer was independently hashed and the actual seven
 collector/runner files matched the audited original Git revision byte-for-byte.
 
-The final permanent implementation requires local regressions and exact-head
-Runtime CI, including real PostgreSQL tests for atomic queue publication, failures
-followed by scheduled success, crash/restart with uncertain delivery, fresh-record
-delivery, missing credentials, concurrent writer exclusion and original history
-preservation. Production recovery is not claimed at this implementation checkpoint.
+The permanent implementation passed local regressions (1,195 passed; 31
+environment/optional skips) and exact-head Runtime CI `34353185272` (506 passed;
+one SQLite-only skip), including real PostgreSQL atomicity, failure-to-success,
+uncertain-delivery restart, fresh-record delivery, missing-credential and writer
+lock tests. Investor Edge CI `34353185434` passed 712 tests.
 
-The issue #159 personal acknowledgement release owns the next production slot.
-Integrate its merged source and wait for its completion receipt before shared
-production mutations. Then pause/drain the four existing producer schedules,
-deploy one tested immutable build to the existing resources, and run the additive
-outbox migration through the existing admin job. Never run the new producers before
-the migration succeeds. Verify a complete-source Legislative successor with the
-accepted generation 232 parent, changed Executive/AI paths, Dashboard publication,
-original failure preservation and the restored original schedules. Verify a later
-natural scheduled Legislative successor as evidence of continued liveness.
+Issue #159 returned production ownership after its accepted release. Runtime
+source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301` was built as `9ad52cb8-5875-4e08-a86c-ea90e512247c` and deployed to all six existing
+resources using immutable image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1`. The additive migration succeeded
+before any new producer execution. The controlled Legislative successor passed
+House 894 / Senate 85 completeness and appended generation 233; Executive, AI
+and Dashboard also succeeded. Natural scheduled Legislative execution
+`polititrack-legislative-nmt57` succeeded afterward. Original schedules were restored exactly.
+
+Original failed-run evidence and side-effect flag, the generation 232 payload,
+all pre-release snapshot metadata and personal account/acknowledgement hashes
+are unchanged. Every current snapshot payload and manifest verifies. The live
+Operations page and readiness endpoint reflect the recovered publication.
+[Full acceptance record](../releases/2026-09-09-legislative-recovery.md). External Pushover delivery remains
+unverified because credentials are absent from the inherited live configuration.
 
 ### Rollback boundary
 

@@ -1216,3 +1216,18 @@ without resubmission; retain actor/history and block duplicate manual requests.
 Correct the AI cadence description to its existing twice-hourly schedule without
 changing schedules. Default controls off until the additive schema and narrow
 job-scoped service-account permissions are ready. See [issue #164 controls](operations-manual-runs.md).
+
+## 2026-09-09 — Accept collection recovery after a natural scheduled successor
+
+**Decision:** Accept PRs #161/#162 at runtime source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301` only after
+exact-head tests, immutable build `9ad52cb8-5875-4e08-a86c-ea90e512247c`, additive migration, controlled
+Legislative/Executive/AI/Dashboard publication, preserved-history and personal-data
+hash checks, exact schedule restoration, and successful natural Legislative
+execution `polititrack-legislative-nmt57`. Record the new per-record delivery authority without
+editing the original failed run or replacing earlier certificates.
+
+**Consequence:** Legislative collection is live again. Original uncertainty and
+accepted history are retained; missing alert credentials and individual uncertain
+submissions do not latch future collection. Any future rollback must remain
+outbox-compatible. The personal review release and owner setup process remain
+intact. [Acceptance evidence](releases/2026-09-09-legislative-recovery.md).
