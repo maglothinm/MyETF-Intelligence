@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -97,6 +98,7 @@ class JobRunner:
         mode: RuntimeMode | str | None = None,
     ):
         self.store = store
+        self._notification_context: dict[str, str] = {}
         self.root = (repository_root or Path(__file__).resolve().parents[1]).resolve()
         self.environment = dict(os.environ if environment is None else environment)
         self.mode = resolve_runtime_mode(self.environment) if mode is None else _coerce_mode(mode)
@@ -153,6 +155,14 @@ class JobRunner:
                 ):
                     result.pop(key, None)
             result["POLITITRACK_EXTERNAL_CALLBACKS_ENABLED"] = "false"
+        from scripts.runtime_notifications import CONTRACT, MODE_KEY, PATH_KEY, NAMESPACE_KEY
+
+        # Force the collection subprocess to stage, never submit. Do not inherit
+        # an operator-supplied outbox path or delivery namespace.
+        result[MODE_KEY] = "disabled" if self.mode.is_shadow else CONTRACT
+        result.pop(PATH_KEY, None)
+        result.pop(NAMESPACE_KEY, None)
+        result.update(self._notification_context)
         return result
 
     def _execute(self, args: Sequence[str]) -> None:
@@ -222,6 +232,37 @@ class JobRunner:
             command.append("--no-notify")
         return command
 
+    def _prepare_notifications(self, locked, namespace: str, directory: Path) -> Path:
+        from scripts.runtime_notifications import PATH_KEY, NAMESPACE_KEY
+
+        path = directory / "notification-intents.jsonl"
+        self._notification_context = {PATH_KEY: str(path), NAMESPACE_KEY: namespace}
+        if not self.mode.is_shadow:
+            locked.prepare_notification_delivery()
+        return path
+
+    def _notification_commit_options(self, path: Path, namespace: str) -> tuple[dict, dict]:
+        if self.mode.is_shadow:
+            return {}, {}
+        from scripts.runtime_notifications import CONTRACT, read_intents
+
+        intents = read_intents(path, namespace)
+        digest = hashlib.sha256(json.dumps(intents, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return {"notification_intents": intents}, {"notification_contract": CONTRACT, "notification_intent_count": len(intents), "notification_intents_sha256": digest}
+
+    def _dispatch_notifications(self, locked, namespace: str) -> None:
+        if self.mode.is_shadow or (self._alerts_suppressed() if namespace == "ai" else self._notifications_suppressed()):
+            return
+        from .notifications import NotificationDispatcher
+
+        try:
+            counts = NotificationDispatcher(locked.connection, namespace, self.environment).dispatch()
+            print(json.dumps({"result": "notification_delivery_processed", "namespace": namespace, "counts": counts}), flush=True)
+        except Exception as exc:
+            # Snapshot/run success is already committed. Pending or uncertain
+            # per-record claims survive for subsequent scheduled collection runs.
+            print(json.dumps({"result": "notification_delivery_deferred", "namespace": namespace, "error_code": type(exc).__name__}), flush=True)
+
     def _ai_command(
         self,
         legislative: Path,
@@ -258,16 +299,13 @@ class JobRunner:
         with self.store.locked(branch) as locked, tempfile.TemporaryDirectory(
             prefix=f"polititrack-{branch}-"
         ) as raw:
-            locked.assert_retry_safe()
             workspace = Path(raw)
             state_dir, output_dir = workspace / "state", workspace / "output"
             output_dir.mkdir()
             parent = locked.restore(state_dir)
             _require_success_state(state_dir)
-            run_id = locked.start_run(
-                branch, trigger, self.source_revision, self.mode.value
-            )
-            side_effects_possible = False
+            outbox = self._prepare_notifications(locked, branch, output_dir)
+            run_id = locked.start_run(branch, trigger, self.source_revision, self.mode.value)
             try:
                 command = self._tracker_command(branch, state_dir, output_dir)
                 if branch == "legislative":
@@ -283,7 +321,6 @@ class JobRunner:
                         ]
                     )
                     command.extend(["--oge-listings-file", str(listings)])
-                side_effects_possible = not self.mode.is_shadow
                 self._execute(command)
                 if branch == "legislative":
                     self._execute(
@@ -296,6 +333,7 @@ class JobRunner:
                         ]
                     )
                 state = _require_success_state(state_dir)
+                notification_options, notification_provenance = self._notification_commit_options(outbox, branch)
                 snapshot = locked.commit(
                     state_dir,
                     expected_parent_sha256=parent.snapshot_sha256,
@@ -307,24 +345,26 @@ class JobRunner:
                         "mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
+                        **notification_provenance,
                     },
+                    **notification_options,
                 )
-                return snapshot
             except Exception as exc:
                 locked.finish_run(
                     run_id,
                     status="failure",
                     error_code=type(exc).__name__,
-                    side_effects_possible=side_effects_possible,
+                    side_effects_possible=False,
                 )
                 raise
+            self._dispatch_notifications(locked, branch)
+            return snapshot
 
     def _run_ai(self) -> SnapshotHead:
         trigger = self._env()["POLITITRACK_TRIGGER_SOURCE"]
         with self.store.locked("ai") as locked, tempfile.TemporaryDirectory(
             prefix="polititrack-ai-"
         ) as raw:
-            locked.assert_retry_safe()
             workspace = Path(raw)
             legislative, executive, ai_dir = (
                 workspace / "legislative",
@@ -338,15 +378,15 @@ class JobRunner:
             parent = locked.restore(ai_dir)
             for directory in (legislative, executive, ai_dir):
                 _require_success_state(directory)
+            outbox = self._prepare_notifications(locked, "ai", workspace)
             run_id = locked.start_run(
                 "ai", trigger, self.source_revision, self.mode.value
             )
-            side_effects_possible = False
             try:
                 command = self._ai_command(legislative, executive, ai_dir, workspace)
-                side_effects_possible = not self.mode.is_shadow
                 self._execute(command)
                 state = _require_success_state(ai_dir)
+                notification_options, notification_provenance = self._notification_commit_options(outbox, "ai")
                 snapshot = locked.commit(
                     ai_dir,
                     expected_parent_sha256=parent.snapshot_sha256,
@@ -358,6 +398,7 @@ class JobRunner:
                         "mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
+                        **notification_provenance,
                         "inputs": {
                             name: {
                                 "generation": input_head.generation,
@@ -366,16 +407,18 @@ class JobRunner:
                             for name, input_head in input_heads.items()
                         },
                     },
+                    **notification_options,
                 )
-                return snapshot
             except Exception as exc:
                 locked.finish_run(
                     run_id,
                     status="failure",
                     error_code=type(exc).__name__,
-                    side_effects_possible=side_effects_possible,
+                    side_effects_possible=False,
                 )
                 raise
+            self._dispatch_notifications(locked, "ai")
+            return snapshot
 
     def _run_dashboard(self) -> SnapshotHead:
         trigger = self._env()["POLITITRACK_TRIGGER_SOURCE"]

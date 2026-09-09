@@ -1662,6 +1662,8 @@ def _pushover_post(
     message: str,
     url: str,
     url_title: str,
+    notification_key: str = "",
+    filed_date: str = "",
 ) -> bool:
     if config.no_notify:
         LOGGER.warning("Notification suppressed (--no-notify): %s — %s", title, message)
@@ -1671,6 +1673,15 @@ def _pushover_post(
             raise NotificationError("Pushover credentials are required but missing")
         LOGGER.warning("Pushover credentials are absent; notification logged only: %s", title)
         return False
+    try:
+        from .runtime_notifications import stage_notification
+    except ImportError:
+        from runtime_notifications import stage_notification
+    if stage_notification(
+        channel="pushover", key=notification_key, filed_date=filed_date,
+        payload={"title": _truncate(title, 250), "message": _truncate(message, 1024), "url": url, "url_title": url_title},
+    ):
+        return False  # Queued is not provider acceptance.
     response = session.post(
         PUSHOVER_MESSAGES_URL,
         data={
@@ -1727,6 +1738,8 @@ def send_purchase_notification(
         message="\n".join(lines),
         url=selected[0].source_url,
         url_title=f"Open {filing_label}",
+        notification_key=json.dumps(["filing", selected[0].source, selected[0].report_id], separators=(",", ":")),
+        filed_date=selected[0].filed_date,
     )
 
 
@@ -1779,6 +1792,8 @@ def send_filing_notification(
         message="\n".join(lines),
         url=transactions[0].source_url,
         url_title=f"Open {filing_label}",
+        notification_key=json.dumps(["filing", transactions[0].source, transactions[0].report_id], separators=(",", ":")),
+        filed_date=transactions[0].filed_date,
     )
 
 
@@ -1797,6 +1812,8 @@ def send_pending_notification(
         message=message,
         url=review.source_url,
         url_title="Open filing or request page",
+        notification_key=json.dumps(["review", logical_review_id(asdict(review))], separators=(",", ":")),
+        filed_date=review.filed_date,
     )
 
 

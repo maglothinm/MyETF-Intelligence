@@ -437,7 +437,9 @@ def _pending_channels(delivery: Mapping[str, Any]) -> set[str]:
         if isinstance(delivered_value, Mapping)
         else set()
     )
-    return requested - delivered
+    queued_value = delivery.get("runtime_queued_channels") or {}
+    queued = set(queued_value) if isinstance(queued_value, Mapping) else set()
+    return requested - delivered - queued
 
 
 def _checkpoint_result(
@@ -452,6 +454,13 @@ def _send_candidate_email_with_evidence(
     config: legacy.AnalystConfig, alert: Mapping[str, str]
 ) -> bool:
     """Send Gmail while distinguishing rejection from unknown acceptance."""
+
+    try:
+        from .runtime_notifications import deferred
+    except ImportError:
+        from runtime_notifications import deferred
+    if deferred():
+        raise FatalAnalystConfigurationError("Runtime candidate delivery must use the durable outbox")
 
     address = config.gmail_address.strip()
     password = config.gmail_app_password.strip()
@@ -500,6 +509,29 @@ def _deliver_pending_candidate_alerts(
     """
 
     if config.suppress_alerts:
+        return
+    try:
+        from .runtime_notifications import deferred, record_key, stage_notification
+    except ImportError:
+        from runtime_notifications import deferred, record_key, stage_notification
+    if deferred():
+        for delivery in state.candidate_alert_deliveries.values():
+            alert = delivery.get("alert") or {}
+            if not isinstance(alert, Mapping):
+                raise FatalAnalystConfigurationError("Invalid queued candidate alert")
+            key = record_key("candidate", delivery.get("trade_id", ""), delivery.get("analysis_id", ""), delivery.get("analysis_revision", 1))
+            queued = dict(delivery.get("runtime_queued_channels") or {})
+            for channel in sorted(_pending_channels(delivery)):
+                stage_notification(channel=channel, key=key, filed_date=str(delivery.get("filed_date") or ""), payload={
+                    "title": str(alert.get("title") or "PolitiTrack candidate")[:250],
+                    "message": str(alert.get("message") or ""),
+                    "url": str(alert.get("url") or delivery.get("source_url") or ""),
+                    "url_title": "Open PolitiTrack analysis",
+                })
+                queued[channel] = key
+            delivery["runtime_queued_channels"] = queued
+        legacy.save_state(state_path, state)
+        _checkpoint_result(config, result)
         return
     pending_ids = [
         delivery_id

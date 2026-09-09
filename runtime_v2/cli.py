@@ -129,6 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--with-vault", action="store_true", help="Also create the existing Filing Vault schema")
     run = commands.add_parser("run", help="Run one independently scheduled producer")
     run.add_argument("job", choices=("legislative", "executive", "ai", "dashboard"))
+    commands.add_parser("notifications-status", help="Read independent notification delivery and legacy uncertainty evidence")
     status = commands.add_parser("status", help="Print current heads and latest job conclusions")
     status.add_argument("--pretty", action="store_true")
     commands.add_parser("review-init-db", help="Create only the additive personal account/review tables")
@@ -235,6 +236,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "status":
         print(json.dumps(store.status(), indent=2 if args.pretty else None, sort_keys=True))
+        return 0
+    if args.command == "notifications-status":
+        from .notifications import notification_status
+        from contextlib import closing
+
+        with closing(store._connect()) as connection:
+            print(json.dumps(notification_status(connection), sort_keys=True))
         return 0
     if args.command == "run":
         try:

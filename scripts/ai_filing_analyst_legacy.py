@@ -2271,6 +2271,12 @@ def format_candidate_alert(
 
 
 def _send_candidate_email(config: AnalystConfig, alert: Mapping[str, str]) -> bool:
+    try:
+        from .runtime_notifications import deferred
+    except ImportError:
+        from runtime_notifications import deferred
+    if deferred():
+        raise AnalystError("Runtime candidate delivery must use the durable outbox")
     address = config.gmail_address.strip()
     password = config.gmail_app_password.strip()
     if not address and not password:
@@ -2308,6 +2314,12 @@ def _notification_post(
     url_title: str,
     priority: int = 0,
 ) -> bool:
+    try:
+        from .runtime_notifications import deferred
+    except ImportError:
+        from runtime_notifications import deferred
+    if deferred():
+        raise AnalystError("Runtime candidate delivery must use the durable outbox")
     if not config.pushover_api_token or not config.pushover_user_key:
         if config.require_pushover:
             raise AnalystError("Pushover credentials are required but not configured")
@@ -2387,6 +2399,7 @@ def _queue_candidate_alert(
         "channel_errors": {},
         "alert": alert,
         "source_url": normalize_text(str(analysis.get("source_url") or "")),
+        "filed_date": str(analysis.get("filed_date") or ""),
     }
     return delivery_id
 
