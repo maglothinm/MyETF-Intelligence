@@ -90,3 +90,26 @@ html.app-shell {
 .run-control > p {flex-basis:100%;margin:0;color:var(--muted)}
 .run-control button {min-height:40px}
 .run-control .run-check {font-size:11px}
+
+/* Keep wide data reachable above tall tables, including in docked windows. */
+html {max-width:100%;overflow-x:auto}
+body {max-width:100%}
+.destination,.surface,.record-panel,.table-wrap,.outcome-table-wrap {min-width:0;max-width:100%}
+.two-column {grid-template-columns:repeat(2,minmax(0,1fr))}
+.table-navigation {display:flex;gap:8px;align-items:center;position:sticky;top:calc(var(--header-height,0px) + 4px);z-index:12;background:var(--surface);padding:5px 0;max-width:100%;min-width:0}
+.table-navigation button {flex:none;min-width:44px}
+.table-scroll-track {flex:1;min-width:0;overflow-x:scroll;scrollbar-width:auto;scrollbar-color:#8199b8 #172437}
+.table-scroll-track>div {height:1px}
+#panel-ai table {table-layout:fixed;min-width:2160px}
+#panel-ai th,#panel-ai td {width:112px;padding:8px 12px}
+#panel-ai th[data-sort-field="filer"],#panel-ai td[data-field="filer"] {width:180px}
+#panel-ai th[data-sort-field="ai.analysis_summary"],#panel-ai td[data-field="ai.analysis_summary"],#panel-ai th[data-sort-field="source_url"],#panel-ai td[data-field="source_url"] {width:270px}
+.cell-preview {display:block;width:100%;max-width:100%;min-width:0;min-height:44px;padding:0;border:0;border-radius:4px;background:transparent;font:inherit;text-align:left;line-height:1.55;color:var(--text);cursor:help}
+.cell-preview>span,#panel-ai .cell-value {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden;max-height:6.2em;overflow-wrap:anywhere;white-space:normal}
+.cell-evidence .cell-preview>span {-webkit-line-clamp:3;max-height:4.65em}
+.cell-evidence {position:relative}
+.cell-evidence summary {cursor:pointer;color:var(--blue);padding:4px 0;min-height:24px}
+.evidence-links {position:absolute;right:0;top:100%;z-index:15;width:300px;max-width:calc(100vw - 48px);max-height:240px;overflow:auto;padding:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #0006}
+.evidence-links a {display:block;overflow-wrap:anywhere}
+.tooltip-body {white-space:pre-wrap}
+@media(max-width:600px){.two-column{grid-template-columns:minmax(0,1fr)}}

@@ -667,6 +667,22 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
     production_runs = [row for row in runs if not is_synthetic(row) and production_run(row, str(row.get("branch") or ""))]
     production_ai_runs = [row for row in ai_runs if not is_synthetic(row) and production_run(row, "ai")]
     health, normalized_runs = _health(production_runs, production_ai_runs, clock, _mapping(payload.get("workflow_evidence")))
+    executive_health = next((branch for branch in health["branches"] if branch["branch"] == "executive"), {})
+    oge_filings = [row for row in filings if str(row.get("source") or "").casefold() == "oge"]
+    oge_reviews = [row for row in categories if str(row.get("source") or "").casefold() == "oge"]
+    # Every successful Runtime Executive attempt includes the mandatory OGE
+    # browser discovery step. Older workflow-only evidence is not a source probe.
+    health["oge"] = {
+        "monitoring_branch": "executive",
+        "checks_included": any(row.get("evidence_source") == "runtime_v2" and row.get("status") == "success"
+                               and row.get("finished_utc") == executive_health.get("last_success_utc")
+                               for row in executive_health.get("timeline", [])),
+        "filing_count": len(oge_filings),
+        "processed_count": sum(row.get("status") == "processed" for row in oge_filings),
+        "transaction_count": sum(str(row.get("source") or "").casefold() == "oge" for row in transactions),
+        "access_required_count": sum(row.get("category") == "access_required" for row in oge_reviews),
+        "manual_exception_count": sum(row.get("category") == "manual_exception" for row in oge_reviews),
+    }
     simulation = _simulation(payload.get("simulation"))
     data_through = source_data_through(payload, as_of=clock)
     incidents = []

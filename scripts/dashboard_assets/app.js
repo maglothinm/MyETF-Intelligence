@@ -152,13 +152,30 @@
     el(`${key}-clear`).onclick=()=>{resetTable(key);syncRecordRoute(key);renderTable(key);};
   }
   document.addEventListener("click",e=>{const b=e.target.closest("[data-sort]");if(!b)return;const t=state.tables[b.dataset.table];t.descending=t.sort===b.dataset.sort?!t.descending:false;t.sort=b.dataset.sort;t.page=0;renderTable(b.dataset.table);});}
+  function compactCell(value,label,kind="Analysis") {
+    if(typeof value!=="string"||!value.trim())return "Unavailable";
+    const preview=Array.from(value.replace(/\s+/g," ").trim());
+    return `<button type="button" class="help cell-preview" data-tooltip="${esc(value)}" data-tooltip-title="${esc(kind+" · "+label)}" aria-label="${esc("Read full "+kind.toLowerCase()+" for "+label)}"><span>${esc(preview.slice(0,220).join("")+(preview.length>220?"…":""))}</span></button>`;
+  }
+  function signalValue(row,field,type){
+    const html=cell(row,field,type),reader=document.createElement("div");
+    reader.innerHTML=html;
+    reader.querySelectorAll("small").forEach(node=>node.prepend(" "));
+    return `<div class="cell-value" tabindex="0" data-tooltip="${esc(reader.textContent.trim())}">${html}</div>`;
+  }
   function cell(row,field,type){let v=get(row,field);if(["investor_edge_relevant_followable_alpha","investor_edge_sector_alpha","investor_edge_score"].includes(field)&&(["insufficient_data","unavailable","disabled","error","neutral"].includes(row.investor_edge_status)||row.investor_edge?.minimum_sample_met===false))v=null;if(field==="final_score")v=v??row.score;
     if(type==="review")return `<a class="record-link" href="${esc(reviewHref(row))}"><strong>${esc(row.filer||"Unknown filer")}</strong><small>${esc(row.report_id||row.review_id||"Record ID unavailable")}</small><span>Inspect record →</span></a><small>${esc([row.title,row.agency].filter(Boolean).join(" · "))}</small>${row.is_synthetic_test===true?'<small class="caution">TEST / SIMULATED</small>':""}`;
     if(type==="age")return `${esc(date(v))}<small>${esc(age(v))}</small>`;
     if(field==="category"){const acknowledged=reviewAcknowledgedAt(row);return `<span class="badge ${v==="manual_exception"?"caution":""}">${esc(reviewLabels[v]||"Uncategorized")}</span>${acknowledged?`<small class="success">✓ Acknowledged by you ${esc(date(acknowledged))}</small>`:""}`;}
     if(field==="source"||field==="branch")return esc(title(v||"Unavailable"));
     if(type==="date")return esc(date(v));if(type==="money")return esc(money(v));if(type==="percent")return esc(percent(v));if(type==="number")return esc(number(v));if(type==="link")return field==="run_url"?link(v,"Open run"):PT.filingActions(row);
-    if(type==="evidence")return PT.filingActions(row)+ (Array.isArray(row.ai?.evidence_sources)?row.ai.evidence_sources.filter(s=>s&&typeof s==="object"&&typeof s.url==="string").slice(0,4).map(s=>link(s.url,s.title||"Evidence")).join(""):"");
+    if(field==="ai.analysis_summary")return compactCell(v,row.ticker||row.asset||row.filer||"record");
+    if(type==="evidence"){
+      const sources=(Array.isArray(row.ai?.evidence_sources)?row.ai.evidence_sources:[]).filter(s=>s&&typeof s==="object"&&typeof s.url==="string");
+      const full=[row.source_url?`Official filing: ${row.source_url}`:"",...sources.map(s=>`${s.title||"Evidence"}: ${s.url}`)].filter(Boolean).join("\n\n");
+      const links=PT.filingActions(row)+sources.map(s=>link(s.url,s.title||"Evidence")).join("");
+      return `<div class="cell-evidence">${compactCell(full,row.ticker||row.asset||row.filer||"record","Evidence")}<details><summary>Open sources</summary><div class="evidence-links">${links}</div></details></div>`;
+    }
     if(type==="status"){if(row.errors && (Array.isArray(row.errors)?row.errors.length:typeof row.errors==="object"?Object.keys(row.errors).length:String(row.errors).trim().length))v=false;return `<span class="status ${v===true?"success":v===false?"failure":"unknown"}">${v===true?"✓ Success":v===false?"! Failed":"◌ Unknown"}</span>`;}
     if(type==="array")return esc(Array.isArray(v)?v.join("; ")||"None recorded":v||"None recorded");
     if(type==="sum")return v&&typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(x=>numeric(x)!==null)?number(Object.values(v).reduce((a,b)=>a+Number(b),0)):"Unavailable";
@@ -183,7 +200,7 @@
     t.page=Math.min(t.page,Math.max(0,Math.ceil(rows.length/PAGE_SIZE)-1));const start=t.page*PAGE_SIZE,shown=rows.slice(start,start+PAGE_SIZE);
     const parserOnly=key==="reviews"&&t.filters.category==="manual_exception",reviewStats=manualReviewStats();
     const empty=parserOnly?(reviewStats.active===0&&!state.showAcknowledgedReviews?"No unacknowledged records currently require manual parser review.":"No parser exceptions match these additional filters. Clear filters to see all review records."):t.selected?"This source record is not retained in the current publication. Clear filters to browse available records.":key==="portfolio"&&!data.length?"No open paper positions. No performance implied.":"No matching records.";
-    el(`${key}-body`).innerHTML=shown.length?shown.map(row=>`<tr ${key==="reviews"?`class="review-row ${reviewAcknowledgedAt(row)?"acknowledged":""}"`:""} ${t.selected?'data-selected-record="true"':""}>${def.columns.map(([field,label,type])=>`<td>${cell(row,field,type)}</td>`).join("")}</tr>${t.selected?recordDetails(row,key):""}`).join(""):`<tr><td colspan="${def.columns.length}" class="empty">${empty}</td></tr>`;
+    el(`${key}-body`).innerHTML=shown.length?shown.map(row=>`<tr ${key==="reviews"?`class="review-row ${reviewAcknowledgedAt(row)?"acknowledged":""}"`:""} ${t.selected?'data-selected-record="true"':""}>${def.columns.map(([field,label,type])=>`<td data-field="${field}">${key==="ai"&&!["ai.analysis_summary","source_url"].includes(field)?signalValue(row,field,type):cell(row,field,type)}</td>`).join("")}</tr>${t.selected?recordDetails(row,key):""}`).join(""):`<tr><td colspan="${def.columns.length}" class="empty">${empty}</td></tr>`;
     el(`panel-${key}`).querySelector(".table-wrap").hidden=parserOnly&&!rows.length&&reviewStats.active===0&&!state.showAcknowledgedReviews;
     if(parserOnly&&reviewStats.active===0&&!state.showAcknowledgedReviews)el(`${key}-count-label`).textContent=empty;
     else
@@ -258,6 +275,13 @@
     if(preserveHistory)host.querySelectorAll(".timeline").forEach((node,index)=>{node.scrollLeft=offsets[index]||0;});
     if(focusKey)[...host.querySelectorAll("a,button")].find(node=>node.getAttribute("href")===focusKey.href&&node.getAttribute("aria-label")===focusKey.label&&node.textContent===focusKey.text)?.focus({preventScroll:true});
   }
+  function renderOGE(m) {
+    const oge=m.health.oge||{},worker=m.health.branches.find(b=>b.branch==="executive")||{};
+    const verified=oge.checks_included===true;
+    const status=worker.status==="failure"?"failure":worker.status==="stale"?"stale":verified&&worker.status==="success"?"success":"unknown";
+    const explanation=status==="failure"?"The Executive monitoring run failed. OGE coverage is not confirmed by that attempt; the last successful check remains below.":status==="stale"?"The Executive collector is overdue. OGE monitoring needs a fresh successful check.":status==="success"?"OGE discovery completed as part of the successful Executive run.":"A successful OGE check is not established by the available execution evidence.";
+    el("oge-health").innerHTML=`<header class="section-heading"><h2 id="oge-health-title">OGE disclosures</h2><span class="status ${status}">${status==="success"?"✓ Current":statusText(status)}</span></header><p>${esc(explanation)}</p><dl class="facts health-facts">${fact("Monitored by","Executive collector")}${fact("Last attempt",date(worker.last_attempt_utc))}${fact("Last successful OGE check",verified?date(worker.last_success_utc):"Unavailable")}${fact("Expected cadence",PT.cadenceText(worker))}${fact("Next expected run",date(worker.next_expected_utc))}${fact("Successful check age",verified?PT.durationMinutes(worker.age_minutes):"Unavailable")}${fact("Retained OGE filings",number(oge.filing_count))}${fact("Processed filings",number(oge.processed_count))}${fact("Parsed transactions",number(oge.transaction_count))}${fact("Access / request required",number(oge.access_required_count))}${fact("Manual parser exceptions",number(oge.manual_exception_count))}</dl><p class="chart-note">Access-required disclosures need the official document request process; they are not collector failures. OGE is checked by the existing Executive schedule.</p><a href="#records/reviews">Review source records →</a>`;
+  }
   function renderHealth(m,changes={},preserveHistory=false) {
     const summary=PT.monitoringSummary(m),status=m.health.status;
     el("overall-state").className=`status ${state.refreshError&&status==="success"?"unknown":status}`;
@@ -269,7 +293,7 @@
     el("attention-health").className=`health-metric ${status}`;
     el("situation-brief").textContent=activeReviewBrief(m,changes,manualReviewStats(m).active);
     updateHealthCards("health-chart",m,false,preserveHistory);updateHealthCards("operations-health",m,true,preserveHistory);
-    renderExceptionInventory(m);
+    renderExceptionInventory(m);renderOGE(m);
     el("build-details").textContent=`Dashboard generated ${date(m.generated_utc)} · build ${m.build_sha||"unavailable"} · Source data through ${date(m.data_through_utc)}. Publication does not establish collector success.`;
     state.healthViewKey=PT.healthViewKey(m);
   }
@@ -296,7 +320,7 @@
   }
   function notificationEvidence(url){return /^#[\w/-]+$/.test(url||"")?`<a href="${esc(url)}" data-notification-link>View evidence →</a>`:link(url,"Evidence");}
   function renderNotifications(){const s=notifications.getState(),focused=document.activeElement,focusKeys=["ack","snooze","mute"],focusKey=focusKeys.find(key=>focused?.dataset?.[key]),focusValue=focusKey?focused.dataset[focusKey]:null;el("notification-count").textContent=number(s.unread);el("notification-button").setAttribute("aria-label",`Notification Center, ${s.unread} unread, ${s.actionable} actionable`);el("notification-summary").textContent=`${s.unread} unread · ${s.actionable} actionable`;
-    el("sound-button").textContent=s.settings.mode==="off"?"Sound off":s.sound.armed?"Sound armed":"Sound unarmed";el("sound-status").textContent=s.sound.status||"Sound is off.";
+    el("sound-button").textContent=s.settings.mode==="off"?"Sound off":s.sound.armed?"Sound on":"Sound on · activate";el("sound-status").textContent=s.sound.status||"Sound is off.";
     el("notification-storage-note").hidden=s.storageAvailable;el("notification-storage-note").textContent="Browser storage unavailable. History cannot persist; automatic sound remains silent.";
     el("notification-list").innerHTML=s.events.length?s.events.map(e=>`<article class="notification-item ${e.acknowledged?"acknowledged":""}"><header><strong class="${e.severity==="high"?"positive":e.severity==="warning"?"caution":e.severity==="success"?"success":"muted"}">${esc(e.icon)} ${esc(title(e.severity))}${e.simulation?" · SIMULATED":""}</strong><time>${esc(date(e.timestamp))}</time></header><p>${esc(e.summary)}</p><small>${e.acknowledged?"Acknowledged":s.settings.mutedCategories[e.category]?"Category muted":e.snoozedUntil&&Date.parse(e.snoozedUntil)>Date.now()?`Snoozed until ${esc(date(e.snoozedUntil))}`:"Unread"}</small><div class="event-controls">${notificationEvidence(e.link)}<button data-ack="${esc(e.id)}" ${e.acknowledged?"disabled":""}>Acknowledge</button><button data-snooze="${esc(e.id)}">Snooze 1h</button></div></article>`).join(""):'<p class="empty">No new events on this browser. Initial records establish a quiet baseline.</p>';
     el("recent-changes").innerHTML=s.events.length?s.events.slice(0,4).map(e=>`<div class="activity-row"><span aria-hidden="true">${esc(e.icon)}</span><div><strong>${esc(e.summary)}</strong><small>${esc(title(e.severity))} · ${esc(date(e.timestamp))}${e.simulation?" · SIMULATED":""}</small></div></div>`).join(""):'<p class="empty">No new activity since your browser baseline. Existing records were not marked as new.</p>';

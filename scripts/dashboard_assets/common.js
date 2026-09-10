@@ -212,6 +212,7 @@ window.PT = (() => {
   const isCoarsePointer = event => event?.pointerType ? ["touch","pen"].includes(event.pointerType) :
     event?.sourceCapabilities?.firesTouchEvents || !!window.matchMedia?.("(pointer: coarse)").matches;
   function setupDialogsAndTooltips() {
+    setupTableNavigation();
     let opener=null,anchor=null,pinned=false,openTimer=null,closeTimer=null,frame=null;
     let pending=null,pointer=null,input="keyboard",suppressFocus=false,touchHint=false,contentKey=null;
     const tooltip=el("tooltip"), selector="[data-tooltip], [data-tooltip-key]";
@@ -362,6 +363,45 @@ window.PT = (() => {
       d.addEventListener("click",e=>{if(e.target===d){const b=d.getBoundingClientRect();if(e.clientX<b.left||e.clientX>b.right||e.clientY<b.top||e.clientY>b.bottom)d.close();}});
     }
     return openDialog;
+  }
+  function setupTableNavigation() {
+    if(typeof MutationObserver!=="function"||typeof requestAnimationFrame!=="function")return;
+    if(document.documentElement.dataset.tableNavigation)return;
+    document.documentElement.dataset.tableNavigation="ready";
+    const tracked=new Map();let frame=null;
+      const schedule=()=>{if(window.document?.body&&frame===null)frame=requestAnimationFrame(update);};
+    function update(){
+      frame=null;
+      document.querySelectorAll(".table-wrap,.outcome-table-wrap").forEach(wrap=>{
+          if(tracked.has(wrap)||wrap.closest("[hidden],details:not([open])"))return;
+        const bar=document.createElement("div");bar.className="table-navigation";bar.hidden=true;
+        const label=wrap.getAttribute("aria-label")||wrap.querySelector("caption")?.textContent||"Data table";
+        bar.setAttribute("role","group");bar.setAttribute("aria-label",label+" horizontal navigation");
+        bar.innerHTML='<button type="button" data-scroll-left aria-label="Scroll table left">←</button><div class="table-scroll-track" tabindex="0" role="region" aria-label="Scroll table columns left or right"><div></div></div><button type="button" data-scroll-right aria-label="Scroll table right">→</button>';
+        wrap.before(bar);
+        if(!wrap.hasAttribute("tabindex"))wrap.tabIndex=0;
+        const track=bar.querySelector(".table-scroll-track"),spacer=track.firstElementChild;
+        const left=bar.querySelector("[data-scroll-left]"),right=bar.querySelector("[data-scroll-right]");
+        const sync=()=>{track.scrollLeft=wrap.scrollLeft;left.disabled=wrap.scrollLeft<=0;right.disabled=wrap.scrollLeft>=wrap.scrollWidth-wrap.clientWidth-1;};
+        wrap.addEventListener("scroll",sync,{passive:true});
+        track.addEventListener("scroll",()=>{if(Math.abs(wrap.scrollLeft-track.scrollLeft)>1)wrap.scrollLeft=track.scrollLeft;sync();},{passive:true});
+        left.onclick=()=>{wrap.scrollLeft-=Math.max(160,wrap.clientWidth*.7);sync();};
+        right.onclick=()=>{wrap.scrollLeft+=Math.max(160,wrap.clientWidth*.7);sync();};
+        track.addEventListener("keydown",e=>{if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;e.preventDefault();wrap.scrollLeft=e.key==="Home"?0:e.key==="End"?wrap.scrollWidth:wrap.scrollLeft+(e.key==="ArrowLeft"?-160:160);sync();});
+        tracked.set(wrap,{bar,track,spacer,sync});
+        resize?.observe(wrap);if(wrap.firstElementChild)resize?.observe(wrap.firstElementChild);
+      });
+      tracked.forEach(({bar,track,spacer,sync},wrap)=>{
+        if(!wrap.isConnected){bar.remove();tracked.delete(wrap);resize?.unobserve(wrap);return;}
+          bar.hidden=wrap.clientWidth===0||!!wrap.closest("[hidden],details:not([open])")||wrap.scrollWidth<=wrap.clientWidth+1;
+        if(!bar.hidden){const width=wrap.scrollWidth-wrap.clientWidth+track.clientWidth;const value=`${width}px`;if(spacer.style.width!==value)spacer.style.width=value;sync();}
+      });
+    }
+    const resize=typeof ResizeObserver==="function"?new ResizeObserver(schedule):null;
+      const observer=new MutationObserver(records=>{if(window.document?.body&&records.some(r=>!r.target.closest?.(".table-navigation")))schedule();});
+      observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["hidden","open","class"]});
+      window.addEventListener("pagehide",e=>{if(!e.persisted){observer.disconnect();resize?.disconnect();if(frame!==null)cancelAnimationFrame(frame);}});
+    window.addEventListener("resize",schedule);document.addEventListener("toggle",schedule,true);schedule();
   }
   function filingActions(row) {
     const id=row.filing_id||row.filing_key, url=safeUrl(row.official_source_url||row.source_url);

@@ -1231,3 +1231,32 @@ accepted history are retained; missing alert credentials and individual uncertai
 submissions do not latch future collection. Any future rollback must remain
 outbox-compatible. The personal review release and owner setup process remain
 intact. [Acceptance evidence](releases/2026-09-09-legislative-recovery.md).
+
+
+## 2026-09-10 — Owner investor alerts and reachable compact tables
+
+**Decision:** Send the configured owner Gmail notifications through the existing
+Runtime AI outbox for Investor Edge ratings strictly above 60.0 and the existing
+Watchlist/High Priority classifications. Observe complete/partial profiles only
+when their minimum sample is met. An additive per-profile crossing journal is
+committed with AI state and intents; unknown, absent or stale evidence never
+resets it. Initially qualifying profiles alert once, and later observed
+below-to-above crossings receive a new episode. Missing sender credentials leave
+intents queued without blocking collection. Simulations and suppressed/shadow
+execution remain unable to stage owner alerts. Existing outbox payloads remain
+valid; new Gmail payloads carry an explicit validated recipient.
+
+**UI:** Default new-browser sound to all eligible events, requiring the browser's
+normal real-interaction activation and preserving saved Off preferences. Reuse
+the shared accessible reader for short Analysis/Evidence previews, retaining
+full exact text, source links and search. Add synchronized, keyboard-accessible
+top scrolling to wide data tables and avoid creating controls for unopened
+profile details. Operations derives OGE health from the mandatory OGE step in
+the existing Runtime Executive writer, with explicit unknown/failure/stale
+states; access-required inventory is not a collector failure.
+
+**Release boundary:** No new schedule, writer, protected-state rebaseline,
+notification-history reset or personal-data change. Gmail credentials and a
+coordinated deployment remain separate from implementation. Once recipient-aware
+intents exist, any rollback must preserve both the outbox and recipient contract.
+See [issue #168 implementation](investor-alerts-navigation.md).

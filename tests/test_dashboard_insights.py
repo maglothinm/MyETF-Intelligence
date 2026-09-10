@@ -59,6 +59,22 @@ def test_historical_bootstrap_remains_visible_without_new_record_or_candidate_ev
     assert [row["analysis_id"] for row in model["notifications"]["qualifying_signals"]] == ["a:new"]
 
 
+def test_oge_inventory_and_runtime_check_are_explicit_without_duplicate_writer():
+    source = payload(filings=[{"source": "oge", "report_id": "oge-1", "status": "processed"},
+                              {"source": "oge", "report_id": "oge-2", "status": "review_required", "access_mode": "request"}],
+                     transactions=[{"source": "oge", "trade_id": "oge-trade"}],
+                     reviews=[{"source": "oge", "report_id": "oge-2", "review_id": "oge-review", "reason": "Form 201 request required"}],
+                     runs=[run("executive", evidence_source="runtime_v2", trigger_source="external_scheduler")])
+    model = build_insights(source)
+    oge = model["health"]["oge"]
+    assert oge["checks_included"] is True
+    assert oge["filing_count"] == 2 and oge["processed_count"] == 1 and oge["transaction_count"] == 1
+    assert oge["access_required_count"] == 1 and oge["manual_exception_count"] == 0
+    assert [b["branch"] for b in model["health"]["branches"]] == ["legislative", "executive", "ai"]
+    source["runs"][0]["evidence_source"] = "github_actions"
+    assert build_insights(source)["health"]["oge"]["checks_included"] is False
+
+
 def test_coverage_composition_and_review_categories_are_distinct_exact_populations(monkeypatch):
     monkeypatch.setenv("GITHUB_SHA", "a" * 40)
     source = payload(

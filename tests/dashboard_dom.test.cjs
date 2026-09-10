@@ -819,7 +819,7 @@ test('one new qualifying signal renders one local event and unchanged refresh st
   assert.match(env.byId('overview-signals').textContent, /insufficient completed observations \(n = 1\)/);
   await env.refresh();
   assert.equal(env.byId('notification-list').querySelectorAll('.notification-item').length, 1);
-  assert.equal(env.byId('sound-button').textContent, 'Sound off');
+  assert.equal(env.byId('sound-button').textContent, 'Sound on · activate');
   assert.deepEqual(env.errors, []);
 });
 
@@ -1711,4 +1711,66 @@ test('shell header measurement follows viewport resizing when ResizeObserver is 
   height = 84; env.window.dispatchEvent(new env.window.Event('resize'));
   assert.equal(measuredHeight(), '84px');
   assert.deepEqual(env.errors, []);
+});
+
+test('Signals compact exact analysis and evidence with safe hover, focus, tap and full-text search', async t => {
+  const data=fixtures();
+  const full='Original "quoted" <img src=x onerror=alert(1)> & text. '.repeat(30)+'TAIL_SEARCH_ONLY';
+  const sources=Array.from({length:7},(_,i)=>({title:'Source '+i+' '+('long evidence '.repeat(10)),url:'https://example.test/evidence/'+i}));
+  data['ai-analyses']=[{analysis_id:'analysis-long',trade_id:'trade-long',ticker:'LONG',classification:'weak_signal',
+    analyzed_at_utc:'2026-08-30T10:00:00Z',asset:'Full asset name',filer:'Filer',owner:'Spouse',investor_edge_score:85,investor_edge_status:'insufficient_data',source_url:'https://example.test/filing',ai:{analysis_summary:full,evidence_sources:sources}}];
+  const env=await dashboard({change:target=>Object.assign(target,data),hash:'#signals'});t.after(env.close);
+  await waitFor(()=>env.byId('ai-body').querySelector('.cell-preview'),'compact analysis');
+  const control=env.byId('ai-body').querySelector('[data-field="ai.analysis_summary"] button');
+  assert.equal(control.dataset.tooltip,full);
+  assert.ok(control.textContent.length<=221);
+  assert.equal(control.getAttribute('aria-label'),'Read full analysis for LONG');
+  assert.equal(env.byId('ai-body').querySelector('img'),null);
+  assert.equal(env.byId('ai-body').querySelector('[data-field="investor_edge_score"] .cell-value').dataset.tooltip,'Unavailable');
+  assert.match(env.byId('ai-body').querySelector('[data-field="ticker"] .cell-value').dataset.tooltip,/Full asset name/);
+  assert.match(env.byId('ai-body').querySelector('[data-field="filer"] .cell-value').dataset.tooltip,/Spouse/);
+  control.focus();
+  assert.equal(env.byId('tooltip').querySelector('.tooltip-body').textContent,full);
+  assert.equal(control.getAttribute('aria-describedby'),'tooltip');
+  control.click();env.doc.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  assert.equal(env.byId('tooltip').hidden,true);
+  pointer(env,control,'pointerdown',{pointerType:'touch'});pointer(env,control,'click',{pointerType:'touch'});
+  assert.equal(env.byId('tooltip').hidden,false);
+  const evidence=env.byId('ai-body').querySelector('[data-field="source_url"] .cell-preview');
+  assert.ok(evidence.dataset.tooltip.includes(sources[6].url));
+  assert.equal(env.byId('ai-body').querySelectorAll('.evidence-links a').length,9);
+  env.byId('ai-search').value='TAIL_SEARCH_ONLY';env.byId('ai-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  await tick(220);
+  assert.match(env.byId('ai-count-label').textContent,/1.*of 1/);
+  assert.deepEqual(env.errors,[]);
+});
+
+test('wide tables get synchronized top navigation that reaches both ends', async t => {
+  const env=await dashboard({hash:'#signals'});t.after(env.close);
+  const wrap=env.byId('panel-ai').querySelector('.table-wrap');
+  Object.defineProperties(wrap,{clientWidth:{get:()=>400},scrollWidth:{get:()=>2400}});
+  env.window.dispatchEvent(new env.window.Event('resize'));
+  await waitFor(()=>wrap.previousElementSibling.classList.contains('table-navigation'),'navigation added');
+  const bar=wrap.previousElementSibling;
+  await waitFor(()=>!bar.hidden,'wide table navigation visible');
+  const track=bar.querySelector('.table-scroll-track');
+  track.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'End',bubbles:true}));
+  assert.equal(wrap.scrollLeft,2400); // JSDOM does not implement native clamping.
+  assert.equal(track.scrollLeft,wrap.scrollLeft);
+  track.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+  assert.equal(wrap.scrollLeft,0);
+  bar.querySelector('[data-scroll-right]').click();
+  assert.ok(wrap.scrollLeft>0);
+  assert.deepEqual(env.errors,[]);
+});
+
+test('Operations shows OGE inventory and ages the same mandatory Executive check', async t => {
+  const data=fixtures();data['dashboard-insights'].health.oge={checks_included:true,filing_count:25,processed_count:2,transaction_count:6,access_required_count:23,manual_exception_count:0};
+  const env=await dashboard({change:target=>Object.assign(target,data),hash:'#operations'});t.after(env.close);
+  const card=env.byId('oge-health');
+  assert.match(card.textContent,/OGE disclosures.*Current/);
+  assert.match(card.textContent,/Access \/ request required23/);
+  assert.equal(card.querySelector('[data-run-now]'),null);
+  env.advanceTime(61*60000);
+  assert.match(card.textContent,/overdue/i);
 });
