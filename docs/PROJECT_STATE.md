@@ -6,6 +6,17 @@
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
+## September 11 release in progress — issues #168/#170
+
+The owner authorized full release of investor alerts, OGE health and compact
+navigation. PR #169 is merged at `258b7e16f51485fb9ba92971f4c05964eaab09aa`, but
+production still uses the accepted image below. The live Signals JSON endpoint
+now exceeds Cloud Run's buffered response limit and returns HTTP 500; `/readyz`
+remains ready because the snapshot itself is valid. Issue #170 supplies streaming
+responses before live acceptance. Gmail sender credentials remain absent and
+require the owner's secure Google verification. No schedules, data, schemas or
+personal history have changed during this release preflight.
+
 ## September 9 permanent Legislative recovery — current release
 
 Runtime source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301`, build `9ad52cb8-5875-4e08-a86c-ea90e512247c`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1` is verified on

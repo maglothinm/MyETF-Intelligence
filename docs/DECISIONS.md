@@ -1260,3 +1260,20 @@ notification-history reset or personal-data change. Gmail credentials and a
 coordinated deployment remain separate from implementation. Once recipient-aware
 intents exist, any rollback must preserve both the outbox and recipient contract.
 See [issue #168 implementation](investor-alerts-navigation.md).
+
+
+## 2026-09-11 — Stream growing public dashboard assets
+
+**Decision:** Serve public text assets of at least 64 KiB with negotiated gzip
+streaming, preserving their exact decoded bytes. Remove the buffered response
+length for identity-only responses of at least 32 MiB so the WSGI server can use
+chunked transfer. Preserve range and conditional requests; use Vary and weak ETags
+for the semantically equivalent encoded representation. Do not compress private
+account/API responses or truncate retained ledgers.
+
+**Evidence:** The live Signals ledger returned HTTP 500 on September 11 while
+Cloud Run recorded “Response size was too large.” Its documented non-streaming
+HTTP/1 limit is 32 MiB. A ready snapshot alone does not prove every data endpoint
+loads; live acceptance must fetch and parse the complete Signals JSON.
+[Cloud Run limit](https://docs.cloud.google.com/run/quotas),
+[Flask streaming](https://flask.palletsprojects.com/en/stable/patterns/streaming/).

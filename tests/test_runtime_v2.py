@@ -249,6 +249,60 @@ def test_web_app_rejects_path_escape_and_serves_snapshot():
     assert escaped.status_code == 404
 
 
+@pytest.mark.parametrize("encoding,compressed", [("gzip", True), ("gzip;q=0", False), ("identity", False)])
+def test_large_dashboard_ledger_streams_complete_bytes(tmp_path, encoding, compressed):
+    import hashlib
+    import zlib
+    from runtime_v2.web import create_app
+
+    class LargeLock(_DashboardLock):
+        def restore(self, destination):
+            super().restore(destination)
+            (destination / "data").mkdir()
+            with (destination / "data/large.json").open("wb") as stream:
+                stream.write(b'["')
+                for _ in range(33 * 1024):
+                    stream.write(b"x" * 1024)
+                stream.write(b'"]')
+
+    class LargeStore:
+        @contextmanager
+        def locked(self, namespace):
+            assert namespace == "dashboard"
+            yield LargeLock()
+
+    app = create_app({"TESTING": True}, store=LargeStore())
+    with app.test_client() as client:
+        response = client.get("/data/large.json", headers={"Accept-Encoding": encoding}, buffered=False)
+        assert response.status_code == 200 and response.is_streamed
+        assert "Content-Length" not in response.headers
+        assert "Accept-Encoding" in response.vary
+        assert response.headers["X-PolitiTrack-Snapshot"] == "d" * 64
+        assert (response.headers.get("Content-Encoding") == "gzip") == compressed
+        decoder = zlib.decompressobj(31) if compressed else None
+        digest = hashlib.sha256()
+        decoded_size = 0
+        for chunk in response.response:
+            raw = decoder.decompress(chunk) if decoder else chunk
+            digest.update(raw)
+            decoded_size += len(raw)
+        if decoder:
+            assert decoder.eof
+        assert decoded_size == 33 * 1024 * 1024 + 4
+        path = app.extensions["runtime_v2_dashboard"].active / "data/large.json"
+        with path.open("rb") as stream:
+            assert digest.hexdigest() == hashlib.file_digest(stream, "sha256").hexdigest()
+        etag = response.headers["ETag"]
+        response.close()
+        cached = client.get("/data/large.json", headers={"Accept-Encoding": encoding, "If-None-Match": etag})
+        assert cached.status_code == 304 and not cached.data
+        head = client.head("/data/large.json", headers={"Accept-Encoding": encoding})
+        assert head.status_code == 200 and not head.data
+        partial = client.get("/data/large.json", headers={"Accept-Encoding": encoding, "Range": "bytes=0-1"})
+        assert partial.status_code == 206 and partial.data == b'["'
+        assert "Content-Encoding" not in partial.headers
+
+
 class _IamConfiguration:
     uniform_bucket_level_access_enabled = True
     public_access_prevention = "enforced"
