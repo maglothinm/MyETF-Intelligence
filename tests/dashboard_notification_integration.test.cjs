@@ -97,7 +97,7 @@ test('wallboard arms sound without awaiting another setting operation first', as
   assert.equal(env.calls[0][0], 'enable');
   assert.equal(env.calls[0][1], event);
   await result;
-  assert.equal(env.nodes.get('wall-sound').textContent, 'Sound armed');
+  assert.equal(env.nodes.get('wall-sound').textContent, 'Sound on');
 });
 
 test('wallboard waits for Off to persist and catches failed sound settings', async () => {

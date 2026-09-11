@@ -56,6 +56,13 @@ def validate_intent(intent: Mapping[str, Any], namespace: str) -> dict[str, Any]
         raise ValueError("invalid notification availability date")
     payload = intent["payload"]
     limits = {"title": 250, "message": 10000, "url": 2048, "url_title": 100}
+    if channel == "gmail" and isinstance(payload, dict) and "recipient" in payload:
+        try:
+            from .investor_notifications import recipient
+        except ImportError:
+            from investor_notifications import recipient
+        recipient(payload["recipient"])
+        limits["recipient"] = 254
     if not isinstance(payload, dict) or set(payload) != set(limits):
         raise ValueError("invalid notification payload")
     if any(not isinstance(payload[key], str) or len(payload[key]) > maximum for key, maximum in limits.items()):

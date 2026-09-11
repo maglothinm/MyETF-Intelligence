@@ -2,6 +2,7 @@
 (() => {
   "use strict";
   const {el,esc,date,age,title,safeUrl,fact}=PT;
+  PT.setupDialogsAndTooltips();
   const state={api:"/api",rows:[],catalog:[],filing:null,blob:null,token:"",page:0,generation:0,notice:null,ready:false};
   const params=new URLSearchParams(location.search);
   const tokenKey="polititrack.filing-ack.v1";

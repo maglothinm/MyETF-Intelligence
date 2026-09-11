@@ -8,6 +8,12 @@ on:
       - "scripts/ai_retry_guard.py"
       - "scripts/ai_filing_analyst_hardened.py"
       - "scripts/runtime_notifications.py"
+      - "scripts/investor_notifications.py"
+      - "runtime_v2/notifications.py"
+      - "config/investor_notifications.json"
+      - "tests/test_investor_notifications.py"
+      - "tests/test_dashboard_notifications.py"
+      - "tests/dashboard_notifications.test.cjs"
       - "scripts/validate_ai_publication.py"
       - "scripts/run_trigger.py"
       - "scripts/dashboard_insights.py"
@@ -88,6 +94,12 @@ on:
       - "scripts/ai_retry_guard.py"
       - "scripts/ai_filing_analyst_hardened.py"
       - "scripts/runtime_notifications.py"
+      - "scripts/investor_notifications.py"
+      - "runtime_v2/notifications.py"
+      - "config/investor_notifications.json"
+      - "tests/test_investor_notifications.py"
+      - "tests/test_dashboard_notifications.py"
+      - "tests/dashboard_notifications.test.cjs"
       - "scripts/validate_ai_publication.py"
       - "scripts/run_trigger.py"
       - "scripts/dashboard_insights.py"
@@ -214,6 +226,8 @@ jobs:
             tests/test_trade_dashboard.py \
             tests/test_dashboard_insights.py \
             tests/test_dashboard_dom.py \
+            tests/test_dashboard_notifications.py \
+            tests/test_investor_notifications.py \
             tests/test_filing_vault.py \
             tests/test_filing_vault_providers.py \
             tests/test_filing_vault_ui.py \

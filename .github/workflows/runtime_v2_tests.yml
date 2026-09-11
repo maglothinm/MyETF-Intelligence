@@ -5,6 +5,9 @@ on:
     paths:
       - "runtime_v2/**"
       - "scripts/runtime_notifications.py"
+      - "scripts/investor_notifications.py"
+      - "config/investor_notifications.json"
+      - "tests/test_investor_notifications.py"
       - "scripts/government_trade_tracker_core.py"
       - "scripts/ai_filing_analyst_hardened.py"
       - "scripts/ai_filing_analyst_legacy.py"

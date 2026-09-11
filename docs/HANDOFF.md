@@ -1,7 +1,38 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-09T13:41:35.684561+00:00 — Legislative recovery accepted**. Canonical repository
-**1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+Updated **2026-09-10 — issue #168 implementation prepared; production unchanged**.
+Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+
+## Active task — investor alerts, OGE health and table navigation
+
+Branch `codex/alerts-oge-navigation`, based on main
+`86cb05cdcb248e3308dce52eca9a0ab7859d61e6`. The owner's request is implemented:
+new-browser sound defaults on and activates on a real interaction; configured
+Gmail recipient `maglothinm@gmail.com` receives queued Investor Edge crossings
+strictly above 60.0 plus existing Watchlist/High Priority analysis alerts;
+Operations exposes OGE check evidence and inventories; compact Signals cells
+retain full hover/focus/tap text; wide tables have reachable top navigation.
+Existing saved Off preferences remain Off.
+
+Local canonical suite: **1,226 passed, 37 environment-dependent skips**; shared
+sound/integration checks passed again after the final audio status wording fix
+(**33 tests**). Repository safety verification passed. Real browser checks used
+read-only copies of published data at 1280, 700 and 390 pixel widths. Main
+Signals rows measured about 93 px instead of 946–1032 px. See
+[implementation and activation checklist](investor-alerts-navigation.md).
+Canonical exact-head CI evidence belongs to the linked PR for issue #168.
+
+**Not activated:** no merge, image deployment, schema migration, producer
+execution, scheduler/IAM modification or external message delivery occurred.
+Gmail sender credentials are absent from the live AI job, Secret Manager and
+repository secrets. Configure them securely on the existing AI job before
+claiming accepted delivery. Never put the app password in chat or Git.
+
+**Next safe action:** finish exact-head PR checks, coordinate one production
+release with the still-pending Operations #164 activation, obtain secure Gmail
+sender configuration, preserve current state/personal history and verify a real
+outbox acceptance separately from collection success. Do not activate #154 or
+change schedules. The accepted production baseline below remains unchanged.
 
 ## Current production release
 

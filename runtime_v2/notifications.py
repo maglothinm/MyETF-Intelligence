@@ -141,7 +141,9 @@ def send_notification(channel: str, payload: Mapping[str, str], environment: Map
     message = EmailMessage()
     message["Subject"] = payload["title"]
     message["From"] = address
-    message["To"] = address
+    from scripts.investor_notifications import recipient
+
+    message["To"] = recipient(payload.get("recipient") or address)
     message.set_content(payload["message"])
     submission_possible = False
     try:

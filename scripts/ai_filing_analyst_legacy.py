@@ -2366,7 +2366,13 @@ def _requested_candidate_channels(config: AnalystConfig) -> list[str]:
         config.pushover_api_token and config.pushover_user_key
     ):
         channels.append("pushover")
-    if config.gmail_address and config.gmail_app_password:
+    try:
+        from .investor_notifications import runtime_recipient
+    except ImportError:
+        from investor_notifications import runtime_recipient
+    # Record requested email even while sender credentials are unavailable.
+    # Runtime dispatch retries definite non-submission independently of collection.
+    if runtime_recipient() or (config.gmail_address and config.gmail_app_password):
         channels.append("gmail")
     return channels
 
@@ -2388,6 +2394,10 @@ def _queue_candidate_alert(
     if isinstance(existing, dict):
         return delivery_id
     alert = format_candidate_alert(analysis, config.dashboard_url)
+    try:
+        from .investor_notifications import runtime_recipient
+    except ImportError:
+        from investor_notifications import runtime_recipient
     state.candidate_alert_deliveries[delivery_id] = {
         "delivery_id": delivery_id,
         "analysis_id": str(analysis.get("analysis_id") or ""),
@@ -2400,6 +2410,7 @@ def _queue_candidate_alert(
         "alert": alert,
         "source_url": normalize_text(str(analysis.get("source_url") or "")),
         "filed_date": str(analysis.get("filed_date") or ""),
+        "gmail_recipient": runtime_recipient(),
     }
     return delivery_id
 

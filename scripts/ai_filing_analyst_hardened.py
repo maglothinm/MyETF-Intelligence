@@ -515,6 +515,11 @@ def _deliver_pending_candidate_alerts(
     except ImportError:
         from runtime_notifications import deferred, record_key, stage_notification
     if deferred():
+        try:
+            from .investor_notifications import runtime_recipient
+        except ImportError:
+            from investor_notifications import runtime_recipient
+        email_recipient = runtime_recipient()
         for delivery in state.candidate_alert_deliveries.values():
             alert = delivery.get("alert") or {}
             if not isinstance(alert, Mapping):
@@ -527,6 +532,7 @@ def _deliver_pending_candidate_alerts(
                     "message": str(alert.get("message") or ""),
                     "url": str(alert.get("url") or delivery.get("source_url") or ""),
                     "url_title": "Open PolitiTrack analysis",
+                    **({"recipient": delivery.get("gmail_recipient") or email_recipient} if channel == "gmail" and (delivery.get("gmail_recipient") or email_recipient) else {}),
                 })
                 queued[channel] = key
             delivery["runtime_queued_channels"] = queued
@@ -1199,6 +1205,14 @@ def run_analyst(
             )
 
         if not result.errors:
+            try:
+                from .investor_notifications import stage_profile_alerts
+            except ImportError:
+                from investor_notifications import stage_profile_alerts
+            if investor_edge is not None and final_maintenance_ok is True:
+                stage_profile_alerts(config.ai_dir, getattr(investor_edge, "profiles", {}),
+                                     dashboard_url=config.dashboard_url,
+                                     suppress_alerts=config.suppress_alerts)
             _deliver_pending_candidate_alerts(
                 config, result, state, state_path
             )
