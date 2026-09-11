@@ -1,38 +1,43 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-10 — issue #168 implementation prepared; production unchanged**.
-Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+Updated **2026-09-11 — owner-authorized issue #168 release in progress**.
+Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**.
 
-## Active task — investor alerts, OGE health and table navigation
+## Active task — complete investor alerts and responsive dashboard release
 
-Branch `codex/alerts-oge-navigation`, based on main
-`86cb05cdcb248e3308dce52eca9a0ab7859d61e6`. The owner's request is implemented:
-new-browser sound defaults on and activates on a real interaction; configured
-Gmail recipient `maglothinm@gmail.com` receives queued Investor Edge crossings
-strictly above 60.0 plus existing Watchlist/High Priority analysis alerts;
-Operations exposes OGE check evidence and inventories; compact Signals cells
-retain full hover/focus/tap text; wide tables have reachable top navigation.
-Existing saved Off preferences remain Off.
+The owner explicitly authorized full implementation on September 11. PR #169 is
+merged at `258b7e16f51485fb9ba92971f4c05964eaab09aa`; its tree exactly matches the
+previously tested head. Investor Edge main CI `34659136667` succeeded. Initial
+build `5001986c-b0c4-4cfc-88f0-cd8789bea30d` succeeded but was not deployed.
 
-Local canonical suite: **1,226 passed, 37 environment-dependent skips**; shared
-sound/integration checks passed again after the final audio status wording fix
-(**33 tests**). Repository safety verification passed. Real browser checks used
-read-only copies of published data at 1280, 700 and 390 pixel widths. Main
-Signals rows measured about 93 px instead of 946–1032 px. See
-[implementation and activation checklist](investor-alerts-navigation.md).
-Canonical exact-head CI evidence belongs to the linked PR for issue #168.
+Live preflight found a new acceptance blocker, issue #170: Signals data requests
+return HTTP 500 with Cloud Run's “Response size was too large” log. Branch
+`codex/alerts-release-20260911` adds negotiated streaming gzip for public text
+assets and unbuffered streaming for large identity-only responses. Exact content,
+conditional requests, HEAD, range handling and snapshot headers are retained.
+Local focused Runtime/personal/Operations checks: **43 passed, 25 optional
+PostgreSQL skips**; three cases exercise a full 33 MiB ledger. Exact-head CI and
+the corrected build must succeed before the controlled image cutover.
 
-**Not activated:** no merge, image deployment, schema migration, producer
-execution, scheduler/IAM modification or external message delivery occurred.
-Gmail sender credentials are absent from the live AI job, Secret Manager and
-repository secrets. Configure them securely on the existing AI job before
-claiming accepted delivery. Never put the app password in chat or Git.
+All six live resources still match source
+`9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301` and image
+`sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1`.
+Original schedules are enabled; Vault remains paused. Earlier release tasks are
+inactive. Personal data, snapshots, notification history, scheduler configuration
+and Operations control enablement are unchanged. There is no schema migration
+for this feature. Current Opportunity #154 remains excluded.
 
-**Next safe action:** finish exact-head PR checks, coordinate one production
-release with the still-pending Operations #164 activation, obtain secure Gmail
-sender configuration, preserve current state/personal history and verify a real
-outbox acceptance separately from collection success. Do not activate #154 or
-change schedules. The accepted production baseline below remains unchanged.
+Gmail sender secrets are absent. Google requires the owner's account verification
+and app-password creation; that secure page is open for them. Complete independent
+deployment work while awaiting that credential step. Do not request passwords in
+chat. After credentials are available, use the existing AI outbox and verify
+provider acceptance/inbox receipt separately from successful collection.
+
+Next: merge the tested #170 correction, build the exact source, pause/drain existing
+schedules, capture a read-only baseline, update the existing resources, verify
+controlled successors and live complete Signals data, restore identical schedules
+and verify natural runs. Keep all histories and recipient-aware rollback semantics.
+See [feature contract](investor-alerts-navigation.md).
 
 ## Current production release
 
