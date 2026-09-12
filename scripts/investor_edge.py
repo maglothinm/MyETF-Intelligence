@@ -13,11 +13,13 @@ from __future__ import annotations
 import html
 import hashlib
 import json
+import logging
 import math
 import os
 import re
 import statistics
 import tempfile
+import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -29,8 +31,12 @@ import yaml
 
 try:  # Support both package and direct-script execution.
     from .dashboard_branding import copy_branding_assets
+    from . import investor_edge_progress as edge_progress
+    from .collector_freshness import FRESHNESS_POLICY
 except ImportError:  # pragma: no cover - direct execution path
     from dashboard_branding import copy_branding_assets  # type: ignore
+    import investor_edge_progress as edge_progress  # type: ignore
+    from collector_freshness import FRESHNESS_POLICY  # type: ignore
 
 EDGE_VERSION = "2026-08-29.5"
 DEFAULT_CONFIG = Path("config/investor_edge.yml")
@@ -1067,6 +1073,11 @@ class InvestorEdgeRuntime:
     population_metadata: dict[str, Any] = field(default_factory=dict)
     sector_mappings: dict[str, dict[str, Any]] = field(default_factory=dict)
     population_maintenance_complete: bool = False
+    progress_journal: dict[str, Any] = field(default_factory=dict)
+    progress_run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    progress_recorded: bool = False
+    progress_unavailable: bool = False
+    progress_market_rows: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         # Old methodology versions and long-lived unavailable attempts must not
@@ -1123,6 +1134,10 @@ class InvestorEdgeRuntime:
             provider,
             {str(k): dict(v) for k, v in profiles.items() if isinstance(v, dict)},
             {str(k): dict(v) for k, v in observations.items() if isinstance(v, dict)},
+            progress_journal=dict(
+                (observation_payload.get("backfill") or {}).get("progress_journal") or {}
+            ) if isinstance(observation_payload, dict)
+            and isinstance((observation_payload.get("backfill") or {}).get("progress_journal"), dict) else {},
             last_backfill_investor_key=str(
                 (observation_payload.get("backfill") or {}).get("last_investor_key") or ""
             ) if isinstance(observation_payload, dict) else "",
@@ -1210,6 +1225,7 @@ class InvestorEdgeRuntime:
                     "retention_limit": self.observation_retention_limit,
                     "stored_observation_count": len(self.observations),
                     "pruned_this_run": self.observations_pruned_this_run,
+                    "progress_journal": self.progress_journal,
                 },
                 "observations": self.observations,
             },
@@ -1242,7 +1258,7 @@ class InvestorEdgeRuntime:
         required_through: date | None,
     ) -> list[dict[str, Any]]:
         try:
-            return self.provider.daily(
+            rows = self.provider.daily(
                 ticker,
                 minimum_date=minimum_date,
                 required_through=required_through,
@@ -1252,7 +1268,11 @@ class InvestorEdgeRuntime:
             # required-through coverage.
             if "required_through" not in str(exc):
                 raise
-            return self.provider.daily(ticker, minimum_date=minimum_date)
+            rows = self.provider.daily(ticker, minimum_date=minimum_date)
+        # Reuse the exact provider response for read-only progress classification.
+        # No additional market lookup or scoring mutation is performed.
+        self.progress_market_rows[ticker] = rows
+        return rows
 
     @staticmethod
     def _visible_outcomes(
@@ -2326,21 +2346,35 @@ class InvestorEdgeRuntime:
             self.profile_for_investor(key, transactions, as_of=as_of, allow_backfill=False)
             for key in keys
         ]
-        self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard)
+        self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard, as_of=as_of)
         self.save(leaderboard)
         if allow_backfill and self.enabled:
+            progress_before = self._progress_inventory(leaderboard, as_of=as_of)
             self._backfill_population(keys, transactions, as_of=as_of)
             self.population_maintenance_complete = True
             leaderboard = [
                 self.profile_for_investor(key, transactions, as_of=as_of, allow_backfill=False)
                 for key in keys
             ]
+        if allow_backfill and self.enabled and not self.progress_recorded:
+            progress_after = self._progress_inventory(leaderboard, as_of=as_of)
+            if not self.progress_unavailable:
+                try:
+                    self.progress_journal = edge_progress.record_success(
+                        self.progress_journal, progress_before, progress_after,
+                        method_hash=self.method_hash, run_id=self.progress_run_id,
+                        now=_utc_now(), attempted=self.backfill_processed_this_run,
+                    )
+                except Exception as exc:
+                    self.progress_unavailable = True
+                    logging.getLogger(__name__).warning("Backfill journal unavailable (%s)", type(exc).__name__)
+            self.progress_recorded = True
         leaderboard.sort(key=lambda item: (
             -float(item.get("edge_score") if item.get("edge_score") is not None else 50),
             -int(item.get("sample_count") or 0),
             str(item.get("investor_key") or ""),
         ))
-        self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard)
+        self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard, as_of=as_of)
         self.save(leaderboard)
         return leaderboard
 
@@ -2411,6 +2445,45 @@ class InvestorEdgeRuntime:
             if not attempted_in_round:
                 break
 
+    def _progress_inventory(
+        self, leaderboard: Sequence[Mapping[str, Any]], *, as_of: date,
+    ) -> dict[str, dict[str, Any]]:
+        try:
+            return self._progress_inventory_unchecked(leaderboard, as_of=as_of)
+        except Exception as exc:
+            # Observability must not make otherwise valid scoring unavailable.
+            # Retain the prior journal; never translate a telemetry error to zero.
+            self.progress_unavailable = True
+            logging.getLogger(__name__).warning("Backfill progress unavailable (%s)", type(exc).__name__)
+            return {}
+
+    def _progress_inventory_unchecked(
+        self, leaderboard: Sequence[Mapping[str, Any]], *, as_of: date,
+    ) -> dict[str, dict[str, Any]]:
+        memo: dict[str, list[dict[str, Any]]] = {}
+        def rows_for(ticker: str) -> list[dict[str, Any]]:
+            ticker = _ticker_symbol(ticker)
+            if not ticker:
+                return []
+            if ticker not in memo:
+                memory = getattr(self.provider, "memory", {})
+                groups = [self.progress_market_rows.get(ticker) or [], memory.get(ticker) or []]
+                for directory in ("market-cache", "investor-edge-market"):
+                    payload = _read_json(self.ai_dir / directory / f"{ticker}-daily.json")
+                    if isinstance(payload, Mapping) and isinstance(payload.get("rows"), list):
+                        groups.append(payload["rows"])
+                memo[ticker] = _merge_rows(*groups)
+            return memo[ticker]
+        def computable(trade: Mapping[str, Any], field: str, horizon: int,
+                       stock: Sequence[Mapping[str, Any]], benchmark: Sequence[Mapping[str, Any]]) -> bool:
+            anchor = _parse_date(trade.get("transaction_date" if field == "picker_outcomes" else "followable_anchor_date"))
+            return bool(anchor and _outcome_for_horizon(stock, benchmark, anchor, horizon, as_of=as_of))
+        configured = bool(self.provider.alphavantage_api_key or self.provider.finnhub_api_key) if all(hasattr(self.provider, name) for name in ("alphavantage_api_key", "finnhub_api_key")) else None
+        horizons = list(dict.fromkeys(int(h) for h in self.config.get("horizons") or [5, 20, 60, 120] if int(h) > 0))
+        return edge_progress.inventory(leaderboard, self.observations, horizons=horizons,
+                                       as_of=as_of, rows_for=rows_for, computable=computable,
+                                       market_configured=configured)
+
     def _update_population_metadata(
         self,
         transactions: Sequence[Mapping[str, Any]],
@@ -2418,6 +2491,7 @@ class InvestorEdgeRuntime:
         eligible: Sequence[Mapping[str, Any]],
         counts: Mapping[str, int],
         leaderboard: Sequence[Mapping[str, Any]],
+        *, as_of: date,
     ) -> None:
         exclusions = Counter(
             reason for _, assessment in assessed
@@ -2430,6 +2504,18 @@ class InvestorEdgeRuntime:
             for profile in leaderboard
         )
         branches = Counter(_normal(item.get("branch")).casefold() for item in transactions)
+        progress_work = self._progress_inventory(leaderboard, as_of=as_of)
+        progress_report = None
+        if not self.progress_unavailable:
+            try:
+                progress_report = edge_progress.report(
+                    progress_work, self.progress_journal,
+                    now=_utc_now(), as_of=as_of, enabled=self.enabled, limit=self.backfill_limit,
+                    stale_after_minutes=FRESHNESS_POLICY["ai"]["stale_after_minutes"],
+                )
+            except Exception as exc:
+                self.progress_unavailable = True
+                logging.getLogger(__name__).warning("Backfill report unavailable (%s)", type(exc).__name__)
         self.population_metadata = {
             "historical_transaction_count": len(transactions),
             "eligible_purchase_count": len(eligible),
@@ -2449,6 +2535,7 @@ class InvestorEdgeRuntime:
             },
             "excluded_reason_counts": dict(sorted(exclusions.items())),
             "leaderboard_max_investors": max(0, min(1_000, int(self.config.get("leaderboard_max_investors", 40)))),
+            "backfill_progress": progress_report,
         }
 
     def save(self, leaderboard: Sequence[Mapping[str, Any]] | None = None) -> None:
@@ -2885,11 +2972,11 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         str(key): count for key, value in exclusions.items()
         if (count := history_count(value)) is not None
     }) if isinstance(exclusions, Mapping) else None
+    history["backfill_progress"] = edge_progress.public_report(source_metadata.get("backfill_progress"))
     pending_count = history["backfill_pending_observation_count"]
     history_status = (
-        "Historical backfill status unavailable" if pending_count is None
-        else "Historical backfill in progress" if pending_count > 0
-        else "Historical backfill current"
+        history["backfill_progress"]["status_label"] if history["backfill_progress"]
+        else "Historical backfill status unavailable"
     )
 
     def history_value(key: str) -> str:
@@ -3020,7 +3107,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
                 "available for this investor.</p>"
             )
         rows.append(
-            f"<tr class='investor-row {group_class}' data-edge-group='{group_id}'>"
+            f"<tr id='{group_id}' class='investor-row {group_class}' data-edge-group='{group_id}'>"
             f"<td class='key-cell'><code>{text_cell(investor_key_value)}</code></td>"
             f"<td class='filer-cell'><strong>{text_cell(item.get('filer'), fallback='Unknown filer')}</strong></td>"
             f"<td class='owner-cell'><strong>{text_cell(owner, fallback='Unknown owner')}</strong>{owner_detail}</td>"
@@ -3078,6 +3165,8 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
   <dl class='facts edge-history-counts'>{history_facts}</dl>
   <p>Eligible purchases: {history_value('eligible_purchase_count')} · Eligible filer / owner identities: {history_value('unique_investor_identity_count')} · Legislative trades: {integer_cell(history['branch_transaction_counts']['legislative'])} · Executive trades: {integer_cell(history['branch_transaction_counts']['executive'])}</p>
   <p>Observation budget per run: {history_value('backfill_limit_per_run')} · Market requests this run: {history_value('network_requests_this_run')}. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns. Complete profiles meet the sample minimum and have no pending historical observations.</p>
+  <div id='edge-backfill-detail'></div>
+  <script type='application/json' id='edge-backfill-data'>{json.dumps(history["backfill_progress"], ensure_ascii=True).replace("<", "\\u003c")}</script>
 </section>
 <section class='panel'>
   <div class='panel-header'><div><h2>Investor performance heat map</h2><p>5/20/60/120-session values are average benchmark-relative returns from the first trading session after public observation. Open a drilldown to inspect transaction- and post-disclosure evidence.</p></div></div>
@@ -3211,7 +3300,7 @@ if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); fil
     risk_start = shell.index('<dialog id="risk-dialog"')
     risk = shell[risk_start:shell.index("</dialog>", risk_start) + len("</dialog>")]
     page = page.replace("</main>", '</main>' + risk + '<div id="tooltip" role="tooltip" hidden></div>')
-    js = (assets / "common.js").read_text(encoding="utf-8") + "\n" + js + "\nPT.setupDialogsAndTooltips();\n"
+    js = (assets / "common.js").read_text(encoding="utf-8") + "\n" + (assets / "backfill-progress.js").read_text(encoding="utf-8") + "\n" + js + "\nPT.setupDialogsAndTooltips();\nPTBackfill.attachStandalone();\n"
     css = (assets / "styles.css").read_text(encoding="utf-8") + "\n" + css + "\n" + (assets / "investor-edge-overrides.css").read_text(encoding="utf-8")
     (output_dir / "investor-edge.html").write_text(page, encoding="utf-8")
     (output_dir / "investor-edge.css").write_text(css, encoding="utf-8")

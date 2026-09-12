@@ -189,9 +189,10 @@ pending observations from machine-readable leaderboard metadata:
 | `excluded_reason_counts` | Aggregated eligibility reasons; a record can have multiple reasons. |
 
 Pending observations are not counts of individual horizons, source filings or
-network requests. **Historical backfill in progress** means pending work exists;
-**Historical backfill current** means none remains for the bounded published
-history, not that every cataloged source filing has been parsed. A profile can
+network requests. The earlier aggregate-only labels **Historical backfill in progress** and
+**Historical backfill current** represented nonzero/zero pending counts for the
+bounded population. The detailed status below supersedes those labels; neither
+aggregate establishes that every cataloged filing has been parsed. A profile can
 still be building because its completed sample is too small. Older artifacts
 without population metadata show unavailable counts/unknown history status;
 missing metadata is never inferred to mean zero or current.
@@ -238,6 +239,25 @@ the AI run, so its protected state is not promoted. An initial maintenance failu
 aborts candidate/market work; a final maintenance failure prevents candidate
 delivery. Retaining per-candidate fallback scores does not justify publishing an
 incomplete or stale global inventory as successful.
+
+## Detailed backfill progress
+
+The History panel now separates completed, cache-computable, unverified queued,
+immature, retry-delayed, missing-data, blocked and unknown observations. It shows
+last successful maintenance separately from actual outcome advancement, offers
+searchable reasons and existing profile links, and warns about ready work that
+fails to advance across three successful maintenance passes. No user ratings or
+acknowledgements are needed for normal backfill.
+
+An ETA covers **currently cache-computable work only** and requires three recent
+positive measured throughput intervals. Missing data, future horizons and retry
+waits receive no invented finish time. The existing once-per-UTC-date observation
+attempt gate and provider backoff remain unchanged. Next scheduled execution is
+explicitly unavailable without live scheduler evidence. Legacy snapshots retain
+known aggregate counts but cannot establish detailed completion or an ETA.
+
+See [progress semantics, tests and release boundary](docs/investor-edge-backfill-progress.md).
+Code and tests do not establish that a production image has been deployed.
 
 ## Run Simulation
 

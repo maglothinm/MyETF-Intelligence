@@ -1,9 +1,36 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-10 — issue #168 implementation prepared; production unchanged**.
+Updated **2026-09-11 — issue #172 branch implementation; production not changed by this work**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
 
-## Active task — investor alerts, OGE health and table navigation
+## Active task — Investor Edge backfill progress (#172 / PR #173)
+
+Branch `work/investor-edge-backfill-progress-172`, based on canonical main
+`258b7e16f51485fb9ba92971f4c05964eaab09aa` (PR #169 merged). Adds truthful
+observation categories, persisted advancement/cadence evidence, bounded measured
+ETA, retry explanations, stalled-work detection and accessible root/standalone
+pending-work details. Scoring, schedules, production state and personal history
+are unchanged. [Implementation/acceptance contract](investor-edge-backfill-progress.md).
+
+Local focused tests: **87 passed, 1 optional Node/jsdom skip**. Repository safety
+verification passed. Canonical CI, responsive browser evidence, merge and runtime
+acceptance must be reported separately on PR #173 / issue #172. Temporary source
+export/application tooling is development-only and must be absent from the final
+merge tree. It cannot access production data or cloud/notification credentials.
+
+**Next safe action:** finish exact-head code/DOM/full regression acceptance, remove
+temporary tooling, then coordinate deployment from a fresh live baseline. Do not
+close #172 as production-complete until AI/Dashboard successors and the served
+status are verified. No rebaseline, historical snapshot replacement, IAM expansion,
+new production writer or unrelated activation is authorized by this change.
+
+## Prior task — investor alerts, OGE health and table navigation
+
+**Source update:** PR #169 merged as `258b7e16f51485fb9ba92971f4c05964eaab09aa`
+on September 11. Its previous implementation checkpoint follows for context;
+its then-pending merge statement is historical, not current source status.
+No newer live image was verified during the #172 implementation session.
+
 
 Branch `codex/alerts-oge-navigation`, based on main
 `86cb05cdcb248e3308dce52eca9a0ab7859d61e6`. The owner's request is implemented:

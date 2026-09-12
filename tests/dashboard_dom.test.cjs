@@ -445,7 +445,7 @@ test('Investor Edge renders the full building population and producer history co
   assert.deepEqual(env.requests, ['dashboard-insights']);
   await env.navigate('#investor-edge', () => env.byId('edge-profile-body').children.length === 12);
   assert.equal(env.byId('attention-signals').textContent, '0');
-  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill in progress');
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
   assert.equal(env.byId('edge-history-label').textContent, '12 published investor profiles');
   assert.match(env.byId('edge-profile-body').textContent, /TEST Filer 11/);
   assert.match(env.byId('edge-profile-body').textContent, /Building history — insufficient completed observations \(n = 0\)/);
@@ -455,7 +455,7 @@ test('Investor Edge renders the full building population and producer history co
   assert.match(env.byId('edge-bootstrap-budget').textContent, /Observation budget per run: 30 · Market requests this run: 7/);
   env.data['investor-edge'].backfill_pending_observation_count = 0;
   await env.refresh();
-  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill current');
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
   assert.equal(env.byId('edge-profile-body').children.length, 12);
   assert.equal(env.byId('notification-count').textContent, '0');
   assert.deepEqual(env.errors, []);

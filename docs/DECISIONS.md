@@ -1260,3 +1260,22 @@ notification-history reset or personal-data change. Gmail credentials and a
 coordinated deployment remain separate from implementation. Once recipient-aware
 intents exist, any rollback must preserve both the outbox and recipient contract.
 See [issue #168 implementation](investor-alerts-navigation.md).
+
+
+## 2026-09-11 — Separate computable backfill from future outcomes (#172)
+
+**Decision:** Add disjoint evidence-based observation states, an additive bounded
+maintenance journal, cache-computable-only measured ETA and a three-pass stalled
+ready-work warning. Share the read-only presentation between root and standalone
+Investor Edge. No rating or acknowledgement is required to advance normal work.
+
+**Boundary:** Preserve scores/method hashes, provider/date gates, stable identities,
+protected snapshots, notifications/outbox, personal history and all schedules.
+Unknown or stale telemetry cannot imply completion. Dashboard rendering is not a
+successful processing event. The new journal is carried inside the existing AI
+snapshot; it is not an alternate state authority or production writer.
+
+**Release:** Branch implementation and CI remain distinct from immutable-image
+runtime deployment and live acceptance. Preserve the recipient-aware #169 source
+and the existing release coordination boundaries. See
+[progress contract](investor-edge-backfill-progress.md) and PR #173.

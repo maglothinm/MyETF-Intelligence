@@ -6,6 +6,16 @@
 
 **Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
 
+## September 11 source implementation checkpoint — Investor Edge progress
+
+PR #169 is merged as `258b7e16f51485fb9ba92971f4c05964eaab09aa`.
+Issue #172 / PR #173 adds historical backfill progress on
+`work/investor-edge-backfill-progress-172`, preserving that source. Local focused
+acceptance: 87 passed, 1 optional Node/jsdom skip; safety verification passed.
+CI/deployment evidence belongs to PR #173 and the live release receipt, not this
+local result. The #172 session has not changed production configuration, state,
+schedules or personal data. No newer live release is asserted here.
+
 ## September 9 permanent Legislative recovery — current release
 
 Runtime source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301`, build `9ad52cb8-5875-4e08-a86c-ea90e512247c`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1` is verified on
