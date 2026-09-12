@@ -1,0 +1,412 @@
+{
+  "schema": "polititrack-investor-alerts-release-v1",
+  "accepted_at": "2026-09-12T00:24:24.042666+00:00",
+  "repository": {
+    "id": 1349678672,
+    "name": "maglothinm/MyETF-Intelligence",
+    "default_branch": "main"
+  },
+  "runtime_source": "4deb31cb08fc38b0e38928aee609761f6c6579fd",
+  "runtime_tree": "db330aad8b7b1f1a72f13942d46a2e540d26d1ae",
+  "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf",
+  "build_id": "960864c8-87bc-4b77-a088-afbb87f85783",
+  "merged_main": "4b5b0a75cac06fb8a35af03c3b7b48ecaa42c04d",
+  "merged_prs": [
+    169,
+    171
+  ],
+  "ci": {
+    "feature_runtime": 34474763564,
+    "feature_investor": 34474763566,
+    "main_investor": 34659136667,
+    "main_runtime": 34659244278,
+    "final_runtime": 34659557574,
+    "final_runtime_result": "530 passed, 2 skipped; real PostgreSQL integration passed"
+  },
+  "continuity": {
+    "baseline_at": "2026-09-12T00:01:13.206125+00:00",
+    "accepted_at": "2026-09-12T00:17:48.452277+00:00",
+    "preserved": true,
+    "successors": [
+      {
+        "namespace": "ai",
+        "run_id": "78793e6d-d07a-417d-8e0b-f4bf15d72b56",
+        "snapshot_id": "03104119-edd8-41e7-9aa7-ece69ae70f4f",
+        "snapshot_generation": 315,
+        "parent_sha256": "8fa7c84b8dd3fb98435d384c91bfb79044fb5c9c6128aa4b55c5ee5619dc32dc",
+        "status": "success",
+        "started_at": "2026-09-12T00:11:18.73663+00:00",
+        "finished_at": "2026-09-12T00:13:34.452092+00:00",
+        "source_revision": "4deb31cb08fc38b0e38928aee609761f6c6579fd",
+        "source_provenance": {
+          "authority": "runtime_v2",
+          "inputs": {
+            "executive": {
+              "generation": 282,
+              "snapshot_sha256": "ef60534c99f2d875f2aab2a6cbfb45080f99d13b05e3354abcd16257a70808e9"
+            },
+            "legislative": {
+              "generation": 465,
+              "snapshot_sha256": "a2176f5211f92b7c7543c8a0c0c382478b8fe99159d6dacbeeb0562222ed7792"
+            }
+          },
+          "job": "ai",
+          "last_success_utc": "2026-09-12T00:13:30Z",
+          "mode": "production",
+          "notification_contract": "durable_outbox_v1",
+          "notification_intent_count": 0,
+          "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "trigger_source": "issue-168-release"
+        }
+      },
+      {
+        "namespace": "dashboard",
+        "run_id": "57de892f-96fc-45ed-9f4d-b06c7fd2c446",
+        "snapshot_id": "627d4aac-a8d0-44ea-ab7a-ba0a20dd34dc",
+        "snapshot_generation": 568,
+        "parent_sha256": "5596cd0b4357747e686d835011a3e4504155b66041b0b8cf38200ec8cacb2767",
+        "status": "success",
+        "started_at": "2026-09-12T00:16:58.140909+00:00",
+        "finished_at": "2026-09-12T00:17:38.893093+00:00",
+        "source_revision": "4deb31cb08fc38b0e38928aee609761f6c6579fd",
+        "source_provenance": {
+          "authority": "runtime_v2",
+          "inputs": {
+            "ai": "bdc8f731921a3cdb362c4df81722531f9a61875a3d7bebb04e626cd6157027a4",
+            "executive": "e4bc6e3722d04cb4e40434a3c0aff5c1f6e63f20adbcdec54fc2f94c126af27f",
+            "legislative": "a2176f5211f92b7c7543c8a0c0c382478b8fe99159d6dacbeeb0562222ed7792"
+          },
+          "job": "dashboard",
+          "mode": "production",
+          "trigger_source": "issue-168-release"
+        }
+      },
+      {
+        "namespace": "executive",
+        "run_id": "0713e476-caef-46da-b7f8-50d18ee44724",
+        "snapshot_id": "b9fd4f39-bf17-466a-91bd-1570beda5303",
+        "snapshot_generation": 282,
+        "parent_sha256": "cf354cf8bfa78d114eea8522f8858bc8f7cbdbdfc41bb6de9982c3e1e3d24a70",
+        "status": "success",
+        "started_at": "2026-09-12T00:04:58.752001+00:00",
+        "finished_at": "2026-09-12T00:06:37.802472+00:00",
+        "source_revision": "4deb31cb08fc38b0e38928aee609761f6c6579fd",
+        "source_provenance": {
+          "authority": "runtime_v2",
+          "job": "executive",
+          "last_success_utc": "2026-09-12T00:06:37Z",
+          "mode": "production",
+          "notification_contract": "durable_outbox_v1",
+          "notification_intent_count": 0,
+          "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "trigger_source": "issue-168-release"
+        }
+      },
+      {
+        "namespace": "legislative",
+        "run_id": "41d1b8f5-a483-41ec-8926-1fa1d6e40229",
+        "snapshot_id": "0bfdd3ed-84b3-4aab-ba89-784db353373a",
+        "snapshot_generation": 465,
+        "parent_sha256": "f38b871ab1640f2a6270a15e7d59a179fdd6e3e34b01bff20dc6be52205d5fd4",
+        "status": "success",
+        "started_at": "2026-09-12T00:04:57.841866+00:00",
+        "finished_at": "2026-09-12T00:08:44.415324+00:00",
+        "source_revision": "4deb31cb08fc38b0e38928aee609761f6c6579fd",
+        "source_provenance": {
+          "authority": "runtime_v2",
+          "job": "legislative",
+          "last_success_utc": "2026-09-12T00:08:42Z",
+          "mode": "production",
+          "notification_contract": "durable_outbox_v1",
+          "notification_intent_count": 0,
+          "notification_intents_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "trigger_source": "issue-168-release"
+        }
+      }
+    ],
+    "heads": [
+      {
+        "generation": 315,
+        "namespace": "ai",
+        "snapshot_id": "03104119-edd8-41e7-9aa7-ece69ae70f4f",
+        "snapshot_sha256": "bdc8f731921a3cdb362c4df81722531f9a61875a3d7bebb04e626cd6157027a4",
+        "updated_at": "2026-09-12T00:13:34.452092+00:00"
+      },
+      {
+        "generation": 568,
+        "namespace": "dashboard",
+        "snapshot_id": "627d4aac-a8d0-44ea-ab7a-ba0a20dd34dc",
+        "snapshot_sha256": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0",
+        "updated_at": "2026-09-12T00:17:38.893093+00:00"
+      },
+      {
+        "generation": 283,
+        "namespace": "executive",
+        "snapshot_id": "96246a8a-d653-43ce-88b3-7ba571e041f6",
+        "snapshot_sha256": "e4bc6e3722d04cb4e40434a3c0aff5c1f6e63f20adbcdec54fc2f94c126af27f",
+        "updated_at": "2026-09-12T00:14:02.559086+00:00"
+      },
+      {
+        "generation": 465,
+        "namespace": "legislative",
+        "snapshot_id": "0bfdd3ed-84b3-4aab-ba89-784db353373a",
+        "snapshot_sha256": "a2176f5211f92b7c7543c8a0c0c382478b8fe99159d6dacbeeb0562222ed7792",
+        "updated_at": "2026-09-12T00:08:44.415324+00:00"
+      }
+    ],
+    "investor_alert_journal": {
+      "above": 0,
+      "episodes": 0,
+      "present": true,
+      "profiles": 40,
+      "sha256": "e662e585a4cdc659988e06ded06282e0bd6c494b1bc6e177fe7cdcf5d8d3040c"
+    },
+    "notifications": [],
+    "personal_accounts": 3,
+    "acknowledgements": 8
+  },
+  "natural_executive": {
+    "execution": "polititrack-executive-md66c",
+    "source_revision": "4deb31cb08fc38b0e38928aee609761f6c6579fd",
+    "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf",
+    "creation": "2026-09-12T00:11:01.083844Z",
+    "completed": "2026-09-12T00:14:05.764778Z",
+    "success": true,
+    "scheduler_log_rows": 4
+  },
+  "web_revision": "polititrack-web-00040-c2l",
+  "traffic_percent": 100,
+  "schedulers": [
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-executive",
+      "schedule": "11,41 * * * *",
+      "timeZone": "Etc/UTC",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-ai",
+      "schedule": "14,44 * * * *",
+      "timeZone": "America/New_York",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-dashboard",
+      "schedule": "2,17,32,47 * * * *",
+      "timeZone": "Etc/UTC",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-legislative",
+      "schedule": "5,20,35,50 * * * *",
+      "timeZone": "Etc/UTC",
+      "state": "ENABLED"
+    },
+    {
+      "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-vault-lifecycle",
+      "schedule": "17 3 * * *",
+      "timeZone": "Etc/UTC",
+      "state": "PAUSED"
+    }
+  ],
+  "scheduler_configuration_preserved": true,
+  "assets": {
+    "at": "2026-09-12T00:18:52.758711+00:00",
+    "assets": [
+      {
+        "path": "app.js",
+        "bytes": 143526,
+        "sha256": "b9de7b52e1bc4c4960e207775a4a707d6b2434ed767c2d0d72dc94bbf8f18f4f",
+        "snapshot_sha256": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0"
+      },
+      {
+        "path": "styles.css",
+        "bytes": 29493,
+        "sha256": "214b2c9950a5fdfcb83ef5aabc1f6d79a09ac5ca6a8f50e65ab65c3a9547209a",
+        "snapshot_sha256": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0"
+      },
+      {
+        "path": "wallboard.css",
+        "bytes": 10424,
+        "sha256": "a7a5f22941d34f02ed098c092e4bc393e7f76a2467ce7e731d20fa8d4b050c57",
+        "snapshot_sha256": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0"
+      },
+      {
+        "path": "filing-vault.css",
+        "bytes": 1951,
+        "sha256": "d53a56fffe2cdfc5c7650d4d318a22593f1ee9f037ea3849334438811a01135e",
+        "snapshot_sha256": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0"
+      },
+      {
+        "path": "filing-pdf.css",
+        "bytes": 1358,
+        "sha256": "e481b103f3e09144704d928f51c885fffed5b3a835c2afb5ab2a3ac8c65943d6",
+        "snapshot_sha256": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0"
+      }
+    ]
+  },
+  "browser": {
+    "passed": true,
+    "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/",
+    "checked_at": "2026-09-12T00:24:00Z",
+    "signals": {
+      "loaded_records": 273,
+      "page_rows": 50,
+      "sample_row_heights_px": [
+        92.83333587646484,
+        92.83333587646484,
+        92.83333587646484,
+        92.83333587646484,
+        92.83333587646484
+      ],
+      "analysis_preview_characters": 221,
+      "analysis_full_characters": 642,
+      "evidence_preview_characters": 221,
+      "evidence_full_characters": 429,
+      "full_analysis_and_evidence_in_popups": true,
+      "horizontal_end_checks": [
+        {
+          "viewport": 700,
+          "document_width": 685,
+          "table_scroll_left": 1686,
+          "maximum_scroll": 1686
+        },
+        {
+          "viewport": 390,
+          "document_width": 375,
+          "table_scroll_left": 1982,
+          "maximum_scroll": 1982
+        }
+      ],
+      "phone_popup": {
+        "viewport": 390,
+        "left": 12,
+        "right": 352,
+        "top": 214.33334350585935,
+        "bottom": 494.2395935058594,
+        "full_text_included": true
+      }
+    },
+    "main_navigation_at_390_px": {
+      "routes": [
+        "overview",
+        "signals",
+        "investor-edge",
+        "agent",
+        "records/filings",
+        "records/transactions",
+        "records/reviews",
+        "operations"
+      ],
+      "document_width": 375,
+      "all_visible_wide_tables_have_visible_controls": true,
+      "table_widths": {
+        "investor-edge": 600,
+        "agent": 1102,
+        "filings": 705,
+        "transactions": 1011,
+        "reviews": 884,
+        "operations": 700
+      }
+    },
+    "standalone_at_390_px": [
+      {
+        "page": "investor-edge.html",
+        "document_width": 375,
+        "table_width": 302,
+        "table_scroll_width": 1911,
+        "visible_navigation_controls": 1
+      },
+      {
+        "page": "filing-vault.html",
+        "document_width": 390,
+        "wide_tables": 0
+      },
+      {
+        "page": "wallboard.html",
+        "document_width": 390,
+        "body_horizontal_overflow": "auto"
+      }
+    ],
+    "expanded_investor_profile": {
+      "viewport": 700,
+      "document_width": 685,
+      "outcome_tables": 54,
+      "total_navigation_controls": 55,
+      "all_outcomes_have_controls": true,
+      "first_outcome_scroll_left": 38.66666793823242,
+      "maximum_scroll": 39
+    },
+    "oge": {
+      "status": "Current",
+      "last_success_utc": "2026-09-12T00:14:02Z",
+      "retained_filings": 4126,
+      "access_or_request_required": 1518,
+      "processed_filings": 0,
+      "parsed_transactions": 0,
+      "manual_parser_exceptions": 0,
+      "monitored_by": "Executive collector"
+    },
+    "account": "maglothinm remained signed in",
+    "sound": "All eligible events selected; enabled; test sound invoked; live header shows Sound on",
+    "browser_overrides_reset": true,
+    "console_errors": []
+  },
+  "public_data": {
+    "at": "2026-09-12T00:18:52.914762+00:00",
+    "responses": [
+      {
+        "path": "/readyz",
+        "status": 200,
+        "bytes": 121,
+        "sha256": "ee414d8e5652f5877563d03bafdaddd3dca44a1a5b5c8b77e34c7f9d8fadf2bb",
+        "headers": {
+          "Content-Length": "121"
+        },
+        "shape": {}
+      },
+      {
+        "path": "/data/ai-analyses.json",
+        "status": 200,
+        "bytes": 67671025,
+        "sha256": "cf292219fbd8dd1b3b5444151d0b1b65c33a4b6a98e02d74c16800d78ac41578",
+        "headers": {
+          "etag": "W/\"1789172333.926993-67671025-115413912\"",
+          "vary": "Accept-Encoding",
+          "x-polititrack-snapshot": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0",
+          "content-encoding": "gzip",
+          "Transfer-Encoding": "chunked"
+        },
+        "shape": {
+          "rows": 273
+        }
+      },
+      {
+        "path": "/data/investor-edge.json",
+        "status": 200,
+        "bytes": 9567109,
+        "sha256": "a01bd84a6eac757d2a80da7a0a72ed16e8099cc5ff7bf513b020101fc86f9028",
+        "headers": {
+          "etag": "W/\"1789172334.0250046-9567109-855708797\"",
+          "vary": "Accept-Encoding",
+          "x-polititrack-snapshot": "2860606944c05ecd34123ac9580f958969866de4b89b2ecc0dbe4a48614b11f0",
+          "content-encoding": "gzip",
+          "Transfer-Encoding": "chunked"
+        },
+        "shape": {
+          "branch_transaction_counts": 2,
+          "excluded_reason_counts": 7,
+          "investors": 40
+        }
+      }
+    ]
+  },
+  "email": {
+    "status": "blocked",
+    "reason": "Owner-created Google app password has not yet been saved in the prepared Secret Manager form.",
+    "recipient": "maglothinm@gmail.com",
+    "provider_acceptance": false,
+    "inbox_receipt": false
+  },
+  "unrelated_operations_controls_enabled": false,
+  "current_opportunity_activated": false
+}

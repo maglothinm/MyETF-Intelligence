@@ -65,7 +65,13 @@ Branch: `codex/alerts-oge-navigation`; base:
 - Exact-head Actions run IDs and conclusions are recorded in the linked PR.
   Local checks do not certify deployment or external email delivery.
 
-## Production boundary and activation
+## September 11 production release
+
+The owner authorized release; application deployment, state continuity, OGE collection,
+responsive navigation and schedule restoration are accepted. Gmail delivery remains incomplete: Owner-created Google app password has not yet been saved in the prepared Secret Manager form. No successful investor-alert email or inbox receipt is claimed.
+See [current release evidence](releases/2026-09-11-investor-alerts-navigation.md).
+
+## Historical implementation-only boundary (September 10)
 
 No production change was made during implementation. The observed accepted live
 web revision was `polititrack-web-00039-ps5`, runtime source
