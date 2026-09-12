@@ -1277,3 +1277,10 @@ HTTP/1 limit is 32 MiB. A ready snapshot alone does not prove every data endpoin
 loads; live acceptance must fetch and parse the complete Signals JSON.
 [Cloud Run limit](https://docs.cloud.google.com/run/quotas),
 [Flask streaming](https://flask.palletsprojects.com/en/stable/patterns/streaming/).
+
+
+## 2026-09-11 — Accept the owner-authorized alerts and navigation release
+
+**Decision:** Release PRs #169/#171 through the existing Runtime resources using the tested immutable image, a fresh read-only preservation baseline, exact-parent controlled successors, complete live data/asset checks, and a natural scheduled Executive success. Restore each verified producer to its unchanged original schedule; retain paused publication until its controlled acceptance. Preserve all snapshots, incident evidence, personal accounts, acknowledgements and notification history. No new migration or unrelated feature activation is included.
+
+**Consequence:** Sound defaults, compact accessible text, horizontal navigation and OGE health are live. SMTP configuration, provider acceptance and inbox receipt remain distinct evidence states; a missing owner-entered app password does not justify claiming delivery or blocking collection. Keep the recipient-aware outbox and crossing journal on every future release/rollback. [Release evidence](releases/2026-09-11-investor-alerts-navigation.md).

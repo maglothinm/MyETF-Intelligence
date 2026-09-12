@@ -1,23 +1,22 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-09T13:41:35.684561+00:00 — Legislative recovery accepted; personal review data preserved.
+**Current as of:** 2026-09-12T00:24:24.042666+00:00 — investor alerts, OGE health and navigation release accepted; personal history preserved.
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
-**Historical recovery control revision:** `db080d413b5e804a335f575071a62d48a9d4083b` (PR #151).
+## September 11 current release — issues #168/#170
 
-## September 11 release in progress — issues #168/#170
+PRs #169/#171 are merged. All six resources use runtime source `4deb31cb08fc38b0e38928aee609761f6c6579fd`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf`, build `960864c8-87bc-4b77-a088-afbb87f85783`. Web `polititrack-web-00040-c2l` serves 100% traffic. Final Runtime CI `34659557574` passed (530 tests, 2 skips; real PostgreSQL), and Investor main CI `34659136667` passed.
 
-The owner authorized full release of investor alerts, OGE health and compact
-navigation. PR #169 is merged at `258b7e16f51485fb9ba92971f4c05964eaab09aa`, but
-production still uses the accepted image below. The live Signals JSON endpoint
-now exceeds Cloud Run's buffered response limit and returns HTTP 500; `/readyz`
-remains ready because the snapshot itself is valid. Issue #170 supplies streaming
-responses before live acceptance. Gmail sender credentials remain absent and
-require the owner's secure Google verification. No schedules, data, schemas or
-personal history have changed during this release preflight.
+Sound defaults on for new browsers; the owner's current browser was enabled. Investor Edge >60.0 and Watchlist/High Priority stage recipient-aware Gmail intent in the existing durable outbox. Operations shows OGE health and inventory; full Signals data loads with compact readable cells and reachable horizontal scrolling. Controlled successors, exact source assets, live narrow-window behavior and natural scheduled Executive `polititrack-executive-md66c` passed.
 
-## September 9 permanent Legislative recovery — current release
+All prior snapshot metadata, the retained incident evidence, three account rows, eight acknowledgements and notification history match the baseline. All four original schedules are restored unchanged; Vault remains paused. No migration, rebaseline, rewind or unrelated feature activation occurred. Operations controls #164 remain disabled; Current Opportunity #154 remains excluded.
+
+Gmail delivery remains incomplete: Owner-created Google app password has not yet been saved in the prepared Secret Manager form. No successful investor-alert email or inbox receipt is claimed.
+
+[Exact release evidence](releases/2026-09-11-investor-alerts-navigation.md) and [receipt](releases/2026-09-11-investor-alerts-navigation-receipt.json). Runtime heads continue to advance; refresh live evidence for subsequent releases.
+
+## September 9 permanent Legislative recovery — historical accepted release
 
 Runtime source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301`, build `9ad52cb8-5875-4e08-a86c-ea90e512247c`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1` is verified on
 all six existing resources. Web revision `polititrack-web-00039-ps5` serves 100% traffic.
