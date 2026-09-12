@@ -67,8 +67,16 @@ jobs:
           assert paths == expected, (paths,expected)
           subprocess.run(['git','apply','--check','--unidiff-zero',str(target)],check=True)
           subprocess.run(['git','apply','--index','--unidiff-zero',str(target)],check=True)
+          # The accessibility result is an Array from JSDOM's realm. Compare
+          # its numeric length rather than host/browser Array prototypes.
+          test = Path('tests/backfill_progress_dom.test.cjs')
+          old = '  assert.deepEqual(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)})), []);'
+          new = '  assert.equal(result.violations.length, 0, JSON.stringify(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)}))));'
+          assert old in test.read_text()
+          test.write_text(test.read_text().replace(old, new))
+          subprocess.run(['git','add',str(test)],check=True)
           subprocess.run(['git','diff','--cached','--check'],check=True)
-          Path('/tmp/backfill-evidence/bundle-sha256.txt').write_text(hashlib.sha256(patch).hexdigest()+'\n')
+          Path('/tmp/backfill-evidence/bundle-sha256.txt').write_text(hashlib.sha256(patch).hexdigest()+'\nAccessibility assertion correction: compare violations.length === 0 across realms.\n')
           PY
           python -m py_compile scripts/investor_edge.py scripts/investor_edge_progress.py tests/backfill_progress_preview.py
       - name: Install isolated regression dependencies
