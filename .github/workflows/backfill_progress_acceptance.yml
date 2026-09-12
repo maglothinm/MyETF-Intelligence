@@ -1,0 +1,123 @@
+name: Backfill progress isolated acceptance
+
+# Temporary issue-172 development bridge. Remove before merge.
+# Only the specified working branch can be written; no cloud or production access.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/backfill_progress_acceptance.yml'
+      - '.remediation/backfill-progress-172/**'
+permissions:
+  contents: read
+jobs:
+  accept:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event.pull_request.number == 173 &&
+      github.event.pull_request.head.repo.id == 1349678672 &&
+      github.head_ref == 'work/investor-edge-backfill-progress-172'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUNTIME_V2_TEST_POSTGRES: '1'
+      POLITITRACK_TEST_NODE: node
+      POLITITRACK_TEST_NODE_MODULES: ${{ github.workspace }}/.remediation/ui-test-tools/node_modules
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: runtime-v2-test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Validate and apply the exact reviewed source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/backfill-evidence
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, lzma, subprocess
+          source = Path('.remediation/backfill-progress-172')
+          packed = b''.join((source/f'part-{i}.xzpart').read_bytes() for i in range(1,4))
+          assert hashlib.sha256(packed).hexdigest() == 'c6af5ff6dbe3585ce23805c52aa2eaae26e3b57c7d64ddd4b91ac9efb519489d'
+          patch = lzma.decompress(packed, memlimit=128*1024*1024)
+          assert len(patch) == 84036
+          assert hashlib.sha256(patch).hexdigest() == 'ab118b3734219bf6888c38070192038813143cb895ced2a0a2e5556b29490b9e'
+          target = Path('/tmp/backfill-progress.patch'); target.write_bytes(patch)
+          expected = {'README_INVESTOR_EDGE.md','docs/DECISIONS.md','docs/HANDOFF.md','docs/PROJECT_STATE.md','docs/investor-edge-backfill-progress.md','scripts/build_trade_dashboard.py','scripts/dashboard_assets/app.js','scripts/dashboard_assets/backfill-progress.js','scripts/dashboard_assets/index.html','scripts/dashboard_assets/styles.css','scripts/investor_edge.py','scripts/investor_edge_progress.py','tests/backfill_progress_dom.test.cjs','tests/backfill_progress_preview.py','tests/dashboard_dom.test.cjs','tests/test_investor_edge_progress.py','tests/test_investor_edge_surfaces.py'}
+          stats = subprocess.check_output(['git','apply','--numstat',str(target)],text=True)
+          paths = {line.split('\t',2)[2] for line in stats.splitlines()}
+          assert paths == expected, (paths,expected)
+          subprocess.run(['git','apply','--check','--unidiff-zero',str(target)],check=True)
+          subprocess.run(['git','apply','--index','--unidiff-zero',str(target)],check=True)
+          # The accessibility result is an Array from JSDOM's realm. Compare
+          # its numeric length rather than host/browser Array prototypes.
+          test = Path('tests/backfill_progress_dom.test.cjs')
+          old = '  assert.deepEqual(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)})), []);'
+          new = '  assert.equal(result.violations.length, 0, JSON.stringify(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)}))));'
+          assert old in test.read_text()
+          test.write_text(test.read_text().replace(old, new))
+          subprocess.run(['git','add',str(test)],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          Path('/tmp/backfill-evidence/bundle-sha256.txt').write_text(hashlib.sha256(patch).hexdigest()+'\nAccessibility assertion correction: compare violations.length === 0 across realms.\n')
+          PY
+          python -m py_compile scripts/investor_edge.py scripts/investor_edge_progress.py tests/backfill_progress_preview.py
+      - name: Install isolated regression dependencies
+        run: |
+          python -m pip install --requirement requirements-runtime-v2.txt
+          npm install --prefix .remediation/ui-test-tools --no-save --package-lock=false --ignore-scripts --no-audit --no-fund jsdom@26.1.0 axe-core@4.10.3
+      - name: Full offline regression and safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests 2>&1 | tee /tmp/backfill-evidence/full-tests.txt
+          bash verify.sh 2>&1 | tee /tmp/backfill-evidence/safety.txt
+      - name: Responsive browser acceptance on TEST-only data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m playwright install --with-deps chromium
+          python tests/backfill_progress_preview.py --output /tmp/backfill-preview/site --screenshots /tmp/backfill-evidence/browser
+      - name: Commit verified source to the same working branch only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          branch='work/investor-edge-backfill-progress-172'
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          remote_head="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" ls-remote origin "refs/heads/$branch" | cut -f1)"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git diff --cached --quiet && { echo 'No source changes'; exit 1; }
+          git config user.name 'maglothinm'
+          git config user.email 'maglothinm@gmail.com'
+          git commit -m 'feat: truthful Investor Edge backfill progress and measured ETA (#172)'
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$branch"
+          git rev-parse HEAD > /tmp/backfill-evidence/source-commit.txt
+          git rev-parse 'HEAD^{tree}' > /tmp/backfill-evidence/source-tree.txt
+      - name: Preserve isolated acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backfill-172-acceptance-${{ github.run_id }}
+          path: /tmp/backfill-evidence/
+          retention-days: 3
+          if-no-files-found: warn
