@@ -1315,3 +1315,9 @@ source-export, patch-application workflows and bundle parts before merge.
 profile-crossing history, personal reviews and source evidence. Deployment must
 use the existing coordinated release process with a fresh baseline; source or
 CI success is not production acceptance.
+
+## 2026-09-14 — Accept backfill progress only after actual-interpreter and live verification
+
+**Decision:** Accept #172 through PRs #173/#176/#177 only after successful corrected immutable image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404`, controlled producer successors, exact snapshot parent continuity, observation/profile key preservation, personal-history hashes and six real-data browser checks. Preserve the first failed AI execution rather than resetting its history. Compile affected entry points in the actual image and run Investor Edge CI on production Python 3.11.
+
+**Outcome:** Backfill progress, measured ready-work ETA and retry/maturity/stall explanations are live. All original producer schedules are restored unchanged and Vault remains paused. Historical processing completion and measured ETA availability remain data-dependent, not consequences of deploying UI. [Release evidence](releases/2026-09-14-investor-edge-backfill-progress.md).

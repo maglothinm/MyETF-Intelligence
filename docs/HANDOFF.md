@@ -1,23 +1,17 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-12T00:24:24.042666+00:00 — investor alerts, OGE health and navigation deployed**.
+Updated **2026-09-14T15:05:00.702173+00:00 — backfill progress deployed and verified**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 
-## Investor Edge backfill implementation — issue #172 / PR #173
+## September 14 current release — Investor Edge backfill progress accepted
 
-The owner renewed full implementation authority on September 14, 2026. The
-backfill branch is reconciled with the accepted September 11 release below.
-Source adds disjoint progress states, measured ready-work throughput/ETA,
-retry and maturity reasons, stale/stalled distinctions, and shared accessible
-root/standalone UI. It preserves scores, budgets, dates, all runtime state,
-alerts, reviews and schedules. Temporary development bridges are removed.
+PRs #173/#176/#177 are merged and deployed. Source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc`, build `b27a9df0-8c09-42df-a39b-01b1d0f985b8`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404` are verified on all six existing resources; web `polititrack-web-00043-29c` serves 100% traffic.
 
-See `docs/investor-edge-backfill-progress.md` for the contract and
-`docs/validation/investor-edge-backfill-progress-2026-09-14.md` for verification.
-Issue #172 remains open until the existing immutable-image release process
-and live AI/Dashboard successor acceptance are verified. Do not confuse a
-source merge or test artifact with a deployed runtime. Do not rerun an old
-cutover or change unrelated Gmail/Operations/Current Opportunity enablement.
+The corrected engine chain succeeded at source `4717b770`; the final CSS-only successor passed a new Dashboard run, preservation audit and vertical-scroll checks. Root and standalone progress views passed six live browser checks. Original history, all observation/profile identities, three accounts, eight acknowledgements and failed-run evidence are preserved. The first Python 3.11 incompatibility was corrected without advancing or resetting its failed AI snapshot. All original producer schedules are ENABLED unchanged; Vault remains PAUSED. No new migration, IAM, scoring/budget or unrelated feature enablement.
+
+[Exact release evidence](releases/2026-09-14-investor-edge-backfill-progress.md) and [receipt](releases/2026-09-14-investor-edge-backfill-progress-receipt.json). Production heads advance naturally; this is bounded feature acceptance, not completion of all historical market outcomes. Gmail delivery configuration remains separate.
+
+Issue #172 deployment is complete. No additional owner feedback is needed. Do not rerun the release; refresh live evidence before any future changes.
 
 ## Preserved concurrent release handoff
 
@@ -28,15 +22,7 @@ The owner is signed into Google and created an app password named “PolitiTrack
 
 ## Current production
 
-- Runtime source: `4deb31cb08fc38b0e38928aee609761f6c6579fd`; tested tree `db330aad8b7b1f1a72f13942d46a2e540d26d1ae`.
-- Image on all six existing resources: `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf`.
-- Build: `960864c8-87bc-4b77-a088-afbb87f85783`; web `polititrack-web-00040-c2l`, 100% traffic.
-- Final Runtime CI `34659557574`: 530 passed, 2 skipped, real PostgreSQL integration passed. Investor main `34659136667` and Runtime main `34659244278` succeeded.
-- Controlled Legislative, Executive, AI and Dashboard successors passed with exact prior-parent continuity. Natural scheduled Executive `polititrack-executive-md66c` succeeded.
-- Full Signals JSON loads successfully; compact cells/popups and responsive scrolling passed live checks. Sound is enabled in the owner's existing browser.
-- All four original producer schedules are ENABLED unchanged. Filing Vault remains PAUSED.
-
-[Exact acceptance evidence](releases/2026-09-11-investor-alerts-navigation.md) and [machine-readable receipt](releases/2026-09-11-investor-alerts-navigation-receipt.json). Accepted heads in those receipts are historical observations and advance naturally.
+Source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc`; image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404`; build `b27a9df0-8c09-42df-a39b-01b1d0f985b8`; web `polititrack-web-00043-29c` at 100%. All four producer schedules are ENABLED, Vault remains PAUSED. The release receipt records exact controlled executions, snapshot hashes, live progress counts and preservation checks. Earlier September 11 tools and credentials handoff below remain historical/context only.
 
 ## Preservation and release boundaries
 

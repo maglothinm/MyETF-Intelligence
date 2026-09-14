@@ -115,3 +115,7 @@ release path, unchanged configuration/schedules/personal data, and accepted AI
 and Dashboard successors. Verify the live JSON/panels and their snapshot lineage.
 Do not use an old Phase 5 certificate as acceptance of this change. Issue #172
 remains open until production verification is recorded.
+
+## Production acceptance — 2026-09-14T15:05:00.702173+00:00
+
+PRs #173/#176/#177 are deployed at source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc` after correcting the Python 3.11 f-string import failure and root list scroll containment. Controlled producers, preserved history and six live browser checks passed; original schedules are restored. See [accepted release](/docs/releases/2026-09-14-investor-edge-backfill-progress.md) for exact evidence. Earlier not-deployed statements above describe their historical source-validation checkpoint.
