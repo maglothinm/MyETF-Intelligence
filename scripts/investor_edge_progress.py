@@ -117,13 +117,24 @@ def inventory(
                             return True
                         if not stock or day(stock[-1].get("date")) < expected_latest:
                             return False
-                        after = [r for r in stock if day(r.get("date")) >= anchor]
-                        return bool(after) and len(after) <= horizon
+                        # A short/truncated or gapped series is missing history,
+                        # not evidence that a mature trade is still too young.
+                        if (day(stock[0].get("date")) > anchor or not benchmark
+                                or day(benchmark[0].get("date")) > anchor
+                                or day(benchmark[-1].get("date")) < expected_latest):
+                            return False
+                        sessions = {day(r.get("date")) for r in benchmark
+                                    if day(r.get("date")) >= anchor}
+                        stock_sessions = {day(r.get("date")) for r in stock
+                                          if day(r.get("date")) >= anchor}
+                        return bool(sessions) and sessions <= stock_sessions and len(sessions) <= horizon
                     all_immature = all(immature(field, h) for field, h in missing)
                     attempted = day(cached.get("last_attempted_as_of"))
                     retry = day(cached.get("retry_after_as_of"))
                     if all_immature and not available:
                         category, reason = "awaiting_maturity", "outcome_not_mature"
+                    elif market_configured is False and not available:
+                        category, reason = "blocked", "no_market_credentials"
                     elif retry and retry > as_of:
                         category, reason = "awaiting_retry", "provider_backoff"
                         retry_at = utc(datetime.combine(retry, datetime.min.time(), timezone.utc))
@@ -232,14 +243,14 @@ def report(work: Mapping[str, Any], journal: Any, *, now: datetime, as_of: date,
         eta_reason = "no_currently_computable_work"
     elif stale:
         eta_reason = "successful_run_evidence_stale_or_missing"
-    elif stalled or not enabled or limit == 0:
+    elif status in {"stalled", "blocked", "unknown", "disabled"}:
         eta_reason = "processing_not_advancing"
     elif len(rates) >= 3 and all(rate > 0 for rate in rates[-3:]):
-        rates = rates[-3:]
-        eta = {"lower_seconds": math.ceil(counts["ready"] / max(rates)),
-               "upper_seconds": math.ceil(counts["ready"] / min(rates)),
+        recent_rates = rates[-3:]
+        eta = {"lower_seconds": math.ceil(counts["ready"] / max(recent_rates)),
+               "upper_seconds": math.ceil(counts["ready"] / min(recent_rates)),
                "basis": "Measured cache-computable completions at the observed successful cadence; excludes all other pending categories.",
-               "measured_intervals": len(rates)}
+               "measured_intervals": len(recent_rates)}
         eta_reason = None
     pending = [row for row in work.values() if row["category"] != "completed"]
     priority = {"blocked": 0, "unknown": 1, "missing_data": 2, "awaiting_retry": 3, "ready": 4, "queued": 5, "awaiting_maturity": 6}
@@ -248,11 +259,15 @@ def report(work: Mapping[str, Any], journal: Any, *, now: datetime, as_of: date,
     retry_dates = [r["next_retry_at"] for r in pending if r["next_retry_at"]]
     return {"schema_version": VERSION, "as_of_date": as_of.isoformat(), "counts": counts,
             "total_observations": len(work), "status": status, "status_label": LABELS[status],
-            "caught_up_computable": counts["ready"] == 0 and counts["queued"] == 0 and counts["unknown"] == 0,
+            "caught_up_computable": status in {"caught_up", "awaiting_maturity"} and not stale,
+            "status_reason_code": "observation_budget_zero" if enabled and limit == 0 and counts["ready"] + counts["queued"] else None,
             "last_successful_run_at": latest.get("at"), "last_advancement_at": old.get("last_advancement_at"),
             "completed_in_last_run": count(latest.get("completed_observations")),
             "advanced_in_last_run": count(latest.get("advanced_observations")),
             "attempted_in_last_run": count(latest.get("attempted")),
+            "resolved_ready_in_last_run": count(latest.get("resolved_ready")),
+            "measured_ready_per_hour": round(sum(r * s for r, s in zip(rates[-3:], intervals[-3:])) / sum(intervals[-3:]) * 3600, 2) if len(intervals) >= 3 else None,
+            "measured_interval_count": min(3, len(intervals)),
             "stalled_successful_runs": count(latest.get("stalled_streak")),
             "stale_after_minutes": stale_after_minutes, "evidence_stale": stale,
             "next_retry_at": min(retry_dates) if retry_dates else None,
@@ -272,17 +287,27 @@ def public_report(value: Any) -> dict[str, Any] | None:
         return None
     if count(value.get("total_observations")) != sum(counts[k] for k in CATEGORIES) or value.get("status") not in LABELS:
         return None
+    pending = value["total_observations"] - counts["completed"]
+    status = value["status"]
+    if (status == "caught_up" and pending or status == "empty" and value["total_observations"]
+            or status == "stalled" and not counts["ready"]
+            or status == "awaiting_maturity" and (not counts["awaiting_maturity"] or pending != counts["awaiting_maturity"])):
+        return None
     result = {k: value.get(k) if isinstance(value.get(k), bool) else None for k in ("caught_up_computable", "evidence_stale", "details_truncated")}
+    result["caught_up_computable"] = bool(value.get("caught_up_computable") is True and value.get("evidence_stale") is False and status in {"caught_up", "awaiting_maturity"})
+    result["status_reason_code"] = "observation_budget_zero" if value.get("status_reason_code") == "observation_budget_zero" else None
     result["as_of_date"] = d.isoformat() if (d := day(value.get("as_of_date"))) else None
     result.update(schema_version=VERSION, counts={k: counts[k] for k in CATEGORIES},
                   total_observations=value["total_observations"], status=value["status"], status_label=LABELS[value["status"]])
     for k in ("last_successful_run_at", "last_advancement_at", "next_retry_at", "next_scheduled_run_at"):
         t = instant(value.get(k)); result[k] = utc(t) if t else None
-    for k in ("completed_in_last_run", "advanced_in_last_run", "attempted_in_last_run", "stalled_successful_runs", "stale_after_minutes", "observed_interval_seconds", "detail_total"):
+    for k in ("completed_in_last_run", "advanced_in_last_run", "attempted_in_last_run", "resolved_ready_in_last_run", "measured_interval_count", "stalled_successful_runs", "stale_after_minutes", "observed_interval_seconds", "detail_total"):
         result[k] = count(value.get(k))
+    rate = value.get("measured_ready_per_hour")
+    result["measured_ready_per_hour"] = rate if isinstance(rate, (int, float)) and not isinstance(rate, bool) and math.isfinite(rate) and rate >= 0 else None
     eta = _mapping(value.get("eta"))
     lower, upper = count(eta.get("lower_seconds")), count(eta.get("upper_seconds"))
-    result["eta"] = {"lower_seconds": lower, "upper_seconds": upper, "measured_intervals": count(eta.get("measured_intervals"))} if lower is not None and upper is not None and lower <= upper else None
+    result["eta"] = {"lower_seconds": lower, "upper_seconds": upper, "measured_intervals": count(eta.get("measured_intervals"))} if lower is not None and upper is not None and 0 < lower <= upper and (count(eta.get("measured_intervals")) or 0) >= 3 and counts["ready"] and status == "queued" and value.get("evidence_stale") is False else None
     valid_eta_reasons = {"insufficient_measured_progress", "no_currently_computable_work", "successful_run_evidence_stale_or_missing", "processing_not_advancing"}
     result["eta_unavailable_reason"] = value.get("eta_unavailable_reason") if value.get("eta_unavailable_reason") in valid_eta_reasons else None
     details = value.get("details")

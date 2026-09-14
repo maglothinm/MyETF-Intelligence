@@ -1,137 +1,51 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-11 — issue #172 branch implementation; production not changed by this work**.
-Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+Updated **2026-09-12T00:24:24.042666+00:00 — investor alerts, OGE health and navigation deployed**.
+Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 
-## Active task — Investor Edge backfill progress (#172 / PR #173)
+## Investor Edge backfill implementation — issue #172 / PR #173
 
-Branch `work/investor-edge-backfill-progress-172`, based on canonical main
-`258b7e16f51485fb9ba92971f4c05964eaab09aa` (PR #169 merged). Adds truthful
-observation categories, persisted advancement/cadence evidence, bounded measured
-ETA, retry explanations, stalled-work detection and accessible root/standalone
-pending-work details. Scoring, schedules, production state and personal history
-are unchanged. [Implementation/acceptance contract](investor-edge-backfill-progress.md).
+The owner renewed full implementation authority on September 14, 2026. The
+backfill branch is reconciled with the accepted September 11 release below.
+Source adds disjoint progress states, measured ready-work throughput/ETA,
+retry and maturity reasons, stale/stalled distinctions, and shared accessible
+root/standalone UI. It preserves scores, budgets, dates, all runtime state,
+alerts, reviews and schedules. Temporary development bridges are removed.
 
-Local focused tests: **87 passed, 1 optional Node/jsdom skip**. Repository safety
-verification passed. Canonical CI, responsive browser evidence, merge and runtime
-acceptance must be reported separately on PR #173 / issue #172. Temporary source
-export/application tooling is development-only and must be absent from the final
-merge tree. It cannot access production data or cloud/notification credentials.
+See `docs/investor-edge-backfill-progress.md` for the contract and
+`docs/validation/investor-edge-backfill-progress-2026-09-14.md` for verification.
+Issue #172 remains open until the existing immutable-image release process
+and live AI/Dashboard successor acceptance are verified. Do not confuse a
+source merge or test artifact with a deployed runtime. Do not rerun an old
+cutover or change unrelated Gmail/Operations/Current Opportunity enablement.
 
-**Next safe action:** finish exact-head code/DOM/full regression acceptance, remove
-temporary tooling, then coordinate deployment from a fresh live baseline. Do not
-close #172 as production-complete until AI/Dashboard successors and the served
-status are verified. No rebaseline, historical snapshot replacement, IAM expansion,
-new production writer or unrelated activation is authorized by this change.
+## Preserved concurrent release handoff
 
-## Prior task — investor alerts, OGE health and table navigation
+The owner authorized full release. PRs #169/#171 are merged and the application changes are live.
+Gmail delivery remains incomplete: Owner-created Google app password has not yet been saved in the prepared Secret Manager form. No successful investor-alert email or inbox receipt is claimed.
 
-**Source update:** PR #169 merged as `258b7e16f51485fb9ba92971f4c05964eaab09aa`
-on September 11. Its previous implementation checkpoint follows for context;
-its then-pending merge statement is historical, not current source status.
-No newer live image was verified during the #172 implementation session.
+The owner is signed into Google and created an app password named “PolitiTrack alerts.” A Google Cloud Secret Manager form named `polititrack-gmail-app-password` was prepared for their private entry. Do not ask for the password in chat or recreate account credentials. Complete this secure handoff, bind only the existing AI job's versioned Gmail secrets with narrow access, and verify provider acceptance/inbox receipt separately. The release tools and private evidence are in `C:/Users/maglo/Documents/Codex/2026-09-10/polititrack-alerts-navigation/release-20260911`. Refresh live configuration before any further mutation; schedules are already restored, so do not rerun the initial cutover.
 
+## Current production
 
-Branch `codex/alerts-oge-navigation`, based on main
-`86cb05cdcb248e3308dce52eca9a0ab7859d61e6`. The owner's request is implemented:
-new-browser sound defaults on and activates on a real interaction; configured
-Gmail recipient `maglothinm@gmail.com` receives queued Investor Edge crossings
-strictly above 60.0 plus existing Watchlist/High Priority analysis alerts;
-Operations exposes OGE check evidence and inventories; compact Signals cells
-retain full hover/focus/tap text; wide tables have reachable top navigation.
-Existing saved Off preferences remain Off.
+- Runtime source: `4deb31cb08fc38b0e38928aee609761f6c6579fd`; tested tree `db330aad8b7b1f1a72f13942d46a2e540d26d1ae`.
+- Image on all six existing resources: `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf`.
+- Build: `960864c8-87bc-4b77-a088-afbb87f85783`; web `polititrack-web-00040-c2l`, 100% traffic.
+- Final Runtime CI `34659557574`: 530 passed, 2 skipped, real PostgreSQL integration passed. Investor main `34659136667` and Runtime main `34659244278` succeeded.
+- Controlled Legislative, Executive, AI and Dashboard successors passed with exact prior-parent continuity. Natural scheduled Executive `polititrack-executive-md66c` succeeded.
+- Full Signals JSON loads successfully; compact cells/popups and responsive scrolling passed live checks. Sound is enabled in the owner's existing browser.
+- All four original producer schedules are ENABLED unchanged. Filing Vault remains PAUSED.
 
-Local canonical suite: **1,226 passed, 37 environment-dependent skips**; shared
-sound/integration checks passed again after the final audio status wording fix
-(**33 tests**). Repository safety verification passed. Real browser checks used
-read-only copies of published data at 1280, 700 and 390 pixel widths. Main
-Signals rows measured about 93 px instead of 946–1032 px. See
-[implementation and activation checklist](investor-alerts-navigation.md).
-Canonical exact-head CI evidence belongs to the linked PR for issue #168.
+[Exact acceptance evidence](releases/2026-09-11-investor-alerts-navigation.md) and [machine-readable receipt](releases/2026-09-11-investor-alerts-navigation-receipt.json). Accepted heads in those receipts are historical observations and advance naturally.
 
-**Not activated:** no merge, image deployment, schema migration, producer
-execution, scheduler/IAM modification or external message delivery occurred.
-Gmail sender credentials are absent from the live AI job, Secret Manager and
-repository secrets. Configure them securely on the existing AI job before
-claiming accepted delivery. Never put the app password in chat or Git.
+## Preservation and release boundaries
 
-**Next safe action:** finish exact-head PR checks, coordinate one production
-release with the still-pending Operations #164 activation, obtain secure Gmail
-sender configuration, preserve current state/personal history and verify a real
-outbox acceptance separately from collection success. Do not activate #154 or
-change schedules. The accepted production baseline below remains unchanged.
+All pre-release snapshots, original failure/side-effect evidence, three accounts, eight acknowledgement rows, and previous notification history were preserved. No schema migration, rebaseline, rewind or alternate writer was introduced. Personal review enablement, allowed origin and existing sign-in are intact. Prior recovery and Phase 5 certificates remain historical; this is bounded release acceptance.
 
-## Current production release
+Only recipient-aware, outbox-compatible images may follow this release. Keep the per-profile crossing journal and pending/held/uncertain/accepted delivery distinctions. Missing provider credentials must not stop collection. Do not clear holds, delete original failures, reset reviews, or populate production with a synthetic qualification test.
 
-PRs #161 and #162 are merged, built, deployed and accepted. Legislative completed
-House 894 / Senate 85 in its normal 180-day window, passed complete-source
-validation and appended generation 233 to the exact preserved generation 232
-parent. Executive, AI and Dashboard also published valid successors. A later
-natural scheduled Legislative execution `polititrack-legislative-nmt57` succeeded.
+## Other work remains separate
 
-- Runtime source: `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301`.
-- Image on all six existing resources: `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:916f23124c028467079b305f50681336fc0b1e6e553cdb4fefe491dc2d380ef1`.
-- Build: `9ad52cb8-5875-4e08-a86c-ea90e512247c`; web: `polititrack-web-00039-ps5`, 100% traffic.
-- Final Runtime CI `34353185272`: 506 passed, one SQLite-only skip; real PostgreSQL integration passed.
-- Investor Edge CI `34353185434`: 712 passed. Local full suite: 1,195 passed, 31 optional/environment skips.
+Operations controls #164/#165 are present in source but their enablement remains off; their schema/IAM activation was not included. Current Opportunity #154 remains excluded. Preserve existing production ownership and coordinate any new release from fresh live evidence.
 
-[Exact release evidence](releases/2026-09-09-legislative-recovery.md) and
-[permanent contract](incidents/2026-09-09-legislative-recovery.md).
-Prior Phase 5 certificates remain historical; this is bounded recovery acceptance.
-
-## State, notification and scheduling boundaries
-
-All four original schedules are ENABLED with unchanged timing, time zones,
-targets and retry settings. Filing Vault remains PAUSED. Accepted heads advance
-naturally; refresh live state before any subsequent release. Original failed run
-`065d5330-abca-4eda-b683-64e85f2dcbe7` and `side_effects_possible=true` remain
-unchanged, as does its generation 232 parent. The historical flag no longer
-latches collection. Its delivery fence is resolved only by the exact pinned
-no-delivery evidence. Other uncertain alerts retain per-record duplicate protection.
-
-Runtime Legislative, Executive and AI atomically commit alert intents with
-successful snapshots. Missing credentials do not block collection. Pushover
-credentials remain absent; external provider delivery is not certified by this
-release. Queued, held, uncertain and accepted states must remain distinct.
-
-After accepting outbox snapshots, use only an outbox-compatible corrected image.
-Do not roll back to the old direct-send AI image, rewind heads, rebaseline,
-delete old runs, clear alert holds or introduce an alternate writer. Keep writer
-locks and complete-source validation. No IAM, private database networking,
-backup/PITR, legacy-route or unrelated PR #154 activation change occurred.
-
-## Personal acknowledgement continuity
-
-Issue #159 / PR #160 remains accepted and included in this image. All five
-personal-review tables, account identities and eight retained acknowledgement
-rows are unchanged. The owner's four original acknowledgements retain their
-timestamps; disabled test-account history and the Restore tombstone remain.
-Personal review enablement and the exact configured origin are preserved.
-
-The live browser showed the owner account signed in during recovery acceptance;
-this release did not modify credentials or sessions. Any password setup or
-recovery remains the owner's action. Never replace the owner identity, choose a
-password for them, ask them to re-acknowledge, or publish setup tokens or recovery data.
-See [the personal review release](releases/2026-09-09-personal-review-acknowledgements.md)
-and [account administration](parser-review-acknowledgements.md).
-
-## Additional active owner request — Operations Run now controls
-
-Issue #164 / PR #165 is merged as `4948b3bb6683b826ca6647495ed6d6a32ff24be6`;
-its coordinated production activation remains pending after this recovery handoff. The owner can start
-the three existing jobs using the existing signed-in account; public/ordinary
-review accounts cannot dispatch. Additive receipts survive refresh and browser
-clearing. Production images, schedules, IAM and schemas have not changed for #164.
-See [the implementation and activation contract](operations-manual-runs.md).
-Preserve the owner's user-completed sign-in; never reset their password or session.
-
-## Next coordinated work
-
-The separate personal-review task is implementing the owner's Operations
-**Run now** controls. It must use the existing jobs, execution-scoped trigger
-labels, writer locks, completeness checks and durable notification contract.
-Dispatch acceptance is not collection success. Preserve authentication,
-same-origin protections and actor authorization. Keep schedules unchanged.
-This recovery task returns production ownership with its exact acceptance
-receipt; subsequent deployment must establish a fresh baseline and use its own
-tested image. No overlapping production release is permitted.
+Historical references: [September 9 recovery](releases/2026-09-09-legislative-recovery.md), [personal acknowledgements](releases/2026-09-09-personal-review-acknowledgements.md), [Operations activation contract](operations-manual-runs.md), [feature contract](investor-alerts-navigation.md).

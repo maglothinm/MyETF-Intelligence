@@ -138,3 +138,38 @@ test('component controls and open detail table pass accessibility checks', async
   const result = await e.w.axe.run(e.w.document, {rules: {'color-contrast': {enabled: false}}});
   assert.equal(result.violations.length, 0, JSON.stringify(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)}))));
 });
+
+test('contradictory completion states never display success', t => {
+  const e = setup(t, payload({status: 'caught_up'}));
+  assert.equal(e.status.textContent, 'Historical backfill status unavailable');
+  assert.doesNotMatch(e.host.textContent, /Estimated processing:/);
+  e.render(payload({status: 'awaiting_maturity'}));
+  assert.equal(e.status.textContent, 'Historical backfill status unavailable');
+});
+
+test('measured throughput is displayed separately from processing attempts', t => {
+  const e = setup(t, payload({measured_ready_per_hour: 20, measured_interval_count: 3,
+    attempted_in_last_run: 30, resolved_ready_in_last_run: 10, observed_interval_seconds: 1800}));
+  assert.match(e.host.textContent, /20 observations\/hour/);
+  assert.match(e.host.textContent, /30 \/ 10/);
+  e.tick(76); e.render(payload({measured_ready_per_hour: 20, measured_interval_count: 3}));
+  assert.doesNotMatch(e.host.textContent, /20 observations\/hour/);
+});
+
+test('old stall evidence is not presented as a current stalled-job warning', t => {
+  const e = setup(t, payload({status: 'stalled', stalled_successful_runs: 3}));
+  e.tick(76); e.render(payload({status: 'stalled', stalled_successful_runs: 3}));
+  assert.match(e.status.textContent, /stale/i);
+  assert.equal(e.host.querySelector('.edge-progress-warning'), null);
+});
+
+test('zero budget explains the required operational action', t => {
+  const e = setup(t, payload({status: 'blocked', status_reason_code: 'observation_budget_zero'}));
+  assert.match(e.host.textContent, /processing budget is zero/);
+  assert.doesNotMatch(e.host.textContent, /Estimated processing:/);
+});
+
+test('unverified or too-short throughput samples do not generate an ETA', t => {
+  const e = setup(t, payload({eta: {lower_seconds: 1800, upper_seconds: 3600, measured_intervals: 2}}));
+  assert.doesNotMatch(e.host.textContent, /Estimated processing:/);
+});

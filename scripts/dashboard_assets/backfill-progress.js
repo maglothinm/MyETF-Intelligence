@@ -13,7 +13,11 @@ window.PTBackfill = (() => {
   function valid(p) {
     return p && p.schema_version === 1 && Object.hasOwn(labels,p.status) && p.counts &&
       Object.keys(categories).every(k=>integer(p.counts[k]) !== null) &&
-      integer(p.total_observations) === Object.keys(categories).reduce((n,k)=>n+p.counts[k],0);
+      integer(p.total_observations) === Object.keys(categories).reduce((n,k)=>n+p.counts[k],0) &&
+      !(p.status === "caught_up" && p.total_observations !== p.counts.completed) &&
+      !(p.status === "empty" && p.total_observations !== 0) &&
+      !(p.status === "stalled" && p.counts.ready === 0) &&
+      !(p.status === "awaiting_maturity" && (p.counts.awaiting_maturity === 0 || p.total_observations !== p.counts.completed + p.counts.awaiting_maturity));
   }
   function staleEvidence(host,p) {
     const t=Date.parse(p.last_successful_run_at),wall=Date.now(),mono=typeof performance!=="undefined"?performance.now():wall;
@@ -42,15 +46,17 @@ window.PTBackfill = (() => {
     if(!p.counts.ready)eta="No cache-computable backlog is currently identified. Other pending categories do not have a computable-work ETA.";
     else if(stale)eta="Estimate unavailable — successful processing evidence is stale or missing.";
     else if(p.status==="stalled"||p.status==="blocked"||p.status==="disabled")eta="Estimate unavailable — processing is not advancing normally.";
-    else if(p.eta&&integer(p.eta.lower_seconds)!==null&&integer(p.eta.upper_seconds)!==null&&p.eta.upper_seconds>=p.eta.lower_seconds){
+    else if(p.status==="queued"&&p.eta&&integer(p.eta.measured_intervals)!==null&&p.eta.measured_intervals>=3&&p.eta.lower_seconds>0&&integer(p.eta.lower_seconds)!==null&&integer(p.eta.upper_seconds)!==null&&p.eta.upper_seconds>=p.eta.lower_seconds){
       eta=`Estimated processing: ${duration(p.eta.lower_seconds)}–${duration(p.eta.upper_seconds)} at the observed successful cadence. This estimate covers ready cached work only, not missing data, queued first evaluations, retries or future outcomes.`;
     }
+    const rate=!stale&&typeof p.measured_ready_per_hour==="number"&&Number.isFinite(p.measured_ready_per_hour)&&p.measured_ready_per_hour>=0&&integer(p.measured_interval_count)!==null&&p.measured_interval_count>=3?`${p.measured_ready_per_hour.toLocaleString()} observations/hour`:"Unavailable";
     const rows=Array.isArray(p.details)?p.details.filter(r=>r && typeof r==="object" && Object.hasOwn(categories,r.category)).slice(0,200):[];
     host.innerHTML=`<div class="edge-progress-panel">
       <dl class="facts edge-history-counts">${Object.entries(categories).map(([key,label])=>`<div><dt>${esc(label)}</dt><dd>${number(p.counts[key])}</dd></div>`).join("")}</dl>
       <p class="chart-note"><strong>${esc(eta)}</strong></p>
-      <dl class="facts"><div><dt>Last successful maintenance</dt><dd>${esc(stamp(p.last_successful_run_at))}</dd></div><div><dt>Last actual advancement</dt><dd>${esc(stamp(p.last_advancement_at))}</dd></div><div><dt>Advanced / fully completed last run</dt><dd>${number(p.advanced_in_last_run)} / ${number(p.completed_in_last_run)}</dd></div><div><dt>Earliest eligible retry</dt><dd>${esc(stamp(p.next_retry_at))}</dd></div><div><dt>Next scheduled execution</dt><dd>${esc(stamp(p.next_scheduled_run_at))}</dd></div></dl>
-      ${p.status==="stalled"?`<p class="edge-progress-warning" role="status">Ready work remained across ${number(p.stalled_successful_runs)} successful maintenance passes without new outcomes. Review the existing AI job in <a href="./#operations">Operations</a>.</p>`:""}
+      <dl class="facts"><div><dt>Last successful maintenance</dt><dd>${esc(stamp(p.last_successful_run_at))}</dd></div><div><dt>Last actual advancement</dt><dd>${esc(stamp(p.last_advancement_at))}</dd></div><div><dt>Advanced / fully completed last run</dt><dd>${number(p.advanced_in_last_run)} / ${number(p.completed_in_last_run)}</dd></div><div><dt>Attempted / ready work resolved last run</dt><dd>${number(p.attempted_in_last_run)} / ${number(p.resolved_ready_in_last_run)}</dd></div><div><dt>Measured ready-work throughput</dt><dd>${esc(rate)}</dd></div><div><dt>Observed successful cadence</dt><dd>${!stale&&integer(p.observed_interval_seconds)!==null?esc(duration(p.observed_interval_seconds)):"Unavailable"}</dd></div><div><dt>Earliest eligible retry</dt><dd>${esc(stamp(p.next_retry_at))}</dd></div><div><dt>Next scheduled execution</dt><dd>${esc(stamp(p.next_scheduled_run_at))}</dd></div></dl>
+      ${!stale&&p.status==="stalled"?`<p class="edge-progress-warning" role="status">Ready work remained across ${number(p.stalled_successful_runs)} successful maintenance passes without new outcomes. Review the existing AI job in <a href="./#operations">Operations</a>.</p>`:""}
+      ${p.status_reason_code==="observation_budget_zero"?'<p class="edge-progress-warning">The historical observation processing budget is zero. Restore the existing backfill budget in the approved runtime configuration; acknowledgements will not restart processing.</p>':""}
       <p class="chart-note">These are counts of trade observations, not individual return horizons. A partial observation can already contribute available outcomes. Full completion requires all configured horizons. No rating or acknowledgement is needed for normal backfill.</p>
       <details class="edge-progress-details" ${wasOpen?"open":""}><summary>Inspect pending work and reasons (${number(p.detail_total)})</summary>
         <div class="edge-progress-controls"><label for="backfill-state-filter">Work category<select id="backfill-state-filter"><option value="all">All pending work</option>${Object.entries(categories).filter(([k])=>k!=="completed").map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join("")}</select></label><label for="backfill-text-filter">Find investor or ticker<input id="backfill-text-filter" type="search" autocomplete="off"></label></div>

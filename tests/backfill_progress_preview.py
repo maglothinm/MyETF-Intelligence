@@ -8,6 +8,7 @@ import argparse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import sys
 from threading import Thread
@@ -44,7 +45,7 @@ def capture(output: Path, evidence: Path) -> None:
     errors=[]; checks=[]
     try:
         with sync_playwright() as driver:
-            browser=driver.chromium.launch()
+            browser=driver.chromium.launch(executable_path=os.environ.get("POLITITRACK_TEST_CHROMIUM") or None)
             for width in [1280,700,390]:
                 for route in ['/#investor-edge','/investor-edge.html']:
                     page=browser.new_page(viewport={'width':width,'height':900})

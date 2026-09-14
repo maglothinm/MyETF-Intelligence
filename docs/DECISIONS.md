@@ -1262,6 +1262,29 @@ intents exist, any rollback must preserve both the outbox and recipient contract
 See [issue #168 implementation](investor-alerts-navigation.md).
 
 
+## 2026-09-11 — Stream growing public dashboard assets
+
+**Decision:** Serve public text assets of at least 64 KiB with negotiated gzip
+streaming, preserving their exact decoded bytes. Remove the buffered response
+length for identity-only responses of at least 32 MiB so the WSGI server can use
+chunked transfer. Preserve range and conditional requests; use Vary and weak ETags
+for the semantically equivalent encoded representation. Do not compress private
+account/API responses or truncate retained ledgers.
+
+**Evidence:** The live Signals ledger returned HTTP 500 on September 11 while
+Cloud Run recorded “Response size was too large.” Its documented non-streaming
+HTTP/1 limit is 32 MiB. A ready snapshot alone does not prove every data endpoint
+loads; live acceptance must fetch and parse the complete Signals JSON.
+[Cloud Run limit](https://docs.cloud.google.com/run/quotas),
+[Flask streaming](https://flask.palletsprojects.com/en/stable/patterns/streaming/).
+
+
+## 2026-09-11 — Accept the owner-authorized alerts and navigation release
+
+**Decision:** Release PRs #169/#171 through the existing Runtime resources using the tested immutable image, a fresh read-only preservation baseline, exact-parent controlled successors, complete live data/asset checks, and a natural scheduled Executive success. Restore each verified producer to its unchanged original schedule; retain paused publication until its controlled acceptance. Preserve all snapshots, incident evidence, personal accounts, acknowledgements and notification history. No new migration or unrelated feature activation is included.
+
+**Consequence:** Sound defaults, compact accessible text, horizontal navigation and OGE health are live. SMTP configuration, provider acceptance and inbox receipt remain distinct evidence states; a missing owner-entered app password does not justify claiming delivery or blocking collection. Keep the recipient-aware outbox and crossing journal on every future release/rollback. [Release evidence](releases/2026-09-11-investor-alerts-navigation.md).
+
 ## 2026-09-11 — Separate computable backfill from future outcomes (#172)
 
 **Decision:** Add disjoint evidence-based observation states, an additive bounded
@@ -1279,3 +1302,16 @@ snapshot; it is not an alternate state authority or production writer.
 runtime deployment and live acceptance. Preserve the recipient-aware #169 source
 and the existing release coordination boundaries. See
 [progress contract](investor-edge-backfill-progress.md) and PR #173.
+
+## 2026-09-14 — Complete backfill telemetry without weakening runtime gates
+
+**Decision:** Resume PR #173 on the current accepted release. Incomplete price
+coverage cannot prove immaturity; stale/contradictory telemetry cannot prove
+completion. Measure ready-work throughput separately from attempts. Add the new
+backend, DOM and responsive checks to permanent canonical CI. Remove temporary
+source-export, patch-application workflows and bundle parts before merge.
+
+**Boundary:** Preserve Runtime v2, all producer schedules, outbox/recipient and
+profile-crossing history, personal reviews and source evidence. Deployment must
+use the existing coordinated release process with a fresh baseline; source or
+CI success is not production acceptance.

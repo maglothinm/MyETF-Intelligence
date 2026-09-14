@@ -259,3 +259,93 @@ def test_broken_progress_accounting_is_nonfatal_and_explicitly_unknown(tmp_path,
     assert profiles[0]['sample_count']==1
     assert runtime.population_metadata['backfill_progress'] is None
     assert 'private token' not in (tmp_path/edge.OBSERVATION_FILE).read_text()
+
+
+def test_recent_end_of_series_does_not_make_truncated_old_history_immature():
+    work = classify(cached={"last_attempted_as_of": "2026-09-01"},
+                    prices=rows(start=date(2026, 9, 10)))
+    assert category(work) == "missing_data"
+
+
+def test_gaps_in_stock_history_do_not_prove_immaturity():
+    item = trade(transaction_date="2026-09-07", followable_anchor_date="2026-09-07")
+    stock = [r for r in rows() if r["date"] not in {"2026-09-08", "2026-09-09"}]
+    benchmark = rows()
+    work = progress.inventory(
+        [{"trade_results": [item]}], {"obs:one": {"last_attempted_as_of": "2026-09-01"}},
+        horizons=[5], as_of=AS_OF,
+        rows_for=lambda ticker: stock if ticker == "AAA" else benchmark,
+        computable=lambda *args: False,
+    )
+    assert category(work) == "missing_data"
+
+
+def test_missing_credentials_are_actionable_even_during_provider_backoff():
+    assert category(classify(cached={"retry_after_as_of": "2026-09-14"},
+                             prices=[], market_configured=False)) == "blocked"
+
+
+def test_caught_up_flag_requires_fresh_positive_processing_evidence():
+    for w in [work_fixture(ready=0, done=10), work_fixture(ready=0, waiting=10)]:
+        assert not publish(w, {})["caught_up_computable"]
+        journal = progress.record_success({}, w, w, method_hash="m", run_id="one", now=NOW, attempted=0)
+        assert publish(w, journal)["caught_up_computable"]
+        assert not publish(w, journal, now=NOW + timedelta(hours=2))["caught_up_computable"]
+    w = work_fixture(ready=0, waiting=1)
+    w["0"]["category"] = "blocked"
+    assert not publish(w, {})["caught_up_computable"]
+
+
+@pytest.mark.parametrize("status", ["caught_up", "empty", "awaiting_maturity"])
+def test_contradictory_success_telemetry_is_not_published(status):
+    report = publish(work_fixture(ready=5), {})
+    report["status"] = status
+    assert progress.public_report(report) is None
+
+
+def test_reported_throughput_is_observed_ready_completions_not_attempts():
+    journal = {}; before = work_fixture(ready=100)
+    for i in range(4):
+        after = work_fixture(ready=100-10*i, done=10*i)
+        journal = progress.record_success(journal, before, after, method_hash="m", run_id=str(i),
+                                          now=NOW+timedelta(minutes=30*i), attempted=30)
+        before = after
+    report = publish(after, journal, now=NOW+timedelta(minutes=90))
+    assert report["measured_ready_per_hour"] == 20
+    assert report["resolved_ready_in_last_run"] == 10
+    assert report["measured_interval_count"] == 3
+    clean = progress.public_report(report)
+    assert clean["measured_ready_per_hour"] == 20
+    assert clean["eta"]["measured_intervals"] == 3
+    for invalid in [True, float("inf"), float("nan"), -2, "20"]:
+        report["measured_ready_per_hour"] = invalid
+        assert progress.public_report(report)["measured_ready_per_hour"] is None
+    report["eta"]["measured_intervals"] = 2
+    assert progress.public_report(report)["eta"] is None
+
+
+def test_zero_budget_has_an_explicit_action_reason_and_no_eta():
+    work = work_fixture(ready=1)
+    report = progress.report(work, {}, now=NOW, as_of=AS_OF, enabled=True, limit=0, stale_after_minutes=75)
+    assert report["status"] == "blocked"
+    assert report["status_reason_code"] == "observation_budget_zero"
+    assert progress.public_report(report)["status_reason_code"] == "observation_budget_zero"
+    assert report["eta"] is None
+
+
+def test_progress_regressions_are_wired_into_permanent_ci():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/investor_edge_tests.yml").read_text()
+    assert workflow.count('"scripts/investor_edge_progress.py"') == 2
+    assert workflow.count('"tests/test_investor_edge_progress.py"') == 2
+    assert '            tests/test_investor_edge_progress.py \\' in workflow
+    assert "python tests/backfill_progress_preview.py" in workflow
+    runtime_workflow = (root / ".github/workflows/runtime_v2_tests.yml").read_text()
+    assert '"scripts/investor_edge_progress.py"' in runtime_workflow
+
+
+def test_no_temporary_backfill_development_bridges_remain():
+    root = Path(__file__).resolve().parents[1]
+    assert not (root / ".github/workflows/backfill_progress_source_export.yml").exists()
+    assert not (root / ".github/workflows/backfill_progress_acceptance.yml").exists()
+    assert not (root / ".remediation/backfill-progress-172").exists()

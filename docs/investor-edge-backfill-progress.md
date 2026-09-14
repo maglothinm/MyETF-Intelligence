@@ -20,7 +20,10 @@ The producer classifies each distinct eligible observation into exactly one stat
 | Blocked | Market credentials are absent and available caches cannot finish the work. A zero configured processing budget is also called out as blocked at the summary level. |
 | Unknown | Required dates, identity or current-profile evidence cannot be established. |
 
-Maturity is conservative: an absent weekday price is not assumed to be an
+Maturity is conservative: stock and benchmark caches must span the entry anchor,
+reach the current observed session, and agree on the observed session coverage.
+A short or gapped old series is missing history, not an immature trade. An absent
+weekday price is not assumed to be an
 exchange holiday, and no future trading calendar or finish date is fabricated.
 An old transaction can have a recently observed disclosure and therefore an
 immature followable outcome. Partial observations still contribute only their
@@ -55,6 +58,10 @@ outcomes. Zero or insufficient progress, stale evidence, disabled processing,
 or zero processing budget suppresses the estimate. It is a conditional processing
 range, not an appointment or estimate of all historical coverage.
 
+Measured ready-work observations per hour and resolved/attempted last-run counts
+are displayed separately. A zero observation budget has an explicit operational
+explanation. Stale or contradictory success telemetry cannot establish completion.
+
 Three successful maintenance passes with the same ready work remaining and no
 new outcomes produce a stalled-work warning. Ordinary maturity waiting and
 provider retry delays do not. Last maintenance and last actual advancement are
@@ -88,11 +95,14 @@ ordinary historical maintenance. Source parsing/access reviews remain separate.
 
 ## Acceptance and release boundary
 
-Local focused acceptance: **87 passed, 1 optional Node/jsdom skip**. Repository
-safety verification passed. Node, accessibility and responsive browser acceptance
-run against isolated TEST fixtures in GitHub CI. Full local collection could not
-run because Flask/application dependencies were not installed in the ChatGPT
-container; this is not a claim that the full suite passed locally.
+September 14 focused local verification: **98 passed, 1 optional Node/jsdom skip**.
+Python compilation, JavaScript syntax and repository safety verification passed.
+Local Chromium navigation is blocked by the container policy; Flask runtime
+dependencies were unavailable.
+full-suite, Node/accessibility and responsive-browser checks require canonical CI.
+These tests are now included in permanent workflow paths and test lists, not
+only in a temporary acceptance bridge. See the dated validation record for the
+final exact-head results. No production execution is claimed by these tests.
 
 `tests/backfill_progress_preview.py` generates read-only TEST previews and can
 capture Chromium evidence for root/standalone views at 1280, 700 and 390 pixels.

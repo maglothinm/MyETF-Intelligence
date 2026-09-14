@@ -23,6 +23,10 @@ on:
       - "tests/scheduler_dispatch.test.mjs"
       - ".github/workflows/executive_trade_tracker.yml"
       - "scripts/investor_edge.py"
+      - "scripts/investor_edge_progress.py"
+      - "tests/test_investor_edge_progress.py"
+      - "tests/backfill_progress_dom.test.cjs"
+      - "tests/backfill_progress_preview.py"
       - "scripts/ai_filing_analyst.py"
       - "scripts/ai_filing_analyst_legacy.py"
       - "scripts/build_trade_dashboard.py"
@@ -109,6 +113,10 @@ on:
       - "tests/scheduler_dispatch.test.mjs"
       - ".github/workflows/executive_trade_tracker.yml"
       - "scripts/investor_edge.py"
+      - "scripts/investor_edge_progress.py"
+      - "tests/test_investor_edge_progress.py"
+      - "tests/backfill_progress_dom.test.cjs"
+      - "tests/backfill_progress_preview.py"
       - "scripts/ai_filing_analyst.py"
       - "scripts/ai_filing_analyst_legacy.py"
       - "scripts/build_trade_dashboard.py"
@@ -218,6 +226,7 @@ jobs:
             tests/test_oge_disclosures.py \
             tests/test_investor_edge.py \
             tests/test_investor_edge_core.py \
+            tests/test_investor_edge_progress.py \
             tests/test_investor_edge_surfaces.py \
             tests/test_ai_filing_analyst.py \
             tests/test_ai_filing_analyst_hardened.py \
@@ -237,3 +246,15 @@ jobs:
       - name: Verify repository safety contract
         shell: bash
         run: bash verify.sh
+      - name: Verify responsive backfill progress with isolated fixtures
+        run: |
+          python -m playwright install --with-deps chromium
+          python tests/backfill_progress_preview.py --output /tmp/backfill-preview/site --screenshots /tmp/backfill-preview/evidence
+      - name: Retain TEST-only backfill browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backfill-progress-browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/backfill-preview/evidence/
+          retention-days: 7
+          if-no-files-found: ignore
