@@ -113,3 +113,14 @@ body {max-width:100%}
 .evidence-links a {display:block;overflow-wrap:anywhere}
 .tooltip-body {white-space:pre-wrap}
 @media(max-width:600px){.two-column{grid-template-columns:minmax(0,1fr)}}
+
+/* Shared root/standalone backfill progress; contained scrolling on small screens. */
+.edge-progress-panel { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.edge-progress-controls { display: flex; flex-wrap: wrap; gap: 1rem; margin: .75rem 0; }
+.edge-progress-controls label { display: grid; gap: .35rem; min-width: 12rem; flex: 1; }
+.edge-progress-controls input, .edge-progress-controls select { max-width: 100%; }
+.edge-progress-table { max-height: 24rem; overflow: auto; }
+.edge-progress-table td { white-space: normal; min-width: 8rem; }
+.edge-progress-table td:nth-child(3) { min-width: 16rem; max-width: 32rem; }
+.edge-progress-details summary { cursor: pointer; padding: .75rem 0; font-weight: 600; }
+.edge-progress-warning { border-inline-start: 3px solid currentColor; padding-inline-start: .75rem; }

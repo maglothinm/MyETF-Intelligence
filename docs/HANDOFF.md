@@ -3,7 +3,23 @@
 Updated **2026-09-12T00:24:24.042666+00:00 — investor alerts, OGE health and navigation deployed**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 
-## Current task and remaining action
+## Investor Edge backfill implementation — issue #172 / PR #173
+
+The owner renewed full implementation authority on September 14, 2026. The
+backfill branch is reconciled with the accepted September 11 release below.
+Source adds disjoint progress states, measured ready-work throughput/ETA,
+retry and maturity reasons, stale/stalled distinctions, and shared accessible
+root/standalone UI. It preserves scores, budgets, dates, all runtime state,
+alerts, reviews and schedules. Temporary development bridges are removed.
+
+See `docs/investor-edge-backfill-progress.md` for the contract and
+`docs/validation/investor-edge-backfill-progress-2026-09-14.md` for verification.
+Issue #172 remains open until the existing immutable-image release process
+and live AI/Dashboard successor acceptance are verified. Do not confuse a
+source merge or test artifact with a deployed runtime. Do not rerun an old
+cutover or change unrelated Gmail/Operations/Current Opportunity enablement.
+
+## Preserved concurrent release handoff
 
 The owner authorized full release. PRs #169/#171 are merged and the application changes are live.
 Gmail delivery remains incomplete: Owner-created Google app password has not yet been saved in the prepared Secret Manager form. No successful investor-alert email or inbox receipt is claimed.

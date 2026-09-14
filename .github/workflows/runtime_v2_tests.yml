@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "runtime_v2/**"
+      - "scripts/investor_edge.py"
+      - "scripts/investor_edge_progress.py"
+      - "tests/test_investor_edge_progress.py"
       - "scripts/runtime_notifications.py"
       - "scripts/investor_notifications.py"
       - "config/investor_notifications.json"

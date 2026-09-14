@@ -4,6 +4,13 @@
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
+## September 14 backfill source completion — not deployment evidence
+
+Issue #172 / PR #173 is the isolated backfill-progress implementation. Its
+verification is tracked in `docs/validation/investor-edge-backfill-progress-2026-09-14.md`.
+The production image/schedules/state described below have not been changed by
+source development or tests. Live release acceptance remains required.
+
 ## September 11 current release — issues #168/#170
 
 PRs #169/#171 are merged. All six resources use runtime source `4deb31cb08fc38b0e38928aee609761f6c6579fd`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf`, build `960864c8-87bc-4b77-a088-afbb87f85783`. Web `polititrack-web-00040-c2l` serves 100% traffic. Final Runtime CI `34659557574` passed (530 tests, 2 skips; real PostgreSQL), and Investor main CI `34659136667` passed.

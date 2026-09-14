@@ -246,12 +246,13 @@
   const edgeCount=value=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0?value:null;
   const edgeStats=[["published_profile_count","Profiles"],["completed_profile_count","Complete"],["building_profile_count","Building"],["historical_transaction_count","Historical trades"],["backfill_processed_this_run","Processed this run"],["backfill_pending_observation_count","Pending observations"]];
   function renderEdge(edge){
-    const profiles=edge?.investors||[],pending=edgeCount(edge?.backfill_pending_observation_count),metadata=edge||{};
-    el("edge-bootstrap-status").textContent=pending===null?"Historical backfill status unavailable":pending>0?"Historical backfill in progress":"Historical backfill current";
-    el("edge-bootstrap-status").className=`status ${pending===null?"unknown":pending>0?"caution":"success"}`;
+    const profiles=edge?.investors||[],metadata=edge||{};
+    el("edge-bootstrap-status").textContent="Historical backfill status unavailable";
+    el("edge-bootstrap-status").className="status unknown";
     el("edge-bootstrap-counts").innerHTML=edgeStats.map(([key,label])=>fact(label,number(key==="published_profile_count"&&edgeCount(metadata[key])===null&&edge?profiles.length:edgeCount(metadata[key])))).join("");
     el("edge-bootstrap-coverage").textContent=`Eligible purchases: ${number(edgeCount(metadata.eligible_purchase_count))} · Eligible filer / owner identities: ${number(edgeCount(metadata.unique_investor_identity_count))} · Legislative trades: ${number(edgeCount(metadata.branch_transaction_counts?.legislative))} · Executive trades: ${number(edgeCount(metadata.branch_transaction_counts?.executive))}`;
     el("edge-bootstrap-budget").textContent=`Observation budget per run: ${number(edgeCount(metadata.backfill_limit_per_run))} · Market requests this run: ${number(edgeCount(metadata.network_requests_this_run))}. Complete profiles meet the sample minimum and have no pending observations. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns.`;
+    if(window.PTBackfill)PTBackfill.render(el("edge-backfill-detail"),metadata.backfill_progress);
     el("edge-history-label").textContent=edge?`${number(profiles.length)} published investor profiles`:"Investor Edge data unavailable";
     el("edge-history-note").textContent=edge?"Full retained profile inventory, independent of qualifying signals. Building-history profiles remain visible; missing outcomes remain unavailable.":"Profile inventory and history counts could not refresh. No completeness or zero-count assumption is made.";
     el("edge-profile-body").innerHTML=profiles.length?profiles.map(p=>{
