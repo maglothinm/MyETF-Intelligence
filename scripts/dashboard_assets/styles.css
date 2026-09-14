@@ -119,6 +119,7 @@ body {max-width:100%}
 .edge-progress-controls { display: flex; flex-wrap: wrap; gap: 1rem; margin: .75rem 0; }
 .edge-progress-controls label { display: grid; gap: .35rem; min-width: 12rem; flex: 1; }
 .edge-progress-controls input, .edge-progress-controls select { max-width: 100%; }
+.app-shell .edge-progress-table,
 .edge-progress-table { max-height: 24rem; overflow: auto; }
 .edge-progress-table td { white-space: normal; min-width: 8rem; }
 .edge-progress-table td:nth-child(3) { min-width: 16rem; max-width: 32rem; }
