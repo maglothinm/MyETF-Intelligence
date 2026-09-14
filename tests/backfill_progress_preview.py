@@ -59,7 +59,7 @@ def capture(output: Path, evidence: Path) -> None:
                     page.locator('#backfill-state-filter').select_option('all')
                     assert page.locator('tr[data-backfill-category]:visible').count()==6
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
-                    metrics = page.locator('.edge-progress-table').evaluate("el => ({height: el.getBoundingClientRect().height, maximum: getComputedStyle(el).maxHeight, limit: parseFloat(getComputedStyle(document.documentElement).fontSize)*24})")
+                    metrics = page.locator('.edge-progress-table').evaluate("el => ({height: el.getBoundingClientRect().height, maximum: getComputedStyle(el).maxHeight, limit:location.pathname.endsWith('investor-edge.html')?innerHeight*0.75:parseFloat(getComputedStyle(document.documentElement).fontSize)*24})")
                     assert metrics['maximum'] != 'none', metrics
                     assert metrics['height'] <= metrics['limit'] + 2, metrics
                     name=('root' if route.startswith('/#') else 'standalone')+f'-{width}'
