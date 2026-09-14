@@ -1,30 +1,26 @@
 name: Backfill progress isolated acceptance
 
-# Temporary issue-172 development bridge. Remove before merge.
-# Only the specified working branch can be written; no cloud or production access.
+# Temporary issue-172 completion bridge. Removes itself from the verified tree.
+# No production data, cloud authority, live notifications, or deployed state.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - '.github/workflows/backfill_progress_acceptance.yml'
-      - '.remediation/backfill-progress-172/**'
+  push:
+    branches: ['work/investor-edge-backfill-progress-172']
+    paths: ['.github/workflows/backfill_progress_acceptance.yml']
 permissions:
   contents: read
 jobs:
   accept:
-    if: >-
-      github.repository_id == '1349678672' &&
-      github.event.pull_request.number == 173 &&
-      github.event.pull_request.head.repo.id == 1349678672 &&
-      github.head_ref == 'work/investor-edge-backfill-progress-172'
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/work/investor-edge-backfill-progress-172'
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       RUNTIME_V2_TEST_POSTGRES: '1'
       POLITITRACK_TEST_NODE: node
       POLITITRACK_TEST_NODE_MODULES: ${{ github.workspace }}/.remediation/ui-test-tools/node_modules
+      REVIEWED_MAIN: 6e4db3725f9d1da4d85b7609e9afac180e017288
+      REVIEWED_TREE: 8d3c5995d42ddbaa7123cd7fb9779bf0728ff3ab
     services:
       postgres:
         image: postgres:17-alpine
@@ -37,7 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v7
@@ -46,39 +41,62 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Validate and apply the exact reviewed source bundle
+      - name: Reconcile and verify exact reviewed source tree
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/backfill-evidence
+          test "$(git rev-parse refs/remotes/origin/main)" = "$REVIEWED_MAIN"
+          git merge-base --is-ancestor 063ff26ba6d41d937c816f898a509a04457bdf5f HEAD
           python - <<'PY'
+          import base64, hashlib, lzma, os, subprocess
           from pathlib import Path
-          import hashlib, lzma, subprocess
-          source = Path('.remediation/backfill-progress-172')
-          packed = b''.join((source/f'part-{i}.xzpart').read_bytes() for i in range(1,4))
-          assert hashlib.sha256(packed).hexdigest() == 'c6af5ff6dbe3585ce23805c52aa2eaae26e3b57c7d64ddd4b91ac9efb519489d'
+          def git(*args, env=None):
+              return subprocess.check_output(['git', *args], text=True, env=env).strip()
+          packed = base64.b64decode(Path('.remediation/backfill-progress-172/completion.patch.xz.b64').read_text())
           patch = lzma.decompress(packed, memlimit=128*1024*1024)
-          assert len(patch) == 84036
-          assert hashlib.sha256(patch).hexdigest() == 'ab118b3734219bf6888c38070192038813143cb895ced2a0a2e5556b29490b9e'
-          target = Path('/tmp/backfill-progress.patch'); target.write_bytes(patch)
-          expected = {'README_INVESTOR_EDGE.md','docs/DECISIONS.md','docs/HANDOFF.md','docs/PROJECT_STATE.md','docs/investor-edge-backfill-progress.md','scripts/build_trade_dashboard.py','scripts/dashboard_assets/app.js','scripts/dashboard_assets/backfill-progress.js','scripts/dashboard_assets/index.html','scripts/dashboard_assets/styles.css','scripts/investor_edge.py','scripts/investor_edge_progress.py','tests/backfill_progress_dom.test.cjs','tests/backfill_progress_preview.py','tests/dashboard_dom.test.cjs','tests/test_investor_edge_progress.py','tests/test_investor_edge_surfaces.py'}
-          stats = subprocess.check_output(['git','apply','--numstat',str(target)],text=True)
-          paths = {line.split('\t',2)[2] for line in stats.splitlines()}
-          assert paths == expected, (paths,expected)
-          subprocess.run(['git','apply','--check','--unidiff-zero',str(target)],check=True)
-          subprocess.run(['git','apply','--index','--unidiff-zero',str(target)],check=True)
-          # The accessibility result is an Array from JSDOM's realm. Compare
-          # its numeric length rather than host/browser Array prototypes.
-          test = Path('tests/backfill_progress_dom.test.cjs')
-          old = '  assert.deepEqual(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)})), []);'
-          new = '  assert.equal(result.violations.length, 0, JSON.stringify(result.violations.map(v => ({id: v.id, nodes: v.nodes.map(n => n.target)}))));'
-          assert old in test.read_text()
-          test.write_text(test.read_text().replace(old, new))
-          subprocess.run(['git','add',str(test)],check=True)
-          subprocess.run(['git','diff','--cached','--check'],check=True)
-          Path('/tmp/backfill-evidence/bundle-sha256.txt').write_text(hashlib.sha256(patch).hexdigest()+'\nAccessibility assertion correction: compare violations.length === 0 across realms.\n')
+          assert len(patch) == 37540
+          assert hashlib.sha256(patch).hexdigest() == '0dde7a634181bbe024e0654e107fe3d08eb84cd87a192b9f127295c5ed2ee6a6'
+          target = Path('/tmp/backfill-completion.patch'); target.write_bytes(patch)
+          entries = {
+              'README_INVESTOR_EDGE.md':'316d03ed8ac2cc874d1896aa1414c02e94d8c52e',
+              'docs/investor-edge-backfill-progress.md':'35d828a7e8fb44a5c5562c00cfb38e60ddc839e5',
+              'scripts/build_trade_dashboard.py':'6a44c9cdcaa31f36704f575f4aa6cfc45c99e246',
+              'scripts/dashboard_assets/app.js':'3dd58800e3ac67912cfe406d4cf28769e868b13f',
+              'scripts/dashboard_assets/backfill-progress.js':'51afbf5e15ff9e81b1ce28d056039d600dc1e40e',
+              'scripts/dashboard_assets/index.html':'bc5fdc4f9f3e70732c77590553eaab18c7789439',
+              'scripts/dashboard_assets/styles.css':'ffbd7b918af3e43982fa713d0a31673ed62d3e99',
+              'scripts/investor_edge.py':'fd3b2e401c4f1989627176b0cfc9d3db2b6c09de',
+              'scripts/investor_edge_progress.py':'5710d531113578c9cb16daaa715721766a7a7f4a',
+              'tests/backfill_progress_dom.test.cjs':'e2a671cf680fb2baf62720216ce708da916569f',
+              'tests/backfill_progress_preview.py':'d9c73e1eb46c5acd464b5230c2d340f5d65c5d21',
+              'tests/dashboard_dom.test.cjs':'3d111e52f3525e53835313314a234551a49876c2',
+              'tests/test_investor_edge_progress.py':'d7ef56066c072deede8cae0869fc4c284a9d0a13',
+              'tests/test_investor_edge_surfaces.py':'817dcfa2315a17ce52fc680648eee89f4e896ad2',
+          }
+          # The existing feature source is overlaid on the accepted release;
+          # main's runtime, alert and personal-history repairs are retained.
+          entries['tests/backfill_progress_dom.test.cjs'] = 'e2a671cf680fb2baf62720216ce708da9168169f'
+          env = dict(os.environ, GIT_INDEX_FILE='/tmp/backfill-reconcile.index')
+          git('read-tree', os.environ['REVIEWED_MAIN'], env=env)
+          for path, sha in entries.items():
+              git('update-index', '--add', '--cacheinfo', f'100644,{sha},{path}', env=env)
+          tree = git('write-tree', env=env)
+          assert tree == '654d389760bbb493a6b3cbd0383d1b50c63561b1', tree
+          git('read-tree', '--reset', '-u', tree)
+          expected = {'.github/workflows/investor_edge_tests.yml','.github/workflows/runtime_v2_tests.yml','docs/DECISIONS.md','docs/HANDOFF.md','docs/PROJECT_STATE.md','docs/investor-edge-backfill-progress.md','docs/validation/investor-edge-backfill-progress-2026-09-14.md','scripts/dashboard_assets/backfill-progress.js','scripts/investor_edge_progress.py','tests/backfill_progress_dom.test.cjs','tests/backfill_progress_preview.py','tests/test_investor_edge_progress.py'}
+          paths = {line.split('\t',2)[2] for line in git('apply','--numstat',str(target)).splitlines()}
+          assert paths == expected, paths
+          git('apply', '--check', str(target))
+          git('apply', '--index', str(target))
+          assert git('write-tree') == os.environ['REVIEWED_TREE']
+          assert not Path('.remediation/backfill-progress-172').exists() or not any(Path('.remediation/backfill-progress-172').iterdir())
+          assert not Path('.github/workflows/backfill_progress_acceptance.yml').exists()
+          assert not Path('.github/workflows/backfill_progress_source_export.yml').exists()
+          git('diff', '--cached', '--check')
+          Path('/tmp/backfill-evidence/reviewed-tree.txt').write_text(os.environ['REVIEWED_TREE']+'\n')
+          Path('/tmp/backfill-evidence/patch-sha256.txt').write_text(hashlib.sha256(patch).hexdigest()+'\n')
           PY
-          python -m py_compile scripts/investor_edge.py scripts/investor_edge_progress.py tests/backfill_progress_preview.py
       - name: Install isolated regression dependencies
         run: |
           python -m pip install --requirement requirements-runtime-v2.txt
@@ -87,6 +105,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python -m py_compile scripts/investor_edge.py scripts/investor_edge_progress.py tests/backfill_progress_preview.py
+          node --check scripts/dashboard_assets/backfill-progress.js
           python -m pytest -q tests 2>&1 | tee /tmp/backfill-evidence/full-tests.txt
           bash verify.sh 2>&1 | tee /tmp/backfill-evidence/safety.txt
       - name: Responsive browser acceptance on TEST-only data
@@ -95,29 +115,34 @@ jobs:
           set -euo pipefail
           python -m playwright install --with-deps chromium
           python tests/backfill_progress_preview.py --output /tmp/backfill-preview/site --screenshots /tmp/backfill-evidence/browser
-      - name: Commit verified source to the same working branch only
+      - name: Commit verified reconciliation to the same working branch only
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD: ${{ github.sha }}
         run: |
           set -euo pipefail
           branch='work/investor-edge-backfill-progress-172'
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           remote_head="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" ls-remote origin "refs/heads/$branch" | cut -f1)"
+          remote_main="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" ls-remote origin refs/heads/main | cut -f1)"
           test "$remote_head" = "$EXPECTED_HEAD"
-          git diff --cached --quiet && { echo 'No source changes'; exit 1; }
+          test "$remote_main" = "$REVIEWED_MAIN"
+          test "$(git write-tree)" = "$REVIEWED_TREE"
+          git diff --exit-code
           git config user.name 'maglothinm'
           git config user.email 'maglothinm@gmail.com'
-          git commit -m 'feat: truthful Investor Edge backfill progress and measured ETA (#172)'
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$branch"
-          git rev-parse HEAD > /tmp/backfill-evidence/source-commit.txt
-          git rev-parse 'HEAD^{tree}' > /tmp/backfill-evidence/source-tree.txt
+          commit="$(printf '%s\n' 'feat: complete and reconcile Investor Edge backfill progress (#172)' | git commit-tree "$REVIEWED_TREE" -p "$EXPECTED_HEAD" -p "$REVIEWED_MAIN")"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "$commit:refs/heads/$branch"
+          git update-ref refs/heads/accepted-backfill "$commit"
+          git bundle create /tmp/backfill-evidence/verified-source.bundle refs/heads/accepted-backfill refs/remotes/origin/main
+          printf '%s\n' "$commit" > /tmp/backfill-evidence/source-commit.txt
+          git show --stat --oneline "$commit" > /tmp/backfill-evidence/source-stat.txt
       - name: Preserve isolated acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backfill-172-acceptance-${{ github.run_id }}
+          name: backfill-172-completion-${{ github.run_id }}
           path: /tmp/backfill-evidence/
-          retention-days: 3
+          retention-days: 7
           if-no-files-found: warn
