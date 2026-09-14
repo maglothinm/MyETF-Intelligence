@@ -1,37 +1,38 @@
 name: Backfill progress source export
 
-# Temporary development-only export. Remove before merging issue #172.
-# No production state, cloud permissions, secrets, dispatch or deployment.
+# Temporary read-only development export for issue #172. Remove before merge.
+# Tracked source only: no production state, cloud authority or credentials.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - '.github/workflows/backfill_progress_source_export.yml'
-
+  push:
+    branches: ['work/investor-edge-backfill-progress-172']
+    paths: ['.github/workflows/backfill_progress_source_export.yml']
 permissions:
   contents: read
-
 jobs:
   export:
-    if: github.repository_id == '1349678672' && github.head_ref == 'work/investor-edge-backfill-progress-172'
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/work/investor-edge-backfill-progress-172'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - name: Export tracked source only
+      - name: Export verified source history only
         shell: bash
         run: |
-          git archive --format=tar HEAD > source.tar
-          sha256sum source.tar > source.tar.sha256
-          git rev-parse HEAD > source-commit.txt
+          set -euo pipefail
+          mkdir -p /tmp/backfill-source
+          git archive --format=tar HEAD > /tmp/backfill-source/branch.tar
+          git archive --format=tar refs/remotes/origin/main > /tmp/backfill-source/main.tar
+          git bundle create /tmp/backfill-source/source.bundle HEAD refs/remotes/origin/main
+          git rev-parse HEAD > /tmp/backfill-source/branch-commit.txt
+          git rev-parse refs/remotes/origin/main > /tmp/backfill-source/main-commit.txt
+          cd /tmp/backfill-source
+          sha256sum branch.tar main.tar source.bundle > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: backfill-source-${{ github.run_id }}
-          path: |
-            source.tar
-            source.tar.sha256
-            source-commit.txt
+          path: /tmp/backfill-source/
           retention-days: 1
+          if-no-files-found: error
