@@ -24,6 +24,9 @@ COPY runtime_v2 ./runtime_v2
 COPY schemas ./schemas
 COPY scripts ./scripts
 
+# Compile changed runtime entry points with the exact image interpreter.
+RUN python -m py_compile scripts/investor_edge.py scripts/investor_edge_progress.py scripts/ai_filing_analyst.py scripts/ai_filing_analyst_legacy.py scripts/build_trade_dashboard.py
+
 RUN useradd --create-home --uid 10001 polititrack \
     && chown -R polititrack:polititrack /srv/polititrack /ms-playwright
 USER polititrack
