@@ -1,17 +1,25 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-12T00:24:24.042666+00:00 — investor alerts, OGE health and navigation release accepted; personal history preserved.
+**Current as of:** 2026-09-14T15:05:00.702173+00:00 — backfill progress release accepted; history preserved.
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
-## September 14 backfill source completion — not deployment evidence
+## September 14 current release — Investor Edge backfill progress accepted
+
+PRs #173/#176/#177 are merged and deployed. Source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc`, build `b27a9df0-8c09-42df-a39b-01b1d0f985b8`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404` are verified on all six existing resources; web `polititrack-web-00043-29c` serves 100% traffic.
+
+The corrected engine chain succeeded at source `4717b770`; the final CSS-only successor passed a new Dashboard run, preservation audit and vertical-scroll checks. Root and standalone progress views passed six live browser checks. Original history, all observation/profile identities, three accounts, eight acknowledgements and failed-run evidence are preserved. The first Python 3.11 incompatibility was corrected without advancing or resetting its failed AI snapshot. All original producer schedules are ENABLED unchanged; Vault remains PAUSED. No new migration, IAM, scoring/budget or unrelated feature enablement.
+
+[Exact release evidence](releases/2026-09-14-investor-edge-backfill-progress.md) and [receipt](releases/2026-09-14-investor-edge-backfill-progress-receipt.json). Production heads advance naturally; this is bounded feature acceptance, not completion of all historical market outcomes. Gmail delivery configuration remains separate.
+
+## September 14 backfill source completion — historical development evidence
 
 Issue #172 / PR #173 is the isolated backfill-progress implementation. Its
 verification is tracked in `docs/validation/investor-edge-backfill-progress-2026-09-14.md`.
 The production image/schedules/state described below have not been changed by
 source development or tests. Live release acceptance remains required.
 
-## September 11 current release — issues #168/#170
+## September 11 release — historical accepted predecessor
 
 PRs #169/#171 are merged. All six resources use runtime source `4deb31cb08fc38b0e38928aee609761f6c6579fd`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6bd42784caff11fae8bcec4373331e58986a3bc79216782f682d2ca5107b87bf`, build `960864c8-87bc-4b77-a088-afbb87f85783`. Web `polititrack-web-00040-c2l` serves 100% traffic. Final Runtime CI `34659557574` passed (530 tests, 2 skips; real PostgreSQL), and Investor main CI `34659136667` passed.
 
