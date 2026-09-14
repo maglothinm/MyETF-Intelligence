@@ -3132,6 +3132,9 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             "</td></tr>"
         )
 
+    # Keep escaping outside the f-string for the production Python 3.11 parser.
+    backfill_json = json.dumps(history["backfill_progress"], ensure_ascii=True).replace("<", "\\u003c")
+
     page = f"""<!doctype html>
 <html lang='en'>
 <head>
@@ -3166,7 +3169,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
   <p>Eligible purchases: {history_value('eligible_purchase_count')} · Eligible filer / owner identities: {history_value('unique_investor_identity_count')} · Legislative trades: {integer_cell(history['branch_transaction_counts']['legislative'])} · Executive trades: {integer_cell(history['branch_transaction_counts']['executive'])}</p>
   <p>Observation budget per run: {history_value('backfill_limit_per_run')} · Market requests this run: {history_value('network_requests_this_run')}. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns. Complete profiles meet the sample minimum and have no pending historical observations.</p>
   <div id='edge-backfill-detail'></div>
-  <script type='application/json' id='edge-backfill-data'>{json.dumps(history["backfill_progress"], ensure_ascii=True).replace("<", "\\u003c")}</script>
+  <script type='application/json' id='edge-backfill-data'>{backfill_json}</script>
 </section>
 <section class='panel'>
   <div class='panel-header'><div><h2>Investor performance heat map</h2><p>5/20/60/120-session values are average benchmark-relative returns from the first trading session after public observation. Open a drilldown to inspect transaction- and post-disclosure evidence.</p></div></div>
