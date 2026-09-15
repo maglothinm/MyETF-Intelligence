@@ -1,10 +1,29 @@
 # PolitiTrack project state
 
-**Current as of:** 2026-09-14T15:05:00.702173+00:00 — backfill progress release accepted; history preserved.
+**Current as of:** 2026-09-15T12:38:15.901975+00:00 — Inbox interruption delay accepted; history preserved.
 
 **Canonical repository:** ID `1349678672`, `maglothinm/MyETF-Intelligence`; default branch `main`.
 
-## September 14 current release — Investor Edge backfill progress accepted
+## September 15 current release — Inbox interruption delay accepted
+
+PR #180 / issue #179 is deployed and verified. Inbox waits for a continuous
+60-minute interruption before one alert, and emits recovery only for a reported
+episode. Operations stays immediate. Local checks, canonical PR/main CI, exact
+served bundles and real Chromium boundary/recovery checks passed.
+
+Dashboard publisher source `2629c05be5a7478c1fdd8695536f618b25d4d78f`, build `0acd4adc-7a40-4a1b-b142-3f163b987723`,
+image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:aa5b79b468c6f02d3925bc8758b77fa68db922cbdafa383df37258574aeb9cae`. Publication `polititrack-dashboard-kvtfv`
+succeeded at generation 900. Other production resource specifications
+are unchanged. All original schedules are restored; Vault remains paused.
+Snapshot lineage, original history, three accounts and eight acknowledgements
+passed preservation checks. No task blocker remains; existing Gmail setup and
+source-date reporting are separate. Refresh the page to load the new browser code.
+
+[Release evidence](releases/2026-09-15-inbox-interruption-delay.md) and
+[receipt](releases/2026-09-15-inbox-interruption-delay-receipt.json).
+Do not replay this release; refresh live evidence before any future change.
+
+## September 14 accepted predecessor — Investor Edge backfill progress
 
 PRs #173/#176/#177 are merged and deployed. Source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc`, build `b27a9df0-8c09-42df-a39b-01b1d0f985b8`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404` are verified on all six existing resources; web `polititrack-web-00043-29c` serves 100% traffic.
 

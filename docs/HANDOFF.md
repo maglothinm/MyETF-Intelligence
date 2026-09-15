@@ -1,22 +1,26 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-15 — Inbox interruption delay implemented; release verification pending**.
+Updated **2026-09-15T12:38:15.901975+00:00 — Inbox interruption delay deployed and verified**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 
-## Current task — sustained Inbox interruption alerts (#179)
+## September 15 current release — Inbox interruption delay accepted
 
-The owner requested a sensible delay for agent offline/online Inbox noise.
-Implemented a 60-minute continuous published-evidence threshold, one warning per
-branch episode, and recovery only after a reported interruption. Persisted timers
-survive reloads and concurrent tabs; intermediate successful runs reset them.
-Operations stays immediate, and external notifications and stored history remain
-unchanged. Local notification checks: 41 passed. Generated dashboard, notification
-wrapper and insight checks: 82 passed. Canonical CI and live release are pending.
+PR #180 / issue #179 is deployed and verified. Inbox waits for a continuous
+60-minute interruption before one alert, and emits recovery only for a reported
+episode. Operations stays immediate. Local checks, canonical PR/main CI, exact
+served bundles and real Chromium boundary/recovery checks passed.
 
-Branch `codex/inbox-outage-delay-20260915`, based on canonical main `02dfe412`
-plus the local diagnosis below. Next: verify PR CI, build an immutable image,
-update only the existing Dashboard publisher, verify its successor and served
-bundle, and preserve all other existing resource settings and state.
+Dashboard publisher source `2629c05be5a7478c1fdd8695536f618b25d4d78f`, build `0acd4adc-7a40-4a1b-b142-3f163b987723`,
+image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:aa5b79b468c6f02d3925bc8758b77fa68db922cbdafa383df37258574aeb9cae`. Publication `polititrack-dashboard-kvtfv`
+succeeded at generation 900. Other production resource specifications
+are unchanged. All original schedules are restored; Vault remains paused.
+Snapshot lineage, original history, three accounts and eight acknowledgements
+passed preservation checks. No task blocker remains; existing Gmail setup and
+source-date reporting are separate. Refresh the page to load the new browser code.
+
+[Release evidence](releases/2026-09-15-inbox-interruption-delay.md) and
+[receipt](releases/2026-09-15-inbox-interruption-delay-receipt.json).
+Do not replay this release; refresh live evidence before any future change.
 
 ## Prior diagnosis — Current despite an older source date
 
@@ -36,7 +40,7 @@ Next remediation, if undertaken, should correct new run-history provenance witho
 rewriting retained history and clarify the source-date contract. The prior release
 and outstanding Gmail handoff below remain intact.
 
-## September 14 current release — Investor Edge backfill progress accepted
+## September 14 accepted predecessor — Investor Edge backfill progress
 
 PRs #173/#176/#177 are merged and deployed. Source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc`, build `b27a9df0-8c09-42df-a39b-01b1d0f985b8`, image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404` are verified on all six existing resources; web `polititrack-web-00043-29c` serves 100% traffic.
 
@@ -53,7 +57,7 @@ Gmail delivery remains incomplete: Owner-created Google app password has not yet
 
 The owner is signed into Google and created an app password named “PolitiTrack alerts.” A Google Cloud Secret Manager form named `polititrack-gmail-app-password` was prepared for their private entry. Do not ask for the password in chat or recreate account credentials. Complete this secure handoff, bind only the existing AI job's versioned Gmail secrets with narrow access, and verify provider acceptance/inbox receipt separately. The release tools and private evidence are in `C:/Users/maglo/Documents/Codex/2026-09-10/polititrack-alerts-navigation/release-20260911`. Refresh live configuration before any further mutation; schedules are already restored, so do not rerun the initial cutover.
 
-## Current production
+## September 14 production predecessor
 
 Source `0483e8c1f66a9328ec6f46d1ba003594c9aa75fc`; image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404`; build `b27a9df0-8c09-42df-a39b-01b1d0f985b8`; web `polititrack-web-00043-29c` at 100%. All four producer schedules are ENABLED, Vault remains PAUSED. The release receipt records exact controlled executions, snapshot hashes, live progress counts and preservation checks. Earlier September 11 tools and credentials handoff below remain historical/context only.
 

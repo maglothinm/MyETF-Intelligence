@@ -1,0 +1,50 @@
+{
+  "result": "inbox_delay_deployed_and_verified",
+  "source": "2629c05be5a7478c1fdd8695536f618b25d4d78f",
+  "build_id": "0acd4adc-7a40-4a1b-b142-3f163b987723",
+  "scope": "dashboard-publisher-assets-only",
+  "at": "2026-09-15T12:25:22.765275+00:00",
+  "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:aa5b79b468c6f02d3925bc8758b77fa68db922cbdafa383df37258574aeb9cae",
+  "dashboard_head": {
+    "generation": 900,
+    "namespace": "dashboard",
+    "snapshot_id": "02577bd4-6b1f-40a1-bdf6-12431bd40550",
+    "snapshot_sha256": "8b4d02f1791e4f50bab9adb7c2cf826f3247d926ef496c715ea99a15127c7b37",
+    "updated_at": "2026-09-15T12:34:50.945767+00:00"
+  },
+  "publication_execution": "polititrack-dashboard-kvtfv",
+  "baseline_audit": "polititrack-admin-gs5zz",
+  "acceptance_audit": "polititrack-admin-l69mq",
+  "preservation": "all baseline metadata and history hashes unchanged; descendant parent links verified",
+  "live": {
+    "at": "2026-09-15T12:35:21.528Z",
+    "assets": [
+      {
+        "name": "app.js",
+        "sha256": "f5b29d68ef80c75461cf14e1d095073aa7550a4157669ba0003f875a19365508",
+        "snapshot": "8b4d02f1791e4f50bab9adb7c2cf826f3247d926ef496c715ea99a15127c7b37"
+      },
+      {
+        "name": "wallboard.js",
+        "sha256": "2ab009563c24f5d258bc544f72f4968077f2c7d35a678594a0e6d304c406da91",
+        "snapshot": "8b4d02f1791e4f50bab9adb7c2cf826f3247d926ef496c715ea99a15127c7b37"
+      }
+    ],
+    "browser_checks": [
+      {
+        "inbox_opens": true,
+        "briefRecovery": 0,
+        "beforeThreshold": 0,
+        "atThreshold": 1,
+        "recovery": 2
+      }
+    ],
+    "errors": [],
+    "assets_match": true,
+    "readiness": {
+      "dashboard": true,
+      "snapshot_sha256": "8b4d02f1791e4f50bab9adb7c2cf826f3247d926ef496c715ea99a15127c7b37",
+      "status": "ready"
+    }
+  }
+}
