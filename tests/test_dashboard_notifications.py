@@ -15,7 +15,7 @@ def test_browser_local_notification_engine() -> None:
         pytest.skip("Node is unavailable; run dashboard_notifications.test.cjs in Linux CI")
     repository = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        [node, "--test", "tests/dashboard_notifications.test.cjs", "tests/dashboard_notification_integration.test.cjs"],
+        [node, "--test", "tests/dashboard_notifications.test.cjs", "tests/dashboard_notification_integration.test.cjs", "tests/inbox_outage_delay.test.cjs"],
         cwd=repository,
         capture_output=True,
         text=True,

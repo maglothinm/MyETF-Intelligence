@@ -1,7 +1,40 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-14T15:05:00.702173+00:00 — backfill progress deployed and verified**.
+Updated **2026-09-15 — Inbox interruption delay implemented; release verification pending**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
+
+## Current task — sustained Inbox interruption alerts (#179)
+
+The owner requested a sensible delay for agent offline/online Inbox noise.
+Implemented a 60-minute continuous published-evidence threshold, one warning per
+branch episode, and recovery only after a reported interruption. Persisted timers
+survive reloads and concurrent tabs; intermediate successful runs reset them.
+Operations stays immediate, and external notifications and stored history remain
+unchanged. Local notification checks: 41 passed. Generated dashboard, notification
+wrapper and insight checks: 82 passed. Canonical CI and live release are pending.
+
+Branch `codex/inbox-outage-delay-20260915`, based on canonical main `02dfe412`
+plus the local diagnosis below. Next: verify PR CI, build an immutable image,
+update only the existing Dashboard publisher, verify its successor and served
+bundle, and preserve all other existing resource settings and state.
+
+## Prior diagnosis — Current despite an older source date
+
+The owner cancelled the tooltip change and requested diagnosis. At 12:15 UTC on
+September 15, published monitoring evidence and independent Cloud Run logs show
+recent successful Legislative, Executive and AI execution. House, Senate and OGE
+reported zero new filings. The displayed September 14 source timestamp uses
+retained record/run timestamps separately from monitoring health.
+
+A reporting defect is confirmed: recent collector history rows are incorrectly
+labelled `local`, so the production-only source-date calculation excludes them.
+Verified Runtime v2 execution records still support the Current badge. Application,
+tooltip, schedules, credentials and production state were not changed. No repair or
+new release is claimed. [Diagnosis and exact evidence](incidents/2026-09-15-monitoring-current-source-date.md).
+
+Next remediation, if undertaken, should correct new run-history provenance without
+rewriting retained history and clarify the source-date contract. The prior release
+and outstanding Gmail handoff below remain intact.
 
 ## September 14 current release — Investor Edge backfill progress accepted
 
