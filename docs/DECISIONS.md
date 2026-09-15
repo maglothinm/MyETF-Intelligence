@@ -1321,3 +1321,20 @@ CI success is not production acceptance.
 **Decision:** Accept #172 through PRs #173/#176/#177 only after successful corrected immutable image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404`, controlled producer successors, exact snapshot parent continuity, observation/profile key preservation, personal-history hashes and six real-data browser checks. Preserve the first failed AI execution rather than resetting its history. Compile affected entry points in the actual image and run Investor Edge CI on production Python 3.11.
 
 **Outcome:** Backfill progress, measured ready-work ETA and retry/maturity/stall explanations are live. All original producer schedules are restored unchanged and Vault remains paused. Historical processing completion and measured ETA availability remain data-dependent, not consequences of deploying UI. [Release evidence](releases/2026-09-14-investor-edge-backfill-progress.md).
+
+## 2026-09-15 — Delay Inbox interruption alerts for 60 minutes (#179)
+
+Use one browser-persisted interruption episode per branch. Allow 60 minutes of
+continuing published problem evidence before creating an Inbox warning or sound.
+That spans two scheduled opportunities for the twice-hourly agents. Changing
+failed run IDs or failure/stale classification does not restart or duplicate an
+episode. A verified success between failed observations resets the duration.
+Recovery notices require a prior alert for that episode; brief interruptions and
+their recoveries stay quiet. Previously delivered legacy alerts remain eligible
+for one recovery, while unreported legacy incidents start a fresh waiting period.
+
+Publication timestamps advance the waiting period. Refreshing cached data,
+changing the device clock, or opening another tab cannot earn outage duration.
+First hydration remains quiet. Unknown evidence cannot manufacture recovery.
+Operations status remains immediate; no external notification channel, collector,
+freshness threshold, source-date calculation, or stored user history is changed.

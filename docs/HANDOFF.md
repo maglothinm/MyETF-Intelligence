@@ -1,9 +1,24 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-15 — monitoring/source-date diagnosis complete; tooltip request cancelled**.
+Updated **2026-09-15 — Inbox interruption delay implemented; release verification pending**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 
-## Current task — explain Current despite an older source date
+## Current task — sustained Inbox interruption alerts (#179)
+
+The owner requested a sensible delay for agent offline/online Inbox noise.
+Implemented a 60-minute continuous published-evidence threshold, one warning per
+branch episode, and recovery only after a reported interruption. Persisted timers
+survive reloads and concurrent tabs; intermediate successful runs reset them.
+Operations stays immediate, and external notifications and stored history remain
+unchanged. Local notification checks: 41 passed. Generated dashboard, notification
+wrapper and insight checks: 82 passed. Canonical CI and live release are pending.
+
+Branch `codex/inbox-outage-delay-20260915`, based on canonical main `02dfe412`
+plus the local diagnosis below. Next: verify PR CI, build an immutable image,
+update only the existing Dashboard publisher, verify its successor and served
+bundle, and preserve all other existing resource settings and state.
+
+## Prior diagnosis — Current despite an older source date
 
 The owner cancelled the tooltip change and requested diagnosis. At 12:15 UTC on
 September 15, published monitoring evidence and independent Cloud Run logs show
