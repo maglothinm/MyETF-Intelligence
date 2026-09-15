@@ -1,7 +1,25 @@
 # PolitiTrack active handoff
 
-Updated **2026-09-14T15:05:00.702173+00:00 — backfill progress deployed and verified**.
+Updated **2026-09-15 — monitoring/source-date diagnosis complete; tooltip request cancelled**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
+
+## Current task — explain Current despite an older source date
+
+The owner cancelled the tooltip change and requested diagnosis. At 12:15 UTC on
+September 15, published monitoring evidence and independent Cloud Run logs show
+recent successful Legislative, Executive and AI execution. House, Senate and OGE
+reported zero new filings. The displayed September 14 source timestamp uses
+retained record/run timestamps separately from monitoring health.
+
+A reporting defect is confirmed: recent collector history rows are incorrectly
+labelled `local`, so the production-only source-date calculation excludes them.
+Verified Runtime v2 execution records still support the Current badge. Application,
+tooltip, schedules, credentials and production state were not changed. No repair or
+new release is claimed. [Diagnosis and exact evidence](incidents/2026-09-15-monitoring-current-source-date.md).
+
+Next remediation, if undertaken, should correct new run-history provenance without
+rewriting retained history and clarify the source-date contract. The prior release
+and outstanding Gmail handoff below remain intact.
 
 ## September 14 current release — Investor Edge backfill progress accepted
 
