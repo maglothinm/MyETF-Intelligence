@@ -1,0 +1,47 @@
+name: Trigger one-time Runtime v2 production recovery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_production_recovery_trigger.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: runtime-v2-production-recovery-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify recovery controller exists on canonical main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/contents/.github/workflows/runtime_v2_production_recovery.yml?ref=${GITHUB_SHA}" \
+            --jq '.sha' >/dev/null
+
+      - name: Dispatch exact-main production recovery
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/runtime_v2_production_recovery.yml/dispatches" \
+            --raw-field ref=main \
+            --field "inputs[expected_main_sha]=${GITHUB_SHA}"
+          echo "Dispatched Runtime v2 production recovery for ${GITHUB_SHA}."
