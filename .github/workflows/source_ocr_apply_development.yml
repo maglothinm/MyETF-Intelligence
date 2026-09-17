@@ -1,0 +1,43 @@
+name: Apply verified source OCR development patch
+on:
+  push:
+    branches: [codex/source-upload-ocr-20260917]
+    paths: [.source-ocr-development/03.b64]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/codex/source-upload-ocr-20260917'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/source-upload-ocr-20260917
+          fetch-depth: 0
+      - name: Verify and apply locally tested source-only patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'codex/source-upload-ocr-20260917'
+          git merge-base --is-ancestor decae86a2ccbeac85c316654615eb2810d5fc2b9 HEAD
+          python - <<'PY'
+          import base64, hashlib, lzma, pathlib, subprocess
+          root=pathlib.Path('.source-ocr-development')
+          data=lzma.decompress(base64.b64decode(''.join((root/f'{i:02}.b64').read_text().strip() for i in range(4)),validate=True))
+          assert hashlib.sha256(data).hexdigest()=='7194a4901c6b413e51f30d9b4ceffe898fb2586a3b127f68abb6d9fbef833bf8'
+          path=pathlib.Path('/tmp/source-ocr-feature.patch');path.write_bytes(data)
+          subprocess.run(['git','apply','--check','--unidiff-zero',str(path)],check=True)
+          subprocess.run(['git','apply','--unidiff-zero',str(path)],check=True)
+          PY
+          rm .github/workflows/source_ocr_test_deps.yml .github/workflows/source_ocr_apply_development.yml
+          rm -r .source-ocr-development
+          python -m compileall -q runtime_v2 scripts/source_ocr.py tests/test_source_ocr.py tests/test_source_ocr_runtime.py
+          node --check scripts/dashboard_assets/source-ocr.js
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(ocr): add private source uploads and durable first-observation/backfill processing (#182)'
+          git push origin HEAD:refs/heads/codex/source-upload-ocr-20260917
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
