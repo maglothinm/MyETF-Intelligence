@@ -14,7 +14,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - run: python -m pip download --no-deps --only-binary=:all: --dest /tmp/ocr-wheels 'Flask>=3.0.2,<4' 'Werkzeug>=3.1,<4' 'blinker>=1.9,<2' 'openai>=2.45.0,<3' 'jiter>=0.10,<1' 'distro>=1.8,<2' 'pg8000>=1.31,<2' 'scramp>=1.4,<2' 'asn1crypto>=1.5,<2'
+      - run: |
+          python -m pip download --no-deps --only-binary=:all: --dest /tmp/ocr-wheels 'Flask>=3.0.2,<4' 'Werkzeug>=3.1,<4' 'blinker>=1.9,<2' 'openai>=2.45.0,<3' 'jiter>=0.10,<1' 'distro>=1.8,<2' 'pg8000>=1.31,<2' 'scramp>=1.4,<2' 'asn1crypto>=1.5,<2'
       - uses: actions/upload-artifact@v4
         with:
           name: source-ocr-test-wheels
