@@ -1376,10 +1376,10 @@ def _source_pdf_text(data: bytes, max_pages: int, *, safe_diagnostics: bool = Fa
         return extract_pdf_text(data, max_pages, safe_diagnostics=safe_diagnostics)
     try:
         try:
-            from .source_ocr import inspect_document
+            from .source_ocr_limits import inspect_bounded
         except ImportError:
-            from source_ocr import inspect_document
-        info = inspect_document(data)
+            from source_ocr_limits import inspect_bounded
+        info = inspect_bounded(data)
         text = "\n".join(info["native_pages"]).strip()
         if len(normalize_text(text)) < 20:
             raise ValueError("no native text")

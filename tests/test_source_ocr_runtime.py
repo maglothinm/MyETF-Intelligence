@@ -218,7 +218,8 @@ def test_runner_acknowledges_only_after_successful_canonical_commit(monkeypatch,
     monkeypatch.setattr(runner,"_notification_commit_options",lambda *a:({},{}))
     monkeypatch.setattr(runner,"_dispatch_notifications",lambda *a:None)
     monkeypatch.setattr(source_uploads,"SourceUploadStore",lambda:SimpleNamespace(pending=lambda branch:[],acknowledge=lambda *a:order.append("ack")))
-    monkeypatch.setattr(source_ocr_worker,"run_pass",lambda *a:[{"TEST":"outcome"}])
+    monkeypatch.setattr(source_ocr_worker,"run_pass",lambda *a,**k:[{"TEST":"outcome"}])
+    monkeypatch.setattr(store.lock,"record_ocr_health",lambda *a:None,raising=False)
     commit=store.lock.commit
     def wrapped(*args,**kwargs):
         order.append("commit")

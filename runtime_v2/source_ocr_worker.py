@@ -198,10 +198,15 @@ def _cached_evidence(directory, digest):
     return payload
 
 
-def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, loader=download, extractor=extract):
+def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, loader=download, extractor=extract,
+             health=None, on_progress=None):
     """Return upload acknowledgements to apply ONLY after canonical commit."""
     if str(environment.get("POLITITRACK_MODE", "production")).lower() != "production":
         raise OCRError("live_ocr_forbidden_in_shadow")
+    if extractor is extract:
+        import shutil
+        if not all(shutil.which(name) for name in ("tesseract", "pdftoppm")):
+            raise OCRError("ocr_dependency_unavailable")
     config = _configuration(directory, branch, environment)
     if not config.terms_acknowledged:
         raise OCRError("disclosure_terms_required")
@@ -234,6 +239,25 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         candidates.append((priority, receipt.get("attempted_at", ""), filing.get("first_seen_utc", ""), key))
     candidates.sort()
     acknowledgements = []
+    metrics = health if health is not None else {}
+    from scripts.source_ocr_health import COUNTS, instant
+    metrics.update({key: 0 for key in COUNTS})
+    metrics.update(inventory_count=sum(row.get("branch") == branch for row in index.values()),
+                   eligible_count=len(candidates), engine_version=VERSION, stage="processing", enabled=True)
+    handled = set()
+    def report_progress():
+        remaining = [key for *_, key in candidates if key not in handled]
+        metrics["ready_remaining"] = len(remaining)
+        oldest = min((stamp for key in remaining if (stamp := instant(index[key].get("first_seen_utc")))), default=None)
+        metrics["oldest_ready_at"] = oldest.isoformat().replace("+00:00", "Z") if oldest else None
+        current = [receipts.get(key, {}) for key, filing in index.items() if filing.get("branch") == branch]
+        for target, status in (("review_remaining", "needs_review"), ("access_remaining", "access_required"), ("retry_remaining", "retry_delayed")):
+            metrics[target] = sum(row.get("status") == status for row in current)
+        metrics["unobserved_remaining"] = sum(not row for row in current)
+        metrics["heartbeat_at"] = now()
+        if on_progress is not None:
+            on_progress(metrics)
+    report_progress()
     started = time.monotonic()
     limit = max(1, min(20, int(environment.get("RUNTIME_SOURCE_OCR_FILES_PER_RUN", "5"))))
     budget = max(30, min(600, int(environment.get("RUNTIME_SOURCE_OCR_SECONDS_PER_RUN", "180"))))
@@ -252,7 +276,11 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
             "approved": upload.get("result") if upload.get("status") == "approved" else None}, sort_keys=True).encode()).hexdigest() if upload else None
         if upload and prior.get("upload_request_key") == request_key and prior.get("upload_outcome") and prior.get("status") in {"complete", "needs_review", "not_applicable"}:
             acknowledgements.append(prior["upload_outcome"])
+            metrics["acknowledgements_replayed"] += 1
+            handled.add(key)
+            report_progress()
             continue
+        metrics["documents_attempted"] += 1
         receipt["upload_request_key"] = request_key
         receipt["revalidate_after"] = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
         try:
@@ -271,8 +299,13 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                 previous_evidence = _cached_evidence(directory, digest)
                 if previous_evidence is not None:
                     evidence = previous_evidence
+                    metrics["extractions_reused"] += 1
                 else:
                     evidence = extractor(data, max_pages=MAX_PAGES, timeout=max(10, min(120, int(budget - (time.monotonic() - started)))))
+                    metrics["documents_completed"] += 1
+                    metrics["pages_expected"] += evidence["page_count"]
+                    metrics["pages_completed"] += len(evidence["completed_pages"])
+                    metrics["last_document_completed_at"] = evidence["ocr_completed_at"]
                 del data
             receipt["sha256"] = evidence["sha256"]
             # Coordinates for row/checkbox evidence are retained; individual word
@@ -296,6 +329,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
             receipt["transactions_appended"] = _import(directory, filing, trades, evidence,
                 "user_confirmed_upload" if approval is not None else receipt["origin"])
             receipt["status"] = "complete"
+            metrics["transactions_appended"] += receipt["transactions_appended"]
         except Exception as error:
             if persisting or (importing and not isinstance(error, OCRError)):
                 raise  # canonical I/O failures must abort the entire snapshot
@@ -303,7 +337,9 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
             # No request URLs with credentials, PDF text, tool stderr or exception
             # message from a network/parser library is copied into diagnostics.
             receipt["error_code"] = code
-            receipt["status"] = "needs_review" if evidence is not None else "not_applicable" if code == "native_html_not_applicable" else "access_required" if code in {"access_required", "SenateAccessDenied"} else "retry_delayed"
+            invalid_document = code in {"document_byte_limit", "document_page_limit", "document_pixel_limit", "native_text_limit",
+                                        "invalid_or_encrypted_pdf", "invalid_image", "unsupported_image_format", "document_inspection_limit"}
+            receipt["status"] = "needs_review" if evidence is not None or invalid_document else "not_applicable" if code == "native_html_not_applicable" else "access_required" if code in {"access_required", "SenateAccessDenied"} else "retry_delayed"
             delay = min(7 * 86400, 300 * 2 ** min(receipt["attempts"], 11))
             receipt["next_attempt_at"] = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat().replace("+00:00", "Z")
         # Upload-specific result makes a crash after snapshot commit recoverable:
@@ -317,4 +353,10 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                 "filer_matches": bool(evidence and _matching_filer(filing, evidence))}})
             receipt["upload_outcome"] = acknowledgements[-1]
         tracker.append_jsonl(ledger, [receipt])
+        receipts[key] = receipt
+        metrics[receipt["status"] + "_count"] += 1
+        handled.add(key)
+        report_progress()
+    metrics["duration_seconds"] = round(time.monotonic() - started, 3)
+    report_progress()
     return acknowledgements

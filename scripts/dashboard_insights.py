@@ -18,10 +18,12 @@ from typing import Any, Callable, Mapping
 from urllib.parse import parse_qsl, urlsplit
 
 try:
+    from .source_ocr_health import branch_health, safe_metrics
     from .review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
     from .collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                       nonproduction_evidence, overall_status, production_run, trigger_source)
 except ImportError:  # pragma: no cover - direct-script execution
+    from source_ocr_health import branch_health, safe_metrics
     from review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
     from collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                      nonproduction_evidence, overall_status, production_run, trigger_source)
@@ -444,7 +446,14 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
     evidence_source = row.get("evidence_source")
     if evidence_source not in {"github_actions", "runtime_v2"}:
         evidence_source = "retained_state"
-    return {"id": f"{branch}:{key}", "branch": branch, "started_utc": optional_timestamp(row.get("started_utc")),
+    ocr_metrics = _mapping(_mapping(row.get("runtime_mode_evidence")).get("source_ocr")) if evidence_source == "runtime_v2" and row.get("runtime_mode_verified") is True else {}
+    if ocr_metrics:
+        try:
+            ocr_metrics = safe_metrics(ocr_metrics)
+        except ValueError:
+            ocr_metrics = {"enabled": ocr_metrics.get("enabled") is True, "invalid": True}
+    return {"id": f"{branch}:{key}", "branch": branch, "source_ocr_metrics": ocr_metrics,
+            "started_utc": optional_timestamp(row.get("started_utc")),
             "workflow_started_utc": optional_timestamp(row.get("workflow_started_utc")),
             "producer_job_started_utc": optional_timestamp(row.get("producer_job_started_utc")),
             "workflow_created_utc": optional_timestamp(row.get("workflow_created_utc")),
@@ -551,7 +560,13 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
                          "errors": last.get("errors", []), "error_count": last.get("error_count", 0),
                          "new_record_count": last.get("new_record_count"),
                          "run_url": newest.get("run_url"), "timeline": ordered[:10]})
-    return {"status": overall_status(branches), "branches": branches,
+    for item in branches:
+        if item["branch"] in {"legislative", "executive"}:
+            item["source_ocr"] = branch_health(item["timeline"], as_of, item.get("stale_after_minutes") or 90)
+    required_ocr = [item["source_ocr"] for item in branches if item.get("source_ocr", {}).get("required")]
+    combined = [{"status": overall_status(branches), "branch": "collectors"}] + [{"status": item["status"], "branch": "ocr"} for item in required_ocr]
+    combined_status = next((status for status in ("failure", "stale", "unknown") if any(item["status"] == status for item in combined)), "success")
+    return {"status": combined_status, "branches": branches,
             "as_of_utc": optional_timestamp(as_of.isoformat()) if as_of else None,
             "required_branches": list(REQUIRED_BRANCHES),
             "policy": {branch: dict(policy) for branch, policy in FRESHNESS_POLICY.items()},
@@ -667,6 +682,14 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
     production_runs = [row for row in runs if not is_synthetic(row) and production_run(row, str(row.get("branch") or ""))]
     production_ai_runs = [row for row in ai_runs if not is_synthetic(row) and production_run(row, "ai")]
     health, normalized_runs = _health(production_runs, production_ai_runs, clock, _mapping(payload.get("workflow_evidence")))
+    # Retained OCR inventory keeps monitoring required even if a later producer
+    # stops reporting OCR. Seven newer parent successes must not erase an outage.
+    for branch in health["branches"]:
+        if "source_ocr" in branch and any(row.get("branch") == branch["branch"] and row.get("ocr_status") for row in filings):
+            branch["source_ocr"]["required"] = True
+    monitored_statuses = [branch["status"] for branch in health["branches"]] + [
+        branch["source_ocr"]["status"] for branch in health["branches"] if branch.get("source_ocr", {}).get("required")]
+    health["status"] = next((state for state in ("failure", "stale", "unknown") if state in monitored_statuses), "success")
     executive_health = next((branch for branch in health["branches"] if branch["branch"] == "executive"), {})
     oge_filings = [row for row in filings if str(row.get("source") or "").casefold() == "oge"]
     oge_reviews = [row for row in categories if str(row.get("source") or "").casefold() == "oge"]

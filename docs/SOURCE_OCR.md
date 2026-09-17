@@ -25,12 +25,55 @@ Automatic downloads use official-source transports. Senate keeps the existing va
 
 OCR files are created only in a scoped temporary directory. Upload bytes stay in the private inbox until extraction evidence/outcome is committed in the canonical source snapshot. Only then does the runner acknowledge the result and clear bytes. Failed OCR keeps bytes for retry; failed canonical commit cannot acknowledge or delete them. A crash after commit but before acknowledgement replays the committed upload receipt without duplicate extraction/import. Raw uploads expire after seven days; expiry is enforced on the next intake/status/producer maintenance transaction. Hashes, extraction evidence, source identity, corrections and status history remain. Neither raw uploads nor private OCR previews are published as dashboard/Actions assets or checked into git.
 
+## OCR run health (owner requirement, September 17)
+
+OCR has a separate stage outcome; a successful collector or successful snapshot is
+not by itself an OCR success. The existing production run record stores an
+allowlisted `runtime_mode_evidence.source_ocr` object. Recording telemetry does
+not change run success, snapshot lineage, personal reviews or outbox state. The
+atomic source commit preserves this field while replacing the runner provenance
+with its normal snapshot attestation. Health is finalized after upload cleanup.
+No additional health table, scheduled writer, external service or secret is added.
+
+Stages distinguish waiting for collection, processing, awaiting canonical commit,
+completed maintenance, failure, and skipped work after a collector failure. A
+missing engine is a failure even on an otherwise idle pass. Upload-intake failure,
+document retry backlog and post-commit cleanup failure are degraded health, not
+hidden behind collector success. Human interpretation and official-access
+requirements are separate counts, not engine failures. A completed idle pass is
+healthy only when the commit and cleanup are confirmed.
+
+Operations reports start/heartbeat/last healthy pass, last document actually
+OCR-processed, document/page counts, reused extractions, appended transactions,
+ready/unobserved work, oldest ready observation, review/access/retry counts,
+intake and cleanup results. Run-history tooltips include the OCR stage where
+available. The overall monitoring banner and brief include required OCR health;
+collector status remains separately truthful. Once retained OCR inventory exists,
+missing later telemetry cannot silently remove OCR from the required rollup.
+Browser time advances the age of published evidence, never creates a new run.
+
+A processing/commit heartbeat older than ten minutes is stale; collection-wait
+uses thirty minutes. Completed passes use the source's existing freshness window.
+Three distinct completed passes with ready work but no attempt or acknowledgement
+progress are stalled. These are reported as published evidence, not continuous
+live worker probes. Dashboard publication delays still apply. This change adds no
+notification provider and does not change the existing sixty-minute Inbox
+interruption policy or create a second alert schedule.
+
+The extractor version is now `source-ocr-v2`. PDF/image inspection is isolated in a
+child process with timeout and Linux CPU/address-space limits. Intake checks
+capacity before decoder admission; decoder/render/OCR subprocesses receive no
+application secrets or proxy configuration. A rotated or unreadable continuation
+with no validated form layout prevents automatic partial-table import. Unsupported
+layouts remain review-required rather than being described as successfully parsed.
+
 ## Activation gates — not executed by this change
 
 1. Review and pass exact-head CI, real PostgreSQL and isolated browser evidence, plus the owner-provided two-page regression document. Test failed commit/acknowledgement recovery and malformed/encrypted/oversized documents before production release.
 2. Use the established approved Runtime v2 release process. Create only the additive inbox table using `python -m runtime_v2.cli source-ocr-init-db` against the existing private runtime database. Do not initialize source state or personal accounts.
 3. Configure `RUNTIME_SOURCE_OCR_ENABLED=true` consistently on the web service and existing legislative/executive producers. Configure `RUNTIME_SOURCE_OCR_ACCOUNT_IDS` to the authorized stable personal-account UUID(s), preserve the existing HTTPS `RUNTIME_REVIEW_ORIGIN`, and keep `DISCLOSURE_TERMS_ACKNOWLEDGED` accurate. Optional bounds are `RUNTIME_SOURCE_OCR_FILES_PER_RUN` and `RUNTIME_SOURCE_OCR_SECONDS_PER_RUN`. No schedule or unrelated feature flag changes are required. Vault remains paused.
-4. Verify one upload through committed import/publication, original-file cleanup, a subsequent idempotent run, bounded historical advancement, and unchanged protected-history/alert state. Explicitly record source revision, image digest, schema migration, producer runs and publication. Do not label a merged PR or green unit tests as live deployment.
+4. Verify independent OCR health in the existing Operations panels and overall monitoring rollup. Confirm that the committed source run contains stage evidence, actual document/page counts and a finalized cleanup outcome. Use isolated tests, not destructive production fault injection, to prove stale/failed/intake/cleanup paths.
+5. Verify one upload through committed import/publication, original-file cleanup, a subsequent idempotent run, bounded historical advancement, and unchanged protected-history/alert state. Explicitly record source revision, image digest, schema migration, producer runs and publication. Do not label a merged PR or green unit tests as live deployment.
 
 The maintenance pass currently follows successful normal source collection. An upstream collector outage can therefore delay OCR/import work. OCR coverage in the interface is a last-published snapshot, not a live progress estimate, and is separate from Investor Edge market-outcome backfill.
 

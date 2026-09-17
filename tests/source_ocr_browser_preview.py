@@ -55,8 +55,28 @@ def main():
         assert len(requests)==1 and requests[0]['data']['rows'][0]['asset']=='Corrected TEST municipal bond'
         assert requests[0]['headers']['X-PolitiTrack-Account']=='test-owner'
         assert len(requests[0]['data']['rows'])==5 and requests[0]['data']['rows'][4]['page']==2
+        # Exercise the actual Operations health renderer separately from the
+        # correction modal. Collection success must not hide deferred OCR cleanup.
+        health = {"health": {"branches": [{"branch": "legislative", "status": "success", "errors": [], "timeline": [],
+            "last_success_utc": "2026-09-17T20:00:00Z", "expected_interval_minutes": 30,
+            "stale_after_minutes": 90, "latest_conclusion": "success", "latest_run_success": True,
+            "source_ocr": {"enabled": True, "required": True, "status": "failure", "activity": "degraded",
+                "stage": "complete", "detail": "TEST: collection succeeded; OCR file cleanup is deferred.",
+                "started_at": "2026-09-17T19:59:00Z", "heartbeat_at": "2026-09-17T20:00:00Z",
+                "finished_at": "2026-09-17T20:00:00Z", "documents_attempted": 5, "documents_completed": 4,
+                "pages_completed": 8, "pages_expected": 8, "extractions_reused": 1, "transactions_appended": 5,
+                "ready_remaining": 23, "unobserved_remaining": 19, "review_remaining": 3, "access_remaining": 2,
+                "retry_remaining": 1, "cleanup_status": "deferred", "intake_status": "ok", "cleanup_error_code": "TESTCleanupError"}}]}}
+        page.evaluate("document.body.innerHTML='<main style=\"max-width:900px;margin:auto;padding:16px\"><h1>TEST Operations health</h1><div id=\"health-fixture\"></div></main>'")
+        page.evaluate("model => document.getElementById('health-fixture').innerHTML=PT.healthCards(model,true)", health)
+        assert page.locator('[data-ocr-health="legislative"] .status.failure').count() == 1
+        assert page.locator('[data-branch="legislative"] > header .status.success').count() == 1
+        for width, height in ((1280, 900), (390, 844)):
+            page.set_viewport_size({"width": width, "height": height})
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), "Operations health clips horizontally"
+            page.screenshot(path=str(args.output/f"source-ocr-health-{width}.png"), full_page=True)
         assert not errors,errors
-        (args.output/'browser-result.json').write_text(json.dumps({'result':'passed','rows_reviewed':5,'viewports':[1280,390],'requests':1,'browser_errors':errors},indent=2))
+        (args.output/'browser-result.json').write_text(json.dumps({'result':'passed','rows_reviewed':5,'viewports':[1280,390],'requests':1,'health_checks':'collector_success_and_ocr_failure_separate; no_horizontal_clipping','browser_errors':errors},indent=2))
         browser.close()
 
 if __name__=='__main__':main()

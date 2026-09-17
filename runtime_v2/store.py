@@ -226,7 +226,10 @@ class LockedNamespace:
                         "UPDATE runtime_job_runs AS job_run "
                         "SET status = 'success', finished_at = now(), "
                         "snapshot_id = %s::uuid, snapshot_sha256 = %s, error_code = '', "
-                        "side_effects_possible = false, runtime_mode_evidence = %s::jsonb "
+                        "side_effects_possible = false, runtime_mode_evidence = %s::jsonb || "
+                        "CASE WHEN job_run.runtime_mode_evidence ? 'source_ocr' "
+                        "THEN jsonb_build_object('source_ocr', job_run.runtime_mode_evidence -> 'source_ocr') "
+                        "ELSE '{}'::jsonb END "
                         "FROM runtime_state_snapshots AS committed_snapshot "
                         "WHERE job_run.run_id = %s::uuid AND job_run.namespace = %s "
                         "AND job_run.status = 'running' "
@@ -301,6 +304,24 @@ class LockedNamespace:
                 ),
             )
         return run_id
+
+    def record_ocr_health(self, run_id: str, metrics: Mapping[str, Any]) -> None:
+        """Update only this producer's OCR-stage telemetry, never its outcome/state."""
+        from scripts.source_ocr_health import safe_metrics
+
+        if self.namespace not in {"legislative", "executive"}:
+            raise StateStoreError("OCR telemetry requires a source namespace")
+        payload = safe_metrics(metrics)
+        with closing(self.connection.cursor()) as cursor:
+            cursor.execute(
+                "UPDATE runtime_job_runs SET runtime_mode_evidence = "
+                "jsonb_set(runtime_mode_evidence, '{source_ocr}', %s::jsonb, true) "
+                "WHERE run_id = %s::uuid AND namespace = %s AND runtime_mode = 'production' "
+                "RETURNING run_id::text",
+                (json.dumps(payload, sort_keys=True), run_id, self.namespace),
+            )
+            if cursor.fetchone() is None:
+                raise StateStoreError("OCR telemetry has no matching production run")
 
     def finish_run(
         self,

@@ -1347,3 +1347,19 @@ freshness threshold, source-date calculation, or stored user history is changed.
 - Treat user uploads and uncertain checkbox/asset readings as reviewable evidence. Require owner confirmation of complete supported tables; preserve row/page identity, unknown ownership and disclosed ranges. Existing trusted transaction conflicts remain blocked rather than replaced.
 - Acknowledge/clear raw upload bytes only after canonical commit. Retain SHA-keyed derived evidence and retry/approval receipts; suppress historical alert and backdated paper-trade replay through the existing bootstrap contract.
 - This decision records development scope, not deployment or production certification. The separate release gates and current limitations are in `docs/SOURCE_OCR.md`.
+
+
+## 2026-09-17 — Independent OCR health within existing producer reporting (#182)
+
+The owner requires OCR in run-health reporting. Store bounded stage telemetry in
+existing production run metadata, preserve it during the canonical atomic commit,
+and confirm cleanup separately. Collector success cannot establish OCR success.
+No new scheduler, state writer, health database, provider credential or alert
+channel is introduced. Keep human interpretation/access backlog distinct from
+technical failure and stalls; show both in Operations and include required OCR in
+the monitoring rollup. Retain the existing Inbox interruption-delay policy.
+
+Unknown or unreadable continuation-page layout blocks partial import. Use the
+v2 extraction version to invalidate older layout acceptance evidence, and bound
+untrusted document inspection before admission to the application process. This
+records source design and owner authorization, not production release acceptance.

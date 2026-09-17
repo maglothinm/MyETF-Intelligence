@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-VERSION = "source-ocr-v1"
+VERSION = "source-ocr-v2"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 30
 MAX_PIXELS = 20_000_000
@@ -44,12 +44,17 @@ def inspect_document(data: bytes, max_pages: int = MAX_PAGES) -> dict[str, Any]:
         import pdfplumber
         try:
             with pdfplumber.open(io.BytesIO(data)) as pdf:
+                if getattr(pdf.doc, "encryption", None) is not None:
+                    raise OCRError("invalid_or_encrypted_pdf")
                 count = len(pdf.pages)
                 if not 0 < count <= max_pages:
                     raise OCRError("document_page_limit")
-                if any(p.width * p.height * (300 / 72) ** 2 > MAX_PIXELS for p in pdf.pages):
+                import math
+                if any(not math.isfinite(p.width * p.height) or min(p.width, p.height) <= 0 or p.width * p.height * (300 / 72) ** 2 > MAX_PIXELS for p in pdf.pages):
                     raise OCRError("document_pixel_limit")
                 native = [p.extract_text() or "" for p in pdf.pages]
+                if sum(map(len, native)) > 2_000_000:
+                    raise OCRError("native_text_limit")
             return {"format": "pdf", "pages": count, "native_pages": native}
         except OCRError:
             raise
@@ -154,6 +159,7 @@ def house_rows(images, words: list[dict[str, Any]]) -> dict[str, Any]:
             else:
                 group.append(box)
         populated = 0
+        page_groups = 0
         for group in clusters:
             group.sort(key=lambda item: item["cx"])
             if len(group) != 15:
@@ -164,6 +170,7 @@ def house_rows(images, words: list[dict[str, Any]]) -> dict[str, Any]:
             if amounts[0]["cx"] - types[-1]["cx"] < types[0]["w"] * 4:
                 continue
             form_groups += 1
+            page_groups += 1
             cy = sum(b["cy"] for b in group) / len(group)
             band = max(b["h"] for b in group) * .70
             line = [w for w in page_words if abs(w["top"] + w["height"] / 2 - cy) < band]
@@ -210,6 +217,10 @@ def house_rows(images, words: list[dict[str, Any]]) -> dict[str, Any]:
                          "amount_column": chr(65 + selected_amounts[0]) if len(selected_amounts) == 1 else "",
                          "bbox": [max(0, int(image.width * .09)), int(cy - band), int(group[-1]["x"] + group[-1]["w"]), int(cy + band)],
                          "checkboxes": group, "issues": sorted(set(issues))})
+        # OCR process/page coverage alone does not prove table coverage. An
+        # unreadable/rotated/other-layout continuation cannot silently disappear.
+        if not page_groups:
+            problems.append("unvalidated_page_layout")
         # Any readable date pair below the table header not attached to a detected
         # row is evidence of incomplete segmentation, not an empty filing.
         for w in page_words:
@@ -230,7 +241,11 @@ def house_rows(images, words: list[dict[str, Any]]) -> dict[str, Any]:
 
 def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> dict[str, Any]:
     """One bounded Tesseract process for the complete document; no silent truncation."""
-    info = inspect_document(data, max_pages)
+    try:
+        from .source_ocr_limits import inspect_bounded, decoder_environment
+    except ImportError:
+        from source_ocr_limits import inspect_bounded, decoder_environment
+    info = inspect_bounded(data, max_pages)
     from PIL import Image, ImageOps
     with tempfile.TemporaryDirectory(prefix="polititrack-ocr-") as temporary:
         root = Path(temporary)
@@ -240,7 +255,7 @@ def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> d
             source.write_bytes(data)
             try:
                 subprocess.run(["pdftoppm", "-r", "300", "-png", "-gray", str(source), str(root / "page")],
-                               check=True, timeout=timeout, capture_output=True)
+                               check=True, timeout=timeout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=decoder_environment(), cwd=root)
             except (subprocess.SubprocessError, OSError):
                 raise OCRError("pdf_render_failed") from None
             paths = sorted(root.glob("page-*.png"), key=lambda p: int(p.stem.split("-")[-1]))
@@ -257,9 +272,11 @@ def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> d
         (root / "pages.txt").write_text("\n".join(str(path) for path in paths), encoding="utf-8")
         try:
             subprocess.run(["tesseract", str(root / "pages.txt"), str(root / "result"), "-l", "eng", "--psm", "11", "txt", "tsv"],
-                           check=True, timeout=timeout, capture_output=True)
+                           check=True, timeout=timeout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=decoder_environment(), cwd=root)
         except (subprocess.SubprocessError, OSError):
             raise OCRError("ocr_engine_failed") from None
+        if (root / "result.txt").stat().st_size > 8_000_000 or (root / "result.tsv").stat().st_size > 12_000_000:
+            raise OCRError("ocr_output_limit")
         text = (root / "result.txt").read_text(encoding="utf-8")
         tsv = (root / "result.tsv").read_text(encoding="utf-8")
         if len(text) > 2_000_000 or len(tsv) > 12_000_000:

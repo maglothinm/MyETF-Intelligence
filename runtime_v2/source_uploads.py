@@ -65,7 +65,9 @@ class SourceUploadStore:
                            .values(payload=None, status="expired"))
 
     def submit(self, account_id, filing, data):
-        info = inspect_document(data)
+        from scripts.source_ocr import MAX_BYTES, OCRError
+        if not data or len(data) > MAX_BYTES:
+            raise OCRError("document_byte_limit")
         digest = hashlib.sha256(data).hexdigest()
         created = self.clock()
         with self.engine.begin() as connection:
@@ -81,6 +83,8 @@ class SourceUploadStore:
                 uploads.c.account_id == account_id, uploads.c.submitted_at > created - timedelta(hours=1))).scalar_one()
             if pending >= 20 or recent >= 10:
                 raise ReviewError("UPLOAD_LIMIT", "The source upload queue is full or its hourly limit has been reached. Try again later.", 429)
+            from scripts.source_ocr_limits import inspect_bounded
+            info = inspect_bounded(data)
             if existing:
                 connection.execute(update(uploads).where(uploads.c.upload_id == existing["upload_id"])
                                    .values(payload=data, status="pending", submitted_at=created, expires_at=created + timedelta(days=7)))

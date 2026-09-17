@@ -35,7 +35,7 @@ window.PT = (() => {
     localChanges: "Changes detected by this browser after it successfully established a local baseline. This is not a server-side account history.",
     parserExceptions: "Unacknowledged records requiring manual parser review. Acknowledgement is reversible, belongs to this browser and does not alter retained production evidence; access/request inventory is tracked separately.",
     systemEvidence: "Status uses retained production run evidence and freshness targets. Failure takes precedence over stale, then unknown, then current. It is not an independent live probe of every upstream service.",
-    monitoringCurrent: "All required PolitiTrack collectors and the AI analyst have completed successfully within their freshness windows.",
+    monitoringCurrent: "All required PolitiTrack collectors, the AI analyst and enabled OCR stages have confirmed healthy outcomes within their freshness windows.",
     monitoringStale: "The most recent retained collector run may have succeeded, but it is older than PolitiTrack’s freshness window. This can indicate a delayed or missed scheduled execution.",
     monitoringClock: "This device’s clock cannot confirm current monitoring. Elapsed time continues to age the published evidence when available; known failures and overdue evidence still take precedence. A page refresh is not a new collector execution.",
     sourceDataThrough: "Newest timestamp represented by retained production source evidence. It is not simply the time this dashboard page was generated.",
@@ -85,6 +85,19 @@ window.PT = (() => {
   // Python owns cadence policy and admission of production evidence. The browser
   // only advances the age of that evidence, even if publication has stopped.
   // Never infer a collector execution from a page load or manufacture a run row.
+  function ocrHealthAt(original,now,{clockUnreliable=false}={}) {
+    if(!original)return original;
+    const ocr={...original};
+    if(!ocr.required)return ocr;
+    const observed=Date.parse(ocr.finished_at||ocr.heartbeat_at);
+    const threshold=numeric(ocr.stage==="complete"?ocr.stale_after_minutes:ocr.heartbeat_limit_minutes);
+    if(ocr.status!=="failure"&&Number.isFinite(now)&&Number.isFinite(observed)&&threshold!==null&&now>=observed&&(now-observed)/60000>threshold){
+      ocr.status="stale";ocr.activity=ocr.stage==="complete"?"overdue":"stalled";
+      ocr.detail="OCR evidence has aged without a new confirmed processing update. Refreshing the page is not an OCR run.";
+    }
+    if(ocr.status==="success"&&(clockUnreliable||!Number.isFinite(observed)||observed>now)){ocr.status="unknown";ocr.detail="The available clock cannot confirm current OCR health.";}
+    return ocr;
+  }
   function healthAt(model,asOf=Date.now(),{clockUnreliable=false}={}) {
     const health=model.health||{},clientNow=typeof asOf==="number"?asOf:Date.parse(asOf),publishedAt=Date.parse(health.as_of_utc);
     // A device clock behind the publisher must never make server-proven stale
@@ -107,9 +120,11 @@ window.PT = (() => {
       b.status=failed?"failure":fresh===false?"stale":fresh===true&&latest===true&&!b.evidence_incomplete&&!uncertainClock?"success":"unknown";
       b.cadence_label=b.cadence_label||policy.cadence_label;
       b.trigger_relationship=b.trigger_relationship||policy.trigger_relationship;
+      b.source_ocr=ocrHealthAt(b.source_ocr,now,{clockUnreliable:uncertainClock});
       return b;
     });
     const required=health.required_branches||branches.map(b=>b.branch),statuses=required.map(name=>branches.find(b=>b.branch===name)?.status||"unknown");
+    statuses.push(...branches.filter(b=>b.source_ocr?.required).map(b=>b.source_ocr.status||"unknown"));
     const status=["failure","stale","unknown"].find(value=>statuses.includes(value))||(statuses.length?"success":"unknown");
     return {...model,health:{...health,branches,status,clock_unreliable:uncertainClock,as_of_utc:Number.isFinite(now)?new Date(now).toISOString():null}};
   }
@@ -146,6 +161,8 @@ window.PT = (() => {
   }
   function monitoringSummary(model) {
     const status=model.health.status,branch=model.health.branches.find(b=>b.status===status);
+    const ocrBranch=model.health.branches.find(b=>b.source_ocr?.required&&b.source_ocr.status===status);
+    if(!branch&&ocrBranch&&status!=="success")return {label:`${branchLabel(ocrBranch.branch)} OCR ${status==="failure"?"needs attention":status==="stale"?"overdue":"not confirmed"}`,detail:ocrBranch.source_ocr.detail};
     if(status==="failure")return {label:`! ${branchLabel(branch?.branch)} ${branch?.branch==="ai"?"failed":"collector failed"}`,detail:healthDetail(branch)};
     if(status==="stale")return {label:`◷ ${branchLabel(branch?.branch)} ${branch?.branch==="ai"?"processing":"polling"} overdue`,detail:healthDetail(branch)};
     if(status==="success")return {label:"✓ Monitoring current",detail:HELP.monitoringCurrent};
@@ -181,8 +198,18 @@ window.PT = (() => {
       return timeOrder || descendingText(String(a.id??""),String(b.id??"")) || descendingText(String(a.run_url??""),String(b.run_url??""));
     });
   }
+  function ocrRunLabel(row) {
+    const ocr=row.source_ocr_metrics;
+    if(!ocr?.stage)return "OCR not recorded";
+    return `OCR ${title(ocr.stage)}; ${number(ocr.documents_completed)} documents OCR-completed; ${number(ocr.retry_delayed_count)} retries; cleanup ${title(ocr.cleanup_status||"unconfirmed")}`;
+  }
+  function ocrHealthPanel(b,detailed) {
+    const ocr=b.source_ocr;
+    if(!ocr)return "";
+    return `<section class="ocr-run-health" data-ocr-health="${esc(b.branch)}" aria-label="${esc(branchLabel(b.branch))} OCR health"><h4>Source OCR <span class="status ${esc(ocr.status)}">${ocr.enabled===false?"Disabled":statusText(ocr.status)}</span></h4><p>${esc(ocr.detail)}</p>${detailed?`<dl class="facts health-facts">${fact("OCR stage",title(ocr.activity))}${fact("Last OCR pass started",date(ocr.started_at))}${fact("Last OCR heartbeat",date(ocr.heartbeat_at))}${fact("Last healthy OCR pass",date(ocr.last_success_at))}${fact("Last document OCR completed",date(ocr.last_document_completed_at))}${fact("Documents attempted",number(ocr.documents_attempted))}${fact("Documents OCR-completed",number(ocr.documents_completed))}${fact("Pages OCR-completed / expected",`${number(ocr.pages_completed)} / ${number(ocr.pages_expected)}`)}${fact("Cached extractions reused",number(ocr.extractions_reused))}${fact("Transactions appended",number(ocr.transactions_appended))}${fact("Ready work remaining",number(ocr.ready_remaining))}${fact("Not yet OCR-observed",number(ocr.unobserved_remaining))}${fact("Oldest ready filing observed",date(ocr.oldest_ready_at))}${fact("Needs human review",number(ocr.review_remaining))}${fact("Access required",number(ocr.access_remaining))}${fact("Retries deferred",number(ocr.retry_remaining))}${fact("Upload intake",title(ocr.intake_status||"unconfirmed"))}${fact("File cleanup",title(ocr.cleanup_status||"unconfirmed"))}${fact("Safe error codes",[ocr.error_code,ocr.intake_error_code,ocr.cleanup_error_code].filter(Boolean).join("; ")||"None reported")}</dl><p class="chart-note">Historical OCR backlog and review/access requirements are separate from engine health. This is published run evidence, not a live worker connection.</p>`:""}</section>`;
+  }
   function healthCards(model,detailed=false) {
-    return model.health.branches.map(b=>`<${detailed?"article":"div"} data-branch="${esc(b.branch)}" class="${detailed?"surface":"branch-health"}">${detailed?`<div class="run-control" data-run-control="${esc(b.branch)}"><button type="button" data-run-now="${esc(b.branch)}" aria-label="Run ${esc(branchLabel(b.branch))} now" disabled>Run now</button><button type="button" class="run-check" data-operation-refresh hidden>Check status</button><p data-run-status role="status" aria-live="polite">Checking run controls...</p></div>`:""}<header><strong>${esc(branchLabel(b.branch))}</strong><span class="status ${esc(b.status)}">${b.status==="success"?"✓ Current":statusText(b.status)}</span></header><div class="timeline" aria-label="Recent ${esc(b.branch)} run results">${newestRuns(b.timeline||[]).map(r=>`<a href="${esc(safeUrl(r.run_url)||"#operations")}" class="${esc(r.status)}" aria-label="${esc(`${statusText(r.status)} ${runTimeLabel(r)}; ${number(r.error_count)} errors; ${number(r.new_record_count)} new records`)}" title="${esc(`${statusText(r.status)} · ${runTimeLabel(r)}`)}" target="_blank" rel="noopener"><span>${r.status==="success"?"✓":r.status==="failure"?"!":"◌"}</span></a>`).join("")||'<span class="muted">No retained evidence</span>'}</div><p class="health-explanation ${esc(b.status)}">${esc(healthDetail(b))}</p>${detailed?`<dl class="facts health-facts">${fact("Last attempted run",date(b.last_attempt_utc))}${fact("Last successful run",date(b.last_success_utc))}${fact("Expected cadence",cadenceText(b))}${fact("Freshness window",durationMinutes(b.stale_after_minutes))}${fact("Next expected run",date(b.next_expected_utc))}${fact("Successful run age",durationMinutes(b.age_minutes))}${fact("Overdue by",durationMinutes(b.overdue_minutes))}${fact("Estimated missed intervals",number(b.estimated_missed_intervals))}${fact("Latest conclusion",title(b.latest_conclusion||"unknown"))}${fact("Error count",number(b.error_count??b.errors.length))}${fact("Triggered by",triggerLabel(b.trigger_source))}${fact("New records",number(b.new_record_count))}</dl>${b.trigger_relationship?`<p class="chart-note">${esc(b.trigger_relationship)}</p>`:""}<p>${esc(b.errors.join(" · ") || "No retained error text.")}</p>${link(b.run_url,"Latest run")}`:`<p>Last success ${esc(date(b.last_success_utc))}</p>`}</${detailed?"article":"div"}>`).join("");
+    return model.health.branches.map(b=>`<${detailed?"article":"div"} data-branch="${esc(b.branch)}" class="${detailed?"surface":"branch-health"}">${detailed?`<div class="run-control" data-run-control="${esc(b.branch)}"><button type="button" data-run-now="${esc(b.branch)}" aria-label="Run ${esc(branchLabel(b.branch))} now" disabled>Run now</button><button type="button" class="run-check" data-operation-refresh hidden>Check status</button><p data-run-status role="status" aria-live="polite">Checking run controls...</p></div>`:""}<header><strong>${esc(branchLabel(b.branch))}</strong><span class="status ${esc(b.status)}">${b.status==="success"?"✓ Current":statusText(b.status)}</span></header><div class="timeline" aria-label="Recent ${esc(b.branch)} run results">${newestRuns(b.timeline||[]).map(r=>`<a href="${esc(safeUrl(r.run_url)||"#operations")}" class="${esc(r.status)}" aria-label="${esc(`${statusText(r.status)} ${runTimeLabel(r)}; ${number(r.error_count)} errors; ${number(r.new_record_count)} new records${r.source_ocr_metrics?.stage?`; ${ocrRunLabel(r)}`:""}`)}" title="${esc(`${statusText(r.status)} · ${runTimeLabel(r)}${r.source_ocr_metrics?.stage?` · ${ocrRunLabel(r)}`:""}`)}" target="_blank" rel="noopener"><span>${r.status==="success"?"✓":r.status==="failure"?"!":"◌"}</span></a>`).join("")||'<span class="muted">No retained evidence</span>'}</div><p class="health-explanation ${esc(b.status)}">${esc(healthDetail(b))}</p>${ocrHealthPanel(b,detailed)}${detailed?`<dl class="facts health-facts">${fact("Last attempted run",date(b.last_attempt_utc))}${fact("Last successful run",date(b.last_success_utc))}${fact("Expected cadence",cadenceText(b))}${fact("Freshness window",durationMinutes(b.stale_after_minutes))}${fact("Next expected run",date(b.next_expected_utc))}${fact("Successful run age",durationMinutes(b.age_minutes))}${fact("Overdue by",durationMinutes(b.overdue_minutes))}${fact("Estimated missed intervals",number(b.estimated_missed_intervals))}${fact("Latest conclusion",title(b.latest_conclusion||"unknown"))}${fact("Error count",number(b.error_count??b.errors.length))}${fact("Triggered by",triggerLabel(b.trigger_source))}${fact("New records",number(b.new_record_count))}</dl>${b.trigger_relationship?`<p class="chart-note">${esc(b.trigger_relationship)}</p>`:""}<p>${esc(b.errors.join(" · ") || "No retained error text.")}</p>${link(b.run_url,"Latest run")}`:`<p>Last success ${esc(date(b.last_success_utc))}</p>`}</${detailed?"article":"div"}>`).join("");
   }
   function replay(model,compact=false) {
     const r=model.simulation;
@@ -204,7 +231,8 @@ window.PT = (() => {
     if(changes.transactions)bits.push(`${number(changes.transactions)} newly parsed transactions`);
     if(manualExceptionCount)bits.push(`${number(manualExceptionCount)} manual parsing exception${manualExceptionCount===1?"":"s"}`);
     const bad=model.health.branches.filter(b=>b.status!=="success");
-    bits.push(bad.length?bad.map(b=>`${b.branch==="ai"?"AI":title(b.branch)} ${b.status==="failure"?"run failure":b.status==="stale"?"polling overdue":"evidence unknown"}`).join("; "):"monitoring current");
+    const ocrBad=model.health.branches.filter(b=>b.source_ocr?.required&&b.source_ocr.status!=="success");
+    bits.push([...bad.map(b=>`${b.branch==="ai"?"AI":title(b.branch)} ${b.status==="failure"?"run failure":b.status==="stale"?"polling overdue":"evidence unknown"}`),...ocrBad.map(b=>`${branchLabel(b.branch)} OCR ${b.source_ocr.activity}`)].join("; ")||"monitoring current");
     if(changes.simulations)bits.push("latest historical replay result observed");
     return bits.join(" · ")+".";
   }
@@ -415,5 +443,5 @@ window.PT = (() => {
     const query=new URLSearchParams(id?{filing:id}:{url,...(row.source?{source:row.source}:{}),...(row.report_id?{report:row.report_id}:{})});
     return `<span class="filing-actions"><a href="filing-vault.html?${esc(query.toString())}">View Filing</a>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Official Source ↗</a>`:""}</span>`;
   }
-  return {el,esc,HELP,helpAttrs,helpButton,numeric,number,money,percent,title,date,age,durationMinutes,branchLabel,triggerLabel,healthAt,createHealthClock,healthViewKey,cadenceText,healthDetail,monitoringSummary,safeUrl,link,filingActions,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief,validateModel,isCoarsePointer,setupDialogsAndTooltips};
+  return {el,esc,HELP,helpAttrs,helpButton,numeric,number,money,percent,title,date,age,durationMinutes,branchLabel,triggerLabel,healthAt,ocrHealthAt,ocrRunLabel,ocrHealthPanel,createHealthClock,healthViewKey,cadenceText,healthDetail,monitoringSummary,safeUrl,link,filingActions,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief,validateModel,isCoarsePointer,setupDialogsAndTooltips};
 })();
