@@ -1,0 +1,34 @@
+name: Source OCR development evidence
+
+on:
+  push:
+    branches: [codex/source-upload-ocr-20260917]
+    paths: [.github/workflows/source_ocr_development.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  source-evidence:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive tracked source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY_ID" = '1349678672'
+          mkdir -p "$RUNNER_TEMP/source-ocr-evidence"
+          git archive --format=tar HEAD > "$RUNNER_TEMP/source-ocr-evidence/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/source-ocr-evidence/source-revision.txt"
+          sha256sum "$RUNNER_TEMP/source-ocr-evidence/source.tar" > "$RUNNER_TEMP/source-ocr-evidence/source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-ocr-development-${{ github.sha }}
+          path: ${{ runner.temp }}/source-ocr-evidence/
+          retention-days: 1
+          if-no-files-found: error
