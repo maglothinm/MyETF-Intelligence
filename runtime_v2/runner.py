@@ -332,6 +332,19 @@ class JobRunner:
                             str(output_dir / "legislative-result.json"),
                         ]
                     )
+                ocr_uploads, ocr_outcomes = None, []
+                if _truthy(self.environment.get("RUNTIME_SOURCE_OCR_ENABLED")) and not self.mode.is_shadow:
+                    from .source_uploads import SourceUploadStore
+                    from .source_ocr_worker import run_pass
+                    ocr_uploads = SourceUploadStore()
+                    # The existing source namespace lock is the sole consumer.
+                    # Intake failure must not stop ordinary source collection.
+                    try:
+                        queued = ocr_uploads.pending(branch)
+                    except Exception as exc:
+                        queued = []
+                        print(json.dumps({"result": "ocr_intake_deferred", "error_code": type(exc).__name__}), flush=True)
+                    ocr_outcomes = run_pass(state_dir, branch, self.environment, queued)
                 state = _require_success_state(state_dir)
                 notification_options, notification_provenance = self._notification_commit_options(outbox, branch)
                 snapshot = locked.commit(
@@ -357,6 +370,12 @@ class JobRunner:
                     side_effects_possible=False,
                 )
                 raise
+            if ocr_uploads is not None and ocr_outcomes:
+                try:
+                    ocr_uploads.acknowledge(ocr_outcomes, snapshot.snapshot_sha256)
+                except Exception as exc:
+                    # A later run replays the committed receipt, not the import.
+                    print(json.dumps({"result": "ocr_cleanup_deferred", "error_code": type(exc).__name__}), flush=True)
             self._dispatch_notifications(locked, branch)
             return snapshot
 

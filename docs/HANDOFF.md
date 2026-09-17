@@ -1,5 +1,12 @@
 # PolitiTrack active handoff
 
+## Development handoff — September 17, 2026: source uploads and OCR (#182)
+
+Branch `codex/source-upload-ocr-20260917`, based on main `decae86a2ccbeac85c316654615eb2810d5fc2b9`. Source development adds a private upload inbox, owner review/correction UI, bounded per-content-version OCR, and historical maintenance inside the existing source producer. See `docs/SOURCE_OCR.md` for contracts, limits and release gates. The two-page owner regression file remains outside git; actual extraction finds five populated rows and flags three degraded asset labels rather than guessing them.
+
+**No merge, production schema migration, deployment, schedule change, Vault activation or canonical production-state mutation has occurred.** Exact-head CI and live release/acceptance remain separate gates. Temporary source/dependency export and patch-application tooling must be removed before the final PR tree. Preserve the accepted operating-state handoff below.
+
+
 Updated **2026-09-15T12:38:15.901975+00:00 — Inbox interruption delay deployed and verified**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 
