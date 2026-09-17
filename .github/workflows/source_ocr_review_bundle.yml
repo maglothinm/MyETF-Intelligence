@@ -1,0 +1,27 @@
+name: Source OCR review bundle
+on:
+  push:
+    branches: [codex/source-upload-ocr-20260917]
+    paths: [.github/workflows/source_ocr_review_bundle.yml]
+permissions:
+  contents: read
+jobs:
+  bundle:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Bundle tracked source without production state
+        run: |
+          mkdir -p "$RUNNER_TEMP/source-ocr-review"
+          git archive HEAD > "$RUNNER_TEMP/source-ocr-review/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/source-ocr-review/revision.txt"
+          sha256sum "$RUNNER_TEMP/source-ocr-review/source.tar" > "$RUNNER_TEMP/source-ocr-review/source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-ocr-review-${{ github.sha }}
+          path: ${{ runner.temp }}/source-ocr-review/
+          retention-days: 1
