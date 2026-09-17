@@ -35,7 +35,7 @@ window.PT = (() => {
     localChanges: "Changes detected by this browser after it successfully established a local baseline. This is not a server-side account history.",
     parserExceptions: "Unacknowledged records requiring manual parser review. Acknowledgement is reversible, belongs to this browser and does not alter retained production evidence; access/request inventory is tracked separately.",
     systemEvidence: "Status uses retained production run evidence and freshness targets. Failure takes precedence over stale, then unknown, then current. It is not an independent live probe of every upstream service.",
-    monitoringCurrent: "All required PolitiTrack collectors, the AI analyst and enabled OCR stages have confirmed healthy outcomes within their freshness windows.",
+    monitoringCurrent: "All required PolitiTrack collectors, the AI analyst and enabled OCR stages have completed successfully within their freshness windows; OCR also requires confirmed state commit and temporary-file cleanup.",
     monitoringStale: "The most recent retained collector run may have succeeded, but it is older than PolitiTrack’s freshness window. This can indicate a delayed or missed scheduled execution.",
     monitoringClock: "This device’s clock cannot confirm current monitoring. Elapsed time continues to age the published evidence when available; known failures and overdue evidence still take precedence. A page refresh is not a new collector execution.",
     sourceDataThrough: "Newest timestamp represented by retained production source evidence. It is not simply the time this dashboard page was generated.",
