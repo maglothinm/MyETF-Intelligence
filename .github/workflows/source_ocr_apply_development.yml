@@ -2,7 +2,7 @@ name: Apply verified source OCR development patch
 on:
   push:
     branches: [codex/source-upload-ocr-20260917]
-    paths: [.source-ocr-development/03.b64]
+    paths: [.source-ocr-development/03.b64, .github/workflows/source_ocr_apply_development.yml]
 permissions:
   contents: write
 jobs:
@@ -27,10 +27,9 @@ jobs:
           data=lzma.decompress(base64.b64decode(''.join((root/f'{i:02}.b64').read_text().strip() for i in range(4)),validate=True))
           assert hashlib.sha256(data).hexdigest()=='7194a4901c6b413e51f30d9b4ceffe898fb2586a3b127f68abb6d9fbef833bf8'
           path=pathlib.Path('/tmp/source-ocr-feature.patch');path.write_bytes(data)
-          subprocess.run(['git','apply','--check','--unidiff-zero',str(path)],check=True)
-          subprocess.run(['git','apply','--unidiff-zero',str(path)],check=True)
+          subprocess.run(['git','apply','--check','--unidiff-zero','--exclude=.github/workflows/*',str(path)],check=True)
+          subprocess.run(['git','apply','--unidiff-zero','--exclude=.github/workflows/*',str(path)],check=True)
           PY
-          rm .github/workflows/source_ocr_test_deps.yml .github/workflows/source_ocr_apply_development.yml
           rm -r .source-ocr-development
           python -m compileall -q runtime_v2 scripts/source_ocr.py tests/test_source_ocr.py tests/test_source_ocr_runtime.py
           node --check scripts/dashboard_assets/source-ocr.js
