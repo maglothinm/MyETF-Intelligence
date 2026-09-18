@@ -1,5 +1,19 @@
 # PolitiTrack active handoff
 
+## Current continuation — September 18, 2026: Cloud Shell access unavailable (#182)
+
+The continuation recovered [the controller takeover](releases/2026-09-18-ocr-controller-takeover.md) and its tested identity patch from canonical `main` at `108d5315938a48d3bd33c8448e8ce99f23407285`. Existing feature and bounded-maintenance authorizations remain recorded; another authorization is not the remedy for the access or tool restrictions.
+
+Beast was online. Its release checkout was clean, detached at tested runtime source `9402f6c9866e919c789845de96f4334058600cee`, with the canonical GitHub remote. A fresh remote ref read confirmed the main commit above. No existing inventory diagnostic, production job, migration or release test was rerun.
+
+**New access evidence:** the connected cloud browser had no existing Cloud Shell session. Opening Cloud Shell and one reload each returned **502 Bad Gateway / [Errno 111] Connection refused**. Beast's Cloud SDK reported no existing Cloud Shell SSH key; its key-generation prompt was declined and exited with `SSH key generation aborted by user`. No new SSH credentials or session authorization were created. This connection failure does not establish a GCP permissions problem.
+
+**Still outstanding:** read and reconcile the actual Cloud Shell journal at the reported workspace `/home/maglothinm/polititrack-ocr-182-v68vldej`; install the tested controller correction; establish a permitted journal-preserving continuation; then complete the coordinated baseline, additive migration, pinned-image rollout, authenticated upload/correction/cleanup test and independent live OCR-health acceptance. The owner-reported `recovered_original_configuration` journal was not inspected, changed or reopened during this continuation.
+
+No production resource, scheduler, database, account or controller file was changed. The previously verified state remains the latest available evidence: four production schedules enabled, Filing Vault paused, OCR undeployed. Those statuses were not re-certified by a new live inventory in this continuation. The earlier deployment-helper safety rejection was neither retried nor cleared; an accessible Cloud Shell session alone does not clear it.
+
+Next safe action: restore access to the existing Cloud Shell workspace through a permitted connection, inspect the retained journal, and continue only with an operation permitted by the tool's safety controls. Preserve the recovered attempt and every receipt. Keep issue #182 open.
+
 ## Active task — September 18, 2026: source OCR activation blocked; schedules restored (#182 / PR #183)
 
 **The owner explicitly authorized the bounded maintenance window. No further
