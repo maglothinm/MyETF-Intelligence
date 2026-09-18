@@ -1,37 +1,46 @@
 # PolitiTrack active handoff
 
-## Active task — September 17, 2026: release source OCR with run health (#182 / PR #183)
+## Active task — September 18, 2026: activate source OCR with run health (#182 / PR #183)
 
-The owner explicitly authorized proceeding and requested prompts for concrete
-access/approval/interpretation needs. OCR must be monitored independently as part
-of run health. Continue the existing branch `codex/source-upload-ocr-20260917`,
-canonical repository ID 1349678672, based on main `decae86a2ccbeac85c316654615eb2810d5fc2b9`.
+Beast is online and authenticated GCP inspection succeeded. PR #183 is now merged
+at source `9402f6c9866e919c789845de96f4334058600cee` in canonical repository
+ID 1349678672, `maglothinm/MyETF-Intelligence`, branch `main`. The merge tree
+matches tested PR head `3e11f9491bfa29d0935059202926ed2ec57ec987` exactly.
+Post-merge OCR CI `35339190135` and Investor Edge CI `35339190177` passed;
+PR-head Runtime v2 safety CI `35273397245` also passed.
 
-Source changes add stage evidence in existing runtime run metadata, preserve it
-through atomic source commit, finalize after cleanup, and surface separate OCR
-status/counts in Operations, history, the banner and brief. Failed collection,
-missing OCR binaries, pending commit, delayed retries and cleanup faults cannot be
-misreported as healthy OCR. Human review/access queues remain distinct. Inspection
-is bounded outside the web process; unvalidated continuation pages block partial
-imports. See `docs/SOURCE_OCR.md` and the validation record for executed checks.
+Cloud Build `d4a7f1e6-3437-4235-8e3b-13e4125f6a72` succeeded. Built immutable image:
+`us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:5c9e1eee52a1e0e7b0be06f8c98f454ecb66c9320106ac183c1b327b71f6e2fc`.
+**Not deployed or enabled.** The owner authorized the feature; do not ask for its
+requirements or original approval again.
 
-**Concrete release-access blocker:** the authorized Desktop Commander connection
-for Beast was offline when checked on September 17 (last seen September 16).
-The owner was asked to reconnect it and leave it running, without posting any
-credentials. GitHub source work is available; no new GCP connector was found.
-Do not assume that offline workstation access proves GCP credentials are invalid.
-After reconnecting, inspect current authenticated GCP state and the established
-release workspace before modifying anything. Prior certificates are historical.
+Read-only preflight `polititrack-admin-tbdj4` succeeded and verified current
+snapshot payloads/manifests and retained history. Observed generations were
+Legislative 1078, Executive 572, AI 624 and Dashboard 1182, with three personal
+accounts and nine acknowledgements. Schedules continue advancing normally;
+these are not frozen cutover heads. All four producer schedules remain enabled,
+Vault remains paused, and private SQL/backups/PITR remain configured.
 
-**Not live:** no merge, production migration, image rollout, feature activation,
-source-state mutation or live import is established by this source checkpoint.
-Do not ask for the original feature authorization again. Complete exact-head CI,
-then use the approved Runtime v2 release path with a fresh preservation baseline,
-additive inbox migration and account/feature activation. Verify a real upload,
-commit/cleanup, bounded history advancement and independent OCR health. Preserve
-original schedules, Vault pause, personal accounts/acknowledgements, outbox and
-all source/AI history. The sample's three unclear labels still need document review;
-never invent them. Preserve the accepted operating-state handoff below.
+A tool safety check blocked preparation of the temporary schedule-pause helper
+before execution. This was not a GCP permission error. No pause, migration,
+live-image update or feature activation occurred. Do not circumvent a continuing
+tool restriction. The owner is being asked to confirm the specific maintenance
+window: pause only the four existing producer schedules, allow active runs to
+finish, record a fresh frozen baseline, add the OCR inbox table, update existing
+resources with the pinned image and authorized-account/OCR settings, verify
+controlled execution/publication/cleanup/health, and restore the exact schedules.
+Confirmation does not by itself prove that a blocked tool action will be allowed.
+
+OCR has independent run health in the merged source, including stage evidence,
+commit/cleanup outcomes, failures, stalls, retry/access/review counts and overall
+monitoring integration. It has not yet been verified live. The sample's three
+unclear asset labels remain held for document-specific owner review.
+
+[Predeployment evidence](releases/2026-09-18-source-ocr-predeployment.md).
+Private receipts and the isolated checkout:
+`C:/Users/maglo/Documents/Codex/2026-09-18/polititrack-ocr-release-182`.
+Preserve all original source/AI history, accounts, acknowledgements, outbox,
+Vault pause and unrelated feature settings. Refresh live evidence before cutover.
 
 
 Updated **2026-09-15T12:38:15.901975+00:00 — Inbox interruption delay deployed and verified**.
