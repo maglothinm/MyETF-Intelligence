@@ -1,5 +1,13 @@
 # PolitiTrack active handoff
 
+## September 18 repository cleanup — issue #184
+
+Removed the obsolete August 29 `myetf-investor-edge-implementation.zip` installer after verifying the integrated application files remain present and no runtime/workflow consumes the ZIP. Current application code is unchanged. The owner's retention request is to remove obsolete update copies older than September 11 while keeping the two latest useful versions and their dependencies.
+
+Inventory: 134 old merged branches are eligible (122 ancestry-verified and 12 exact-head merged PRs); 231 non-state output artifacts are candidates after retaining the newest two per family and excluding exact pinned evidence. Deletion of branches/artifacts is pending authenticated access; none is claimed complete. Open PRs, unique unmerged work, recent releases, ordinary Git ancestry, production state and pinned recovery/cutover evidence remain intact.
+
+The concurrent OCR continuation at `ebf233ffdffbb7c91bbab90fd281436bd41ab086` is preserved. This cleanup does not deploy OCR, modify runtime/schedules, or certify live health. Existing OCR/runtime release evidence below remains the authority for that separate task. Verification for cleanup is the exact deletion/documentation diff and unchanged application tree; no new runtime run is claimed.
+
 ## Active maintenance — September 18, 2026: reviewed OCR continuation is running (#182)
 
 PR #185 is merged at `58ac647d55f6952174966776304efe6fbd43c11b`; GitHub controller safety run `35384375512` passed after 42 local offline tests. The exact controller SHA-256 `bde6921a252f956a5405cff0dc12d2eb8cbd01f1ec61304f08281bed947c568a` is staged in Cloud Shell as `/home/maglothinm/ocrv2.continuation-review.py`. Its read-only recovery review succeeded against the actual journal and all retained receipts. The original journal remains SHA-256 `cc89df4df75bf91210cb6394162ad2c8a4623e87531a875f6c87494f61adac4e`.

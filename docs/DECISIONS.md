@@ -1368,3 +1368,8 @@ records source design and owner authorization, not production release acceptance
 ## 2026-09-18 — Preserve recovered OCR attempts and use one reviewed successor (#182)
 
 A closed recovered journal is immutable evidence. Reject deployment/recovery before constructor writes or recovery handlers. For the specific inventory failure before any submission, permit one explicitly selected successor bound to the reviewed predecessor checksum and all retained receipt hashes. Keep the predecessor in place and retain the workspace-wide lock, fresh preflight/baseline, exact image and existing production safeguards. Status/recovery cannot create a successor, and a closed successor cannot automatically start another one. This controller lifecycle design does not override tool safety review or certify deployment. See [continuation evidence](releases/2026-09-18-ocr-recovered-continuation.md).
+
+
+## 2026-09-18 — Prune obsolete repository copies; keep two recent versions (#184)
+
+Apply the owner's September 18 retention request to obsolete update packages and merged development copies older than September 11. Retain the two latest useful versions, active dependencies, open PRs and unique unmerged work. Preserve ordinary Git ancestry and operational data; a versioned filename alone does not establish obsolescence. Exact pinned migration/cutover evidence and the latest provenance-valid state must survive any artifact pruning. Remove the unused August 29 Investor Edge installer ZIP; its integrated, evolved source remains canonical. Branch and output-artifact removal is pending authenticated deletion access, separately from this source cleanup. No runtime deployment or state reset is part of this task.
