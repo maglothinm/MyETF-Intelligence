@@ -1,5 +1,7 @@
 # Reviewed release of the OCR health publication correction
 
+**Execution outcome:** This procedure completed at `2026-09-18T20:56:33.832832Z` with `DEPLOYED_WITH_OCR_WARNINGS`. All original schedules were restored; Vault remains paused. Do not replay it. See [final deployment and remaining acceptance](2026-09-18-ocr-deployed.md) for actual build/digest, executions, preservation, natural scheduling and the incomplete owner upload test. The preparation requirements below describe the reviewed procedure, not outstanding deployment work.
+
 Issue #182; application correction [PR #186](https://github.com/maglothinm/MyETF-Intelligence/pull/186), merged source `a2a15edb30895ece37b690e50e0f95fb1eaa2649`. Exact PR-head OCR CI `35389493194` and Investor Edge CI `35389493190` passed. The immutable image build is `db933dc7-5e85-483f-b7b0-655a0ddf7dc0`; its completion/digest must be verified before preparation.
 
 The previous acceptance failed because the public projection stripped the OCR heartbeat. Recovery verified preservation and returned all original schedules to ENABLED at `2026-09-18T20:02:20.643694+00:00`, with Vault PAUSED and OCR disabled. The migration and retained new-image state are preserved. This is a new reviewed release of a concrete correction, not a replay of the failed acceptance.
