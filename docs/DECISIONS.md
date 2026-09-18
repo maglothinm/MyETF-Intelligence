@@ -1378,3 +1378,8 @@ Apply the owner's September 18 retention request to obsolete update packages and
 ## D-2026-09-18-003 — Validate public OCR telemetry before generic privacy projection (#182)
 
 The exact `runtime_mode_evidence.source_ocr` envelope uses the bounded `safe_metrics()` projection before generic key-based redaction. OCR health depends on its validated heartbeat timestamp; deleting that field produces unknown health and disagrees with canonical producer evidence. Private heartbeat URLs, raw documents and arbitrary extra configuration remain excluded. Invalid telemetry never becomes success. Verify this boundary through `build_site()` output, not only direct insights-builder unit tests. This decision does not weaken independent deployment acceptance or permit editing failed release journals.
+
+
+## D-2026-09-18-004 — Release the heartbeat correction from sealed recovered configuration (#182)
+
+A reviewed wrapper reuses the exact v2.2 release engine, holds its original workspace lock, and requires both closed journal hashes plus all retained receipt hashes. It permits one deterministic new preparation for source `a2a15edb30895ece37b690e50e0f95fb1eaa2649`, after live configuration/build/database verification. Both prior attempts remain closed. The successor starts empty and repeats fresh baseline/acceptance; prior recovery evidence is never promoted to new release success. The original audit bytes and SQL remain pinned; only explicit verified release identity constants are rebound. [Procedure and tests](releases/2026-09-18-ocr-health-repair-release.md).
