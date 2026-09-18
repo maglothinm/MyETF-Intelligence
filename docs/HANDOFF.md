@@ -1,46 +1,50 @@
 # PolitiTrack active handoff
 
-## Active task — September 18, 2026: activate source OCR with run health (#182 / PR #183)
+## Active task — September 18, 2026: source OCR activation blocked; schedules restored (#182 / PR #183)
 
-Beast is online and authenticated GCP inspection succeeded. PR #183 is now merged
-at source `9402f6c9866e919c789845de96f4334058600cee` in canonical repository
-ID 1349678672, `maglothinm/MyETF-Intelligence`, branch `main`. The merge tree
-matches tested PR head `3e11f9491bfa29d0935059202926ed2ec57ec987` exactly.
-Post-merge OCR CI `35339190135` and Investor Edge CI `35339190177` passed;
-PR-head Runtime v2 safety CI `35273397245` also passed.
+**The owner explicitly authorized the bounded maintenance window. No further
+feature or maintenance approval is outstanding.** Beast is online and GCP
+inspection succeeds. The remote tool nevertheless blocked preparation of the
+runtime deployment helper because it could not determine the request's safety
+status. This is not a GCP credential/permission error. Do not circumvent the tool
+restriction, change security settings, or ask for another authorization as a cure.
 
-Cloud Build `d4a7f1e6-3437-4235-8e3b-13e4125f6a72` succeeded. Built immutable image:
+The four existing producer schedules were paused at the recorded checkpoint
+`2026-09-18T11:33:08.050652+00:00`. Drain found existing Dashboard execution
+`polititrack-dashboard-k6cp4`, which was not cancelled. After the tool block,
+all four original schedules were resumed and verified against their original
+cadences, time zones, HTTP targets, retry settings and attempt deadlines. Vault
+remained PAUSED and untouched. All six runtime resource specifications were also
+verified unchanged. Recovery receipt: `2026-09-18T11:35:04.096136+00:00`.
+
+**Not deployed or enabled.** No frozen cutover baseline, migration, live-image
+update, OCR/account activation, or live upload/import was executed. No rebaseline,
+account/acknowledgement reset or history deletion occurred. Existing scheduled
+jobs can advance normally; no post-restoration successful run is claimed merely
+from restoring the schedules. Application source was not changed in this attempt.
+
+PR #183 remains merged at pinned runtime source
+`9402f6c9866e919c789845de96f4334058600cee` in canonical repository ID 1349678672,
+`maglothinm/MyETF-Intelligence`, branch `main`. The merge tree matches tested PR
+head `3e11f9491bfa29d0935059202926ed2ec57ec987`. Post-merge OCR CI `35339190135`
+and Investor Edge CI `35339190177` passed; PR-head Runtime safety `35273397245`
+passed. Cloud Build `d4a7f1e6-3437-4235-8e3b-13e4125f6a72` succeeded. Built image:
 `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:5c9e1eee52a1e0e7b0be06f8c98f454ecb66c9320106ac183c1b327b71f6e2fc`.
-**Not deployed or enabled.** The owner authorized the feature; do not ask for its
-requirements or original approval again.
 
-Read-only preflight `polititrack-admin-tbdj4` succeeded and verified current
-snapshot payloads/manifests and retained history. Observed generations were
-Legislative 1078, Executive 572, AI 624 and Dashboard 1182, with three personal
-accounts and nine acknowledgements. Schedules continue advancing normally;
-these are not frozen cutover heads. All four producer schedules remain enabled,
-Vault remains paused, and private SQL/backups/PITR remain configured.
+OCR-specific run health is in that merged/built version, not verified live.
+The original sample's three unclear labels remain held for document-specific
+owner review. Keep issue #182 open. Once deployment execution is permitted,
+refresh live specifications, coordinate the same bounded window, capture a fresh
+frozen preservation baseline, perform only the additive OCR migration/activation,
+and verify real processing, cleanup, history continuity and independent health.
+Do not treat the earlier read-only preflight as a frozen or post-release audit.
 
-A tool safety check blocked preparation of the temporary schedule-pause helper
-before execution. This was not a GCP permission error. No pause, migration,
-live-image update or feature activation occurred. Do not circumvent a continuing
-tool restriction. The owner is being asked to confirm the specific maintenance
-window: pause only the four existing producer schedules, allow active runs to
-finish, record a fresh frozen baseline, add the OCR inbox table, update existing
-resources with the pinned image and authorized-account/OCR settings, verify
-controlled execution/publication/cleanup/health, and restore the exact schedules.
-Confirmation does not by itself prove that a blocked tool action will be allowed.
-
-OCR has independent run health in the merged source, including stage evidence,
-commit/cleanup outcomes, failures, stalls, retry/access/review counts and overall
-monitoring integration. It has not yet been verified live. The sample's three
-unclear asset labels remain held for document-specific owner review.
-
-[Predeployment evidence](releases/2026-09-18-source-ocr-predeployment.md).
-Private receipts and the isolated checkout:
+[Latest maintenance-stop and restoration evidence](releases/2026-09-18-source-ocr-maintenance-stopped.md).
+[Earlier merge, build and read-only preflight](releases/2026-09-18-source-ocr-predeployment.md).
+Private receipts and clean pinned checkout:
 `C:/Users/maglo/Documents/Codex/2026-09-18/polititrack-ocr-release-182`.
-Preserve all original source/AI history, accounts, acknowledgements, outbox,
-Vault pause and unrelated feature settings. Refresh live evidence before cutover.
+Preserve all source/AI history, personal accounts, acknowledgements, outbox,
+original schedules, Vault pause and unrelated feature settings.
 
 
 Updated **2026-09-15T12:38:15.901975+00:00 — Inbox interruption delay deployed and verified**.
