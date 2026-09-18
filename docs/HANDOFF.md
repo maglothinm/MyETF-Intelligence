@@ -1,5 +1,13 @@
 # PolitiTrack active handoff
 
+## Current work — September 18, 2026: recovered-attempt continuation implemented, awaiting CI and permitted execution (#182)
+
+The installed controller and actual recovered journal were read again. A closed-attempt retry could write its journal and invoke recovery from the old exception handler. The canonical controller source now rejects closed attempts before those side effects and supports one explicit checksum-bound successor while preserving every predecessor receipt. **42 offline tests pass**; all 38 existing functions outside construction, persistence and CLI routing are unchanged. No cloud call is used by these tests.
+
+The change is on `codex/ocr-recovered-continuation-20260918`, based on main `cb87786e6dd27f749570347054ed270523a88859`; CI, installation and production deployment are not yet claimed. Runtime source/image remain pinned to the existing OCR build. The original recovered journal has not been edited. The earlier automatic rejection is a rejected action, not a verified permanent account lock, and this source work does not clear it. Existing authorizations remain in force.
+
+[Continuation design and evidence](releases/2026-09-18-ocr-recovered-continuation.md). Next: verify CI and pursue only permitted controller installation and bounded execution. Deployment, migration, upload/correction/cleanup, OCR-health acceptance and a natural scheduled run remain outstanding. Keep #182 open.
+
 ## Current continuation — September 18, 2026: controller installed; recovered journal preserved (#182)
 
 Beast's Desktop Commander connection is responsive again. The existing Cloud Shell workspace is reachable through Google's authenticated tunnel using the existing local SSH key and an explicitly pinned server fingerprint. No SSH key was created by this continuation and no production credential or permission was changed.
