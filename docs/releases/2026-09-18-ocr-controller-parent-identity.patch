@@ -1,0 +1,90 @@
+--- ocrv2.py
++++ ocrv2.py
+@@ -24,6 +24,7 @@
+ 
+ import argparse
+ import copy
++from collections.abc import Mapping
+ from datetime import datetime, timezone
+ import fcntl
+ import hashlib
+@@ -56,6 +57,43 @@
+ OCR_RESOURCES = {'polititrack-legislative', 'polititrack-executive', 'polititrack-web'}
+ SCHEDULE_FIELDS = ('schedule', 'timeZone', 'httpTarget', 'retryConfig', 'attemptDeadline')
+ 
++class IdentityError(ValueError):
++    """A response does not prove the requested project, location and job."""
++
++
++def execution_identity(row, project, region, job, project_number=None):
++    """Accept a short parent name only alongside its validated full execution path.
++
++    Numeric project aliases must come from an independently verified job/project
++    resource, never from the untrusted execution row being checked. The returned
++    key normalizes those aliases so duplicate detection cannot be bypassed.
++    """
++    aliases = {project}
++    if project_number is not None:
++        if not isinstance(project_number, str) or not re.fullmatch(r'[0-9]+', project_number):
++            raise IdentityError('invalid_verified_project_number')
++        aliases.add(project_number)
++    if not isinstance(row, Mapping):
++        raise IdentityError('invalid_execution_row')
++    name = row.get('name')
++    if not isinstance(name, str):
++        raise IdentityError('missing_execution_name')
++    path = name.split('/')
++    if (len(path) != 8 or path[0] != 'projects' or path[1] not in aliases
++        or path[2:6] != ['locations', region, 'jobs', job] or path[6] != 'executions'
++        or not re.fullmatch(re.escape(job) + r'-[a-z0-9]+', path[7])):
++        raise IdentityError('execution_path_mismatch')
++    parent = row.get('job')
++    if parent != job:
++        if not isinstance(parent, str):
++            raise IdentityError('missing_parent_job')
++        parts = parent.split('/')
++        if (len(parts) != 6 or parts[0] != 'projects' or parts[1] not in aliases
++            or parts[2:] != ['locations', region, 'jobs', job]):
++            raise IdentityError('parent_job_mismatch')
++    return '/'.join(['projects', project, 'locations', region, 'jobs', job, 'executions', path[7]])
++
++
+ class Stop(RuntimeError):
+     """A failed checkpoint requiring recovery or review."""
+ 
+@@ -63,7 +101,7 @@
+     """An observed operation is still running or its outcome is ambiguous."""
+ 
+ 
+-CONTROLLER_VERSION = '2.0-paginated-execution-inventory'
++CONTROLLER_VERSION = '2.1-parent-job-identity-review'
+ 
+ class InventoryWait(Waiting):
+     """Read-only execution inventory is unavailable/incomplete, not a submission."""
+@@ -558,18 +596,15 @@
+             for row in page_rows:
+                 if not isinstance(row, dict):
+                     raise InventoryWait(job + ': malformed execution-inventory row.')
+-                full = row.get('name', '')
+-                parts = full.split('/') if isinstance(full, str) else []
+-                aliases = {PROJECT}
+                 namespace = str(self.original[job].get('metadata', {}).get('namespace', ''))
+-                if namespace.isdigit():
+-                    aliases.add(namespace)
+-                if (len(parts) != 8 or parts[0] != 'projects' or parts[1] not in aliases
+-                    or parts[2:6] != ['locations', REGION, 'jobs', job]
+-                    or parts[6] != 'executions' or not re.fullmatch(re.escape(job) + r'-[a-z0-9]+', parts[7])
+-                    or row.get('job') != '/'.join(parts[:6]) or full in names):
+-                    raise InventoryWait(job + ': execution-inventory identity or pagination changed; no idle result is inferred.')
+-                names.add(full)
++                try:
++                    key = execution_identity(row, PROJECT, REGION, job,
++                                             namespace if namespace.isdigit() else None)
++                except IdentityError as error:
++                    raise InventoryWait(job + ': ' + str(error) + '; no idle result is inferred.') from None
++                if key in names:
++                    raise InventoryWait(job + ': duplicate_execution_identity; inventory is incomplete.')
++                names.add(key)
+             rows.extend(page_rows)
+             next_token = payload.get('nextPageToken', '')
+             if not isinstance(next_token, str) or len(next_token) > 32768:
