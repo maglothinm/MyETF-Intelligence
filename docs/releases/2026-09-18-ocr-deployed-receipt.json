@@ -206,7 +206,22 @@
     "extraction_after_upload": "NOT_VERIFIED",
     "raw_cleanup": "NOT_VERIFIED",
     "correction_confirmation": "NOT_SUBMITTED",
-    "document_review": "Three unclear asset labels require owner interpretation; preserve all five physical rows and blank ownership."
+    "document_review": "Three unclear asset labels require owner interpretation; preserve all five physical rows and blank ownership.",
+    "retry_check": {
+      "observed_at": "2026-09-18T23:09:32Z",
+      "requested_by_owner": true,
+      "browser_connection": "UNRESPONSIVE",
+      "new_submission": false,
+      "cloud_logging_query": {
+        "read_only": true,
+        "service": "polititrack-web",
+        "request_method": "POST",
+        "request_url_contains": "source-ocr",
+        "freshness": "1d",
+        "matching_entries": 0
+      },
+      "limitation": "An empty request log does not prove absence of a database upload receipt. Earlier submission outcome remains unverified."
+    }
   },
   "remaining": [
     "Reconcile the upload attempt through the existing authenticated UI before any retry.",
