@@ -1363,3 +1363,8 @@ Unknown or unreadable continuation-page layout blocks partial import. Use the
 v2 extraction version to invalidate older layout acceptance evidence, and bound
 untrusted document inspection before admission to the application process. This
 records source design and owner authorization, not production release acceptance.
+
+
+## 2026-09-18 — Preserve recovered OCR attempts and use one reviewed successor (#182)
+
+A closed recovered journal is immutable evidence. Reject deployment/recovery before constructor writes or recovery handlers. For the specific inventory failure before any submission, permit one explicitly selected successor bound to the reviewed predecessor checksum and all retained receipt hashes. Keep the predecessor in place and retain the workspace-wide lock, fresh preflight/baseline, exact image and existing production safeguards. Status/recovery cannot create a successor, and a closed successor cannot automatically start another one. This controller lifecycle design does not override tool safety review or certify deployment. See [continuation evidence](releases/2026-09-18-ocr-recovered-continuation.md).
