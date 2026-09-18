@@ -1,5 +1,15 @@
 # OCR controller takeover — September 18, 2026
 
+## Active rollout checkpoint — September 18, 2026, 19:25 UTC
+
+The source-only closed-journal repair and explicit successor design in [PR #185](https://github.com/maglothinm/MyETF-Intelligence/pull/185) are merged at `58ac647d55f6952174966776304efe6fbd43c11b`. All 42 offline checks and GitHub controller safety run `35384375512` passed. See [continuation design](2026-09-18-ocr-recovered-continuation.md).
+
+The exact new controller is staged at `/home/maglothinm/ocrv2.continuation-review.py`, SHA-256 `bde6921a252f956a5405cff0dc12d2eb8cbd01f1ec61304f08281bed947c568a`. Its read-only review matched the actual recovered journal and every original receipt. The reviewed continuation was then submitted through the existing connected tool without a safety rejection. The old rejected helper was not replayed and no security setting was weakened.
+
+**Maintenance is active.** The four production schedules are paused; Vault remains paused. Existing Executive `polititrack-executive-prmt9` completed successfully. Fresh frozen baseline `polititrack-admin-hfszq` passed. The existing Admin job now uses the pinned OCR image, and additive migration `polititrack-admin-jhl44` succeeded. Read-only image/schema/account/role verification is running as `polititrack-admin-k6mkt`. Remaining-resource rollout, producer acceptance, schedule restoration, upload/correction/cleanup and natural-run acceptance are not yet claimed.
+
+Observe the existing Desktop Commander process `44328` on Beast and the successor journal `/home/maglothinm/polititrack-ocr-182-v68vldej/ocr-continuations/9de6a3cfc21a4ec9b51915301bdaa534/journal.json`. Do not start another controller or edit/delete either journal. The original recovered journal remains closed at SHA-256 `cc89df4df75bf91210cb6394162ad2c8a4623e87531a875f6c87494f61adac4e`.
+
 ## Current continuation — September 18, 2026: controller installed; recovered journal preserved (#182)
 
 Beast's Desktop Commander connection is responsive again. The existing Cloud Shell workspace is reachable through Google's authenticated tunnel using the existing local SSH key and an explicitly pinned server fingerprint. No SSH key was created by this continuation and no production credential or permission was changed.
