@@ -150,6 +150,16 @@ def public_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(value, Mapping):
             result = {}
             for key, item in value.items():
+                if key == "source_ocr" and path[-1:] == ("runtime_mode_evidence",) and isinstance(item, Mapping):
+                    # OCR stage timestamps are public evidence. Validate this
+                    # exact telemetry envelope before the generic private-key
+                    # filter, which must still remove healthcheck credentials
+                    # and arbitrary heartbeat configuration everywhere else.
+                    try:
+                        result[key] = safe_metrics(item)
+                    except ValueError:
+                        result[key] = {"enabled": item.get("enabled") is True, "invalid": True}
+                    continue
                 if not isinstance(key, str) or _PRIVATE_KEY.search(key):
                     continue
                 if key == "notification" and isinstance(item, Mapping):

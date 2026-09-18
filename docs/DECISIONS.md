@@ -1373,3 +1373,8 @@ A closed recovered journal is immutable evidence. Reject deployment/recovery bef
 ## 2026-09-18 — Prune obsolete repository copies; keep two recent versions (#184)
 
 Apply the owner's September 18 retention request to obsolete update packages and merged development copies older than September 11. Retain the two latest useful versions, active dependencies, open PRs and unique unmerged work. Preserve ordinary Git ancestry and operational data; a versioned filename alone does not establish obsolescence. Exact pinned migration/cutover evidence and the latest provenance-valid state must survive any artifact pruning. Remove the unused August 29 Investor Edge installer ZIP; its integrated, evolved source remains canonical. Branch and output-artifact removal is pending authenticated deletion access, separately from this source cleanup. No runtime deployment or state reset is part of this task.
+
+
+## D-2026-09-18-003 — Validate public OCR telemetry before generic privacy projection (#182)
+
+The exact `runtime_mode_evidence.source_ocr` envelope uses the bounded `safe_metrics()` projection before generic key-based redaction. OCR health depends on its validated heartbeat timestamp; deleting that field produces unknown health and disagrees with canonical producer evidence. Private heartbeat URLs, raw documents and arbitrary extra configuration remain excluded. Invalid telemetry never becomes success. Verify this boundary through `build_site()` output, not only direct insights-builder unit tests. This decision does not weaken independent deployment acceptance or permit editing failed release journals.

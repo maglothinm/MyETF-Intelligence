@@ -98,6 +98,44 @@ def test_dashboard_retains_separate_ocr_and_collector_outcomes():
     assert "PRIVATE_DOCUMENT" not in json.dumps(dashboard_insights.build_insights(source))
 
 
+@pytest.mark.parametrize("changes,expected", [({}, "success"), ({"retry_remaining": 2}, "failure")])
+def test_published_site_preserves_validated_ocr_heartbeat_and_removes_private_fields(tmp_path, changes, expected):
+    from scripts.build_trade_dashboard import build_site
+    from test_dashboard_insights import payload
+
+    stage = metrics(**changes, raw_pdf="PRIVATE_DOCUMENT", heartbeat_url="https://private.test/SECRET")
+    attempt = {"run_key": "publication-fixture", "branch": "legislative", "evidence_source": "runtime_v2",
+               "runtime_mode": "production", "runtime_mode_verified": True,
+               "runtime_mode_evidence": {"kind": "snapshot_provenance", "mode": "production", "source_ocr": stage},
+               "started_utc": RUN["started_utc"], "finished_utc": RUN["finished_utc"],
+               "success": True, "conclusion": "success", "trigger_source": "external_scheduler"}
+    source = payload(summary={"generated_utc": NOW.isoformat(), "heartbeat_url": "PRIVATE_HEALTHCHECK"},
+        runs=[attempt], workflow_evidence={"schema_version": 1, "available": True,
+        "observed_at_utc": NOW.isoformat(), "branches": {"legislative": {"available": True, "attempts": [attempt]}}})
+    original = copy.deepcopy(source)
+    build_site(source, tmp_path / "site")
+    published = json.loads((tmp_path / "site/data/dashboard-insights.json").read_text())
+    health = published["health"]["branches"][0]["source_ocr"]
+    assert health["heartbeat_at"] == stage["heartbeat_at"]
+    assert health["status"] == expected
+    assert health["required"] is True
+    assert source == original
+    public = dashboard_insights.public_payload(source)
+    assert dashboard_insights.public_payload(public) == public
+    for path in (tmp_path / "site/data").glob("*.json"):
+        assert not any(secret in path.read_text() for secret in ("PRIVATE_DOCUMENT", "PRIVATE_HEALTHCHECK", "SECRET"))
+
+
+@pytest.mark.parametrize("heartbeat", ["https://private.test/SECRET", "yesterday", {"token": "SECRET"}])
+def test_public_projection_rejects_invalid_ocr_heartbeat_without_exposing_value(heartbeat):
+    source = {"runtime_mode_evidence": {"source_ocr": metrics(heartbeat_at=heartbeat)}}
+    clean = dashboard_insights.public_payload(source)
+    stage = clean["runtime_mode_evidence"]["source_ocr"]
+    assert stage == {"enabled": True, "invalid": True}
+    assert run_health(stage, RUN, NOW)["status"] == "unknown"
+    assert "SECRET" not in json.dumps(clean)
+
+
 @pytest.mark.parametrize("fault", ["intake", "cleanup", "engine", "collection"])
 def test_runner_records_intake_cleanup_engine_and_upstream_failures(monkeypatch, fault):
     import test_runtime_v2_shadow_mode as fixtures
