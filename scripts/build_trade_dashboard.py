@@ -355,8 +355,16 @@ def load_branch(directory: Path | None, branch: str) -> dict[str, Any]:
     runs = latest_by(read_jsonl(directory / "runs.jsonl"), "run_key")
     state = read_json_object(directory / "state.json")
 
+    ocr_receipts = {row.get("filing_key"): row for row in read_jsonl(directory / "source-ocr.jsonl")}
     for item in filings:
         item.setdefault("branch", branch)
+        receipt = ocr_receipts.get(item.get("filing_key"), {})
+        if receipt:
+            item.update(ocr_status=receipt.get("status"), ocr_attempted_at=receipt.get("attempted_at"),
+                        ocr_completed_at=receipt.get("evidence", {}).get("ocr_completed_at"),
+                        ocr_page_count=receipt.get("evidence", {}).get("page_count"),
+                        ocr_completed_pages=len(receipt.get("evidence", {}).get("completed_pages", [])),
+                        ocr_error_code=receipt.get("error_code"), ocr_next_attempt_at=receipt.get("next_attempt_at"))
     for item in transactions:
         item.setdefault("branch", branch)
     for item in reviews:
@@ -763,7 +771,7 @@ STYLES_CSS = (ASSET_DIR / "styles.css").read_text(encoding="utf-8")
 WALLBOARD_HTML = (ASSET_DIR / "wallboard.html").read_text(encoding="utf-8")
 WALLBOARD_CSS = (ASSET_DIR / "wallboard.css").read_text(encoding="utf-8")
 _SHARED_JS = "\n".join((ASSET_DIR / name).read_text(encoding="utf-8") for name in ("notifications.js", "common.js"))
-APP_JS = _SHARED_JS + "\n" + "\n".join((ASSET_DIR / name).read_text(encoding="utf-8") for name in ("backfill-progress.js", "personal-reviews.js", "operations.js", "app.js"))
+APP_JS = _SHARED_JS + "\n" + "\n".join((ASSET_DIR / name).read_text(encoding="utf-8") for name in ("backfill-progress.js", "personal-reviews.js", "operations.js", "source-ocr.js", "app.js"))
 WALLBOARD_JS = _SHARED_JS + "\n" + (ASSET_DIR / "wallboard.js").read_text(encoding="utf-8")
 
 

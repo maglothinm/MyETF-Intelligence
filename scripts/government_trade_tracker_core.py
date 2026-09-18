@@ -1369,6 +1369,25 @@ def _selected_legislative_sources(value: str) -> tuple[str, ...]:
     return ("house", "senate") if value == "all" else (value,)
 
 
+def _source_pdf_text(data: bytes, max_pages: int, *, safe_diagnostics: bool = False) -> str:
+    """With durable OCR enabled, leave optical work to its single bounded pass."""
+    if (not parse_bool(os.environ.get("RUNTIME_SOURCE_OCR_ENABLED"), default=False)
+        or os.environ.get("POLITITRACK_MODE", "production").lower() != "production"):
+        return extract_pdf_text(data, max_pages, safe_diagnostics=safe_diagnostics)
+    try:
+        try:
+            from .source_ocr_limits import inspect_bounded
+        except ImportError:
+            from source_ocr_limits import inspect_bounded
+        info = inspect_bounded(data)
+        text = "\n".join(info["native_pages"]).strip()
+        if len(normalize_text(text)) < 20:
+            raise ValueError("no native text")
+        return text
+    except Exception:
+        raise PaperFilingError("Source document is queued for bounded OCR extraction and layout review") from None
+
+
 def scan_house_report(session: Session, report: Report, config: TrackerConfig) -> tuple[list[Trade], PendingReview | None]:
     pdf_bytes = fetch_pdf_bytes(
         session,
@@ -1377,7 +1396,7 @@ def scan_house_report(session: Session, report: Report, config: TrackerConfig) -
         f"House PTR {report.metadata.get('document_id', report.report_id)}",
     )
     try:
-        text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
+        text = _source_pdf_text(pdf_bytes, config.max_ocr_pages)
         return parse_house_transactions(text, report), None
     except PaperFilingError as exc:
         review = make_pending_review(
@@ -1467,7 +1486,7 @@ def _parse_senate_report_response(
             )
 
         try:
-            text = extract_pdf_text(pdf_bytes, config.max_ocr_pages, safe_diagnostics=True)
+            text = _source_pdf_text(pdf_bytes, config.max_ocr_pages, safe_diagnostics=True)
             transactions = parse_generic_transactions_text(
                 text,
                 report,
@@ -1611,7 +1630,7 @@ def scan_oge_listing(
             agency=str(listing.get("agency") or ""),
         )
     try:
-        text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
+        text = _source_pdf_text(pdf_bytes, config.max_ocr_pages)
         transactions = parse_generic_transactions_text(
             text,
             listing,

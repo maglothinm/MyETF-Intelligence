@@ -106,6 +106,7 @@ def create_app(
     review_store=None,
     operation_store=None,
     operation_cloud=None,
+    source_upload_store=None,
 ) -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config.update({key: value for key, value in os.environ.items() if key.startswith(("VAULT_", "RUNTIME_"))})
@@ -124,6 +125,8 @@ def create_app(
     app.register_blueprint(create_blueprint(personal_reviews, cache))
     from .operations_api import create_blueprint as operations_blueprint
     app.register_blueprint(operations_blueprint(personal_reviews, operation_store, operation_cloud))
+    from .source_ocr_api import create_blueprint as source_ocr_blueprint
+    app.register_blueprint(source_ocr_blueprint(personal_reviews, cache, source_upload_store))
 
     if _truthy(app.config.get("VAULT_ENABLED")):
         from backend.filing_vault import init_app

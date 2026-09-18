@@ -1,5 +1,39 @@
 # PolitiTrack active handoff
 
+## Active task — September 17, 2026: release source OCR with run health (#182 / PR #183)
+
+The owner explicitly authorized proceeding and requested prompts for concrete
+access/approval/interpretation needs. OCR must be monitored independently as part
+of run health. Continue the existing branch `codex/source-upload-ocr-20260917`,
+canonical repository ID 1349678672, based on main `decae86a2ccbeac85c316654615eb2810d5fc2b9`.
+
+Source changes add stage evidence in existing runtime run metadata, preserve it
+through atomic source commit, finalize after cleanup, and surface separate OCR
+status/counts in Operations, history, the banner and brief. Failed collection,
+missing OCR binaries, pending commit, delayed retries and cleanup faults cannot be
+misreported as healthy OCR. Human review/access queues remain distinct. Inspection
+is bounded outside the web process; unvalidated continuation pages block partial
+imports. See `docs/SOURCE_OCR.md` and the validation record for executed checks.
+
+**Concrete release-access blocker:** the authorized Desktop Commander connection
+for Beast was offline when checked on September 17 (last seen September 16).
+The owner was asked to reconnect it and leave it running, without posting any
+credentials. GitHub source work is available; no new GCP connector was found.
+Do not assume that offline workstation access proves GCP credentials are invalid.
+After reconnecting, inspect current authenticated GCP state and the established
+release workspace before modifying anything. Prior certificates are historical.
+
+**Not live:** no merge, production migration, image rollout, feature activation,
+source-state mutation or live import is established by this source checkpoint.
+Do not ask for the original feature authorization again. Complete exact-head CI,
+then use the approved Runtime v2 release path with a fresh preservation baseline,
+additive inbox migration and account/feature activation. Verify a real upload,
+commit/cleanup, bounded history advancement and independent OCR health. Preserve
+original schedules, Vault pause, personal accounts/acknowledgements, outbox and
+all source/AI history. The sample's three unclear labels still need document review;
+never invent them. Preserve the accepted operating-state handoff below.
+
+
 Updated **2026-09-15T12:38:15.901975+00:00 — Inbox interruption delay deployed and verified**.
 Canonical repository **1349678672 — maglothinm/MyETF-Intelligence**, default `main`.
 

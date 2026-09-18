@@ -306,7 +306,22 @@ class JobRunner:
             _require_success_state(state_dir)
             outbox = self._prepare_notifications(locked, branch, output_dir)
             run_id = locked.start_run(branch, trigger, self.source_revision, self.mode.value)
+            ocr_health = None
+            ocr_enabled = _truthy(self.environment.get("RUNTIME_SOURCE_OCR_ENABLED")) and not self.mode.is_shadow
+            def record_ocr():
+                if ocr_health is not None:
+                    from scripts.source_ocr import now
+                    ocr_health["heartbeat_at"] = now()
+                    locked.record_ocr_health(run_id, ocr_health)
+                    from scripts.source_ocr_health import safe_metrics
+                    print(json.dumps({"event": "source_ocr_health", "run_id": run_id,
+                                      "branch": branch, **safe_metrics(ocr_health)}, sort_keys=True), flush=True)
             try:
+                if ocr_enabled:
+                    from scripts.source_ocr import now
+                    ocr_health = {"enabled": True, "stage": "waiting_for_collection", "started_at": now(),
+                                  "intake_status": "pending", "cleanup_status": "pending"}
+                    record_ocr()
                 command = self._tracker_command(branch, state_dir, output_dir)
                 if branch == "legislative":
                     command.extend(["--source", "all"])
@@ -332,6 +347,26 @@ class JobRunner:
                             str(output_dir / "legislative-result.json"),
                         ]
                     )
+                ocr_uploads, ocr_outcomes = None, []
+                if ocr_enabled:
+                    from .source_uploads import SourceUploadStore
+                    from .source_ocr_worker import run_pass
+                    ocr_uploads = SourceUploadStore()
+                    # The existing source namespace lock is the sole consumer.
+                    # Intake failure must not stop ordinary source collection.
+                    try:
+                        queued = ocr_uploads.pending(branch)
+                        ocr_health["intake_status"] = "ok"
+                    except Exception as exc:
+                        queued = []
+                        ocr_health.update(intake_status="failed", intake_error_code=type(exc).__name__)
+                        print(json.dumps({"result": "ocr_intake_deferred", "error_code": type(exc).__name__}), flush=True)
+                    ocr_health["stage"] = "processing"
+                    record_ocr()
+                    ocr_outcomes = run_pass(state_dir, branch, self.environment, queued,
+                                           health=ocr_health, on_progress=lambda metrics: record_ocr())
+                    ocr_health["stage"] = "awaiting_commit"
+                    record_ocr()
                 state = _require_success_state(state_dir)
                 notification_options, notification_provenance = self._notification_commit_options(outbox, branch)
                 snapshot = locked.commit(
@@ -350,6 +385,14 @@ class JobRunner:
                     **notification_options,
                 )
             except Exception as exc:
+                if ocr_health is not None:
+                    from scripts.source_ocr import now
+                    ocr_health.update(stage="skipped" if ocr_health["stage"] == "waiting_for_collection" else "failed",
+                                      finished_at=now(), error_code=type(exc).__name__)
+                    try:
+                        record_ocr()
+                    except Exception as telemetry_error:
+                        print(json.dumps({"result": "ocr_health_unavailable", "error_code": type(telemetry_error).__name__}), flush=True)
                 locked.finish_run(
                     run_id,
                     status="failure",
@@ -357,6 +400,25 @@ class JobRunner:
                     side_effects_possible=False,
                 )
                 raise
+            if ocr_health is not None:
+                ocr_health["cleanup_status"] = "not_needed"
+            if ocr_uploads is not None and ocr_outcomes:
+                try:
+                    ocr_uploads.acknowledge(ocr_outcomes, snapshot.snapshot_sha256)
+                    ocr_health["cleanup_status"] = "complete"
+                except Exception as exc:
+                    # A later run replays the committed receipt, not the import.
+                    ocr_health.update(cleanup_status="deferred", cleanup_error_code=type(exc).__name__)
+                    print(json.dumps({"result": "ocr_cleanup_deferred", "error_code": type(exc).__name__}), flush=True)
+            if ocr_health is not None:
+                from scripts.source_ocr import now
+                ocr_health.update(stage="complete", finished_at=now())
+                try:
+                    record_ocr()
+                except Exception as exc:
+                    # The snapshot is already committed. The persisted unfinished
+                    # stage remains unconfirmed/stale, never a manufactured success.
+                    print(json.dumps({"result": "ocr_health_unavailable", "error_code": type(exc).__name__}), flush=True)
             self._dispatch_notifications(locked, branch)
             return snapshot
 
