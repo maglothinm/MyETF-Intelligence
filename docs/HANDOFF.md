@@ -1,12 +1,16 @@
 # PolitiTrack active handoff
 
-## Current work — September 18, 2026: recovered-attempt continuation implemented, awaiting CI and permitted execution (#182)
+## Active maintenance — September 18, 2026: reviewed OCR continuation is running (#182)
 
-The installed controller and actual recovered journal were read again. A closed-attempt retry could write its journal and invoke recovery from the old exception handler. The canonical controller source now rejects closed attempts before those side effects and supports one explicit checksum-bound successor while preserving every predecessor receipt. **42 offline tests pass**; all 38 existing functions outside construction, persistence and CLI routing are unchanged. No cloud call is used by these tests.
+PR #185 is merged at `58ac647d55f6952174966776304efe6fbd43c11b`; GitHub controller safety run `35384375512` passed after 42 local offline tests. The exact controller SHA-256 `bde6921a252f956a5405cff0dc12d2eb8cbd01f1ec61304f08281bed947c568a` is staged in Cloud Shell as `/home/maglothinm/ocrv2.continuation-review.py`. Its read-only recovery review succeeded against the actual journal and all retained receipts. The original journal remains SHA-256 `cc89df4df75bf91210cb6394162ad2c8a4623e87531a875f6c87494f61adac4e`.
 
-The change is on `codex/ocr-recovered-continuation-20260918`, based on main `cb87786e6dd27f749570347054ed270523a88859`; CI, installation and production deployment are not yet claimed. Runtime source/image remain pinned to the existing OCR build. The original recovered journal has not been edited. The earlier automatic rejection is a rejected action, not a verified permanent account lock, and this source work does not clear it. Existing authorizations remain in force.
+**A bounded continuation is now running through the existing connected tool; this concrete execution call was not rejected.** It uses the reviewed checksum-bound successor at `/home/maglothinm/polititrack-ocr-182-v68vldej/ocr-continuations/9de6a3cfc21a4ec9b51915301bdaa534/journal.json`, with the original attempt closed and untouched. Observe the existing process/receipts; do not launch a second controller or delete either journal. Desktop Commander process on Beast: `44328`.
 
-[Continuation design and evidence](releases/2026-09-18-ocr-recovered-continuation.md). Next: verify CI and pursue only permitted controller installation and bounded execution. Deployment, migration, upload/correction/cleanup, OCR-health acceptance and a natural scheduled run remain outstanding. Keep #182 open.
+Fresh resource/build/database/preparation checks passed. The four original schedules are currently paused for the already-authorized maintenance; Vault remains paused. Existing Executive execution `polititrack-executive-prmt9` completed successfully at `2026-09-18T19:16:01.954887Z`. Drain completed and the fresh read-only frozen baseline is running as `polititrack-admin-hfszq`. No migration/image rollout or OCR success is claimed at this checkpoint.
+
+Next: observe that exact baseline and continuation through migration, pinned-image activation, controlled source/AI/dashboard successors, preservation and OCR-health acceptance, then verified original schedule restoration. Authenticated owner upload/correction/cleanup and a natural scheduled execution remain separate acceptance gates. The browser currently shows signed-out review status; do not reset accounts or extract credentials to complete that test. Keep issue #182 open.
+
+[Controller design and evidence](releases/2026-09-18-ocr-recovered-continuation.md). Runtime source/image remain the pinned OCR release, `9402f6c9866e919c789845de96f4334058600cee` / `sha256:5c9e1eee52a1e0e7b0be06f8c98f454ecb66c9320106ac183c1b327b71f6e2fc`. The earlier rejected helper was not replayed, and no security setting was weakened.
 
 ## Current continuation — September 18, 2026: controller installed; recovered journal preserved (#182)
 
