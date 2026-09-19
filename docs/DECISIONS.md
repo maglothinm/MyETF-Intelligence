@@ -1383,3 +1383,10 @@ The exact `runtime_mode_evidence.source_ocr` envelope uses the bounded `safe_met
 ## D-2026-09-18-004 — Release the heartbeat correction from sealed recovered configuration (#182)
 
 A reviewed wrapper reuses the exact v2.2 release engine, holds its original workspace lock, and requires both closed journal hashes plus all retained receipt hashes. It permits one deterministic new preparation for source `a2a15edb30895ece37b690e50e0f95fb1eaa2649`, after live configuration/build/database verification. Both prior attempts remain closed. The successor starts empty and repeats fresh baseline/acceptance; prior recovery evidence is never promoted to new release success. The original audit bytes and SQL remain pinned; only explicit verified release identity constants are rebound. [Procedure and tests](releases/2026-09-18-ocr-health-repair-release.md).
+
+
+## D-2026-09-19-001 — Correct document eligibility without replacing identities (#182)
+
+Keep the legacy document/request URL-slot calculation solely for OGE listing-ID hashing while classifying verified official PDF paths for access. Append retained access corrections through the canonical producer; never rewrite old rows, seen identities, public-observation dates or historical alert state. Use a separate document-policy version to retry affected access/inspection failures without invalidating successful extraction caches or pending owner confirmations.
+
+Readable PDFs with an empty user password may pass the existing bounded decoder even when they contain permission-encryption metadata. Password-required and invalid documents still fail closed; no password guessing, permission removal or weakening of resource bounds is authorized. Newly reachable OGE documents with known header contamination remain under layout review until their transaction rows can be validated. Source/CI acceptance remains separate from deployment and live import. See [repair evidence](releases/2026-09-19-oge-pdf-repair.md).

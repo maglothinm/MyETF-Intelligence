@@ -28,6 +28,7 @@ from bs4 import BeautifulSoup
 from requests import Response, Session
 
 try:  # Support both ``python -m scripts...`` and direct script execution.
+    from .oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
     from .review_identity import ACCESS_REQUIRED, PAPER_REVIEW, UNPARSEABLE_TABLE, logical_review_id
     from .run_trigger import trigger_source
     from .monitor_disclosures import (
@@ -54,6 +55,7 @@ try:  # Support both ``python -m scripts...`` and direct script execution.
         utc_now,
     )
 except ImportError:  # pragma: no cover - direct execution path
+    from oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
     from review_identity import ACCESS_REQUIRED, PAPER_REVIEW, UNPARSEABLE_TABLE, logical_review_id
     from run_trigger import trigger_source
     from monitor_disclosures import (  # type: ignore
@@ -1054,6 +1056,14 @@ def parse_generic_transactions_text(
         if owner_match:
             owner = owner_match.group(1)
             prefix = prefix[owner_match.end() :]
+        if source == "oge" and "received over 30 days ago" in prefix.casefold():
+            # Newly reachable OGE PDFs can split the notification header across
+            # several lines. The generic parser would otherwise import it as
+            # part of the first asset (and may misassign wrapped asset tails).
+            # Reject the entire parse until that layout is validated, rather
+            # than promoting syntactically matched rows as accurate trades.
+            raise PaperFilingError("OGE wrapped transaction headers require layout review",
+                                   exception_code=UNPARSEABLE_TABLE)
         asset_type = infer_asset_type(prefix)
         parsed.append(
             make_trade(
@@ -1562,12 +1572,13 @@ def load_oge_listings(path: Path) -> list[dict[str, Any]]:
         listing_id = str(item.get("listing_id") or "")
         if not listing_id:
             raise MonitorError(f"OGE listing is missing listing_id: {item!r}")
-        normalized.append(dict(item))
+        normalized.append(normalize_oge_listing_access(item))
     deduped = {str(item["listing_id"]): item for item in normalized}
     return sorted(deduped.values(), key=lambda item: (str(item.get("date", "")), str(item["listing_id"])))
 
 
 def resolve_oge_pdf(session: Session, listing: Mapping[str, Any], config: TrackerConfig) -> bytes | None:
+    listing = normalize_oge_listing_access(listing)
     access_mode = normalize_text(str(listing.get("access_mode", "unknown"))).casefold()
     if access_mode == "request":
         return None
@@ -2079,6 +2090,24 @@ def run_legislative(
             senate_client.close()
 
 
+def refresh_oge_document_access(path: Path, filing_index: dict[str, dict[str, Any]]) -> None:
+    """Append corrected access metadata for historical PDFs, never replace IDs.
+
+    Also covers filings no longer returned by current discovery. Seen state,
+    outcomes, review history, first-observation dates and original rows survive.
+    This is called only inside the existing source producer's working snapshot.
+    """
+    updates = []
+    for key, row in filing_index.items():
+        if (row.get("branch") == "executive" and row.get("source") == "oge"
+                and is_direct_oge_pdf_url(str(row.get("source_url") or ""))
+                and (row.get("access_mode") != "direct" or row.get("document_format") != "pdf")):
+            updated = {**row, "access_mode": "direct", "document_format": "pdf", "updated_at_utc": iso_utc()}
+            updates.append(updated)
+            filing_index[key] = updated
+    append_jsonl(path, updates)
+
+
 def run_executive(
     config: TrackerConfig,
     state: TrackerState,
@@ -2097,6 +2126,8 @@ def run_executive(
     result.alerted_filing_counts[source] = 0
     if not listings and not config.allow_empty_sources:
         raise SourceChangedError("OGE discovery returned zero Form 278-T listings")
+
+    refresh_oge_document_access(config.filings_path, filing_index)
 
     source_bootstrap = should_baseline_source(state, source, config)
     unseen = [item for item in listings if not state.is_filing_seen(source, str(item["listing_id"]))]

@@ -16,7 +16,7 @@ from runtime_v2.source_uploads import SourceUploadStore, uploads
 from runtime_v2.review_accounts import ReviewError
 from runtime_v2.source_ocr_worker import run_pass, OfficialSession
 from scripts import government_trade_tracker as tracker
-from scripts.source_ocr import VERSION, OCRError, AMOUNTS
+from scripts.source_ocr import VERSION, DOCUMENT_POLICY_VERSION, OCRError, AMOUNTS
 
 NOW=datetime(2026,9,17,14,tzinfo=timezone.utc)
 ENV={"DISCLOSURE_TERMS_ACKNOWLEDGED":"true","POLITITRACK_MODE":"production"}
@@ -89,6 +89,80 @@ def test_blocked_access_retries_with_backoff_without_rewriting_history(tmp_path)
     receipts=tracker.read_jsonl(directory/"source-ocr.jsonl")
     assert receipts[-1]["status"]=="access_required" and receipts[-1]["next_attempt_at"]
     run_pass(directory,"legislative",ENV,loader=lambda *_:pytest.fail("retry backoff ignored"))
+
+
+def test_old_pdf_rejection_retries_once_without_invalidating_successful_evidence(tmp_path):
+    directory = source_state(tmp_path)
+    rejected = {"filing_key": FILING["filing_key"], "source_url": FILING["source_url"], "version": VERSION,
+                "origin": "official_download", "status": "needs_review", "error_code": "invalid_or_encrypted_pdf",
+                "attempts": 1, "next_attempt_at": "2099-01-01T00:00:00Z", "revalidate_after": "2099-01-01T00:00:00Z"}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [rejected])
+    old_ledger = (directory / "source-ocr.jsonl").read_bytes()
+    calls = []
+    def engine(data, **kwargs):
+        calls.append(1)
+        return evidence(data)
+    run_pass(directory, "legislative", ENV, loader=lambda *_: b"test", extractor=engine)
+    receipt = tracker.latest_records(directory / "source-ocr.jsonl", "filing_key")[FILING["filing_key"]]
+    assert receipt["status"] == "complete" and receipt["document_policy_version"] == DOCUMENT_POLICY_VERSION
+    assert receipt["attempts"] == 2
+    assert (directory / "source-ocr.jsonl").read_bytes().startswith(old_ledger)
+    run_pass(directory, "legislative", ENV, loader=lambda *_: pytest.fail("successful document repeated"), extractor=engine)
+    assert calls == [1]
+
+
+def test_current_policy_pdf_rejection_and_unrelated_reviews_keep_backoff(tmp_path):
+    directory = source_state(tmp_path)
+    for code, policy in [("invalid_or_encrypted_pdf", DOCUMENT_POLICY_VERSION), ("table_needs_review", None)]:
+        tracker.append_jsonl(directory / "source-ocr.jsonl", [{"filing_key": FILING["filing_key"],
+            "source_url": FILING["source_url"], "version": VERSION, "document_policy_version": policy,
+            "status": "needs_review", "error_code": code, "revalidate_after": "2099-01-01T00:00:00Z"}])
+        run_pass(directory, "legislative", ENV, loader=lambda *_: pytest.fail("unaffected review requeued"))
+
+
+def test_executive_direct_pdf_retries_past_old_backoff_ahead_of_gated_requests(tmp_path):
+    directory = source_state(tmp_path)
+    pdf = {**FILING, "branch": "executive", "source": "oge", "filing_key": "oge|retained-pdf",
+           "report_id": "retained-pdf", "access_mode": "request", "source_url": "https://extapps2.oge.gov/201/$FILE/test.pdf"}
+    gated = {**pdf, "filing_key": "oge|gated", "report_id": "gated", "source_url": "https://extapps2.oge.gov/201%20Request?OpenForm"}
+    tracker.append_jsonl(directory / "filings.jsonl", [gated, pdf])
+    prior = {"filing_key": pdf["filing_key"], "source_url": pdf["source_url"], "version": VERSION,
+             "status": "access_required", "error_code": "access_required", "next_attempt_at": "2099-01-01T00:00:00Z"}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    state_before = (directory / "state.json").read_bytes()
+    filing_prefix = (directory / "filings.jsonl").read_bytes()
+    loaded = []
+    def loader(row, config):
+        loaded.append(row)
+        return b"test"
+    # An unrecognized scanned layout remains reviewable; this test accepts the
+    # download/queue repair, not an invented OGE transaction import.
+    run_pass(directory, "executive", {**ENV, "RUNTIME_SOURCE_OCR_FILES_PER_RUN": "1"}, loader=loader, extractor=lambda *a, **k: evidence())
+    assert [row["filing_key"] for row in loaded] == [pdf["filing_key"]]
+    assert loaded[0]["access_mode"] == "direct"
+    assert loaded[0]["first_seen_utc"] == pdf["first_seen_utc"]
+    assert (directory / "state.json").read_bytes() == state_before
+    assert (directory / "filings.jsonl").read_bytes().startswith(filing_prefix)
+    receipts = tracker.read_jsonl(directory / "source-ocr.jsonl")
+    assert receipts[0] == prior and len(receipts) == 2
+    assert receipts[-1]["document_policy_version"] == DOCUMENT_POLICY_VERSION
+    assert receipts[-1]["error_code"] == "unsupported_scanned_layout"
+
+
+def test_ocr_download_reclassifies_only_official_pdf_not_form201(tmp_path, monkeypatch):
+    from runtime_v2 import source_ocr_worker as worker
+    from unittest.mock import Mock
+    pdf = {**FILING, "source": "oge", "branch": "executive", "access_mode": "request",
+           "source_url": "https://extapps2.oge.gov/201/$FILE/test.pdf"}
+    resolve = Mock(return_value=b"%PDF-test")
+    monkeypatch.setattr(tracker, "resolve_oge_pdf", resolve)
+    config = worker._configuration(tmp_path, "executive", ENV)
+    assert worker.download(pdf, config) == b"%PDF-test"
+    assert resolve.call_args.args[1]["access_mode"] == "direct"
+    resolve.reset_mock()
+    with pytest.raises(OCRError, match="access_required"):
+        worker.download({**pdf, "source_url": "https://extapps2.oge.gov/201%20Request?Document=test.pdf"}, config)
+    resolve.assert_not_called()
 
 
 def test_shadow_cannot_read_uploads_or_download_sources(tmp_path):

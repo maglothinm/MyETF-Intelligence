@@ -1,6 +1,54 @@
 from __future__ import annotations
 
+import hashlib
+import pytest
+
 from scripts.oge_disclosures import parse_oge_table_html
+
+
+PDF_URL = "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/ABC/$FILE/Test-278T.pdf"
+REQUEST_URL = "https://extapps2.oge.gov/201/Presiden.nsf/201%20Request?OpenForm&Filer=Example"
+
+
+@pytest.mark.parametrize("prefix,extra,identity_document,identity_request", [
+    ("", "", "", PDF_URL),
+    ('<a href="https://www.oge.gov/official">Official</a>', "", "https://www.oge.gov/official", PDF_URL),
+    ('<a href="'+REQUEST_URL+'">Form 201 request</a>', "", "", REQUEST_URL),
+    ("", '<a href="'+REQUEST_URL+'">Form 201 request</a>', "", PDF_URL),
+])
+def test_extapps_pdf_classification_preserves_pre_repair_listing_identity(prefix, extra, identity_document, identity_request):
+    html = f'''<table><tr><th>Date</th><th>Type</th><th>Name</th><th>Title</th><th>Agency</th><th>Level</th></tr>
+        <tr><td>08/06/2026</td><td>{prefix}<a href="{PDF_URL}">OGE Form 278-T</a>{extra}</td>
+        <td>Example Official</td><td>Director</td><td>Department A</td><td>PAS</td></tr></table>'''
+    listing, = parse_oge_table_html(html)
+    # The pre-repair identity used the old document/request slots, even when the
+    # first request-slot URL was a PDF. Keep this independently calculated key.
+    old_material = "\x1f".join(("08/06/2026", " ".join(filter(None, [
+        "Official" if "Official</a>" in prefix else "Form 201 request" if prefix else "",
+        "OGE Form 278-T", "Form 201 request" if extra else ""])),
+        "Example Official", "Director", "Department A", "PAS", identity_document, identity_request))
+    assert listing.listing_id == "oge:" + hashlib.sha256(old_material.encode()).hexdigest()[:32]
+    assert listing.access_mode == "direct" and listing.document_url == PDF_URL
+
+
+@pytest.mark.parametrize("url,expected", [
+    (PDF_URL, True), (PDF_URL + "?OpenElement", True), (PDF_URL + "#page=2", True),
+    (REQUEST_URL + "&Document=Report.pdf", False),
+    ("https://extapps2.oge.gov/request/201?download=Report.pdf", False),
+    ("https://extapps2.oge.gov.evil.test/file.pdf", False),
+    ("http://extapps2.oge.gov/file.pdf", False),
+    ("https://user:pass@extapps2.oge.gov/file.pdf", False),
+    ("https://extapps2.oge.gov:8443/file.pdf", False),
+    ("https://extapps2.oge.gov:bad/file.pdf", False),
+])
+def test_only_official_pdf_paths_can_reclassify_request_metadata(url, expected):
+    from scripts.oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
+    old = {"listing_id": "keep-this-id", "request_url": url, "access_mode": "request"}
+    normalized = normalize_oge_listing_access(old)
+    assert is_direct_oge_pdf_url(url) is expected
+    assert normalized["listing_id"] == old["listing_id"]
+    assert old["access_mode"] == "request"
+    assert normalized["access_mode"] == ("direct" if expected else "request")
 
 
 def test_parse_oge_table_direct_and_request_rows() -> None:

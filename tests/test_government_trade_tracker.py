@@ -365,6 +365,18 @@ def test_parse_oge_style_text_keeps_purchase_only_filter_separate() -> None:
     assert purchase.transaction_date == "2026-06-10"
 
 
+def test_newly_accessible_oge_wrapped_header_is_not_imported_as_an_asset():
+    listing = {"listing_id": "oge:retained", "name": "Example Official", "date": "08/20/2026"}
+    body = """# DESCRIPTION TYPE DATE NOTIFICATION AMOUNT
+    RECEIVED OVER
+    30 DAYS AGO
+    1 Example Fund Sale 07/15/2026 No $1,001 - $15,000
+    2 Another Fund Purchase 07/15/2026 No $1,001 - $15,000
+    """
+    with pytest.raises(PaperFilingError, match="layout review"):
+        parse_generic_transactions_text(body, listing, branch="executive", source="oge")
+
+
 def test_state_round_trip_and_latest_csv(tmp_path: Path) -> None:
     state_path = tmp_path / "state.json"
     ledger_path = tmp_path / "purchases.jsonl"

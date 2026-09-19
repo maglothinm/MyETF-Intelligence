@@ -65,6 +65,70 @@ def run(config, state, index, **kwargs):
     return result, metrics, session
 
 
+def test_seen_executive_pdfs_reclassify_and_backfill_without_new_ids_or_alerts(tmp_path, monkeypatch):
+    from dataclasses import asdict
+    from scripts.oge_disclosures import parse_oge_table_html
+    config = config_at(tmp_path, branch="executive", limit=5)
+    config = replace(config, oge_listings_path=tmp_path / "oge.json")
+    pdf = "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/ABC/$FILE/Official-278T.pdf"
+    html = f'''<table><tr><th>Date</th><th>Type</th><th>Name</th></tr>
+        <tr><td>04/01/2025</td><td><a href="{pdf}">278-T</a></td><td>Historical Official</td></tr></table>'''
+    listing, = parse_oge_table_html(html)
+    old = {**asdict(listing), "document_url": "", "request_url": pdf, "access_mode": "request"}
+    config.oge_listings_path.write_text(json.dumps([old]))
+    visible = {**filing(1, source="oge"), "report_id": listing.listing_id,
+               "filing_key": tracker.filing_key("oge", listing.listing_id), "source_url": pdf}
+    archived = {**filing(2, source="oge"), "source_url": pdf.replace("Official-", "Archived-")}
+    gated = filing(3, source="oge")
+    state, index = baseline(config, [visible, archived, gated])
+    before = copy.deepcopy(state)
+    prefix = config.filings_path.read_bytes()
+    def scan(session, report, cfg):
+        assert report["access_mode"] == "direct"
+        trade = tracker.make_trade(branch="executive", source="oge", report=report, owner="",
+            asset="Example stock", ticker="", asset_type="Stock", transaction_type="Purchase",
+            transaction_date="2025-04-01", notification_date="", amount="$1,001 - $15,000", raw_row="TEST", confidence="high")
+        return [trade], None
+    scanner = Mock(side_effect=scan)
+    monkeypatch.setattr(tracker, "scan_oge_listing", scanner)
+    monkeypatch.setattr(tracker, "send_filing_notification", Mock(side_effect=AssertionError("historical alert")))
+    monkeypatch.setattr(tracker, "send_pending_notification", Mock(side_effect=AssertionError("historical review alert")))
+    result = tracker.TrackerResult(branch="executive", started_utc="2026-09-19T08:00:00Z")
+    session = Mock(get=Mock(side_effect=AssertionError("unexpected network")))
+    tracker.run_executive(config, state, result, session, index)
+    assert result.new_filing_counts == {"oge": 0}
+    assert result.transactions == result.purchases == result.filings == []
+    assert state.seen_filings == before.seen_filings and state.seen_reviews == before.seen_reviews
+    assert set(index) == {row["filing_key"] for row in [visible, archived, gated]}
+    assert all(index[row["filing_key"]]["first_seen_utc"] == row["first_seen_utc"] for row in [visible, archived, gated])
+    assert config.filings_path.read_bytes().startswith(prefix)
+    assert index[gated["filing_key"]] == gated
+    assert scanner.call_count == 2
+    transactions = tracker.read_jsonl(config.transactions_path)
+    assert len(transactions) == 2 and all(row["historical_bootstrap"] for row in transactions)
+    assert {row["report_id"] for row in transactions} == {visible["report_id"], archived["report_id"]}
+    tracker.run_executive(config, state, result, session, index)
+    assert scanner.call_count == 2
+    assert tracker.read_jsonl(config.transactions_path) == transactions
+
+
+def test_corrected_oge_link_downloads_but_real_request_form_never_does(tmp_path):
+    from requests import Response
+    config = config_at(tmp_path, branch="executive")
+    pdf = "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/ABC/$FILE/Official-278T.pdf"
+    response = Response(); response.status_code = 200; response.url = pdf
+    response.headers["Content-Type"] = "application/pdf"
+    response._content = b"%PDF-original-test-document"; response._content_consumed = True
+    session = Mock(); session.get.return_value = response
+    data = tracker.resolve_oge_pdf(session, {"access_mode": "request", "request_url": pdf}, config)
+    assert data == response.content
+    assert session.get.call_args.args[0] == pdf
+    session.get.reset_mock()
+    gated = {"access_mode": "request", "request_url": "https://extapps2.oge.gov/201%20Request?Document=Test.pdf"}
+    assert tracker.resolve_oge_pdf(session, gated, config) is None
+    session.get.assert_not_called()
+
+
 def test_catalog_backfill_is_bounded_idempotent_and_never_notifies(tmp_path, monkeypatch):
     config = config_at(tmp_path, limit=1)
     rows = [filing(1), filing(2)]

@@ -18,7 +18,8 @@ import requests
 
 from scripts import government_trade_tracker as tracker
 from scripts.historical_transaction_bootstrap import _original_observation, _report
-from scripts.source_ocr import VERSION, MAX_BYTES, MAX_PAGES, OCRError, extract, now
+from scripts.oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
+from scripts.source_ocr import VERSION, DOCUMENT_POLICY_VERSION, MAX_BYTES, MAX_PAGES, OCRError, extract, now
 
 
 class OfficialSession(requests.Session):
@@ -63,8 +64,10 @@ def download(filing, config):
             if soup.find(["img", "iframe", "embed"]):
                 raise OCRError("page_image_download_requires_review")
             raise OCRError("native_html_not_applicable")
-    if source == "oge" and filing.get("access_mode") != "direct":
-        raise OCRError("access_required")
+    if source == "oge":
+        report = normalize_oge_listing_access(report)
+        if report.get("access_mode") != "direct":
+            raise OCRError("access_required")
     with OfficialSession(source) as session:
         session.headers["User-Agent"] = config.user_agent
         if source == "oge":
@@ -214,6 +217,8 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
     if missing_state or not state.last_success_utc:
         raise OCRError("restored_source_state_required")
     index = tracker.latest_records(directory / "filings.jsonl", "filing_key")
+    if branch == "executive":
+        tracker.refresh_oge_document_access(directory / "filings.jsonl", index)
     ledger = directory / "source-ocr.jsonl"
     receipts = tracker.latest_records(ledger, "filing_key")
     incoming = {}
@@ -224,10 +229,17 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         if filing.get("branch") != branch or filing.get("source") not in {"house", "senate", "oge"}:
             continue
         receipt = receipts.get(key, {})
+        # Retry only outcomes affected by the fixed admission/access policy.
+        # Keep successful extraction caches and unrelated review/backoff intact.
+        policy_retry = (receipt.get("document_policy_version") != DOCUMENT_POLICY_VERSION
+                        and ((receipt.get("error_code") == "invalid_or_encrypted_pdf"
+                              and receipt.get("origin", "official_download") == "official_download")
+                             or (receipt.get("error_code") == "access_required" and filing.get("source") == "oge"
+                                 and is_direct_oge_pdf_url(str(filing.get("source_url") or "")))))
         changed = receipt.get("source_url") != filing.get("source_url") or receipt.get("version") != VERSION
-        if key not in incoming and not changed and receipt.get("status") in {"complete", "needs_review", "not_applicable"} and receipt.get("revalidate_after", "") > now():
+        if key not in incoming and not changed and not policy_retry and receipt.get("status") in {"complete", "needs_review", "not_applicable"} and receipt.get("revalidate_after", "") > now():
             continue
-        if receipt.get("next_attempt_at", "") > now():
+        if not policy_retry and receipt.get("next_attempt_at", "") > now():
             queued = incoming.get(key)
             if queued is None or (queued.get("status") != "approved" and receipt.get("upload_id") == queued.get("upload_id")
                                   and receipt.get("status") in {"retry_delayed", "access_required"}):
@@ -236,6 +248,10 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         # parser failures, then oldest untouched history. Never filter by seen IDs.
         is_new = not receipt and filing.get("first_seen_utc", "") >= (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         priority = 0 if key in incoming else 1 if is_new else 2 if filing.get("status") == "review_required" else 3
+        if key not in incoming and filing.get("source") == "oge" and filing.get("access_mode") != "direct":
+            # Real Form 201 requests cannot consume every slot ahead of publicly
+            # downloadable historical PDFs. Still record their blocked outcomes.
+            priority = 4
         candidates.append((priority, receipt.get("attempted_at", ""), filing.get("first_seen_utc", ""), key))
     candidates.sort()
     acknowledgements = []
@@ -267,6 +283,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         filing, upload = index[key], incoming.get(key)
         prior = receipts.get(key, {})
         receipt = {"filing_key": key, "source_url": filing["source_url"], "version": VERSION,
+                   "document_policy_version": DOCUMENT_POLICY_VERSION,
                    "attempted_at": now(), "attempts": int(prior.get("attempts", 0)) + 1,
                    "origin": "user_upload" if upload else "official_download", "status": "retry_delayed"}
         evidence = None
