@@ -1438,3 +1438,20 @@ active. Keep the current OCR repair handoff and all historic decision entries.
 deployed shadow observation, and live activation remain separately unverified.
 The new never-crossed-percentage flag discussed before this merge is not part of
 PR #154 and is not claimed implemented by this reconciliation.
+
+
+## D-2026-09-19-003 — Require complete OGE server-side draws before collection acceptance
+
+OGE's published collection now uses server-side DataTables requests. A visible
+old page or fixed sleep cannot certify the requested search or next page. Match
+the public request/response draw counter, requested filter and offset, then
+validate returned/rendered row counts and stable pagination totals. Reject any
+incomplete collection, including repeats and page-limit exhaustion, instead of
+publishing its prefix. Initial loading may retry once on a timeout; malformed
+source/acknowledgement validation cannot be silently retried or substituted with
+cached discovery. Preserve the existing listing-ID parser and PDF policy.
+
+This source hardening does not make an unavailable OGE service healthy and does
+not relax production's successful-baseline release requirement. All four closed
+release journals remain immutable. See
+[the recovery evidence](releases/2026-09-19-oge-discovery-recovery.md).

@@ -1,5 +1,44 @@
 # PolitiTrack project state
 
+## OGE recovery — September 19, source repaired; upstream data unavailable (#182)
+
+OGE discovery recovery [PR #190](https://github.com/maglothinm/MyETF-Intelligence/pull/190)
+is merged on canonical main at `eb228bc18f242ecc71f368d50181126a746a052a`.
+The collector retries an initial timeout once, waits for the requested server-side
+search/page draw, and rejects partial or inconsistent collections. Filing IDs,
+PDF validation, history and the sole producer path are preserved. Canonical PR CI
+[35441670108](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35441670108)
+passed 341 Python tests (one skip), four Node tests and desktop/mobile checks;
+its tested merge tree exactly matches main. Main CI
+[35441765858](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35441765858)
+also passed. Local application checks passed
+320 tests with 21 environment-dependent skips; the final focused OGE suite passed
+41 tests.
+
+**Live recovery is still blocked before OCR.** Scheduled Executive
+`polititrack-executive-5qpd5` failed at 11:46 UTC with the same 120-second rendered
+table timeout. The public page shell returned HTTP 200, but its published data
+endpoint timed out after 45.13 seconds from Cloud Shell; the connected browser
+also remained on Loading after one reload and a normal 278-T search. No bot or
+access-denial evidence was observed. The cause inside OGE is not established.
+
+Read-only verification at `2026-09-19T12:04:41.573331Z` confirms all six OCR release
+resources still use the accepted September 18 image, OCR remains enabled, and all
+four closed journal hashes match. Four original schedules are enabled with their
+original specifications; Vault is paused. This session changed source/docs only;
+there was no deployment, migration, producer dispatch or state mutation. Existing
+upload cleanup is already independently verified; owner interpretation remains
+open and the upload must not be resubmitted.
+
+Next safe action: verify OGE data recovery and a successful complete Executive
+production run, then use a new reviewed continuation with fresh successful
+baseline and exact deployment-source CI/build verification. Keep all four old
+journals immutable and the release gate intact. The isolated recovery head
+`4b3c7db19f721816495f4213e132a9953dbd4149` excludes the separate Current Opportunity
+integration; PR CI tested the merged tree, so do not confuse their image scopes.
+Current Opportunity remains off and not deployed. Further general maintenance
+permission is not needed. [Evidence](releases/2026-09-19-oge-discovery-recovery.md).
+
 ## Current Opportunity source integration — PR #154, not deployed
 
 The owner authorized merging PR #154 on September 19, 2026. Its source is
