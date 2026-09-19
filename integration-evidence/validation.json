@@ -2,13 +2,63 @@
   "repository_id": 1349678672,
   "main": "75cb399ea870a77069911c80f3bfe0b788475fd9",
   "original_head": "eb0747a7d61624f1f0a6424f4d3f265999f0b31d",
-  "run_id": "35439621635",
+  "run_id": "35439735887",
   "run_attempt": "1",
   "production_access": false,
   "pr_ref_updated": false,
   "candidate_commit": null,
   "tests": {
-    "passed": false,
-    "reason": "Resolution or test setup did not complete"
-  }
+    "passed": true,
+    "results": [
+      {
+        "command": [
+          "/opt/hostedtoolcache/Python/3.12.14/x64/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "tests/test_opportunity_current_runtime.py",
+          "tests/test_opportunity_integration.py",
+          "tests/test_opportunity_lifecycle.py",
+          "tests/test_opportunity_market.py",
+          "tests/test_opportunity_notifications.py",
+          "tests/test_opportunity_providers.py",
+          "tests/test_opportunity_significance.py",
+          "tests/test_ai_filing_analyst.py",
+          "tests/test_ai_filing_analyst_hardened.py",
+          "tests/test_investor_edge.py",
+          "tests/test_investor_edge_core.py",
+          "tests/test_investor_edge_surfaces.py",
+          "tests/test_trade_dashboard.py",
+          "tests/test_dashboard_insights.py",
+          "tests/test_runtime_v2.py",
+          "tests/test_runtime_v2_atomic_commit.py",
+          "tests/test_runtime_v2_legislative_recovery.py",
+          "tests/test_runtime_v2_shadow_mode.py",
+          "tests/test_validate_ai_publication.py",
+          "tests/test_investor_notifications.py",
+          "tests/test_source_ocr_health.py",
+          "--junitxml=/home/runner/work/_temp/pr154-tests.xml"
+        ],
+        "returncode": 0
+      },
+      {
+        "command": [
+          "/opt/hostedtoolcache/Python/3.12.14/x64/bin/python",
+          "tests/opportunity_shadow_fixture.py",
+          "--output",
+          "/home/runner/work/_temp/pr154-TEST-fixture"
+        ],
+        "returncode": 0
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "tests/opportunity_dom.test.cjs"
+        ],
+        "returncode": 0
+      }
+    ]
+  },
+  "publication_error": "AssertionError: "
 }
