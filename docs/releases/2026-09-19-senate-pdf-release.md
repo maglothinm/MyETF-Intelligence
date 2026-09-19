@@ -263,3 +263,36 @@ pending. Supplemental read-only verifier PR #198 is merged at
 `505c56e406c85dffd1d975de10196554b5c9704d`; its separately installed filename is
 `verify_senate_pdf_release_77aad.py`, SHA-256
 `dbb1b7a2183f41e67e5969c0af625c091342355847bba43896fec5d9e21b6b3a`.
+
+## Normal activation interrupted by status authentication — 18:07 UTC checkpoint
+
+Normal baseline `polititrack-admin-lmb84`, migration `polititrack-admin-b4q82`
+and image smoke `polititrack-admin-ln5g4` succeeded. All six resources received
+the pinned tested image; OCR was enabled on Legislative, Executive and web.
+
+- Legislative `polititrack-legislative-7xnjg` committed generation 1191 at
+  17:50:57 UTC: five documents, eight of eight pages, one complete/four review
+  outcomes, zero technical retries. Payload SHA-256
+  `5a7ba310c0b7343682772661206391d6134c6b863850f971d8b0ba82a929f1a8`.
+- Executive `polititrack-executive-xmhxh` again collected 4,068 listings and
+  committed generation 621 at 17:56:22 UTC: five documents, 17 of 17 pages,
+  five review outcomes, zero technical retries. Payload SHA-256
+  `dc92adf7cb7e3d28bff19cdc3a754bea1a8b7df3e2cff0110f4ddaa75547798f`.
+- Both had successful intake and `cleanup_status=not_needed`. No new trade
+  notifications were sent by either source run.
+
+One controller observation failed before it recorded Executive completion:
+`gcloud.run.jobs.executions.describe` returned `UNAUTHENTICATED`, reason
+`ACCESS_TOKEN_TYPE_UNSUPPORTED`, method `google.cloud.run.v1.Executions.GetExecution`.
+The stderr is retained at
+`ocr-pdf-activation-77aadf541b03/ocr-deployment/cloud/observe-executive-1.stderr.txt`.
+Cloud Run and committed production logs independently prove Executive success.
+The exact reason the token was rejected is not established beyond this response.
+The controller correctly retained its failure and started prescribed recovery;
+read-only preservation `polititrack-admin-wd7p9` is still pending startup.
+
+The new normal continuation adds bounded retries only for that exact read/error,
+keeps each failed-read receipt, seals all seven predecessors and requires the
+completed seventh journal's exact SHA-256. It reuses the tested app image; no
+additional Executive-only exception or state reset is introduced. Local controller
+tests passed 141/141. Canonical CI and completed recovery remain prerequisites.
