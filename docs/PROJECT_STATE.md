@@ -2,6 +2,26 @@
 
 ## Authorized PDF/Senate OCR release — September 19 (#182)
 
+**Live activation checkpoint, 17:32 UTC:** the approved Executive-only repair
+completed at 17:29:54 UTC. Executive `polititrack-executive-mldd4` collected all
+4,068 listings and committed generation 620 on tested source `77aadf541b03…`
+with OCR disabled. Independent `polititrack-admin-2bhnz` passed, proving baseline
+preservation, unchanged Executive OCR evidence and unchanged other heads. All
+four original schedules were restored. The completed incident is sealed at
+SHA-256 `64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836`.
+[Recovery receipt](releases/2026-09-19-executive-recovery-receipt.json).
+
+The separate normal activation passed fresh read-only preparation and is running
+in `ocr-pdf-activation-77aadf541b03`, observed by Beast process `32324`.
+It uses the original full release controller and acceptance gates, with the same
+pinned image `6be7d1e52367…`. Do not submit another controller or producer.
+PR #196/controller CI `35457006449` passed all 117 tests; supplemental acceptance
+PR #198 merged at `505c56e406c85dffd1d975de10196554b5c9704d`. Full OCR activation,
+acceptance, supplemental Senate/PDF checks and scheduled-run verification are
+pending. Current Opportunity stays off; Vault stays paused.
+
+The following records describe the preceding diagnosis and closed attempts.
+
 The owner requested deployment of the tested PDF repair and correct review
 classification for Senate image-only filings. PR #191 is merged at
 `a9607c88e10959c0cd3844f008915aec12dd0935`, with the same tree as tested build

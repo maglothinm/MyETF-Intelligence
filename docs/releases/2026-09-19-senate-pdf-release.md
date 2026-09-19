@@ -236,3 +236,30 @@ The supplemental read-only Senate/PDF check now requires source `77aadf541b03407
 and still compares against the original fifth baseline, before the Senate
 corrections. This complements the normal controller's separate fresh activation
 baseline rather than replacing it. Final acceptance is not yet claimed.
+
+## One-time Executive recovery accepted — 17:29:54 UTC
+
+Fresh incident baseline `polititrack-admin-cfwjr` passed at 17:16:06 UTC. Only
+the existing Executive resource received image `6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`,
+source `77aadf541b034072f58dba5e7107c2c8e8ba4bd1`, with OCR explicitly disabled.
+Single recovery `polititrack-executive-mldd4` succeeded at 17:25:14 UTC after
+collecting all 4,068 278-T listings. It committed generation 620, snapshot
+`10670e98-73e8-48bc-9c98-cd104a5277db`, payload SHA-256
+`3af0d688713934147b7f208ee348713a7cb8b86046572dd277e48d30188b1795`.
+No new filing/trade notifications were produced.
+
+Independent incident acceptance `polititrack-admin-2bhnz` passed at 17:29:01:
+baseline preservation, unchanged Executive OCR ledger/evidence, no OCR telemetry,
+correct new source/run/snapshot identity and unchanged other producer heads.
+The controller restored all four original schedules and completed without error.
+Its immutable journal SHA-256 is
+`64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836`.
+[Exact recovery receipt](2026-09-19-executive-recovery-receipt.json).
+
+The separate normal activation uses that exact seal in workspace
+`ocr-pdf-activation-77aadf541b03`. Fresh preparation passed, and Beast process
+`32324` is observing the full original controller. Final activation acceptance is
+pending. Supplemental read-only verifier PR #198 is merged at
+`505c56e406c85dffd1d975de10196554b5c9704d`; its separately installed filename is
+`verify_senate_pdf_release_77aad.py`, SHA-256
+`dbb1b7a2183f41e67e5969c0af625c091342355847bba43896fec5d9e21b6b3a`.

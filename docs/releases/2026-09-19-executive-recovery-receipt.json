@@ -1,0 +1,104 @@
+{
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "approval": "2026-09-19-owner-approved-executive-only-ocr-disabled-repair",
+  "procedure_pr": 196,
+  "procedure_merge": "2f90ad7f04bfae657cbbbf3780ab75f0be9cf077",
+  "procedure_sha256": "61b1b148f21d06681382d64d939fcd29fbb4c3f0b7828786ae3e8d3b19437e05",
+  "controller_ci": {
+    "run": 35457006449,
+    "result": "success",
+    "tests": 117
+  },
+  "app_source": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1",
+  "app_ci": {
+    "run": 35453468818,
+    "result": "success",
+    "python_passed": 354,
+    "python_skipped": 1,
+    "node_passed": 4
+  },
+  "build": "adba5676-b161-4b89-8336-0edc6c22795b",
+  "image_digest": "sha256:6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de",
+  "status": "complete",
+  "ocr_activation_performed": false,
+  "original_schedules_restored": true,
+  "execution": "polititrack-executive-mldd4",
+  "discovered_278t_listings": 4068,
+  "journal_sha256": "64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836",
+  "finished_at": "2026-09-19T17:29:54.896655+00:00",
+  "acceptance": {
+    "result": "PASS",
+    "execution": "polititrack-admin-2bhnz",
+    "observed_at": "2026-09-19T17:29:01.252636+00:00",
+    "baseline_preservation_verified": true,
+    "executive_ocr_unchanged": true,
+    "executive_recovery_detail": {
+      "error_code": "",
+      "ocr": null,
+      "snapshot_id": "10670e98-73e8-48bc-9c98-cd104a5277db",
+      "source": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1"
+    },
+    "latest_production_runs": [
+      {
+        "finished_at": "2026-09-19T16:49:29.022397+00:00",
+        "namespace": "ai",
+        "run_id": "b8712367-4849-4673-b533-b805edb47241",
+        "started_at": "2026-09-19T16:46:52.618872+00:00",
+        "status": "success"
+      },
+      {
+        "finished_at": "2026-09-19T17:04:29.661275+00:00",
+        "namespace": "dashboard",
+        "run_id": "632e585d-87a0-414f-816f-8b3c554ec82f",
+        "started_at": "2026-09-19T17:03:39.031336+00:00",
+        "status": "success"
+      },
+      {
+        "finished_at": "2026-09-19T17:25:14.895194+00:00",
+        "namespace": "executive",
+        "run_id": "6b5c34af-b648-4bcd-b668-96f0403e80ff",
+        "started_at": "2026-09-19T17:23:24.857674+00:00",
+        "status": "success"
+      },
+      {
+        "finished_at": "2026-09-19T17:12:12.887551+00:00",
+        "namespace": "legislative",
+        "run_id": "133fd41c-65ce-4ed7-8cca-ec3ab55609ac",
+        "started_at": "2026-09-19T17:08:39.871976+00:00",
+        "status": "success"
+      }
+    ]
+  },
+  "heads": {
+    "ai": {
+      "snapshot_id": "a3d051ee-6b28-4df3-ac44-d535d77713d5",
+      "source_revision": "df5bb5a850942ff54f6b73a4936fc9ec18d8e548",
+      "generation": 678,
+      "payload_sha256": "56d61dfe50228a61a17e8628a211497425af6d4f390bd93ab2e63c77b87a67d4",
+      "producer_run_id": "b8712367-4849-4673-b533-b805edb47241"
+    },
+    "dashboard": {
+      "snapshot_id": "b83d0898-9701-41df-93a0-01cf36c6ac93",
+      "source_revision": "df5bb5a850942ff54f6b73a4936fc9ec18d8e548",
+      "generation": 1289,
+      "payload_sha256": "3705c86a0952f2fc3d675f49b9aa1aef45f960644433ea3a871dcfc9c0b6ff30",
+      "producer_run_id": "632e585d-87a0-414f-816f-8b3c554ec82f"
+    },
+    "executive": {
+      "snapshot_id": "10670e98-73e8-48bc-9c98-cd104a5277db",
+      "source_revision": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1",
+      "generation": 620,
+      "payload_sha256": "3af0d688713934147b7f208ee348713a7cb8b86046572dd277e48d30188b1795",
+      "producer_run_id": "6b5c34af-b648-4bcd-b668-96f0403e80ff"
+    },
+    "legislative": {
+      "snapshot_id": "61e1a6f1-18b4-4810-9a70-0ffe9a34b03d",
+      "source_revision": "df5bb5a850942ff54f6b73a4936fc9ec18d8e548",
+      "generation": 1190,
+      "payload_sha256": "75a23bdebc2c29f2a1909401c12d5315a2401d330afee1c0c41422ae936ed367",
+      "producer_run_id": "133fd41c-65ce-4ed7-8cca-ec3ab55609ac"
+    }
+  },
+  "prior_executive_head": "41334ad9-3639-48c5-bb9d-64a4b710f26f"
+}
