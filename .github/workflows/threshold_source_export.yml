@@ -1,0 +1,28 @@
+name: Threshold flag isolated source export
+on:
+  push:
+    branches: [codex/never-crossed-threshold-20260919]
+    paths: [.github/workflows/threshold_source_export.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/codex/never-crossed-threshold-20260919'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Export only tracked source, never runtime data or credentials
+        run: |
+          git archive --format=tar --output="$RUNNER_TEMP/threshold-source.tar" HEAD
+          sha256sum "$RUNNER_TEMP/threshold-source.tar" > "$RUNNER_TEMP/threshold-source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: threshold-source-TEST-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/threshold-source.tar
+            ${{ runner.temp }}/threshold-source.sha256
+          retention-days: 1
+          if-no-files-found: error
