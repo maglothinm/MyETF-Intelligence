@@ -1395,3 +1395,46 @@ Readable PDFs with an empty user password may pass the existing bounded decoder 
 ## D-2026-09-19-002 — Release the eligibility repair from the completed predecessor (#182)
 
 Use a new deterministic release workspace for the exact tested PR #188 merge, retaining the unchanged checksum-pinned engine and all three prior attempts. Require the completed predecessor's pinned journal, successful independent acceptance and original schedule restoration; compare all live specifications before preparation. Seal all prior receipts on every new journal write. The original engine still requires a fresh frozen baseline and independent live acceptance; old acceptance is never promoted to current success. [Procedure](releases/2026-09-19-oge-pdf-release.md).
+
+
+## D-2026-09-07-001 - Current Opportunity v1, off by default
+
+**Decision:** Implement independent meaningful-buying, current-entry, current-evidence
+and required-data gates inside the hardened analyst, with Investor Edge used only
+as supplementary context. Persist an additive immutable opportunity journal and
+projection through the existing Runtime v2 AI snapshot owner. Preserve legacy
+scores, incident reference, paper portfolios and retired producer boundaries.
+
+**Reason:** Transaction-age and aggregate-score rules cannot answer whether
+sufficient disclosed buying still has an acceptable current entry after delay.
+Due work must continue without new filings, while stale or incomplete evidence
+must not preserve an actionable badge or pass a queued alert through unchanged.
+
+**Consequence:** Issue #153 / branch `codex/current-opportunity-v1` contains the
+implementation, deterministic TEST replay, fake delivery/restart boundaries,
+source dashboard, configuration/schema and activation/rollback runbook.
+Default mode remains off. PR tests and local fixtures are not deployment or
+investment-performance proof. Entitlement/identity/coverage verification,
+deployed shadow observation and explicit live approval remain separate gates.
+See `docs/CURRENT_OPPORTUNITY.md` and `docs/validation/current-opportunity-v1.md`.
+
+
+## 2026-09-19 — Reconcile Current Opportunity #154 for owner-authorized source merge
+
+**Decision:** The owner requested closing and merging PR #154. Reconcile it with
+canonical main `75cb399ea870a77069911c80f3bfe0b788475fd9`, retaining the subsequent
+OCR/OGE repairs, recipient-aware notification outbox, and Investor Edge backfill.
+Current Opportunity remains off by default. This authorization does not enable
+live opportunity delivery, change production configuration, or deploy a runtime.
+
+**Integration:** Preserve both bullish-alert supersession and the current
+recipient-aware deferred staging path. Every intermediate opportunity snapshot
+also commits the staged legacy notification intents and their provenance, so a
+later failure cannot persist queue markers without their durable outbox entries.
+Do not disable the existing initial Edge backfill pass when opportunity review is
+active. Keep the current OCR repair handoff and all historic decision entries.
+
+**Release boundary:** Provider capability, recipient configuration, quote latency,
+deployed shadow observation, and live activation remain separately unverified.
+The new never-crossed-percentage flag discussed before this merge is not part of
+PR #154 and is not claimed implemented by this reconciliation.

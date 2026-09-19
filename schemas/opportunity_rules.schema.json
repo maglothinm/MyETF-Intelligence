@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "mode",
+    "material_minimum",
+    "accumulation_minimum",
+    "collective_minimum",
+    "relative_minimum",
+    "relative_multiple",
+    "accumulation_count",
+    "collective_groups",
+    "cluster_days",
+    "acceleration_days",
+    "context_days",
+    "relative_history_count",
+    "relative_history_months",
+    "atr_sessions",
+    "quote_max_seconds",
+    "evidence_max_hours",
+    "review_minutes",
+    "monitoring_days",
+    "reentry_observations",
+    "reentry_cooldown_minutes",
+    "security_budget",
+    "request_budget",
+    "delivery_budget",
+    "starvation_hours",
+    "trade_fraction",
+    "discovery_fraction",
+    "trade_atr_multiple",
+    "discovery_atr_multiple",
+    "evidence_model_budget",
+    "evidence_document_budget",
+    "evidence_document_characters",
+    "evidence_min_confidence"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "mode": {
+      "enum": [
+        "off",
+        "shadow",
+        "live"
+      ]
+    },
+    "material_minimum": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "accumulation_minimum": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "collective_minimum": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "relative_minimum": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "relative_multiple": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "accumulation_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "collective_groups": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "cluster_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "acceleration_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "context_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "relative_history_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "relative_history_months": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "atr_sessions": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "quote_max_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "evidence_max_hours": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "review_minutes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "monitoring_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "reentry_observations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "reentry_cooldown_minutes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "security_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "request_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "delivery_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "starvation_hours": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "trade_fraction": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    },
+    "discovery_fraction": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    },
+    "trade_atr_multiple": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 10
+    },
+    "discovery_atr_multiple": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 10
+    },
+    "evidence_model_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "evidence_document_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "evidence_document_characters": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 50000
+    },
+    "evidence_min_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

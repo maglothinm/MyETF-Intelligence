@@ -1,5 +1,17 @@
 # PolitiTrack project state
 
+## Current Opportunity source integration — PR #154, not deployed
+
+The owner authorized merging PR #154 on September 19, 2026. Its source is
+reconciled against main `75cb399ea870a77069911c80f3bfe0b788475fd9`, preserving the
+newer OCR/OGE repairs, recipient-aware legacy outbox, and Edge backfill pass.
+Current Opportunity remains **off**; this is not a production deployment, live
+activation, or implementation of the newly proposed never-crossed-percentage flag.
+See [the feature/runbook](CURRENT_OPPORTUNITY.md) and PR #154 for merge/check
+receipts. Production configuration, histories, schedules, accounts, and live
+notifications are outside this source-only merge. The separate OCR release and
+owner-review work described below remains open and unchanged.
+
 ## Current repair — OGE downloads and readable PDFs (#182)
 
 The repair is merged through [PR #188](https://github.com/maglothinm/MyETF-Intelligence/pull/188) into canonical `main` at `db4aa4da54be845a1e139dc354d9f59aa9006d8a`. The merge tree equals tested head `7c74a303c340928f114e99c25e09606c9a344958`. Official OGE PDF links now receive direct access metadata while the old URL-slot calculation preserves every listing ID. Existing producer passes append metadata corrections to retained PDFs, retry the affected old OCR failures once, and prioritize accessible documents over gated requests. Readable empty-password PDFs pass inspection; password-required/malformed files and all existing resource bounds remain enforced. Successful OCR caches and pending owner confirmations retain their version.

@@ -43,6 +43,14 @@ Before answering a repository-state question or changing code:
 
 ## Production-state invariants
 
+**Runtime authority clarification (2026-09-07):** The certified Runtime v2
+controller and PostgreSQL immutable snapshot heads are the current production
+authority. See `docs/PROJECT_STATE.md`, `docs/HANDOFF.md`, and recovery run
+`34059488724` / artifact `9997087643`. The artifact-selection rules below remain
+required for retained legacy recovery/import inputs; they do not authorize
+reactivating retired artifact writers. Current features must use the existing
+Runtime v2 restore, writer lock, validated snapshot and commit path.
+
 The following artifact names are protected continuity records:
 
 | Pipeline | Protected artifact |
@@ -53,8 +61,8 @@ The following artifact names are protected continuity records:
 
 These rules are non-negotiable:
 
-- Provenance-validated GitHub Actions artifacts are the only production-state
-  authority. Caches may accelerate dependencies, but they must never select,
+- Provenance-validated Runtime v2 snapshots are production-state authority;
+  retained GitHub Actions artifacts are recovery evidence. Caches may accelerate dependencies, but they must never select,
   restore, replace, or advance Legislative, Executive, or AI state.
 - Restore the newest provenance-valid, unexpired artifact before a stateful
   production run. `created_at` ordering alone is not sufficient.

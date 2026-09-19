@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "migration", "opportunities", "events", "intents", "deliveries", "cursor", "activation", "mode", "telemetry"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "migration": {"type": "object", "required": ["version", "at", "source_state_sha256", "preserved_files"], "properties": {"version": {"const": 1}, "source_state_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "preserved_files": {"type": "object"}}},
+    "opportunities": {"type": "object", "additionalProperties": {"$ref": "#/$defs/opportunity"}},
+    "events": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["sequence", "previous", "kind", "at", "payload", "event_id"], "properties": {"sequence": {"type": "integer", "minimum": 1}, "previous": {"type": ["string", "null"]}, "kind": {"enum": ["migration", "evaluation", "notification_intent", "delivery_validation", "delivery_state", "activation_baseline", "mode_change"]}, "at": {"type": "string"}, "payload": {"type": "object"}, "event_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}},
+    "intents": {"type": "object", "additionalProperties": {"type": "object", "required": ["event_id", "opportunity_id", "transition", "evaluation_id", "queued_at", "mode", "notification_type", "channels", "snapshot"], "properties": {"transition": {"enum": ["first_qualification", "qualified_reentry", "material_strengthening", "invalidation"]}, "notification_type": {"const": "current_opportunity"}, "channels": {"type": "array", "uniqueItems": true, "items": {"enum": ["pushover", "gmail", "simulation"]}}, "snapshot": {"$ref": "#/$defs/opportunity"}}}},
+    "deliveries": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": {"type": "object", "required": ["status", "attempts"], "properties": {"status": {"enum": ["pending", "accepted", "failed", "uncertain", "superseded", "deferred"]}, "attempts": {"type": "integer", "minimum": 0}}}}},
+    "cursor": {"type": ["string", "null"]},
+    "activation": {"type": ["object", "null"]},
+    "mode": {"enum": ["off", "shadow", "live"]},
+    "telemetry": {"type": "object"}
+  },
+  "$defs": {
+    "opportunity": {
+      "type": "object",
+      "required": ["opportunity_id", "security_key", "trade_ids", "membership_hash", "transactions", "significance", "entry_significance", "anchors", "market", "evidence", "evidence_status", "lifecycle", "reason_codes", "gates", "evaluation_cutoff", "next_review", "rule_hash", "activation_baseline", "notification_event_ids", "mode", "evaluation_id"],
+      "properties": {
+        "opportunity_id": {"type": "string", "minLength": 1},
+        "security_key": {"type": "string", "minLength": 1},
+        "trade_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "reason_codes": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "lifecycle": {"enum": ["opportunity_available", "watching", "needs_review", "invalidated", "archived"]},
+        "evidence_status": {"enum": ["sufficient", "contradicted", "incomplete"]},
+        "gates": {"type": "object", "additionalProperties": false, "required": ["meaningful_buying", "acceptable_current_entry", "sufficient_current_evidence", "trustworthy_required_data"], "properties": {"meaningful_buying": {"type": "boolean"}, "acceptable_current_entry": {"type": "boolean"}, "sufficient_current_evidence": {"type": "boolean"}, "trustworthy_required_data": {"type": "boolean"}}},
+        "evaluation_cutoff": {"type": "string"},
+        "next_review": {"type": "string"},
+        "rule_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "activation_baseline": {"type": "boolean"},
+        "notification_event_ids": {"type": "array", "items": {"type": "string"}},
+        "mode": {"enum": ["off", "shadow", "live"]},
+        "evaluation_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}
