@@ -1,6 +1,35 @@
 # PolitiTrack active handoff
 
-## OGE go-live diagnosis — September 19, 12:23 UTC (#182)
+## Authorized PDF/Senate OCR release — September 19 (#182)
+
+The owner requested deployment of the tested PDF repair and correct review
+classification for Senate image-only filings. The new worker change is under
+verification; it is not yet deployed. Unsupported Senate page viewers and paper
+layouts become `needs_review`, without a retry timer. Matching retained Senate
+retry receipts receive an append-only classification correction, preserving old
+receipts, attempt counts, source dates, evidence and personal reviews. Transport
+and access failures retain their existing backoff. Successful extraction caches
+and the document policy version are unchanged.
+
+The upstream OGE interruption recovered before the later troubleshooting:
+scheduled `polititrack-executive-6jcw6` succeeded at 13:45:42 UTC, before the first
+successful diagnostic at 13:53:04. Manual `polititrack-executive-cft5v` succeeded
+at 14:00:48. Failed and successful executions had identical image/specifications.
+The earlier TCP failure is established; its upstream internal cause and any claim
+that our testing forced recovery are not established.
+
+Current live image remains `sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d`.
+All four original schedules are enabled; Vault remains paused. Legislative's two
+retained Senate `PaperFilingError` retries account for the technical OCR failure
+despite successful collection. The broad House PDF rejection is separately
+addressed by PR #188; complete OGE pagination is addressed by PR #190.
+
+Next: verify and merge the Senate repair, build its exact source including
+#188/#190, then use a newly reviewed continuation retaining all four closed
+journals, a fresh successful baseline and independent acceptance. Current
+Opportunity stays off. Keep the accepted House upload and owner review intact.
+
+## Historical OGE diagnosis — September 19, 12:23 UTC (#182)
 
 **The current source failure is TCP connectivity to the disclosure host.** Cloud
 Shell and Beast both resolve `extapps2.oge.gov`, but connections to port 443 time

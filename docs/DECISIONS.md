@@ -1455,3 +1455,18 @@ This source hardening does not make an unavailable OGE service healthy and does
 not relax production's successful-baseline release requirement. All four closed
 release journals remain immutable. See
 [the recovery evidence](releases/2026-09-19-oge-discovery-recovery.md).
+
+## D-2026-09-19-004 — Treat unsupported source layouts as human review (#182)
+
+Senate image-only paper viewers and unsupported scanned layouts are deterministic
+review outcomes, not transport failures. Record `needs_review` with no retry
+timer, preserving normal periodic source revalidation. Correct matching retained
+Senate `PaperFilingError`/page-image retry receipts through append-only producer
+metadata, without another download or invented attempt. Require the same source
+URL, extraction version and official-download origin; do not reinterpret uploads
+or unknown transport failures. Existing atomic snapshot, history, evidence,
+access backoff and owner-confirmation boundaries remain mandatory.
+
+The owner authorized deployment with the tested PDF and OGE discovery repairs.
+Preserve four closed release journals and use a fresh reviewed continuation;
+successful scheduled OGE recovery does not waive a fresh successful baseline.
