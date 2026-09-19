@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Any
 
 VERSION = "source-ocr-v2"
+# Admission/transport fixes can retry affected failures without invalidating
+# successful OCR evidence or pending owner confirmations for the same bytes.
+DOCUMENT_POLICY_VERSION = "source-document-policy-v2"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 30
 MAX_PIXELS = 20_000_000
@@ -43,9 +46,11 @@ def inspect_document(data: bytes, max_pages: int = MAX_PAGES) -> dict[str, Any]:
     if data.startswith(b"%PDF"):
         import pdfplumber
         try:
-            with pdfplumber.open(io.BytesIO(data)) as pdf:
-                if getattr(pdf.doc, "encryption", None) is not None:
-                    raise OCRError("invalid_or_encrypted_pdf")
+            # Public PDFs may contain permission encryption with an empty user
+            # password. Let the decoder authenticate that empty password; never
+            # supply an owner password, decrypt a rewritten copy or strip rights.
+            # Password-protected/malformed files still fail closed below.
+            with pdfplumber.open(io.BytesIO(data), password="") as pdf:
                 count = len(pdf.pages)
                 if not 0 < count <= max_pages:
                     raise OCRError("document_page_limit")

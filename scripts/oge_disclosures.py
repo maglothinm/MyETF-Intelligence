@@ -25,8 +25,10 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 try:
+    from .oge_access import is_direct_oge_pdf_url
     from .monitor_disclosures import MonitorError, SourceChangedError, normalize_text, parse_bool
 except ImportError:  # pragma: no cover - direct execution path
+    from oge_access import is_direct_oge_pdf_url
     from monitor_disclosures import MonitorError, SourceChangedError, normalize_text, parse_bool  # type: ignore
 
 LOGGER = logging.getLogger("oge-disclosure-discovery")
@@ -104,7 +106,7 @@ def _cell(cells: Sequence[Any], index: int | None) -> str:
     return normalize_text(cells[index].get_text(" ", strip=True))
 
 
-def _classify_links(cells: Sequence[Any], base_url: str) -> tuple[str, str, str]:
+def _classify_links(cells: Sequence[Any], base_url: str, *, legacy_identity: bool = False) -> tuple[str, str, str]:
     links: list[tuple[str, str]] = []
     for cell in cells:
         for anchor in cell.find_all("a", href=True):
@@ -117,7 +119,9 @@ def _classify_links(cells: Sequence[Any], base_url: str) -> tuple[str, str, str]
     landing: list[str] = []
     for href, text in links:
         combined = f"{href} {text}".casefold()
-        if "form 201" in combined or "request" in combined or "extapps2.oge.gov" in combined:
+        if not legacy_identity and is_direct_oge_pdf_url(href):
+            direct.append(href)
+        elif "form 201" in combined or "request" in combined or "extapps2.oge.gov" in combined:
             request.append(href)
         elif re.search(r"\.pdf(?:$|\?)", href, re.IGNORECASE) or any(
             term in combined for term in ("download", "view document", "view report")
@@ -165,8 +169,12 @@ def parse_oge_table_html(html: str, base_url: str = OGE_COLLECTION_URL) -> list[
             agency = _cell(cells, mapping.get("agency"))
             level = _cell(cells, mapping.get("level"))
             document_url, request_url, access_mode = _classify_links(cells, base_url)
+            # These two URL slots are already part of the public/seen identity.
+            # Freeze the old classification ONLY for hashing. Correcting access
+            # must not turn retained filings into new filings or replay alerts.
+            identity_document, identity_request, _ = _classify_links(cells, base_url, legacy_identity=True)
             listing_id = _stable_listing_id(
-                (date, document_type, name, title, agency, level, document_url, request_url)
+                (date, document_type, name, title, agency, level, identity_document, identity_request)
             )
             listings.append(
                 OgeListing(

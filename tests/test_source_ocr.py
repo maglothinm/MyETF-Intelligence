@@ -1,5 +1,6 @@
 """Deterministic OCR geometry tests plus an optional real-engine acceptance case."""
 import hashlib
+import base64
 import io
 import json
 import os
@@ -73,6 +74,35 @@ def test_no_silent_page_limit_or_invalid_file_acceptance():
     data=io.BytesIO(); image.save(data,format="TIFF",save_all=True,append_images=[image])
     with pytest.raises(OCRError,match="document_page_limit"):inspect_document(data.getvalue(),max_pages=1)
     assert inspect_document(data.getvalue())["pages"] == 2
+
+
+def readable_encrypted_pdf():
+    # Synthetic two-page AES-256 fixture: empty user password, nonempty owner
+    # password. No real filing/upload, authoring dependency or secret is needed.
+    return base64.b64decode((Path(__file__).parent / "fixtures/source-ocr/empty-password.pdf.b64").read_bytes())
+
+
+def test_empty_password_pdf_keeps_native_text_and_inspection_bounds():
+    import pdfplumber
+    from scripts.source_ocr_limits import inspect_bounded
+    data = readable_encrypted_pdf()
+    with pdfplumber.open(io.BytesIO(data), password="") as pdf:
+        assert pdf.doc.encryption is not None
+    result = inspect_bounded(data)
+    assert result["pages"] == 2
+    assert result["native_pages"] == ["PUBLIC DISCLOSURE TEST PAGE 1", "PUBLIC DISCLOSURE TEST PAGE 2"]
+    with pytest.raises(OCRError, match="document_page_limit"):
+        inspect_bounded(data, max_pages=1)
+
+
+@pytest.mark.skipif(not all(shutil.which(name) for name in ("tesseract", "pdftoppm")), reason="real OCR tools unavailable")
+def test_empty_password_pdf_reaches_real_render_and_ocr():
+    data = readable_encrypted_pdf()
+    result = extract(data, timeout=60)
+    assert result["sha256"] == hashlib.sha256(data).hexdigest()
+    assert result["completed_pages"] == [1, 2]
+    assert all(f"TEST PAGE {number}" in result["ocr_text"] for number in [1, 2])
+    assert len(result["native_pages"]) == 2
 
 
 @pytest.mark.skipif(not shutil.which("tesseract"), reason="real OCR engine is not installed")
