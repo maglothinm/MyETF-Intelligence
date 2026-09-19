@@ -19,102 +19,63 @@ OCR continuation or this feature is deployed. Refresh its ownership before
 any release. See [readiness evidence](releases/2026-09-19-purchase-threshold.md)
 and [feature/runbook](PURCHASE_GAIN_THRESHOLD.md).
 
-## Authorized PDF/Senate OCR release — September 19 (#182)
+## PDF/Senate OCR release accepted — September 19 (#182)
 
-**Live activation checkpoint, 17:32 UTC:** the approved Executive-only repair
-completed at 17:29:54 UTC. Executive `polititrack-executive-mldd4` collected all
-4,068 listings and committed generation 620 on tested source `77aadf541b03…`
-with OCR disabled. Independent `polititrack-admin-2bhnz` passed, proving baseline
-preservation, unchanged Executive OCR evidence and unchanged other heads. All
-four original schedules were restored. The completed incident is sealed at
-SHA-256 `64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836`.
-[Recovery receipt](releases/2026-09-19-executive-recovery-receipt.json).
-
-**Activation recovery checkpoint, 18:07 UTC:** the normal attempt installed the
-same tested image on all six resources and enabled OCR. Its first Legislative
-run `polititrack-legislative-7xnjg` committed generation 1191 (5 documents,
-8/8 pages, zero retries); Executive `polititrack-executive-xmhxh` committed
-generation 621 (5 documents, 17/17 pages, zero retries). Both producers succeeded.
-The controller stopped on one `gcloud ... executions describe` status read:
-`UNAUTHENTICATED`, reason `ACCESS_TOKEN_TYPE_UNSUPPORTED`. This is a cloud
-observation failure, not a failed Executive collection or OCR run.
-
-The unchanged controller is completing safe recovery in
-`ocr-pdf-activation-77aadf541b03`; Beast process `32324` remains the only active
-controller. Read-only preservation `polititrack-admin-wd7p9` is queued at Cloud
-Run startup. Preserve the attempt and let recovery disable OCR and restore
-schedules. Do not reopen its journal or resubmit either successful producer.
-A new sealed normal continuation is being prepared in
-`scripts/ocr_activation_read_recovery_release.py`; only the exact execution-status
-read may retry the observed token-type rejection, at most three reads, with all
-diagnostics retained. All full baseline/acceptance gates and mutations remain
-unchanged. Local controller suite: 141 passed. Canonical CI and the completed
-recovery SHA-256 are required before dispatch. Current Opportunity stays off;
-Vault stays paused. Final OCR activation/acceptance is not yet complete.
-
-The following records describe the preceding diagnosis and closed attempts.
-
-The owner requested deployment of the tested PDF repair and correct review
-classification for Senate image-only filings. PR #191 is merged at
-`a9607c88e10959c0cd3844f008915aec12dd0935`, with the same tree as tested build
-source `df5bb5a850942ff54f6b73a4936fc9ec18d8e548`. Canonical OCR, Runtime safety
-and Current Opportunity checks passed. The new image is installed, but rollout
-acceptance failed and recovery disabled OCR; see the current checkpoint below.
-Unsupported Senate page viewers and paper
-layouts become `needs_review`, without a retry timer. Matching retained Senate
-retry receipts receive an append-only classification correction, preserving old
-receipts, attempt counts, source dates, evidence and personal reviews. Transport
-and access failures retain their existing backoff. Successful extraction caches
-and the document policy version are unchanged.
-
-The upstream OGE interruption recovered before the later troubleshooting:
-scheduled `polititrack-executive-6jcw6` succeeded at 13:45:42 UTC, before the first
-successful diagnostic at 13:53:04. Manual `polititrack-executive-cft5v` succeeded
-at 14:00:48. Failed and successful executions had identical image/specifications.
-The earlier TCP failure is established; its upstream internal cause and any claim
-that our testing forced recovery are not established.
-
-**Recovery completed at 15:27:16 UTC.** Build
-`55696595-ff36-411f-922f-65a3657490ab` produced installed image
-`sha256:ae9b21488499dd8e7f7bbbacac5ccaea5bea0e86a817b0f9ceeea8d79d2586eb`.
-The fresh baseline and schema/image checks passed. Legislative
-`polititrack-legislative-7bwpp` committed generation 1183 with five OCR documents,
-11/11 pages, zero technical retries and five review outcomes. Executive
-`polititrack-executive-thrvb` failed before OCR on two bounded OGE loading waits.
-Independent preservation `polititrack-admin-hfd2g` passed. All six resources
-retain the new image; OCR is disabled on Legislative, Executive and web. All four
-original schedules are ENABLED unchanged; Vault stays PAUSED. No controller is active.
-
-The fifth journal is closed as `recovered_new_image_ocr_disabled`, SHA-256
-`ed2e9e56e3f770d66fa45bf69f47a2c3f20a34ff02db993ab9c130802d931f2d`.
-Preserve all five attempts and committed history. Read-only production-browser
-diagnostics prove the table can be fully ready while the collector wait times
-out; this is an application readiness defect, not a proven current upstream outage.
-Probe `polititrack-admin-jjzmt` isolated it: the polling argument
-`{search: null, start: null}` arrives as `{}`, so both properties are undefined
-and the initial optional-filter comparison rejects a ready table. Passing the
-same values as a JSON scalar succeeds on that same page. A narrow source fix
-preserves the values and all existing draw/search/offset/count checks, with a
-real Playwright regression. PR #194 merged at `5acc472214ec1886d6556b5051b6b9379cd5a5de`;
-exact-head CI `35453468818` passed 354 tests, one skip and browser/UI checks.
-Read-only `polititrack-admin-r7svg` collected all 16,670 rows and 4,068 unique
-278-T listings. Build `adba5676-b161-4b89-8336-0edc6c22795b` succeeded for tested
-source `77aadf541b034072f58dba5e7107c2c8e8ba4bd1`, image digest
+Normal activation completed at **19:07:35 UTC**, with both OCR branches reporting
+success. All six resources run tested application source
+`77aadf541b034072f58dba5e7107c2c8e8ba4bd1`, build
+`adba5676-b161-4b89-8336-0edc6c22795b`, image digest
 `sha256:6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`.
-That source fix is built, not deployed. Independent `polititrack-admin-c6wmp`
-confirmed both Senate transitions, unchanged seven-attempt history, no retry
-timers, preserved OCR ledger and the original House upload awaiting review.
+Two passes per source processed **20 documents and 56/56 pages, with zero
+technical retries**. AI and dashboard succeeded. Independent acceptance
+`polititrack-admin-ls8gh` verified prior histories, identities, snapshots,
+acknowledgements, outbox and published OCR health; live asset hashes and the
+enabled OCR API sign-in boundary passed. Accepted generations: Legislative 1193,
+Executive 624, AI 679 and Dashboard 1291.
 
-The owner explicitly approved the one-time Executive-only repair with OCR disabled,
-followed by normal activation and acceptance. The new reviewed procedure
-`scripts/ocr_executive_recovery_release.py` binds that exception to the exact
-built source/image and seals all five closed attempts. It changes only Executive,
-requires independent incident preservation and genuine authoritative recovery,
-then seals the successful incident before a separate ordinary OCR continuation.
-That continuation retains the original successful-baseline and acceptance code.
-Procedure tests and deployment are in progress. No source-recovery action has
-yet been taken. Current Opportunity stays off; the original House
-upload still requires owner review. [Evidence](releases/2026-09-19-senate-pdf-release.md).
+All four original schedules are ENABLED with unchanged configurations; Vault
+remains PAUSED and Current Opportunity remains OFF. Historical OCR continues in
+bounded scheduled batches. Unsupported Senate layouts require review with no
+retry timer. The original House upload must not be resubmitted or auto-approved.
+
+The owner-approved Executive-only recovery completed at 17:29:54 UTC, with OCR
+disabled, genuine generation 620 and independent preservation. A subsequent
+normal attempt had successful source runs but entered recovery after one status
+read returned `ACCESS_TOKEN_TYPE_UNSUPPORTED`. Both closed records remain
+immutable. Reviewed PR #201 adds bounded retries only to that exact read/error,
+preserving full gates and diagnostics; the successful continuation needed no
+such retry. Final journal SHA-256:
+`54014b843890d0f845fe72e5c85c6750b444adaa21baa781fae210a491e34613`.
+
+App CI `35453468818` passed 354 Python tests (one skip), four Node checks and
+real PostgreSQL/browser checks. Controller CI `35460257042` passed 141 tests.
+The application repair addresses a reproducible Playwright argument bug:
+null-valued optional polling arguments were dropped, rejecting a ready table.
+JSON transport preserves them; complete production collection repeatedly
+verified all 4,068 listings. The earlier TCP outage recovered on a scheduled run
+before later diagnostics; its provider-side internal cause is not established.
+
+Independent Senate/PDF verification `polititrack-admin-87ghk` passed at
+19:12:15 UTC against the original pre-repair baseline. Both unsupported Senate
+filings are `needs_review`, with no retry timer and all seven prior attempts
+preserved. Prior OCR receipts and extraction bytes are intact; new extraction
+files total Legislative +20 and Executive +15 since that baseline. The original
+House upload retains two pages and five review rows, with raw payload NULL.
+
+The original Executive scheduler created `polititrack-executive-q525v` at
+19:11:01 UTC using the expected scheduler identity, exact source/image and OCR
+enabled. It completed successfully at **19:16:32 UTC**, collected all 4,068
+listings and committed generation **625** with five documents, 16/16 pages and
+zero technical retries. Intake succeeded and cleanup was not needed. This proves
+post-restoration scheduled operation without a manual producer dispatch.
+
+No release controller remains active or deployment gate remains open. Next safe
+action: let the original schedules continue bounded history processing; review
+unresolved document rows through the existing owner workflow. Keep #182 open
+for the separate owner correction/import acceptance. Do not resubmit the House
+upload or reopen any closed release journal.
+[Release narrative](releases/2026-09-19-senate-pdf-release.md) ·
+[Final acceptance receipt](releases/2026-09-19-ocr-final-acceptance.json).
 
 ## Historical OGE diagnosis — September 19, 12:23 UTC (#182)
 
