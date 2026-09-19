@@ -1470,3 +1470,14 @@ access backoff and owner-confirmation boundaries remain mandatory.
 The owner authorized deployment with the tested PDF and OGE discovery repairs.
 Preserve four closed release journals and use a fresh reviewed continuation;
 successful scheduled OGE recovery does not waive a fresh successful baseline.
+
+## D-2026-09-19-005 — Pin the combined OCR release and seal the fourth attempt (#182)
+
+Select tested source `df5bb5a850942ff54f6b73a4936fc9ec18d8e548` for the owner's
+combined PDF/Senate release. Reuse the unchanged checksum-pinned preparation,
+controller and audit through one explicit successor wrapper. Extend the seal
+to the fourth recovered no-producer attempt and all its receipts. Bind a fresh
+workspace and require new live configuration/build checks, successful frozen
+baseline and independent acceptance. Existing closed journals, failure evidence,
+owner upload and original schedules remain intact. See
+[release procedure](releases/2026-09-19-senate-pdf-release.md).

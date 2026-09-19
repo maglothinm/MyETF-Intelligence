@@ -3,8 +3,11 @@
 ## Authorized PDF/Senate OCR release — September 19 (#182)
 
 The owner requested deployment of the tested PDF repair and correct review
-classification for Senate image-only filings. The new worker change is under
-verification; it is not yet deployed. Unsupported Senate page viewers and paper
+classification for Senate image-only filings. PR #191 is merged at
+`a9607c88e10959c0cd3844f008915aec12dd0935`, with the same tree as tested build
+source `df5bb5a850942ff54f6b73a4936fc9ec18d8e548`. Canonical OCR, Runtime safety
+and Current Opportunity checks passed. It is not yet deployed.
+Unsupported Senate page viewers and paper
 layouts become `needs_review`, without a retry timer. Matching retained Senate
 retry receipts receive an append-only classification correction, preserving old
 receipts, attempt counts, source dates, evidence and personal reviews. Transport
@@ -24,9 +27,9 @@ retained Senate `PaperFilingError` retries account for the technical OCR failure
 despite successful collection. The broad House PDF rejection is separately
 addressed by PR #188; complete OGE pagination is addressed by PR #190.
 
-Next: verify and merge the Senate repair, build its exact source including
-#188/#190, then use a newly reviewed continuation retaining all four closed
-journals, a fresh successful baseline and independent acceptance. Current
+Next: verify build `55696595-ff36-411f-922f-65a3657490ab`, then use the
+[new reviewed continuation](releases/2026-09-19-senate-pdf-release.md) retaining all
+four closed journals, a fresh successful baseline and independent acceptance. Current
 Opportunity stays off. Keep the accepted House upload and owner review intact.
 
 ## Historical OGE diagnosis — September 19, 12:23 UTC (#182)
