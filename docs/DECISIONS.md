@@ -1392,6 +1392,11 @@ Keep the legacy document/request URL-slot calculation solely for OGE listing-ID 
 Readable PDFs with an empty user password may pass the existing bounded decoder even when they contain permission-encryption metadata. Password-required and invalid documents still fail closed; no password guessing, permission removal or weakening of resource bounds is authorized. Newly reachable OGE documents with known header contamination remain under layout review until their transaction rows can be validated. Source/CI acceptance remains separate from deployment and live import. See [repair evidence](releases/2026-09-19-oge-pdf-repair.md).
 
 
+## D-2026-09-19-002 — Release the eligibility repair from the completed predecessor (#182)
+
+Use a new deterministic release workspace for the exact tested PR #188 merge, retaining the unchanged checksum-pinned engine and all three prior attempts. Require the completed predecessor's pinned journal, successful independent acceptance and original schedule restoration; compare all live specifications before preparation. Seal all prior receipts on every new journal write. The original engine still requires a fresh frozen baseline and independent live acceptance; old acceptance is never promoted to current success. [Procedure](releases/2026-09-19-oge-pdf-release.md).
+
+
 ## D-2026-09-07-001 - Current Opportunity v1, off by default
 
 **Decision:** Implement independent meaningful-buying, current-entry, current-evidence
