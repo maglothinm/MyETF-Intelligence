@@ -27,10 +27,16 @@ retained Senate `PaperFilingError` retries account for the technical OCR failure
 despite successful collection. The broad House PDF rejection is separately
 addressed by PR #188; complete OGE pagination is addressed by PR #190.
 
-Next: verify build `55696595-ff36-411f-922f-65a3657490ab`, then use the
-[new reviewed continuation](releases/2026-09-19-senate-pdf-release.md) retaining all
-four closed journals, a fresh successful baseline and independent acceptance. Current
-Opportunity stays off. Keep the accepted House upload and owner review intact.
+**Maintenance is active:** build `55696595-ff36-411f-922f-65a3657490ab` succeeded,
+image `sha256:ae9b21488499dd8e7f7bbbacac5ccaea5bea0e86a817b0f9ceeea8d79d2586eb`.
+Procedure #192 merged; 96 canonical controller checks passed. Read-only
+preparation passed and Beast process `10120` is running the
+[new reviewed continuation](releases/2026-09-19-senate-pdf-release.md).
+The four producer schedules are now paused; Vault stays paused. Fresh baseline
+`polititrack-admin-lvnpb` is running. Observe this same controller through
+acceptance/restoration or recovery; do not launch a second attempt. All four
+closed predecessor journals remain immutable. Current Opportunity stays off.
+Keep the accepted House upload and owner review intact. No final acceptance yet.
 
 ## Historical OGE diagnosis — September 19, 12:23 UTC (#182)
 
