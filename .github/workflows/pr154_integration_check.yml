@@ -1,0 +1,63 @@
+name: PR154 isolated integration inspection
+
+on:
+  push:
+    branches: [integration/pr154-20260919]
+    paths: [.github/workflows/pr154_integration_check.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr154-isolated-integration-inspection
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/integration/pr154-20260919'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inspect pinned source merge without production access
+        shell: bash
+        env:
+          PR_HEAD: eb0747a7d61624f1f0a6424f4d3f265999f0b31d
+          MAIN_HEAD: 75cb399ea870a77069911c80f3bfe0b788475fd9
+          MERGE_BASE: 061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git worktree add --detach "$RUNNER_TEMP/pr154-check" "$PR_HEAD"
+          export INSPECT_TREE="$RUNNER_TEMP/pr154-check"
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['GITHUB_WORKSPACE'])
+          check = pathlib.Path(os.environ['INSPECT_TREE'])
+          out = root / 'integration-evidence'
+          out.mkdir(exist_ok=True)
+          def git(*args, cwd=check):
+              return subprocess.check_output(['git', *args], cwd=cwd, text=True)
+          result = subprocess.run(['git', 'merge', '--no-commit', '--no-ff', os.environ['MAIN_HEAD']], cwd=check, text=True, capture_output=True)
+          conflicts = git('diff', '--name-only', '--diff-filter=U').splitlines()
+          report = {'repository_id': 1349678672, 'main': os.environ['MAIN_HEAD'], 'head': os.environ['PR_HEAD'], 'merge_base': os.environ['MERGE_BASE'], 'merge_returncode': result.returncode, 'merge_stdout': result.stdout, 'merge_stderr': result.stderr, 'conflicts': conflicts, 'run_id': os.environ['GITHUB_RUN_ID'], 'production_access': False}
+          (out / 'inspection.json').write_text(json.dumps(report, indent=2) + '\n')
+          for path in conflicts:
+              name = path.replace('/', '__')
+              (out / (name + '.conflict.patch')).write_text(git('diff', '--cc', '--', path))
+          modified = git('diff', '--name-only', '--diff-filter=M', os.environ['MERGE_BASE'], os.environ['PR_HEAD']).splitlines()
+          (out / 'original-modified-files.patch').write_text(git('diff', os.environ['MERGE_BASE'], os.environ['PR_HEAD'], '--', *modified))
+          workflow_headers = []
+          for path in sorted((root / '.github/workflows').glob('*.yml')):
+              workflow_headers.append('### ' + path.name + '\n' + '\n'.join(path.read_text().splitlines()[:75]))
+          (out / 'workflow-headers.txt').write_text('\n\n'.join(workflow_headers))
+          print(json.dumps(report, indent=2))
+          if result.returncode not in (0, 1) or (result.returncode == 1 and not conflicts):
+              raise SystemExit('Unexpected merge failure; no integration attempted')
+          PY
+          git add -- integration-evidence
+          git commit -m 'test: record PR 154 isolated merge inspection'
+          git push origin HEAD:refs/heads/integration/pr154-20260919
