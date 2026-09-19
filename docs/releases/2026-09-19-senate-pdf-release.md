@@ -61,3 +61,34 @@ receipts, unchanged old extraction evidence, both Senate classifications with
 unchanged attempt history and no retry timer, new actual extraction files, and
 the original two-page/five-row House upload still awaiting owner review with raw
 bytes cleared. It neither changes production nor overrides the original audit.
+
+## Recovery checkpoint — September 19, 15:27 UTC
+
+The image was installed on all six resources, and schema/image checks passed.
+Legislative `polititrack-legislative-7bwpp` succeeded at 15:15:05 UTC. Its OCR
+pass completed five documents and all 11 pages, with zero technical retries and
+five review outcomes. It committed generation 1183, snapshot
+`2d6cc7a9-49bd-46f6-902e-5523293e9686`, payload SHA-256
+`ad6b9b3dd079d59ce0bfd7be8d599663c5bc885c292247688be13fc78a212c76`.
+
+Executive `polititrack-executive-thrvb` failed before OCR after two 120-second
+OGE loading waits. No Executive successor was committed. The controller stopped
+acceptance and completed recovery at `2026-09-19T15:27:16.200595Z`.
+Independent read-only preservation `polititrack-admin-hfd2g` passed, including
+original snapshot metadata, ledger prefixes, identities, personal reviews and
+notification history. The new image and committed Legislative results are
+retained; OCR is disabled on Legislative, Executive and web. All four original
+schedules are restored unchanged; Vault remains paused.
+
+The fifth closed journal has SHA-256
+`ed2e9e56e3f770d66fa45bf69f47a2c3f20a34ff02db993ab9c130802d931f2d`.
+Do not reopen it. Final release acceptance and the supplemental complete-release
+check remain unfulfilled.
+
+Read-only reproduction `polititrack-admin-s8mxn` established a collector readiness
+defect: the same image's browser had 100 rendered/API rows, matching integer
+request/response draw 1, total 16,670, server-side mode, no Loading placeholder
+and no page errors, but the current readiness predicate still timed out. A
+fresh direct official API request also returned HTTP 200 and consistent metadata.
+This reproduction must not be attributed to a currently unavailable OGE service.
+The exact failing predicate condition is under investigation.
