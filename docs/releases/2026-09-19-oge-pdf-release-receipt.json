@@ -1,0 +1,153 @@
+{
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "application_source": "db4aa4da54be845a1e139dc354d9f59aa9006d8a",
+  "release_procedure_merge": "a644c923a8ef5e8a2bdafde3223bd014b495b4cb",
+  "release_procedure_head": "928d3d47b2d2627343bf9cecee9570e0ce48b5d3",
+  "controller_ci": {
+    "run_id": 35440015522,
+    "conclusion": "success",
+    "passed": 81
+  },
+  "build": {
+    "id": "106763d5-5981-41fa-bc97-686c8bdfa3c1",
+    "status": "SUCCESS",
+    "finished_at": "2026-09-19T11:26:09.444506Z",
+    "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:b7e8c0a3cd771e0741abfb5e3bf7334e5f47d0b74807bfd48b991ce9154aecb6"
+  },
+  "deployment_result": "NOT_DEPLOYED_BASELINE_GATE_FAILED",
+  "reason": "Latest Executive production run failed before cutover; OGE discovery table timed out after 120000 ms.",
+  "status": "recovered_original_configuration",
+  "recovered_at": "2026-09-19T11:33:23.485002+00:00",
+  "journal_sha256": "5fd6a3462881fceece2e5665606789f2454a9ecadc28232213cc97eab61ca5b8",
+  "baseline_execution": "polititrack-admin-fqgkw",
+  "baseline_observed_at": "2026-09-19T11:31:36.046330+00:00",
+  "latest_production_runs": [
+    {
+      "finished_at": "2026-09-19T11:19:15.235457+00:00",
+      "namespace": "ai",
+      "run_id": "7fe520ef-fdb6-48f5-8407-5b29b3b05c8a",
+      "started_at": "2026-09-19T11:16:40.686088+00:00",
+      "status": "success"
+    },
+    {
+      "finished_at": "2026-09-19T11:19:31.228922+00:00",
+      "namespace": "dashboard",
+      "run_id": "e0427940-dfe1-4a89-b161-a2b04b580cb2",
+      "started_at": "2026-09-19T11:18:44.019746+00:00",
+      "status": "success"
+    },
+    {
+      "finished_at": "2026-09-19T11:14:21.360598+00:00",
+      "namespace": "executive",
+      "run_id": "d07a22eb-08a4-4bc1-ae1f-95fe0699e349",
+      "started_at": "2026-09-19T11:12:11.709492+00:00",
+      "status": "failure"
+    },
+    {
+      "finished_at": "2026-09-19T11:24:09.976510+00:00",
+      "namespace": "legislative",
+      "run_id": "2d08811b-382d-4e5b-8bcc-81152c0ec731",
+      "started_at": "2026-09-19T11:23:45.654776+00:00",
+      "status": "success"
+    }
+  ],
+  "heads": {
+    "ai": {
+      "generation": 668,
+      "snapshot_id": "2933ef0d-694a-4f51-8e96-aa7ef7453559",
+      "payload_sha256": "12a46b67c9bc1434ec6c6dddddade98864c0dd2a4d0b6df65f48f6188b787d5b",
+      "source_revision": "a2a15edb30895ece37b690e50e0f95fb1eaa2649",
+      "producer_run_id": "7fe520ef-fdb6-48f5-8407-5b29b3b05c8a",
+      "all_file_hashes_verified": true
+    },
+    "dashboard": {
+      "generation": 1269,
+      "snapshot_id": "5b6868b6-e05e-4fec-b8f9-2142a5cee96b",
+      "payload_sha256": "75835f67d0529bdb6bebc23aac0b0489283c6eab0286e98893869d17fe18668e",
+      "source_revision": "a2a15edb30895ece37b690e50e0f95fb1eaa2649",
+      "producer_run_id": "e0427940-dfe1-4a89-b161-a2b04b580cb2",
+      "all_file_hashes_verified": true
+    },
+    "executive": {
+      "generation": 615,
+      "snapshot_id": "192f2142-5d3a-4f2d-ad7e-f01383e0c5cb",
+      "payload_sha256": "01f296194b3ed3b192a1686947738ebbdeb4121dcdc8c06ec5a0a0c10dd5aed5",
+      "source_revision": "a2a15edb30895ece37b690e50e0f95fb1eaa2649",
+      "producer_run_id": "c025352a-6050-4bad-94a3-c15e4cbbaf46",
+      "all_file_hashes_verified": true
+    },
+    "legislative": {
+      "generation": 1168,
+      "snapshot_id": "71f01581-d856-4077-bd29-8f84b475925d",
+      "payload_sha256": "c88ed62ca79edc45ef5731584f95f1f64d94d126e839848d74ab0b41071ed52a",
+      "source_revision": "a2a15edb30895ece37b690e50e0f95fb1eaa2649",
+      "producer_run_id": "2d08811b-382d-4e5b-8bcc-81152c0ec731",
+      "all_file_hashes_verified": true
+    }
+  },
+  "accounts_count": 3,
+  "acknowledgements": {
+    "row_count": 9,
+    "rows_sha256": "ba656c46c1bfd8cd0cce22b04ff458e0d712ad96db20f0dfdb3a17e96a70a237"
+  },
+  "all_predecessors_unchanged": true,
+  "schedules": {
+    "at": "2026-09-19T11:33:22.421415+00:00",
+    "states": {
+      "polititrack-executive": "ENABLED",
+      "polititrack-ai": "ENABLED",
+      "polititrack-dashboard": "ENABLED",
+      "polititrack-legislative": "ENABLED",
+      "polititrack-vault-lifecycle": "PAUSED"
+    }
+  },
+  "resources": [
+    {
+      "name": "polititrack-admin",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d",
+      "ocr_enabled": null
+    },
+    {
+      "name": "polititrack-legislative",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d",
+      "ocr_enabled": "true"
+    },
+    {
+      "name": "polititrack-executive",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d",
+      "ocr_enabled": "true"
+    },
+    {
+      "name": "polititrack-ai",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d",
+      "ocr_enabled": null
+    },
+    {
+      "name": "polititrack-dashboard",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d",
+      "ocr_enabled": null
+    },
+    {
+      "name": "polititrack-web",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d",
+      "ocr_enabled": "true"
+    }
+  ],
+  "upload_cleanup_verification": {
+    "execution": "polititrack-admin-hcvkt",
+    "completed_at": "2026-09-19T11:35:43.858829Z",
+    "result": "PASS",
+    "read_only": true,
+    "filing_key": "house|house:2026:9116331",
+    "sha256": "58cefce89a3fe84a5d4893337e79b4bc9add769d02fac1869403456afd5a4343",
+    "upload_id": "77bf5e8c-fe0a-4467-832e-bb6c53526907",
+    "raw_payload_is_null": true,
+    "status": "needs_review",
+    "review_rows": 5,
+    "durable_extraction_pages_verified": 2,
+    "snapshot_hash_verified": true,
+    "acknowledged_snapshot_sha256": "d60f1c170277493c7568f40a2cc6c87ccb7ad4386311a8f982237104eb228f7a",
+    "owner_corrections_submitted_by_this_check": false
+  }
+}

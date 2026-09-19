@@ -85,16 +85,6 @@ Canonical exact-head CI completed successfully:
 The canonical merge was fetched and compared to the tested head with an empty
 whole-tree diff. No new production artifact/snapshot lineage is asserted by CI.
 
-Beast was **offline** when checked during this repair. The connected Cloud Shell
-deployment path is therefore unavailable. No build, controller, migration,
-production state write or manual producer dispatch was performed. No current
-database/snapshot preservation audit is claimed. The existing sealed journals
-remain untouched; last verified production remains the September 18 release
-`a2a15edb30895ece37b690e50e0f95fb1eaa2649`, four original schedules enabled and
-Filing Vault paused.
+Beast and authenticated Cloud Shell were restored. The repair image was built successfully, but the fresh baseline gate stopped deployment because the latest Executive production run failed during OGE discovery (rendered-table timeout, before OCR). The controller restored all original resource/scheduler configurations at `2026-09-19T11:33:23.485002Z`; no new image, migration or producer was dispatched. The prior OCR release remains enabled, four original schedules are enabled, and Vault is paused. All sealed predecessor evidence is unchanged, and this fourth attempt is now closed. [Release, recovery and exact evidence](2026-09-19-oge-pdf-release.md).
 
-Next: restore the connected deployment path, then use a new coordinated release with an
-immutable tested image, fresh preservation baseline, the existing source writers,
-independent identity/count/history checks and live OCR-health acceptance. Do not
-reopen old release journals, rebaseline, replay historical alerts or claim all
-Executive transactions recovered. Keep issue #182 open.
+Next: resolve/verify OGE discovery recovery before reviewing a new continuation with a fresh successful baseline. Preserve all closed journals; do not rebaseline, replay historical alerts or treat corrected access as validated Executive transactions. OGE layout validation and owner row-correction/import acceptance remain outstanding. Keep #182 open.
