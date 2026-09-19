@@ -1512,3 +1512,21 @@ unchanged successful-latest-run and complete acceptance checks. Preserve all fiv
 older journals and seal the completed incident by its explicit SHA-256. No state
 reset, successful-run relabeling, old-snapshot substitution, duplicate writer or
 automatic owner row confirmation is authorized.
+
+
+## D-2026-09-19-008 — Preserve per-purchase threshold history (#197)
+
+The owner requested the “never crossed +X% since purchase” flag and production
+activation afterward. Add an independent descriptive threshold, default 8%, using
+immutable purchase-date closes and compatible post-reference regular-session
+highs. Preserve positive observations across gaps/restarts and later purchases;
+require complete stated coverage for negatives. Explicitly exclude unknown
+purchase-day ordering/extended hours, and retain reference-correction review.
+Do not infer a future gain or alter existing qualification gates or paper trades.
+
+The additional threshold does not change the qualification method hash or send
+alerts by itself. Existing AI evaluations own the additive history; dashboard
+filters and purchase-level exports reflect that same persisted record. Owner
+authorization now covers activation, but not invented provider capability or
+bypassing the active Executive/OCR release lock. Source defaults stay off until
+verified shadow/production acceptance through the current release procedure.

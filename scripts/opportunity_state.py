@@ -42,6 +42,9 @@ def validate(state: dict) -> None:
         previous = event['event_id']
     evaluations = {e['event_id']:e for e in state['events'] if e['kind'] == 'evaluation'}
     for oid, record in state['opportunities'].items():
+        if 'purchase_thresholds' in record:
+            from .opportunity_threshold import validate_thresholds
+            validate_thresholds(record['purchase_thresholds'])
         eid = record.get('evaluation_id')
         if oid != record['opportunity_id'] or eid not in evaluations or evaluations[eid]['payload'] != {k:v for k,v in record.items() if k != 'evaluation_id'}:
             raise OpportunityError('opportunity projection differs from its immutable evaluation')

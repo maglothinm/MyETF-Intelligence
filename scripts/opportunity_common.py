@@ -119,5 +119,8 @@ def load_rules(path: Path | None = None, *, mode: str | None = None) -> dict:
     for key in ('material_minimum', 'accumulation_minimum', 'collective_minimum', 'relative_minimum', 'relative_multiple'):
         if money(value[key]) is None or money(value[key]) <= 0:
             raise OpportunityError('invalid monetary threshold: ' + key)
-    value['method_hash'] = digest({k: v for k, v in value.items() if k != 'mode'})
+    fraction = number(value.get('never_crossed_fraction', 0.08))
+    if fraction is None or not 0 < fraction <= 10:
+        raise OpportunityError('invalid never-crossed threshold')
+    value['method_hash'] = digest({k: v for k, v in value.items() if k not in ('mode', 'never_crossed_fraction')})
     return value

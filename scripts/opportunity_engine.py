@@ -8,6 +8,7 @@ from typing import Mapping
 
 from .opportunity_common import DataUnavailable, day, digest, money, timestamp, utc
 from .opportunity_market import assess
+from .opportunity_threshold import assess_thresholds, mark_unavailable
 from .opportunity_significance import normalize, significance
 from .opportunity_state import event
 
@@ -180,6 +181,7 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
               'transactions':deepcopy(rows), 'significance':full, 'entry_significance':filtered,
               'transaction_age_days':{r['trade_id']:(now.date()-day(r['transaction_date'])).days if day(r.get('transaction_date')) else None for r in rows},
               'evidence_age_seconds':(now-timestamp(evidence['checked_at'])).total_seconds() if timestamp(evidence.get('checked_at')) else None,
+              'purchase_thresholds':assess_thresholds(buys, market['anchors'], previous.get('purchase_thresholds') or {}, snapshot, now, rules, calendar),
               'anchors':market['anchors'], 'market':market, 'evidence':dict(evidence), 'evidence_status':evstatus,
               'lifecycle':lifecycle, 'reason_codes':sorted(set(reasons)),
               'gates':{'meaningful_buying':full['meaningful'], 'acceptable_current_entry':bool(entry), 'sufficient_current_evidence':evstatus == 'sufficient', 'trustworthy_required_data':data_ok},
@@ -226,7 +228,7 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
             continue
         oid = 'opportunity-'+digest({'security':key, 'direction':'long'})[:32]
         prior = state['opportunities'].get(oid) or {}
-        if not prior or membership(rows) != prior.get('membership_hash') or not timestamp(prior.get('next_review')) or timestamp(prior['next_review']) <= input_cutoff or prior.get('rule_hash') != rules['method_hash'] or (activation and prior.get('activation_id') != activation['activation_id']):
+        if not prior or membership(rows) != prior.get('membership_hash') or not timestamp(prior.get('next_review')) or timestamp(prior['next_review']) <= input_cutoff or prior.get('rule_hash') != rules['method_hash'] or (prior.get('purchase_thresholds') or {}).get('threshold_fraction') != rules.get('never_crossed_fraction', 0.08) or (activation and prior.get('activation_id') != activation['activation_id']):
             due.append((prior.get('last_attempted_review') or '', key, rows))
     # Oldest-attempt first plus durable cyclic tie-break prevents repeated budget starvation.
     cursor = state.get('cursor') or ''
@@ -263,6 +265,9 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
             record['gates']['trustworthy_required_data'] = False
             record['reason_codes'] = sorted(set(record['reason_codes']+['membership_removed_or_superseded' if removed else 'review_budget_exhausted' if prior['security_key'] in missed else 'stale_quote_or_evidence']))
             record['evaluation_cutoff'] = utc(now)
+            if record.get('purchase_thresholds'):
+                record['purchase_thresholds'] = mark_unavailable(record['purchase_thresholds'], now,
+                    'membership_removed_or_superseded' if removed else 'review_not_current', removed=removed)
             record['evaluation_id'] = event(state, 'evaluation', record, now)
             state['opportunities'][oid] = record
     overdue_times = [timestamp(p.get('last_successful_review') or p.get('first_qualifying_discovery') or p['evaluation_cutoff'])

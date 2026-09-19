@@ -17,7 +17,7 @@ test('same persisted gates, semantic details, shadow label and exports',()=>{
   assert.match(doc.getElementById('mode').textContent,/SHADOW/);
   assert.equal(doc.querySelectorAll('article').length,model.records.length);
   assert.equal(doc.querySelectorAll('.available').length,model.records.filter(r=>r.lifecycle==='opportunity_available').length);
-  assert.ok(doc.querySelector('summary')); assert.equal(doc.querySelectorAll('a[download]').length,2);
+  assert.ok(doc.querySelector('summary')); assert.equal(doc.querySelectorAll('a[download]').length,3);
   const count=model.records.filter(r=>effectiveStatus(r,now)==='watching').length;
   render(doc,model,now,'watching'); assert.equal(doc.querySelectorAll('article').length,count);
 });
@@ -38,4 +38,16 @@ test('axe semantic accessibility has no violations',async()=>{
   const dom=page();render(dom.window.document,model,now);dom.window.eval(axe.source);
   const result=await dom.window.axe.run(dom.window.document,{rules:{'color-contrast':{enabled:false}}});
   assert.equal(result.violations.length,0,JSON.stringify(result.violations.map(v=>({id:v.id,impact:v.impact}))));
+});
+
+test('purchase threshold filter distinguishes crossed, quiet and unknown per purchase',()=>{
+  const copy=structuredClone(model); const sample=copy.records[0];
+  sample.purchase_thresholds={threshold_fraction:.08,trades:{quiet:{trade_id:'quiet',active:true,status:'not_crossed',threshold_fraction:.08,valid_until:new Date(now+60000).toISOString(),peak_gain_fraction:.04},crossed:{trade_id:'crossed',active:true,status:'crossed',threshold_fraction:.08,peak_gain_fraction:.19},unknown:{trade_id:'unknown',active:true,status:'unknown',threshold_fraction:.08}}};
+  copy.records=[sample];const dom=page(),doc=dom.window.document;
+  for(const status of ['not_crossed','crossed','unknown']){render(doc,copy,now,'all',status);assert.equal(doc.querySelectorAll('article').length,1);}
+  render(doc,copy,now,'all','not_crossed');assert.match(doc.querySelector('.threshold-summary').textContent,/1 not crossed; 1 previously crossed; 1 unknown/);
+  assert.match(doc.body.textContent,/Peak gain 19.00%/);
+  assert.ok(doc.querySelector('label[for="threshold-filter"]'));
+  render(doc,copy,now+120000,'all','not_crossed');assert.equal(doc.querySelectorAll('article').length,0);
+  render(doc,copy,NaN,'all','crossed');assert.equal(doc.querySelectorAll('article').length,1);
 });

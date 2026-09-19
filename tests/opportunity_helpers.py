@@ -64,6 +64,7 @@ class Market:
         value={'security_id':row['security_id'],'share_class':row['share_class'],'currency':row['currency'],
                'basis':'split_adjusted','basis_date':self.clock().date().isoformat(),'actions_complete':True,
                'provider_conflict':False,'adjustment_events':[],'history_provider':'TEST-history','bars':bars,
+               'history_observed_at':utc(self.clock()),'adjustments_through':max((b['date'] for b in bars),default=None),
                'quote':{'price':self.price,'at':self.fixed_at or utc(self.clock()),'observed_at':utc(self.clock()),'kind':'realtime',
                         'provider':'TEST-market','precision':'second','feed_delay_seconds':0,'session_high':max(self.price,102),'session_low':min(self.price,98)}}
         value.update(deepcopy(self.modify))

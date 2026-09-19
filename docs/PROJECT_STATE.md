@@ -1,5 +1,20 @@
 # PolitiTrack project state
 
+## Current Opportunity purchase threshold — source implementation (#197)
+
+The owner authorized implementation followed by production activation. The
+per-purchase threshold classifies prior crossings rather than endpoint returns,
+with configurable 8% default, preserved positive evidence, explicit unknown
+coverage and compact UI/filter plus purchase-level CSV/JSON provenance. It does
+not alter the four opportunity gates or paper trading. Source defaults stay off.
+See [feature and activation gates](PURCHASE_GAIN_THRESHOLD.md).
+
+Implementation is isolated on `codex/never-crossed-threshold-20260919` from
+`2f90ad7f04bfae657cbbbf3780ab75f0be9cf077`. Initial local feature tests pass; final
+CI, merge and deployment evidence are pending. The #182/#196 Executive-only
+recovery below retains production ownership; do not start a competing controller
+or rewrite its journals. No production configuration/state is changed by #197.
+
 ## Authorized PDF/Senate OCR release — September 19 (#182)
 
 The owner requested deployment of the tested PDF repair and correct review
