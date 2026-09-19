@@ -43,11 +43,22 @@ Probe `polititrack-admin-jjzmt` isolated it: the polling argument
 and the initial optional-filter comparison rejects a ready table. Passing the
 same values as a JSON scalar succeeds on that same page. A narrow source fix
 preserves the values and all existing draw/search/offset/count checks, with a
-real Playwright regression. Complete live collection and exact-source CI are
-still pending; this source fix has not yet been deployed.
-Next: verify complete collection and finish activation via
-an explicitly reviewed continuation. Do not reopen a journal or weaken the
-baseline/acceptance gates. Current Opportunity stays off; the original House
+real Playwright regression. PR #194 merged at `5acc472214ec1886d6556b5051b6b9379cd5a5de`;
+exact-head CI `35453468818` passed 354 tests, one skip and browser/UI checks.
+Read-only `polititrack-admin-r7svg` collected all 16,670 rows and 4,068 unique
+278-T listings. Build `adba5676-b161-4b89-8336-0edc6c22795b` succeeded for tested
+source `77aadf541b034072f58dba5e7107c2c8e8ba4bd1`, image digest
+`sha256:6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`.
+That source fix is built, not deployed. Independent `polititrack-admin-c6wmp`
+confirmed both Senate transitions, unchanged seven-attempt history, no retry
+timers, preserved OCR ledger and the original House upload awaiting review.
+
+Next: obtain specific approval for the concrete Executive-only incident recovery
+in the release report, keeping OCR off and preserving the failed run. The existing
+successful-latest-run gate otherwise prevents installing the collector correction.
+After actual authoritative recovery, a new OCR continuation must still pass a
+fresh successful baseline and full acceptance. No gate exception or production
+source-recovery action has been taken. Current Opportunity stays off; the original House
 upload still requires owner review. [Evidence](releases/2026-09-19-senate-pdf-release.md).
 
 ## Historical OGE diagnosis — September 19, 12:23 UTC (#182)

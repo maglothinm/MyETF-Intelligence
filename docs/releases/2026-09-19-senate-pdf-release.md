@@ -113,3 +113,89 @@ is removed, no partial collection is accepted, and no timeout is extended.
 Add a real Playwright regression for initial nulls and stale search/page draws.
 Local focused validation: 41 passed, one missing-local-Chromium skip; canonical
 CI must run that browser test. Complete live candidate collection remains pending.
+
+PR #194 is merged at `5acc472214ec1886d6556b5051b6b9379cd5a5de`.
+Tested head `77aadf541b034072f58dba5e7107c2c8e8ba4bd1`, its PR CI checkout
+`d69f7a1401fb38889b0a795048a778656d5c6ec5`, and the merge all have tree
+`bc9f28aa15c1fb07a8485a0be9234d8ec086017a`. Canonical
+[CI 35453468818](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35453468818)
+passed 354 Python tests (including the real polling regression), one unrelated
+skip, four Node checks and desktop/mobile UI checks. Main CI `35453651966` also
+passed. Test artifact `10587626600` (attempt 1, repository 1349678672) expires
+September 22; digest `0b863bc18255cd10bee68f3aa27cf9fbedcfb3194a45dda3a0aee2b0c9ea2727`.
+
+The exact library cause is Playwright 1.57's `_impl._page.Page.wait_for_function`
+forwarding its arguments through `_helper.locals_to_params`, which recursively
+removes dictionary entries whose value is `None`. Direct `evaluate` does not
+use that forwarding path. The JSON scalar prevents this loss before the frame
+serializes the argument; it is not a source/network retry workaround.
+
+Complete read-only candidate `polititrack-admin-xzrsl` advanced to 5,900 of
+16,670 source rows, then timed out on the next page. It accepted no incomplete
+collection and wrote no production state. Instrumented reproduction
+`polititrack-admin-r7svg` then passed at 16:07:54 UTC: 168 readiness checks
+(initial table plus 167 data pages), all 16,670 rows, and 4,068 unique 278-T
+listing IDs. The last page contained 70 rows, ending exactly at 16,670. The
+earlier mid-collection timeout's internal/upstream cause remains unproven; the
+second test did not reproduce it, and neither test wrote production state.
+
+Cloud Build `adba5676-b161-4b89-8336-0edc6c22795b` succeeded at
+`2026-09-19T16:08:14.952095Z`, targeting tested source
+`77aadf541b034072f58dba5e7107c2c8e8ba4bd1` and producing
+`us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`.
+This includes the PDF and Senate repairs plus the nullable-wait correction.
+No additional production image change has been made.
+
+## Independent Legislative preservation — September 19, 16:06 UTC
+
+Read-only `polititrack-admin-c6wmp` passed at 16:06:42 UTC, comparing the original
+generation 1182 ledger with current generation 1185, snapshot
+`80f9d315-cb3d-4ece-9636-2f3bcd139aa9`. Both specified Senate paper filings are
+now `needs_review`, with no retry timer. Their seven prior attempts, original
+attempt timestamp, source URL, error code and extraction version are unchanged.
+The old OCR ledger is an exact byte prefix of the current ledger. This confirms
+the append-only classification correction independently of the producer summary.
+
+The original House upload still has its exact SHA-256, two pages and five rows
+awaiting owner review, with raw upload bytes cleared. Latest Legislative, AI and
+Dashboard runs were successful; Executive still failed on deployed source
+`df5bb5a850942ff54f6b73a4936fc9ec18d8e548`. This is partial preservation evidence,
+not full release acceptance or OCR reactivation.
+
+## Concrete source-recovery proposal; not executed
+
+The existing OCR release controller (`ocr_release_controller.py`, both frozen
+baseline checks) and decisions D-2026-09-19-003/005 require every latest production
+run to succeed before cutover. Executive cannot meet that requirement while its
+deployed collector drops the initial wait parameters. A diagnostic collection
+is not an authoritative producer and cannot replace that failed production run.
+The new image is built and verified, but the ordinary OCR cutover remains blocked.
+
+Proposed one-time incident recovery, requiring specific owner approval of this
+exception before execution:
+
+1. Seal the five closed journals and save a new incident receipt. Pause and drain
+   the four existing schedules under the original controller lock. Audit current
+   snapshot hashes/chains, prior history, accounts, reviews, upload and outbox.
+   Preserve the latest Executive failure as the incident baseline; do not relabel
+   it successful or substitute an older run. Reject any unrelated failure or
+   configuration/state mismatch.
+2. Change only the existing `polititrack-executive` job to the built digest above,
+   with `SOURCE_REVISION=77aadf541b034072f58dba5e7107c2c8e8ba4bd1` and OCR still
+   disabled. Use its existing canonical command, service account, configuration,
+   writer lock, validated restore and atomic commit path. No new writer, schedule,
+   permission, data import, blank state or journal reopening is permitted.
+3. Execute one complete authoritative Executive recovery run and independently
+   verify its exact source/image, successful snapshot successor, complete source
+   collection and preservation against the incident receipt. An ambiguous
+   submission is observed, never resubmitted. A failure cannot certify recovery;
+   retain every record and keep OCR disabled during bounded restoration.
+4. After genuine Executive recovery, use a new reviewed OCR continuation with a
+   fresh successful frozen baseline and the unchanged full acceptance checks.
+   Restore original schedules; keep Vault paused and Current Opportunity off.
+
+The requested exception is limited to installing the proven collector correction
+on the failed Executive component while OCR is off. It does not waive snapshot
+validity, preservation or subsequent OCR activation/acceptance. General deployment
+authorization has not been treated as authorization to override this recorded
+successful-baseline rule.
