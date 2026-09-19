@@ -30,14 +30,27 @@ four original schedules were restored. The completed incident is sealed at
 SHA-256 `64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836`.
 [Recovery receipt](releases/2026-09-19-executive-recovery-receipt.json).
 
-The separate normal activation passed fresh read-only preparation and is running
-in `ocr-pdf-activation-77aadf541b03`, observed by Beast process `32324`.
-It uses the original full release controller and acceptance gates, with the same
-pinned image `6be7d1e52367…`. Do not submit another controller or producer.
-PR #196/controller CI `35457006449` passed all 117 tests; supplemental acceptance
-PR #198 merged at `505c56e406c85dffd1d975de10196554b5c9704d`. Full OCR activation,
-acceptance, supplemental Senate/PDF checks and scheduled-run verification are
-pending. Current Opportunity stays off; Vault stays paused.
+**Activation recovery checkpoint, 18:07 UTC:** the normal attempt installed the
+same tested image on all six resources and enabled OCR. Its first Legislative
+run `polititrack-legislative-7xnjg` committed generation 1191 (5 documents,
+8/8 pages, zero retries); Executive `polititrack-executive-xmhxh` committed
+generation 621 (5 documents, 17/17 pages, zero retries). Both producers succeeded.
+The controller stopped on one `gcloud ... executions describe` status read:
+`UNAUTHENTICATED`, reason `ACCESS_TOKEN_TYPE_UNSUPPORTED`. This is a cloud
+observation failure, not a failed Executive collection or OCR run.
+
+The unchanged controller is completing safe recovery in
+`ocr-pdf-activation-77aadf541b03`; Beast process `32324` remains the only active
+controller. Read-only preservation `polititrack-admin-wd7p9` is queued at Cloud
+Run startup. Preserve the attempt and let recovery disable OCR and restore
+schedules. Do not reopen its journal or resubmit either successful producer.
+A new sealed normal continuation is being prepared in
+`scripts/ocr_activation_read_recovery_release.py`; only the exact execution-status
+read may retry the observed token-type rejection, at most three reads, with all
+diagnostics retained. All full baseline/acceptance gates and mutations remain
+unchanged. Local controller suite: 141 passed. Canonical CI and the completed
+recovery SHA-256 are required before dispatch. Current Opportunity stays off;
+Vault stays paused. Final OCR activation/acceptance is not yet complete.
 
 The following records describe the preceding diagnosis and closed attempts.
 

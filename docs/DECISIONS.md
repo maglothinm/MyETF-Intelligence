@@ -1538,3 +1538,24 @@ filters and purchase-level exports reflect that same persisted record. Owner
 authorization now covers activation, but not invented provider capability or
 bypassing the active Executive/OCR release lock. Source defaults stay off until
 verified shadow/production acceptance through the current release procedure.
+
+## D-2026-09-19-009 — Preserve failed observation and bound exact read retries (#182)
+
+Both first-cycle source producers succeeded after normal OCR activation, but one
+Cloud Run execution-status read was rejected with `UNAUTHENTICATED` and
+`ACCESS_TOKEN_TYPE_UNSUPPORTED`. The original controller entered its prescribed
+recovery. Preserve and seal that seventh attempt; do not reopen it, rewrite the
+error, resubmit its producers or treat a successful producer as full acceptance.
+Continue the already-authorized normal release in one deterministic successor
+workspace after independent preservation and restored schedules are proved.
+
+The new wrapper retains the original full release, audit, mutation and failure
+methods. It retries only the exact read-only `run jobs executions describe`
+operation for an existing canonical job when the observed token-type rejection
+recurs, with at most three reads and two bounded waits. Each read has a unique
+private receipt, and failed-read hashes/reasons are retained in the new journal.
+No credentials, identity, scopes, IAM, permissions or authentication checks are
+changed. Permission denials, other authentication errors, job failures, timeouts,
+mutations and submissions keep their original behavior. The rejected token's
+underlying issuance cause is not established; it is distinct from both the earlier
+OGE TCP interruption and the repaired Playwright polling defect.
