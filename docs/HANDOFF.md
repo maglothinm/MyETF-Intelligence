@@ -1,6 +1,14 @@
 # PolitiTrack active handoff
 
-## Current OCR rollout — deployed with warnings (#182)
+## Current check — Legislative OCR and Executive zero transactions (#182)
+
+**September 19, 07:47:56 UTC published evidence:** Legislative OCR is partially functional. The accepted two-page upload now reaches **needs review** with all five rows; three unclear asset labels still need owner review, and no corrections were submitted. Do not resubmit the PDF. Cleanup follows from the evidence-backed acknowledgement code path but has not been independently checked in the database.
+
+Executive retains **4,133 filings and zero processed transactions**. All records are classified request-only, including 340 PDF URLs. The classifier incorrectly treats the entire `extapps2.oge.gov` host as request-only; two affected PDFs downloaded with HTTP 200, passed inspection, and produced 5 and 37 native-parser candidates locally. They were not imported. Legislative has 217 `invalid_or_encrypted_pdf` cases; two sampled PDFs open without a password but are rejected solely for an encryption dictionary. Of those 217 cases, 215 already have collector status processed. Two Senate image-viewer retries remain.
+
+This was diagnosis, not a repair/deployment. Next: repair OGE classification **without changing stable filing IDs**, refine readable-PDF inspection within existing safety bounds, then verify preserved-state processing. Finish independent upload cleanup and owner correction/import acceptance. Beast was offline, so no fresh database audit was possible. No production settings or sealed journals were changed; the last verified configuration remains four enabled schedules and Filing Vault paused. Keep #182 open. [Full findings and verification](releases/2026-09-19-ocr-functionality-diagnosis.md).
+
+## September 18 rollout and earlier upload checkpoints (#182)
 
 **The corrected rollout completed at 2026-09-18T20:56:33.832832Z. No release controller is active.** All six existing runtime resources use source `a2a15edb30895ece37b690e50e0f95fb1eaa2649`, image `sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d`; OCR is enabled on Legislative, Executive and web with the existing owner allowlist. Build `db933dc7-5e85-483f-b7b0-655a0ddf7dc0` succeeded. The additive migration, image/schema checks, controlled successors, independent preservation audit, published OCR-health comparison and live asset checks passed.
 

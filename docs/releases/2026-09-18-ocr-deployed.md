@@ -6,6 +6,10 @@ The corrected rollout finished at **2026-09-18T20:56:33.832832Z**, with result *
 
 The additive inbox migration, image/schema/account check, both controlled source cycles, AI and Dashboard publication succeeded. Independent acceptance `polititrack-admin-d4wp2` returned PASS at `2026-09-18T20:55:33.540395Z`: baseline preservation, source/AI history, published OCR-health values and live asset hashes agree. An unauthenticated OCR API request returned `401 SIGN_IN_REQUIRED`. Three accounts and nine acknowledgement records were preserved, as were previous snapshot metadata, append-only ledgers, durable observation identities and notification history. No rebaseline, rewind, account reset or history deletion occurred.
 
+## September 19 functionality follow-up
+
+The accepted upload now reaches review with all five rows across two pages. Executive's zero transactions are explained by an overbroad request-only classification, including 340 direct PDF URLs; two were independently verified accessible. Legislative's PDF encryption check also rejects readable official documents. Repairs and final correction/import acceptance remain outstanding. See the [dated diagnosis and evidence](2026-09-19-ocr-functionality-diagnosis.md). The deployment and earlier upload checkpoints below remain historical evidence.
+
 ## Corrected defect and verification
 
 The first rollout failed acceptance because the generic dashboard privacy projection removed the safe OCR heartbeat. [PR #186](https://github.com/maglothinm/MyETF-Intelligence/pull/186) passes only the exact OCR telemetry envelope through its bounded `safe_metrics` validator before the generic privacy filter. Invalid telemetry and unrelated private heartbeat/configuration fields remain filtered. The actual generated dashboard is covered by five added regression cases. Local checks: **207 passed, 1 PostgreSQL-dependent skip**. The merge tree equals the tested PR-head tree.

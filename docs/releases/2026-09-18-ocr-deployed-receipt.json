@@ -248,13 +248,162 @@
       "raw_cleanup": "NOT_YET_VERIFIED",
       "corrections": "NOT_SUBMITTED",
       "recorded_at": "2026-09-19T01:23:36.851119+00:00"
+    },
+    "followup_check_2026_09_19": {
+      "ui_status": "needs_review",
+      "error_code": "upload_confirmation_required",
+      "pages": 2,
+      "physical_rows": 5,
+      "page_row_counts": [
+        4,
+        1
+      ],
+      "asset_labels_needing_review": 3,
+      "owners_blank": true,
+      "ocr_attempted_at": "2026-09-19T01:23:34.479670Z",
+      "retained_ocr_completed_at": "2026-09-18T19:32:25.482961Z",
+      "evidence_reuse": "consistent_with_same_digest_cache_reuse",
+      "raw_cleanup": "SUPPORTED_BY_OBSERVED_STATUS_AND_CODE_PATH_NOT_INDEPENDENTLY_DB_VERIFIED",
+      "corrections": "NOT_SUBMITTED",
+      "reuploaded": false
     }
   },
   "remaining": [
-    "Reconcile the upload attempt through the existing authenticated UI before any retry.",
-    "Verify uploaded document extraction and raw-file cleanup.",
-    "Obtain document-specific review of unclear labels before confirming all rows; verify producer reconciliation afterward.",
-    "Resolve the two Senate paper-viewer OCR warnings; do not relabel them healthy."
+    "Correct OGE PDF-link classification while preserving stable filing identities and existing state.",
+    "Refine PDF inspection for documents readable without a supplied password; retain document/process bounds.",
+    "Independently verify upload raw cleanup.",
+    "Obtain document-specific review of three unclear labels before confirming all five rows; verify producer reconciliation.",
+    "Resolve two Senate image-viewer OCR retries.",
+    "Verify repaired live document processing before claiming full OCR health or Executive recovery."
   ],
-  "historical_evidence_note": "This separate receipt supplements the completed controller summary. No original journal or summary was rewritten to claim later acceptance."
+  "historical_evidence_note": "This separate receipt supplements the completed controller summary. No original journal or summary was rewritten to claim later acceptance.",
+  "functionality_check_2026_09_19": {
+    "published_at": "2026-09-19T07:47:56Z",
+    "report": "2026-09-19-ocr-functionality-diagnosis.md",
+    "mode": "read_only_production_diagnosis",
+    "repair_deployed": false,
+    "legislative": {
+      "filings": 1011,
+      "collector_processed": 882,
+      "retained_transactions": 12247,
+      "ocr_needs_review": 220,
+      "invalid_or_encrypted_pdf": 217,
+      "invalid_pdf_already_collector_processed": 215,
+      "retry_delayed": 2,
+      "unobserved": 789
+    },
+    "executive": {
+      "filings": 4133,
+      "processed": 0,
+      "transactions": 0,
+      "access_mode_request": 4133,
+      "pdf_urls_misclassified_request": 340,
+      "request_form_urls": 3793,
+      "ocr_access_required": 36,
+      "unobserved": 4097,
+      "verified_accessible_pdf_samples": 2,
+      "local_native_parser_candidate_counts": [
+        5,
+        37
+      ],
+      "candidate_rows_validated_or_imported": false
+    },
+    "document_checks": [
+      {
+        "filing_key": "oge|oge:c7aa20fb7288756065000dbbacfa2d07",
+        "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/CC5D2BAFDF8EB24085258E6E002DF7E9/$FILE/Kevin-Warsh-08.06.2026-278T.pdf",
+        "access_mode": "request",
+        "status": "review_required",
+        "ocr_error_code": "access_required",
+        "http_status": 200,
+        "content_type": "application/pdf",
+        "final_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/CC5D2BAFDF8EB24085258E6E002DF7E9/$FILE/Kevin-Warsh-08.06.2026-278T.pdf",
+        "bytes": 5451,
+        "is_pdf": true,
+        "sha256": "6578304224ce3d5225cb4f07837934fd9a11f5ad817411ca45bfeaeaa301dc06",
+        "default_open_ok": true,
+        "encryption_dictionary_present": false,
+        "pages": 3,
+        "native_text_chars": 6397,
+        "ocr_inspection": "ok"
+      },
+      {
+        "filing_key": "oge|oge:14d1310fe8a29827f7dcf22a5d264cd5",
+        "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/D4003325FAE6858085258E6E002DF6AB/$FILE/Eric-M-Ueland-08.06.2026-278T.pdf",
+        "access_mode": "request",
+        "status": "review_required",
+        "ocr_error_code": "access_required",
+        "http_status": 200,
+        "content_type": "application/pdf",
+        "final_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/D4003325FAE6858085258E6E002DF6AB/$FILE/Eric-M-Ueland-08.06.2026-278T.pdf",
+        "bytes": 9786,
+        "is_pdf": true,
+        "sha256": "39706d0bc76702e5f6e011d879715e021e8f04d5e91271172c2bd5b2c9315244",
+        "default_open_ok": true,
+        "encryption_dictionary_present": false,
+        "pages": 5,
+        "native_text_chars": 9626,
+        "ocr_inspection": "ok"
+      },
+      {
+        "filing_key": "oge|oge:981cab70ca237b807917ef53173c8aa2",
+        "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/2BF91F890F718ACB85258E5B002DE16B/$FILE/Donald-J-Trump-08.12.2026-278T.pdf",
+        "access_mode": "request",
+        "status": "cataloged",
+        "ocr_error_code": null,
+        "http_status": 200,
+        "content_type": "application/pdf",
+        "final_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/2BF91F890F718ACB85258E5B002DE16B/$FILE/Donald-J-Trump-08.12.2026-278T.pdf",
+        "bytes": 20971521,
+        "is_pdf": true,
+        "read_truncated_at_byte_limit": true
+      },
+      {
+        "filing_key": "house|house:2025:20029105",
+        "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/20029105.pdf",
+        "access_mode": "direct",
+        "status": "processed",
+        "ocr_error_code": "invalid_or_encrypted_pdf",
+        "http_status": 200,
+        "content_type": "application/pdf",
+        "final_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/20029105.pdf",
+        "bytes": 74844,
+        "is_pdf": true,
+        "sha256": "fe0ef6f0c78711df38a237ed1c0eb74ef6fc38803b23a6eefcdbe4cc2f1c9651",
+        "default_open_ok": true,
+        "encryption_dictionary_present": true,
+        "pages": 2,
+        "native_text_chars": 3001,
+        "ocr_inspection": "invalid_or_encrypted_pdf"
+      },
+      {
+        "filing_key": "house|house:2025:20030307",
+        "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/20030307.pdf",
+        "access_mode": "direct",
+        "status": "processed",
+        "ocr_error_code": "invalid_or_encrypted_pdf",
+        "http_status": 200,
+        "content_type": "application/pdf",
+        "final_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/20030307.pdf",
+        "bytes": 69271,
+        "is_pdf": true,
+        "sha256": "0e3856b915af5802855caa7b2f6f83f8fe30bf162350aaa5e9586d0f28c26fcf",
+        "default_open_ok": true,
+        "encryption_dictionary_present": true,
+        "pages": 2,
+        "native_text_chars": 1333,
+        "ocr_inspection": "invalid_or_encrypted_pdf"
+      }
+    ],
+    "snapshot_hashes": {
+      "filings.json": "007c9bee68437a8b2b9eb24513d0df332b0459263d34c2b487bdc5169e211f8b",
+      "dashboard-insights.json": "ea63b3b1eddf456b643d9c54daa5cd8274e805daf81a35d26843a481c17e6a6f",
+      "runs.json": "50a73898dc449c83cbcb684514d48f66712f932638ac02a32a6b3c0a57ddd581"
+    },
+    "limitations": [
+      "Independent database cleanup and continuity audit unavailable while Beast offline.",
+      "Only representative official documents were downloaded; not all 340 PDF URLs or 217 rejection cases were verified.",
+      "Native parser candidates were not accepted as complete or imported."
+    ]
+  }
 }
