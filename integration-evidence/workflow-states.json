@@ -1,0 +1,588 @@
+{
+  "run_id": "35439621635",
+  "total_count": 97,
+  "workflows": [
+    {
+      "id": 344663669,
+      "name": "AI filing analyst and paper portfolio",
+      "path": ".github/workflows/ai_filing_analyst.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 356207164,
+      "name": "Backfill progress isolated acceptance",
+      "path": ".github/workflows/backfill_progress_acceptance.yml",
+      "state": "active"
+    },
+    {
+      "id": 356198706,
+      "name": "Backfill progress source export",
+      "path": ".github/workflows/backfill_progress_source_export.yml",
+      "state": "active"
+    },
+    {
+      "id": 352353705,
+      "name": "Current Opportunity offline tests",
+      "path": ".github/workflows/current_opportunity_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 344663671,
+      "name": "Executive purchase tracker",
+      "path": ".github/workflows/executive_trade_tracker.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 345619106,
+      "name": "Run $10K portfolio simulator",
+      "path": ".github/workflows/filing_simulation.yml",
+      "state": "active"
+    },
+    {
+      "id": 345510976,
+      "name": "Investor Edge tests",
+      "path": ".github/workflows/investor_edge_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 350322589,
+      "name": "Issue 121 one-shot implementation installer",
+      "path": ".github/workflows/issue121_bundle_installer.yml",
+      "state": "active"
+    },
+    {
+      "id": 350333071,
+      "name": ".github/workflows/issue121_ci_compat_patch.yml",
+      "path": ".github/workflows/issue121_ci_compat_patch.yml",
+      "state": "active"
+    },
+    {
+      "id": 345003824,
+      "name": "Legislative purchase tracker v2",
+      "path": ".github/workflows/legislative_trade_tracker_v2.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 345526803,
+      "name": "Run Simulation",
+      "path": ".github/workflows/manual_test.yml",
+      "state": "active"
+    },
+    {
+      "id": 361628919,
+      "name": "OCR release controller safety",
+      "path": ".github/workflows/ocr_release_controller_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349536012,
+      "name": "Phase 3 admin failure diagnostic v2",
+      "path": ".github/workflows/phase3_admin_failure_diagnostic_v2.yml",
+      "state": "active"
+    },
+    {
+      "id": 349405224,
+      "name": "Phase 3 diagnose admin status execution",
+      "path": ".github/workflows/phase3_admin_status_diagnose.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 349353226,
+      "name": "Phase 3 apply exact saved Terraform plan",
+      "path": ".github/workflows/phase3_apply_saved_plan.yml",
+      "state": "active"
+    },
+    {
+      "id": 349712045,
+      "name": "Phase 3 bootstrap builder build identity",
+      "path": ".github/workflows/phase3_bootstrap_builder_build_identity.yml",
+      "state": "active"
+    },
+    {
+      "id": 349686046,
+      "name": "Phase 3 build current Runtime image",
+      "path": ".github/workflows/phase3_build_current_runtime_image.yml",
+      "state": "active"
+    },
+    {
+      "id": 349709523,
+      "name": "Phase 3 build current Runtime image v2",
+      "path": ".github/workflows/phase3_build_current_runtime_image_v2.yml",
+      "state": "active"
+    },
+    {
+      "id": 349744889,
+      "name": "Phase 3 closeout",
+      "path": ".github/workflows/phase3_closeout.yml",
+      "state": "active"
+    },
+    {
+      "id": 349757916,
+      "name": "Phase 3 closeout through private GCS evidence",
+      "path": ".github/workflows/phase3_closeout_gcs.yml",
+      "state": "active"
+    },
+    {
+      "id": 349757321,
+      "name": "Phase 3 GCS closeout safety tests",
+      "path": ".github/workflows/phase3_closeout_gcs_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349760900,
+      "name": "Phase 3 GCS closeout v2",
+      "path": ".github/workflows/phase3_closeout_gcs_v2.yml",
+      "state": "active"
+    },
+    {
+      "id": 349759773,
+      "name": "Phase 3 GCS closeout v2 safety tests",
+      "path": ".github/workflows/phase3_closeout_gcs_v2_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349233754,
+      "name": "Phase 3 read-only cloud boundary discovery",
+      "path": ".github/workflows/phase3_cloud_discovery.yml",
+      "state": "active"
+    },
+    {
+      "id": 349736391,
+      "name": "Phase 3 converge readiness",
+      "path": ".github/workflows/phase3_converge_readiness.yml",
+      "state": "active"
+    },
+    {
+      "id": 349766352,
+      "name": "Phase 3 converge schema and close",
+      "path": ".github/workflows/phase3_converge_schema_and_close.yml",
+      "state": "active"
+    },
+    {
+      "id": 349568004,
+      "name": "Phase 3 current state acceptance",
+      "path": ".github/workflows/phase3_current_state_acceptance.yml",
+      "state": "active"
+    },
+    {
+      "id": 349399516,
+      "name": "Phase 3 data-plane acceptance audit",
+      "path": ".github/workflows/phase3_data_plane_audit.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 349666740,
+      "name": "Phase 3 diagnose current status",
+      "path": ".github/workflows/phase3_diagnose_current_status.yml",
+      "state": "active"
+    },
+    {
+      "id": 349531365,
+      "name": "Phase 3 diagnostic trigger pulse",
+      "path": ".github/workflows/phase3_diagnostic_pulse.yml",
+      "state": "active"
+    },
+    {
+      "id": 349754149,
+      "name": "Phase 3 readiness finalizer safety tests",
+      "path": ".github/workflows/phase3_finalize_readiness_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349739942,
+      "name": "Phase 3 force convergence",
+      "path": ".github/workflows/phase3_force_converge.yml",
+      "state": "active"
+    },
+    {
+      "id": 349236385,
+      "name": "Phase 3 GCP auth inventory",
+      "path": ".github/workflows/phase3_gcp_auth_inventory.yml",
+      "state": "active"
+    },
+    {
+      "id": 349716971,
+      "name": "Phase 3 harvest hardened Runtime build",
+      "path": ".github/workflows/phase3_harvest_current_runtime_build.yml",
+      "state": "active"
+    },
+    {
+      "id": 349574271,
+      "name": "Phase 3 harvest current status",
+      "path": ".github/workflows/phase3_harvest_current_status.yml",
+      "state": "active"
+    },
+    {
+      "id": 349339445,
+      "name": "Phase 3 prepare hash-bound apply plan",
+      "path": ".github/workflows/phase3_prepare_apply_plan.yml",
+      "state": "active"
+    },
+    {
+      "id": 349761782,
+      "name": "Phase 3 publish immutable readiness",
+      "path": ".github/workflows/phase3_publish_readiness.yml",
+      "state": "active"
+    },
+    {
+      "id": 349742371,
+      "name": "Phase 3 readiness gate v2",
+      "path": ".github/workflows/phase3_readiness_gate_v2.yml",
+      "state": "active"
+    },
+    {
+      "id": 349674101,
+      "name": "Phase 3 reconcile private IP and accept",
+      "path": ".github/workflows/phase3_reconcile_private_ip_acceptance.yml",
+      "state": "active"
+    },
+    {
+      "id": 349750733,
+      "name": "Phase 3 private-IP repair safety tests",
+      "path": ".github/workflows/phase3_repair_private_ip_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349741245,
+      "name": "Phase 3 rollout current image and accept",
+      "path": ".github/workflows/phase3_rollout_current_image_acceptance.yml",
+      "state": "active"
+    },
+    {
+      "id": 349683655,
+      "name": "Phase 3 Runtime image routing diagnostic",
+      "path": ".github/workflows/phase3_runtime_image_routing_diagnostic.yml",
+      "state": "active"
+    },
+    {
+      "id": 349765222,
+      "name": "Phase 3 schema convergence closeout safety tests",
+      "path": ".github/workflows/phase3_schema_converge_closeout_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349325258,
+      "name": "Phase 3 Terraform reconciliation plan",
+      "path": ".github/workflows/phase3_terraform_plan.yml",
+      "state": "active"
+    },
+    {
+      "id": 349788225,
+      "name": "Phase 4 build quarantine-safe Runtime image",
+      "path": ".github/workflows/phase4_build_quarantine_image.yml",
+      "state": "active"
+    },
+    {
+      "id": 349768203,
+      "name": "Phase 4 harvest hardened Runtime image",
+      "path": ".github/workflows/phase4_harvest_hardened_image.yml",
+      "state": "active"
+    },
+    {
+      "id": 349767849,
+      "name": "Phase 4 hardened image harvest safety tests",
+      "path": ".github/workflows/phase4_harvest_hardened_image_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 349792997,
+      "name": "Phase 4 harvest submitted quarantine-safe Runtime image",
+      "path": ".github/workflows/phase4_harvest_quarantine_image.yml",
+      "state": "active"
+    },
+    {
+      "id": 350113202,
+      "name": "Phase 4 live shadow validation v5",
+      "path": ".github/workflows/phase4_live_shadow_validation_v5.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 350129720,
+      "name": "Phase 4 live shadow validation v6",
+      "path": ".github/workflows/phase4_live_shadow_validation_v6.yml",
+      "state": "active"
+    },
+    {
+      "id": 349812426,
+      "name": "Phase 4 record latest failure",
+      "path": ".github/workflows/phase4_record_latest_failure.yml",
+      "state": "active"
+    },
+    {
+      "id": 349773200,
+      "name": "Phase 4 recover exact Runtime history",
+      "path": ".github/workflows/phase4_recover_exact_history.yml",
+      "state": "active"
+    },
+    {
+      "id": 349813257,
+      "name": "Phase 4 repair and redispatch",
+      "path": ".github/workflows/phase4_repair_and_redispatch.yml",
+      "state": "active"
+    },
+    {
+      "id": 350289006,
+      "name": "Phase 5 apply shared execution lookup",
+      "path": ".github/workflows/phase5_apply_shared_execution_lookup.yml",
+      "state": "active"
+    },
+    {
+      "id": 350261305,
+      "name": "Phase 5 authorized recovery controller",
+      "path": ".github/workflows/phase5_authorized_recovery_controller_20260904.yml",
+      "state": "active"
+    },
+    {
+      "id": 350111407,
+      "name": "Phase 4/5 promotion control tests",
+      "path": ".github/workflows/phase5_control_plane_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 350249750,
+      "name": "Phase 5 authorized cutover monitor",
+      "path": ".github/workflows/phase5_cutover_monitor_20260904.yml",
+      "state": "active"
+    },
+    {
+      "id": 350265581,
+      "name": ".github/workflows/phase5_evidence_verifier_20260904.yml",
+      "path": ".github/workflows/phase5_evidence_verifier_20260904.yml",
+      "state": "active"
+    },
+    {
+      "id": 351113264,
+      "name": "Reconcile failed Phase 5 promotion 33979778020",
+      "path": ".github/workflows/phase5_failed_promotion_retry.yml",
+      "state": "active"
+    },
+    {
+      "id": 350117204,
+      "name": "Phase 5 observed legacy-state tests",
+      "path": ".github/workflows/phase5_observed_state_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 350245049,
+      "name": "Phase 5 patch shared execution lookup v2",
+      "path": ".github/workflows/phase5_patch_shared_execution_lookup_v2.yml",
+      "state": "active"
+    },
+    {
+      "id": 350246165,
+      "name": "Phase 5 patch shared execution lookup v3",
+      "path": ".github/workflows/phase5_patch_shared_execution_lookup_v3.yml",
+      "state": "active"
+    },
+    {
+      "id": 350113204,
+      "name": "Phase 5 Runtime v2 production promotion",
+      "path": ".github/workflows/phase5_production_promotion.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 350129721,
+      "name": "Phase 5 Runtime v2 production promotion v2",
+      "path": ".github/workflows/phase5_production_promotion_v2.yml",
+      "state": "active"
+    },
+    {
+      "id": 350143580,
+      "name": "Phase 5 Vault metadata repair",
+      "path": ".github/workflows/phase5_vault_admin_iam_repair.yml",
+      "state": "active"
+    },
+    {
+      "id": 351720272,
+      "name": "Verify final PolitiTrack production certificate",
+      "path": ".github/workflows/polititrack_final_certificate_watcher.yml",
+      "state": "active"
+    },
+    {
+      "id": 362018174,
+      "name": "PR154 isolated integration inspection",
+      "path": ".github/workflows/pr154_integration_check.yml",
+      "state": "active"
+    },
+    {
+      "id": 362017532,
+      "name": "PR 154 isolated merge inspection",
+      "path": ".github/workflows/pr154_merge_probe.yml",
+      "state": "active"
+    },
+    {
+      "id": 344663676,
+      "name": "Publish government trade dashboard",
+      "path": ".github/workflows/publish_trade_dashboard.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 351560441,
+      "name": "Apply Runtime v2 scheduler concurrency repair",
+      "path": ".github/workflows/runtime_v2_concurrency_repair.yml",
+      "state": "active"
+    },
+    {
+      "id": 350135227,
+      "name": "Runtime v2 execution diagnosis",
+      "path": ".github/workflows/runtime_v2_execution_diagnosis.yml",
+      "state": "active"
+    },
+    {
+      "id": 351682530,
+      "name": "Certify Runtime v2 natural AI schedule",
+      "path": ".github/workflows/runtime_v2_natural_ai_certification.yml",
+      "state": "active"
+    },
+    {
+      "id": 351682158,
+      "name": "Validate Runtime v2 natural AI certification",
+      "path": ".github/workflows/runtime_v2_natural_ai_certification_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351683801,
+      "name": "Validate Runtime v2 natural AI helper context",
+      "path": ".github/workflows/runtime_v2_natural_ai_context_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351651374,
+      "name": "Runtime v2 production recovery after concurrency repair",
+      "path": ".github/workflows/runtime_v2_production_recovery.yml",
+      "state": "active"
+    },
+    {
+      "id": 351657593,
+      "name": "Resume Runtime v2 production recovery from submitted build",
+      "path": ".github/workflows/runtime_v2_production_recovery_resume.yml",
+      "state": "active"
+    },
+    {
+      "id": 351718134,
+      "name": "Complete Runtime v2 recovery classification and functional audit",
+      "path": ".github/workflows/runtime_v2_recovery_full_watcher.yml",
+      "state": "active"
+    },
+    {
+      "id": 351569802,
+      "name": "Validate one-time Runtime v2 production recovery controller",
+      "path": ".github/workflows/runtime_v2_recovery_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351720497,
+      "name": "Retry transient Runtime v2 production recovery failure once",
+      "path": ".github/workflows/runtime_v2_recovery_transient_retry.yml",
+      "state": "active"
+    },
+    {
+      "id": 351715802,
+      "name": "Classify Runtime v2 production recovery terminal state",
+      "path": ".github/workflows/runtime_v2_recovery_watcher.yml",
+      "state": "active"
+    },
+    {
+      "id": 351656854,
+      "name": "Validate Runtime v2 recovery resume controller",
+      "path": ".github/workflows/runtime_v2_resume_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351673330,
+      "name": "Reactivate Runtime v2 producer schedulers after repaired smoke",
+      "path": ".github/workflows/runtime_v2_scheduler_reactivation.yml",
+      "state": "active"
+    },
+    {
+      "id": 351672643,
+      "name": "Validate Runtime v2 scheduler reactivation",
+      "path": ".github/workflows/runtime_v2_scheduler_reactivation_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351674189,
+      "name": "Validate Runtime v2 scheduler reactivation token correction",
+      "path": ".github/workflows/runtime_v2_scheduler_reactivation_v2_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351676270,
+      "name": "Validate Runtime v2 scheduler reactivation rollback arming",
+      "path": ".github/workflows/runtime_v2_scheduler_reactivation_v3_lint.yml",
+      "state": "active"
+    },
+    {
+      "id": 351706826,
+      "name": "Mirror Runtime v2 production recovery status",
+      "path": ".github/workflows/runtime_v2_status_mirror.yml",
+      "state": "active"
+    },
+    {
+      "id": 351708416,
+      "name": "Probe Runtime v2 production recovery status",
+      "path": ".github/workflows/runtime_v2_status_probe.yml",
+      "state": "active"
+    },
+    {
+      "id": 351710229,
+      "name": "Publish authenticated Runtime v2 recovery status mirror",
+      "path": ".github/workflows/runtime_v2_statusmirror.yml",
+      "state": "active"
+    },
+    {
+      "id": 351711919,
+      "name": "Finalize Runtime v2 production recovery status",
+      "path": ".github/workflows/runtime_v2_statusmirror_finalizer.yml",
+      "state": "active"
+    },
+    {
+      "id": 348460205,
+      "name": "Runtime v2 safety tests",
+      "path": ".github/workflows/runtime_v2_tests.yml",
+      "state": "active"
+    },
+    {
+      "id": 360624202,
+      "name": "Apply verified source OCR development patch",
+      "path": ".github/workflows/source_ocr_apply_development.yml",
+      "state": "active"
+    },
+    {
+      "id": 360584269,
+      "name": "Source OCR development evidence",
+      "path": ".github/workflows/source_ocr_development.yml",
+      "state": "active"
+    },
+    {
+      "id": 360867794,
+      "name": "Apply verified OCR health source patch",
+      "path": ".github/workflows/source_ocr_health_intake.yml",
+      "state": "active"
+    },
+    {
+      "id": 360870876,
+      "name": "OCR health help compatibility correction",
+      "path": ".github/workflows/source_ocr_help_correction.yml",
+      "state": "active"
+    },
+    {
+      "id": 360850172,
+      "name": "Source OCR review bundle",
+      "path": ".github/workflows/source_ocr_review_bundle.yml",
+      "state": "active"
+    },
+    {
+      "id": 360600932,
+      "name": ".github/workflows/source_ocr_test_deps.yml",
+      "path": ".github/workflows/source_ocr_test_deps.yml",
+      "state": "active"
+    },
+    {
+      "id": 360629220,
+      "name": "Source upload and OCR tests",
+      "path": ".github/workflows/source_ocr_tests.yml",
+      "state": "active"
+    }
+  ]
+}
