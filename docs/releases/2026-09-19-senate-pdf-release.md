@@ -199,3 +199,22 @@ on the failed Executive component while OCR is off. It does not waive snapshot
 validity, preservation or subsequent OCR activation/acceptance. General deployment
 authorization has not been treated as authorization to override this recorded
 successful-baseline rule.
+
+## Owner-approved recovery implementation
+
+The owner subsequently approved: "I approve a one-time Executive-only repair with
+OCR disabled, followed by the normal activation and acceptance checks."
+`scripts/ocr_executive_recovery_release.py` implements that exact scope with the
+unchanged pinned controller, preparation and audit. Its first phase records a
+fresh incident baseline, verifies only the reviewed Executive failure is present,
+changes only Executive with OCR off, runs its canonical producer and audits the
+successful successor and unchanged OCR evidence. Other namespace heads must not
+advance during this phase. All original schedules are restored after verification.
+
+Its separate `--activation --incident-sha SHA256` phase requires the completed
+incident's exact journal hash, approval marker, original preservation receipt and
+genuine successful Executive successor. It seals all six earlier attempts before
+fresh normal preparation. The original full release `run` and audit remain
+unchanged, including both successful-latest-run checks and full OCR acceptance.
+The actual action still requires source CI, pinned procedure installation and
+fresh live verification; this entry records implementation, not completion.
