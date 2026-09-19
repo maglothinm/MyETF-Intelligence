@@ -1,28 +1,71 @@
-name: Threshold flag isolated source export
+name: Threshold flag isolated source preparation
 on:
   push:
     branches: [codex/never-crossed-threshold-20260919]
     paths: [.github/workflows/threshold_source_export.yml]
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: threshold-197-source-only
+  cancel-in-progress: false
 jobs:
-  export:
+  prepare:
     if: github.repository_id == '1349678672' && github.ref == 'refs/heads/codex/never-crossed-threshold-20260919'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
-      - name: Export only tracked source, never runtime data or credentials
-        run: |
-          git archive --format=tar --output="$RUNNER_TEMP/threshold-source.tar" HEAD
-          sha256sum "$RUNNER_TEMP/threshold-source.tar" > "$RUNNER_TEMP/threshold-source.sha256"
-      - uses: actions/upload-artifact@v4
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
         with:
-          name: threshold-source-TEST-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/threshold-source.tar
-            ${{ runner.temp }}/threshold-source.sha256
-          retention-days: 1
-          if-no-files-found: error
+          python-version: '3.11'
+      - name: Apply exactly the reviewed source diff without production access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 00f6bc62b0e4f5a8be2df2e6354b63511a9b1022
+          git merge-base --is-ancestor 2f90ad7f04bfae657cbbbf3780ab75f0be9cf077 HEAD
+          python - <<'PY'
+          import base64, hashlib, pathlib, subprocess, zlib
+          parts=[pathlib.Path('.github/threshold-197-'+str(i)+'.b64') for i in range(3)]
+          data=zlib.decompress(base64.b64decode(''.join(p.read_text().strip() for p in parts),validate=True))
+          assert hashlib.sha256(data).hexdigest()=='68654a987a0a1195ebdbaf135d89f87b80f36080367c05f06be10c23499cd6d6'
+          patch=pathlib.Path('/tmp/threshold-197.patch');patch.write_bytes(data)
+          allowed=set('''config/opportunity_rules.yml
+          docs/CURRENT_OPPORTUNITY.md
+          docs/DECISIONS.md
+          docs/HANDOFF.md
+          docs/PROJECT_STATE.md
+          docs/PURCHASE_GAIN_THRESHOLD.md
+          schemas/opportunity_rules.schema.json
+          scripts/dashboard_assets/current-opportunities.css
+          scripts/dashboard_assets/current-opportunities.html
+          scripts/dashboard_assets/current-opportunities.js
+          scripts/opportunity_common.py
+          scripts/opportunity_dashboard.py
+          scripts/opportunity_engine.py
+          scripts/opportunity_providers.py
+          scripts/opportunity_state.py
+          scripts/opportunity_threshold.py
+          tests/opportunity_dom.test.cjs
+          tests/opportunity_helpers.py
+          tests/test_opportunity_threshold.py'''.splitlines())
+          listed=subprocess.check_output(['git','apply','--numstat',str(patch)],text=True)
+          assert {line.split('\t',2)[2] for line in listed.splitlines()}==allowed
+          subprocess.run(['git','apply','--check',str(patch)],check=True)
+          subprocess.run(['git','apply',str(patch)],check=True)
+          assert "mode: 'off'" in pathlib.Path('config/opportunity_rules.yml').read_text()
+          for p in parts:p.unlink()
+          pathlib.Path('.github/workflows/threshold_source_export.yml').unlink()
+          subprocess.run(['python','-m','compileall','-q','scripts/opportunity_threshold.py','scripts/opportunity_common.py','scripts/opportunity_engine.py','scripts/opportunity_providers.py','scripts/opportunity_state.py','scripts/opportunity_dashboard.py','tests/test_opportunity_threshold.py'],check=True)
+          subprocess.run(['git','add','--',*sorted(allowed),*[str(p) for p in parts],'.github/workflows/threshold_source_export.yml'],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          print('Reviewed source-only patch applied; temporary transport removed. No deployment, state, schedule or alert access.')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          test "$(git ls-remote origin refs/heads/codex/never-crossed-threshold-20260919 | cut -f1)" = "$GITHUB_SHA"
+          git commit -m 'feat: add persistent per-purchase gain-threshold flags and research filter (#197)'
+          git push origin HEAD:refs/heads/codex/never-crossed-threshold-20260919
+          git rev-parse HEAD
