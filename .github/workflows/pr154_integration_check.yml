@@ -34,6 +34,14 @@ jobs:
       - name: Prepare isolated merge tooling
         run: |
           python -m pip install PyYAML
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('integration-evidence/reconcile_pr154.py')
+          text = path.read_text()
+          old = "['git', 'diff', '--cached', '--check']"
+          assert text.count(old) == 1
+          path.write_text(text.replace(old, "['git', 'diff', '--cached', '--check', MAIN]", 1))
+          PY
           python -m py_compile integration-evidence/reconcile_pr154.py
       - name: Reconcile only the inspected conflicts and safety boundaries
         shell: bash
