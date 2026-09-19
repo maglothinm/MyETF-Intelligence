@@ -96,3 +96,19 @@ normal attempts. A future successful complete Executive run, a reviewed new
 continuation preserving all four journals, exact deployment-source CI/build
 verification, fresh baseline and live acceptance remain required. Issue #182
 stays open. No additional general maintenance authorization is needed.
+
+
+## Follow-up diagnosis — 12:23 UTC
+
+The next original scheduled Executive execution `polititrack-executive-r5hq7`
+failed at 12:15 UTC with the same pre-OCR table timeout. Separate Cloud Shell GET
+and Beast HEAD checks now locate the problem before HTTP: DNS resolves, but TCP
+port 443 on `extapps2.oge.gov` never connects within 12 seconds. Neither TLS nor
+an HTTP response is obtained; the main OGE frontend returns 200 from both clients.
+OGE's internal service, routing or filtering cause remains unknown.
+
+The release gate rejects that latest failure before image activation. Also, the
+newest Cloud Build remains the earlier PR #188 build: the PR #190 discovery fix
+still needs its own exact-source image and a new reviewed continuation. A source
+recovery alone would not deploy the merged code automatically. See the
+[structured diagnosis](2026-09-19-oge-live-blocker-diagnosis.json).

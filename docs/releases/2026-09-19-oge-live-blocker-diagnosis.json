@@ -1,0 +1,96 @@
+{
+  "repository_id": 1349678672,
+  "issue": 182,
+  "diagnosis_date": "2026-09-19",
+  "production": {
+    "execution": "polititrack-executive-r5hq7",
+    "created_at": "2026-09-19T12:11:08.590890Z",
+    "finished_at": "2026-09-19T12:15:00.336217Z",
+    "run_id": "a160011a-8833-4031-8f24-bec4267efa95",
+    "status": "failure",
+    "error": "Page.wait_for_function: Timeout 120000ms exceeded.",
+    "ocr_enabled": true,
+    "ocr_final_stage": "skipped",
+    "documents_attempted": 0
+  },
+  "network_checks": [
+    {
+      "client": "Cloud Shell",
+      "target": "www.oge.gov collection shell",
+      "observed_at": "2026-09-19T12:22:45.201152Z",
+      "http_status": 200,
+      "dns_seconds": 0.051205,
+      "tcp_seconds": 0.064885,
+      "tls_seconds": 0.125693,
+      "total_seconds": 0.174934,
+      "curl_exit": 0
+    },
+    {
+      "client": "Cloud Shell",
+      "target": "extapps2.oge.gov published DataTables endpoint",
+      "observed_at": "2026-09-19T12:22:57.015676Z",
+      "method": "GET",
+      "http_status": 0,
+      "dns_seconds": 0.045676,
+      "tcp_seconds": 0.0,
+      "tls_seconds": 0.0,
+      "total_seconds": 12.002077,
+      "curl_exit": 28,
+      "error": "Failed to connect to extapps2.oge.gov port 443 after 12002 ms: Timeout was reached"
+    },
+    {
+      "client": "Beast",
+      "target": "extapps2.oge.gov published DataTables endpoint",
+      "method": "HEAD",
+      "http_status": 0,
+      "dns_seconds": 0.042981,
+      "tcp_seconds": 0.0,
+      "tls_seconds": 0.0,
+      "total_seconds": 12.009801,
+      "curl_exit": 28,
+      "error": "Connection timed out after 12009 milliseconds"
+    },
+    {
+      "client": "Beast",
+      "target": "www.oge.gov",
+      "probe_started_at": "2026-09-19T12:22:26.8482331Z",
+      "method": "HEAD",
+      "http_status": 200,
+      "dns_seconds": 0.118518,
+      "tcp_seconds": 0.139245,
+      "tls_seconds": 0.274894,
+      "total_seconds": 0.335564,
+      "resolved_disclosure_host": "169.62.159.153"
+    }
+  ],
+  "interpretation": "Both tested clients resolve the disclosure host but cannot establish TCP port 443; no TLS session or HTTP response is obtained. Main OGE site responds. The exact provider-side service, route or filtering cause is not established.",
+  "release_gate": {
+    "file": "scripts/ocr_release_controller.py",
+    "requirement": "Every latest production run must have status success and finished_at before image updates",
+    "result": "Latest Executive failure prevents cutover; no gate changed"
+  },
+  "release_sources": {
+    "live": "a2a15edb30895ece37b690e50e0f95fb1eaa2649",
+    "latest_built": "db4aa4da54be845a1e139dc354d9f59aa9006d8a",
+    "latest_build_id": "106763d5-5981-41fa-bc97-686c8bdfa3c1",
+    "discovery_merge": "eb228bc18f242ecc71f368d50181126a746a052a",
+    "discovery_isolated_head": "4b3c7db19f721816495f4213e132a9953dbd4149",
+    "discovery_build_available": false,
+    "existing_repair_journal_closed": true
+  },
+  "schedules": {
+    "legislative": "ENABLED",
+    "executive": "ENABLED",
+    "ai": "ENABLED",
+    "dashboard": "ENABLED",
+    "vault": "PAUSED"
+  },
+  "production_mutated": false,
+  "new_tests_required": false,
+  "next_steps": [
+    "Restore successful access to the official disclosure host and complete discovery through the existing Executive writer",
+    "Verify exact chosen source CI and build a new immutable image containing the discovery repair",
+    "Review a fresh release continuation preserving all four closed journals",
+    "Obtain fresh successful baseline, deploy and perform independent acceptance"
+  ]
+}
