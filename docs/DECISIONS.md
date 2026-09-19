@@ -1481,3 +1481,15 @@ workspace and require new live configuration/build checks, successful frozen
 baseline and independent acceptance. Existing closed journals, failure evidence,
 owner upload and original schedules remain intact. See
 [release procedure](releases/2026-09-19-senate-pdf-release.md).
+
+## D-2026-09-19-006 — Preserve optional OGE wait parameters across polling transport
+
+The deployed Playwright polling path drops null-valued object members, unlike
+direct evaluation. Initial unrestricted search/offset values therefore become
+undefined and fail the explicit null checks despite a complete table. Send a
+JSON scalar and parse it inside the predicate. Preserve all draw, search, offset,
+row-count and complete-pagination validation and bounded timeouts. A real browser
+regression exercises initial readiness plus stale search/page draws. This fixes
+the application defect reproduced during the failed release; it does not explain
+the earlier, independently observed upstream TCP interruption or waive deployment
+health, state preservation, owner review or acceptance requirements.

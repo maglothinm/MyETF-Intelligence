@@ -91,4 +91,25 @@ request/response draw 1, total 16,670, server-side mode, no Loading placeholder
 and no page errors, but the current readiness predicate still timed out. A
 fresh direct official API request also returned HTTP 200 and consistent metadata.
 This reproduction must not be attributed to a currently unavailable OGE service.
-The exact failing predicate condition is under investigation.
+The exact failing predicate condition was subsequently isolated below.
+
+## Polling argument defect — September 19, 15:53 UTC
+
+Read-only admin `polititrack-admin-jjzmt` succeeded at 15:53:44 UTC and reproduced
+both failure and correction on the same loaded production-image browser page:
+
+| Input/path | Observed value/result |
+| --- | --- |
+| Direct evaluation, `{search: null, start: null}` | Valid complete 100-row page |
+| Polling, same object | `{}`; both fields `undefined`, strict null checks false |
+| Polling, `{search: "278-T", start: 0}` | Both non-null fields preserved |
+| Polling, serialized JSON parsed inside predicate | Valid complete 100-row page |
+| Original helper | Timeout despite matching draw 1 and total 16,670 |
+
+The optional initial-filter comparison rejects undefined against the source's
+empty search. That explains both 120-second waits in the failed Executive pass.
+The correction serializes only the wait argument; no draw/count/pagination gate
+is removed, no partial collection is accepted, and no timeout is extended.
+Add a real Playwright regression for initial nulls and stale search/page draws.
+Local focused validation: 41 passed, one missing-local-Chromium skip; canonical
+CI must run that browser test. Complete live candidate collection remains pending.
