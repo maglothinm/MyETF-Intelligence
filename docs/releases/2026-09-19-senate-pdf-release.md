@@ -1,5 +1,86 @@
 # PDF/Senate OCR and complete OGE discovery release (#182)
 
+## Final accepted result — September 19, 19:16 UTC
+
+The approved Executive-only repair finished at 17:29:54 UTC with OCR disabled.
+Full normal activation then completed at **19:07:35 UTC**, followed by independent
+Senate/PDF acceptance at **19:12:15 UTC** and a successful original scheduled
+Executive run at **19:16:32 UTC**. All deployment gates are satisfied.
+
+All six runtime resources use tested application source
+`77aadf541b034072f58dba5e7107c2c8e8ba4bd1`, tree
+`bc9f28aa15c1fb07a8485a0be9234d8ec086017a`, successful build
+`adba5676-b161-4b89-8336-0edc6c22795b`, and image
+`sha256:6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`.
+OCR is enabled for Legislative, Executive and web. Both published OCR branches
+report success. Live asset hashes and the OCR API sign-in boundary passed at
+[the production dashboard](https://polititrack-web-s6icmprjvq-uc.a.run.app).
+
+| Controlled pass | Execution | Generation | Documents | Pages | Technical retries |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Legislative 1 | `polititrack-legislative-mxbdp` | 1192 | 5 | 8/8 | 0 |
+| Executive 1 | `polititrack-executive-f2lsh` | 623 | 5 | 25/25 | 0 |
+| Legislative 2 | `polititrack-legislative-dqqxl` | 1193 | 5 | 7/7 | 0 |
+| Executive 2 | `polititrack-executive-m72tv` | 624 | 5 | 16/16 | 0 |
+| Total | Two complete cycles | — | **20** | **56/56** | **0** |
+
+Both Executive passes collected all 4,068 OGE Form 278-T listings. AI
+`polititrack-ai-w5xlx` and Dashboard `polititrack-dashboard-nc9db` succeeded,
+committing generations 679 and 1291. Independent final acceptance
+`polititrack-admin-ls8gh` verified original snapshot lineage, durable keys,
+append-only histories, accounts, acknowledgements, outbox and published health.
+No transactions were appended by these OCR passes.
+
+Supplemental read-only `polititrack-admin-87ghk` passed against the original
+pre-repair baseline. Both unsupported Senate paper filings now require review,
+have no next-attempt timer and retain all seven prior attempts. Old OCR receipts
+and extraction files remain intact; additional evidence totals Legislative +20
+and Executive +15 since that baseline. The existing House upload retains two
+pages and five review rows; its raw payload is NULL.
+
+All four original schedules are enabled with unchanged configurations. The
+existing scheduler created `polititrack-executive-q525v` at 19:11:01 UTC on the
+same tested image with OCR enabled; it collected 4,068 listings and successfully
+committed generation 625, processing another five documents and 16/16 pages with
+zero technical retries. This verifies scheduled operation after restoration.
+
+[Application CI 35453468818](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35453468818)
+passed 354 Python tests (one skip), four Node checks, real PostgreSQL and both
+desktop/mobile checks.
+[Controller CI 35460257042](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35460257042)
+passed 141 tests. PR #201's read-only observation retry was not needed in this
+successful continuation. Final immutable journal SHA-256:
+`54014b843890d0f845fe72e5c85c6750b444adaa21baa781fae210a491e34613`.
+
+The reproducible Executive blocker was a Playwright polling-argument defect:
+optional null members disappeared during serialization, so a ready table failed
+strict null checks. Encoding those arguments as JSON preserves the readiness
+and complete-pagination gates. Legislative's technical failure came from treating
+known unsupported Senate layouts as retryable; they now correctly await review.
+The earlier OGE TCP outage recovered on a scheduled run before later diagnostics,
+so testing is not established as its cause of recovery. A separate status-read
+token rejection interrupted one activation after its producers succeeded; its
+exact response and recovery are retained below.
+
+Runtime v2 PostgreSQL snapshots remain production authority. Retained legacy
+recovery artifact `9997087643`, run `34059488724` attempt 1, was provenance
+checked and was not restored. Existing history and all closed journals remain
+preserved. Current Opportunity stays OFF and Filing Vault PAUSED.
+
+No release controller or deployment blocker remains. Historical OCR continues
+in bounded scheduled batches; access-restricted documents and unresolved fields
+still need their respective access/review workflow. The original House upload
+must not be resubmitted or automatically approved. Issue #182 remains open for
+separate owner correction/import acceptance.
+
+[Machine-readable acceptance, source, hashes and scheduled-run evidence](2026-09-19-ocr-final-acceptance.json).
+
+## Historical procedure and checkpoints
+
+The sections below preserve earlier observations in order. Pending/failure
+statements in them describe those checkpoints, superseded by the final result
+above.
+
 The owner explicitly requested deployment. Application PR #191 merged as
 `a9607c88e10959c0cd3844f008915aec12dd0935`; its tested head and selected immutable
 build source is `df5bb5a850942ff54f6b73a4936fc9ec18d8e548`. The tree includes
@@ -296,3 +377,20 @@ keeps each failed-read receipt, seals all seven predecessors and requires the
 completed seventh journal's exact SHA-256. It reuses the tested app image; no
 additional Executive-only exception or state reset is introduced. Local controller
 tests passed 141/141. Canonical CI and completed recovery remain prerequisites.
+
+Recovery subsequently completed at 18:07:16 UTC: `polititrack-admin-wd7p9`
+verified baseline preservation, all earlier ledger prefixes and durable keys.
+OCR was disabled and all four original schedules restored. The seventh journal
+SHA-256 is `34502e312e9e346855c690e36baf300f145548b33fe09cd9ab2df9138c98f2b0`;
+the retained authentication-error stderr SHA-256 is
+`429daeb41c90c82c0a4189c6c4cdcdf9c9cf483a099b1703aa7a05acdf008374`.
+[Exact observation recovery receipt](2026-09-19-ocr-observation-recovery-receipt.json).
+
+PR #201 merged at `cc74165c6a7d6add49f9322b0cd4c775a405fdc6`; tested head
+`2a50f2614134986d0911d290eae64258d9ef220e`, tree
+`3cc9b65bea758f64147739de89fa9f48962b8d83`. CI `35460257042`, job
+`105942716975`, passed the 141-test controller suite. The separately installed
+procedure SHA-256 is `385ce73042b92be47066d4d352916ffffcf608a533c37593eb9e51f1feb053e4`.
+Fresh preparation passed against the exact seventh seal and all six live
+resources. Beast process `24380` is observing the single full continuation in
+`ocr-pdf-read-recovery-77aadf541b03`. Acceptance remains pending.
