@@ -2,8 +2,7 @@
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
 Implementation branch: `codex/oge-pdf-repair-20260919`, based on `8ca6c4b`.
-Source implementation is complete; canonical CI and merge evidence will be
-recorded below. **This repair has not been deployed.**
+Source implementation is merged through [PR #188](https://github.com/maglothinm/MyETF-Intelligence/pull/188) at `db4aa4da54be845a1e139dc354d9f59aa9006d8a`; its tree matches tested head `7c74a303c340928f114e99c25e09606c9a344958`. **This repair has not been deployed.**
 
 ## Causes and changes
 
@@ -75,7 +74,16 @@ the existing document-specific review; no corrections were submitted.
 
 ## Release status and continuation
 
-Canonical CI/merge: pending at source checkpoint.
+Canonical exact-head CI completed successfully:
+
+| Workflow | Run | Test evidence |
+|---|---|---|
+| Source upload and OCR | [35431787255](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35431787255) | 318 passed, 1 skipped; PostgreSQL service enabled; desktop/mobile correction checks passed |
+| Runtime v2 safety | [35431787249](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35431787249) | 530 passed, 2 skipped; repository safety contract passed |
+| Investor Edge | [35431787258](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35431787258) | 778 passed; responsive fixture and repository safety checks passed |
+
+The canonical merge was fetched and compared to the tested head with an empty
+whole-tree diff. No new production artifact/snapshot lineage is asserted by CI.
 
 Beast was **offline** when checked during this repair. The connected Cloud Shell
 deployment path is therefore unavailable. No build, controller, migration,
@@ -85,7 +93,7 @@ remain untouched; last verified production remains the September 18 release
 `a2a15edb30895ece37b690e50e0f95fb1eaa2649`, four original schedules enabled and
 Filing Vault paused.
 
-Next: finish canonical CI/merge, then use a new coordinated release with an
+Next: restore the connected deployment path, then use a new coordinated release with an
 immutable tested image, fresh preservation baseline, the existing source writers,
 independent identity/count/history checks and live OCR-health acceptance. Do not
 reopen old release journals, rebaseline, replay historical alerts or claim all
