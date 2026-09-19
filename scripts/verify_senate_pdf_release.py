@@ -1,4 +1,8 @@
-"""Independent read-only #182 acceptance; BASELINE is the frozen audit's heads.
+"""Independent read-only #182 acceptance after the Executive recovery activation.
+
+BASELINE is the original fifth attempt's frozen heads, before its append-only
+Senate corrections. The normal controller separately audits the fresh activation
+baseline. Together these checks prove both the original repair and latest cutover.
 
 Run as an explicit existing admin execution after release acceptance. Snapshot
 bytes, document text and private upload contents never leave the process.
@@ -11,7 +15,7 @@ import zipfile
 
 from runtime_v2.database import connect
 
-SOURCE = "df5bb5a850942ff54f6b73a4936fc9ec18d8e548"
+SOURCE = "77aadf541b034072f58dba5e7107c2c8e8ba4bd1"
 SENATE_KEYS = ["senate|senate:https://efdsearch.senate.gov/search/view/paper/" + identifier + "/"
                for identifier in ("929216d5-5dbd-429c-858c-1e9332924627", "ec20cd93-6702-4a29-b3a6-983f4b17f365")]
 

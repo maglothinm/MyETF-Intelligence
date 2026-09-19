@@ -1513,6 +1513,14 @@ older journals and seal the completed incident by its explicit SHA-256. No state
 reset, successful-run relabeling, old-snapshot substitution, duplicate writer or
 automatic owner row confirmation is authorized.
 
+Execution outcome: the one-time repair completed at 17:29:54 UTC. Executive
+`polititrack-executive-mldd4` collected 4,068 listings and committed generation
+620. Independent `polititrack-admin-2bhnz` verified preserved state, unchanged
+OCR evidence and unchanged other producer heads. The completed incident SHA-256
+is `64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836`;
+normal activation uses that exact seal. See the
+[recovery receipt](releases/2026-09-19-executive-recovery-receipt.json).
+
 
 ## D-2026-09-19-008 — Preserve per-purchase threshold history (#197)
 
