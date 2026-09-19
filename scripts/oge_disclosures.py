@@ -396,7 +396,8 @@ def _wait_for_rendered_table(
     # newly requested search/page finished. Correlate its public Ajax API's draw
     # counter, search and offset before reading the rendered rows.
     handle = page.wait_for_function(
-        """expected => {
+        """serialized => {
+            const expected = JSON.parse(serialized);
             const tables = Array.from(document.querySelectorAll('table'));
             for (const table of tables) {
               const text = (table.innerText || '').replace(/\\s+/g, ' ');
@@ -422,7 +423,10 @@ def _wait_for_rendered_table(
             }
             return false;
         }""",
-        arg={"search": search_term, "start": start},
+        # The polling transport drops null-valued object members in the
+        # deployed browser runtime. A JSON scalar preserves the initial
+        # unrestricted search/offset without relaxing either comparison.
+        arg=json.dumps({"search": search_term, "start": start}),
         timeout=timeout_ms,
     )
     try:

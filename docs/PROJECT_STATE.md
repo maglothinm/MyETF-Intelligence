@@ -38,7 +38,14 @@ The fifth journal is closed as `recovered_new_image_ocr_disabled`, SHA-256
 Preserve all five attempts and committed history. Read-only production-browser
 diagnostics prove the table can be fully ready while the collector wait times
 out; this is an application readiness defect, not a proven current upstream outage.
-Next: isolate/correct that wait, verify real collection and finish activation via
+Probe `polititrack-admin-jjzmt` isolated it: the polling argument
+`{search: null, start: null}` arrives as `{}`, so both properties are undefined
+and the initial optional-filter comparison rejects a ready table. Passing the
+same values as a JSON scalar succeeds on that same page. A narrow source fix
+preserves the values and all existing draw/search/offset/count checks, with a
+real Playwright regression. Complete live collection and exact-source CI are
+still pending; this source fix has not yet been deployed.
+Next: verify complete collection and finish activation via
 an explicitly reviewed continuation. Do not reopen a journal or weaken the
 baseline/acceptance gates. Current Opportunity stays off; the original House
 upload still requires owner review. [Evidence](releases/2026-09-19-senate-pdf-release.md).

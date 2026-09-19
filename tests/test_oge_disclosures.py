@@ -311,6 +311,7 @@ def test_draw_readiness_correlates_public_datatables_response():
     _wait_for_rendered_table(SimpleNamespace(wait_for_function=wait), 123,
                              search_term="278-T", start=0)
     assert captured["disposed"] and captured["timeout"] == 123
+    assert json.loads(captured["arg"]) == {"search": "278-T", "start": 0}
     harness = r'''
 const assert = require('node:assert/strict');
 const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
@@ -344,3 +345,44 @@ delete request.draw; delete response.draw;
 assert.equal(predicate(input.arg), false, 'missing counters cannot prove a completed draw');
 '''
     subprocess.run(["node", "-e", harness], input=json.dumps(captured), text=True, check=True)
+
+
+def test_browser_readiness_preserves_initial_nulls_and_rejects_stale_draws():
+    """Exercise the actual Playwright polling transport, not just the predicate."""
+    import os
+    from playwright.sync_api import Error, TimeoutError, sync_playwright
+    from scripts.oge_disclosures import _wait_for_rendered_table
+
+    with sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except Error as exc:
+            if "Executable doesn't exist" in str(exc) and not os.environ.get("CI"):
+                pytest.skip("local Chromium is not installed; canonical CI requires it")
+            raise
+        try:
+            page = browser.new_page()
+            page.set_content("<table><tr><th>Date Type Name</th></tr><tr><td>Report</td></tr></table>")
+            page.evaluate("""() => {
+                window.request = {draw: 1, start: 0, search: {value: ''}};
+                window.response = {draw: 1, data: [{}], recordsFiltered: 2};
+                window.info = {serverSide: true, start: 0, end: 1, recordsDisplay: 2, length: 1};
+                const api = {page: {info: () => info},
+                    ajax: {params: () => request, json: () => response},
+                    rows: () => ({count: () => 1})};
+                window.jQuery = () => ({DataTable: () => api});
+                jQuery.fn = {dataTable: {isDataTable: () => true}};
+            }""")
+            assert _wait_for_rendered_table(page, 1000) == _page_state()
+            page.evaluate("() => {request.draw=2; request.search.value='278-T'}")
+            with pytest.raises(TimeoutError):
+                _wait_for_rendered_table(page, 150, search_term="278-T", start=0)
+            page.evaluate("() => {response.draw=2}")
+            assert _wait_for_rendered_table(page, 1000, search_term="278-T", start=0) == _page_state()
+            page.evaluate("() => {request.draw=3; request.start=1}")
+            with pytest.raises(TimeoutError):
+                _wait_for_rendered_table(page, 150, search_term="278-T", start=1)
+            page.evaluate("() => {response.draw=3; info.start=1; info.end=2}")
+            assert _wait_for_rendered_table(page, 1000, search_term="278-T", start=1) == _page_state(1)
+        finally:
+            browser.close()
