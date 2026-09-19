@@ -1,22 +1,2 @@
 Preparing worktree (detached HEAD eb0747a)
 HEAD is now at eb0747a Record verified Current Opportunity test and artifact evidence
-docs/releases/2026-09-18-ocr-controller-parent-identity.patch:4: trailing whitespace.
-+ 
-docs/releases/2026-09-18-ocr-controller-parent-identity.patch:14: trailing whitespace.
-+ 
-docs/releases/2026-09-18-ocr-controller-parent-identity.patch:54: trailing whitespace.
-+ 
-docs/releases/2026-09-18-ocr-controller-parent-identity.patch:57: trailing whitespace.
-+ 
-docs/releases/2026-09-18-ocr-controller-parent-identity.patch:58: trailing whitespace.
-+ 
-docs/releases/2026-09-18-ocr-controller-parent-identity.patch:61: trailing whitespace.
-+ 
-Traceback (most recent call last):
-  File "/home/runner/work/MyETF-Intelligence/MyETF-Intelligence/integration-evidence/reconcile_pr154.py", line 249, in <module>
-    {'resolve': resolve, 'test': test, 'publish': publish}[sys.argv[1]]()
-  File "/home/runner/work/MyETF-Intelligence/MyETF-Intelligence/integration-evidence/reconcile_pr154.py", line 159, in resolve
-    subprocess.run(['git', 'diff', '--cached', '--check'], cwd=WORK, check=True)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['git', 'diff', '--cached', '--check']' returned non-zero exit status 2.
