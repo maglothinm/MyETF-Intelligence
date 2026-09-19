@@ -26,6 +26,8 @@ jobs:
           test "$(git rev-parse origin/main)" = 75cb399ea870a77069911c80f3bfe0b788475fd9
           git config user.name 'PolitiTrack merge inspection'
           git config user.email '225069210+maglothinm@users.noreply.github.com'
+          git bundle create /tmp/pr154-source.bundle HEAD refs/remotes/origin/main
+          sha256sum /tmp/pr154-source.bundle > /tmp/pr154-source.sha256
           set +e
           git merge --no-commit --no-ff 75cb399ea870a77069911c80f3bfe0b788475fd9 > /tmp/pr154-merge.log 2>&1
           result=$?
@@ -36,16 +38,16 @@ jobs:
           def git(*args):
               return subprocess.check_output(['git', *args], text=True)
           conflicts = git('diff', '--name-only', '--diff-filter=U').splitlines()
-          report = ['## PR #154 isolated merge inspection', '',
+          report = ['## PR #154 isolated code conflict inspection', '',
                     'Main: `75cb399ea870a77069911c80f3bfe0b788475fd9`',
                     'Inspected branch head: `' + os.environ['GITHUB_SHA'] + '`',
                     'Run: https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
-                    '', 'No source refs, production state, deployments, schedules, or live alerts were changed by this inspection.', '',
+                    '', 'Read-only source inspection: no production access, live alerts, state artifacts, deployments, schedules, or source-ref updates.', '',
                     'Merge exit: ' + pathlib.Path('/tmp/pr154-merge-exit').read_text().strip(),
-                    'Conflicting files: ' + str(len(conflicts)), '',
-                    '```text', pathlib.Path('/tmp/pr154-merge.log').read_text()[:5000], '```']
-          diff = git('diff', '--cc', '--unified=8')
-          report += ['', '### Conflict hunks', '```diff', diff[:48000], '```']
+                    'Conflicting files: ' + ', '.join(conflicts), '',
+                    'Source-only bundle SHA-256: `' + pathlib.Path('/tmp/pr154-source.sha256').read_text().split()[0] + '`']
+          diff = git('diff', '--cc', '--unified=12', '--', 'runtime_v2/runner.py', 'scripts/ai_filing_analyst_hardened.py')
+          report += ['', '### Code conflict hunks', '```diff', diff[:48000], '```']
           if len(diff) > 48000:
               report += ['Conflict output truncated; do not treat this as complete resolution evidence.']
           pathlib.Path('/tmp/pr154-report.md').write_text('\n'.join(report))
@@ -55,3 +57,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment 154 --repo maglothinm/MyETF-Intelligence --body-file /tmp/pr154-report.md
+      - name: Retain source-only TEST merge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr154-source-TEST-${{ github.run_id }}
+          path: |
+            /tmp/pr154-source.bundle
+            /tmp/pr154-source.sha256
+            /tmp/pr154-report.md
+          retention-days: 1
+          if-no-files-found: error
