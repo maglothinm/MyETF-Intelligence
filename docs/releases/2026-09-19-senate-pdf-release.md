@@ -218,3 +218,21 @@ fresh normal preparation. The original full release `run` and audit remain
 unchanged, including both successful-latest-run checks and full OCR acceptance.
 The actual action still requires source CI, pinned procedure installation and
 fresh live verification; this entry records implementation, not completion.
+
+## Approved procedure dispatched — September 19
+
+Procedure PR #196 merged at `2f90ad7f04bfae657cbbbf3780ab75f0be9cf077` from
+tested head `88600a16f3249f743d699ff6f805f99f40aee977`, tree
+`d50bce515fd9103814f0d991269021d4a7dcdf15`. Local and canonical controller CI
+`35457006449` passed all 117 tests. Installed wrapper SHA-256:
+`61b1b148f21d06681382d64d939fcd29fbb4c3f0b7828786ae3e8d3b19437e05`.
+Fresh read-only preparation verified the existing six resources, original
+schedules, five sealed attempts, pinned build/image and private database recovery
+configuration. The recovery uses workspace `ocr-executive-recovery-77aadf541b03`
+under the original root; Beast process `18744` is observing the one controller.
+No second controller or producer should be submitted while it runs.
+
+The supplemental read-only Senate/PDF check now requires source `77aadf541b034072f58dba5e7107c2c8e8ba4bd1`
+and still compares against the original fifth baseline, before the Senate
+corrections. This complements the normal controller's separate fresh activation
+baseline rather than replacing it. Final acceptance is not yet claimed.
