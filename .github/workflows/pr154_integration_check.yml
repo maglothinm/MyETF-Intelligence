@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: pr154-isolated-integration-inspection
@@ -35,13 +36,33 @@ jobs:
           python -m pip install PyYAML
           python -m py_compile integration-evidence/reconcile_pr154.py
       - name: Reconcile only the inspected conflicts and safety boundaries
-        run: python integration-evidence/reconcile_pr154.py resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          python integration-evidence/reconcile_pr154.py resolve 2>&1 | tee "$RUNNER_TEMP/pr154-resolution.log"
       - name: Install merged-source test dependencies
         run: |
           python -m pip install -r "$RUNNER_TEMP/pr154-reconciled/requirements-runtime-v2.txt" pytest==8.4.2
           npm install --prefix .test-tools --no-save --package-lock=false --ignore-scripts --no-audit --no-fund jsdom@26.1.0 axe-core@4.10.3
       - name: Run deterministic integration, regression and DOM tests
         run: python integration-evidence/reconcile_pr154.py test
+      - name: Retain reconciliation log and read workflow activation state
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, 'integration-evidence')
+          import reconcile_pr154 as helper
+          log = pathlib.Path(os.environ['RUNNER_TEMP']) / 'pr154-resolution.log'
+          if log.is_file():
+              helper.put_evidence('integration-evidence/resolution.log', log.read_text())
+          workflows = helper.api('actions/workflows?per_page=100')
+          result = {'run_id': os.environ['GITHUB_RUN_ID'], 'total_count': workflows['total_count'], 'workflows': [{k: w[k] for k in ('id', 'name', 'path', 'state')} for w in workflows['workflows']]}
+          assert len(result['workflows']) == result['total_count']
+          helper.put_evidence('integration-evidence/workflow-states.json', json.dumps(result, indent=2) + '\n')
+          PY
       - name: Record evidence and create an unreferenced tested candidate only
         if: always()
         env:
@@ -57,6 +78,7 @@ jobs:
             ${{ runner.temp }}/pr154-tests.json
             ${{ runner.temp }}/pr154-tests.xml
             ${{ runner.temp }}/pr154-validation.log
+            ${{ runner.temp }}/pr154-resolution.log
             ${{ runner.temp }}/pr154-TEST-fixture/
           retention-days: 7
           if-no-files-found: warn
