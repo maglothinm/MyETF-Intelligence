@@ -1,0 +1,14 @@
+{
+  "repository_id": 1349678672,
+  "main": "75cb399ea870a77069911c80f3bfe0b788475fd9",
+  "original_head": "eb0747a7d61624f1f0a6424f4d3f265999f0b31d",
+  "run_id": "35439507309",
+  "run_attempt": "1",
+  "production_access": false,
+  "pr_ref_updated": false,
+  "candidate_commit": null,
+  "tests": {
+    "passed": false,
+    "reason": "Resolution or test setup did not complete"
+  }
+}
