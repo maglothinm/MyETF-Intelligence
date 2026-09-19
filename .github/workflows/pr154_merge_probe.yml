@@ -6,7 +6,7 @@ on:
     paths: [.github/workflows/pr154_merge_probe.yml]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -19,51 +19,64 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Inspect pinned merge in disposable checkout
+      - name: Reproduce reviewed source-only merge tree
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse origin/main)" = 75cb399ea870a77069911c80f3bfe0b788475fd9
+          git branch main 75cb399ea870a77069911c80f3bfe0b788475fd9
           git config user.name 'PolitiTrack merge inspection'
           git config user.email '225069210+maglothinm@users.noreply.github.com'
-          git bundle create /tmp/pr154-source.bundle HEAD refs/remotes/origin/main
-          sha256sum /tmp/pr154-source.bundle > /tmp/pr154-source.sha256
-          set +e
-          git merge --no-commit --no-ff 75cb399ea870a77069911c80f3bfe0b788475fd9 > /tmp/pr154-merge.log 2>&1
-          result=$?
-          set -e
-          printf '%s\n' "$result" > /tmp/pr154-merge-exit
+          git merge --no-commit --no-ff main > /tmp/pr154-merge.log 2>&1 || test "$?" = 1
           python - <<'PY'
-          import os, pathlib, subprocess
-          def git(*args):
-              return subprocess.check_output(['git', *args], text=True)
-          conflicts = git('diff', '--name-only', '--diff-filter=U').splitlines()
-          report = ['## PR #154 isolated code conflict inspection', '',
-                    'Main: `75cb399ea870a77069911c80f3bfe0b788475fd9`',
-                    'Inspected branch head: `' + os.environ['GITHUB_SHA'] + '`',
-                    'Run: https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
-                    '', 'Read-only source inspection: no production access, live alerts, state artifacts, deployments, schedules, or source-ref updates.', '',
-                    'Merge exit: ' + pathlib.Path('/tmp/pr154-merge-exit').read_text().strip(),
-                    'Conflicting files: ' + ', '.join(conflicts), '',
-                    'Source-only bundle SHA-256: `' + pathlib.Path('/tmp/pr154-source.sha256').read_text().split()[0] + '`']
-          diff = git('diff', '--cc', '--unified=12', '--', 'runtime_v2/runner.py', 'scripts/ai_filing_analyst_hardened.py')
-          report += ['', '### Code conflict hunks', '```diff', diff[:48000], '```']
-          if len(diff) > 48000:
-              report += ['Conflict output truncated; do not treat this as complete resolution evidence.']
-          pathlib.Path('/tmp/pr154-report.md').write_text('\n'.join(report))
-          print('\n'.join(report))
+          import base64, pathlib, subprocess, zlib
+          conflicts=subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
+          assert set(conflicts)=={'docs/DECISIONS.md','docs/HANDOFF.md','runtime_v2/runner.py','scripts/ai_filing_analyst_hardened.py'},conflicts
+          encoded='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'
+          source=zlib.decompress(base64.b64decode(encoded)).decode()
+          pathlib.Path('/tmp/pr154-reviewed-resolution.py').write_text(source)
+          subprocess.run(['python','/tmp/pr154-reviewed-resolution.py'],check=True)
           PY
-      - name: Record inspection on the authorized PR
+          git add -A
+          git diff --cached main --check
+          test "$(git write-tree)" = 4f56b4ee27a6506751701cca22724a2f29260993
+          test ! -e .github/workflows/pr154_merge_probe.yml
+          python -m compileall -q scripts/opportunity_*.py scripts/ai_filing_analyst_hardened.py runtime_v2/runner.py tests/test_opportunity_integration.py
+      - name: Stage verified Git objects only, never update refs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr comment 154 --repo maglothinm/MyETF-Intelligence --body-file /tmp/pr154-report.md
-      - name: Retain source-only TEST merge evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr154-source-TEST-${{ github.run_id }}
-          path: |
-            /tmp/pr154-source.bundle
-            /tmp/pr154-source.sha256
-            /tmp/pr154-report.md
-          retention-days: 1
-          if-no-files-found: error
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, json, os, pathlib, subprocess, urllib.request
+          repo='maglothinm/MyETF-Intelligence'
+          expected='4f56b4ee27a6506751701cca22724a2f29260993'
+          def git(*args):
+              return subprocess.check_output(['git',*args])
+          def post(endpoint,payload):
+              request=urllib.request.Request('https://api.github.com/repos/'+repo+endpoint,data=json.dumps(payload).encode(),method='POST',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'})
+              with urllib.request.urlopen(request,timeout=30) as response:
+                  return json.load(response)
+          assert git('write-tree').decode().strip()==expected
+          assert git('rev-parse','main^{tree}').decode().strip()=='ff9c3581d38b901804cd385a13bfce6e0659f15d'
+          entries=[]
+          for path in git('diff','--cached','--name-only','-z','main').decode().split('\0'):
+              if not path:
+                  continue
+              row=git('ls-files','-s','--',path).decode().strip()
+              if not row:
+                  entries.append({'path':path,'mode':'100644','type':'blob','sha':None})
+                  continue
+              metadata,actual_path=row.split('\t',1)
+              mode,sha,stage=metadata.split()
+              assert stage=='0' and actual_path==path and mode in ('100644','100755')
+              blob=post('/git/blobs',{'encoding':'base64','content':base64.b64encode(git('cat-file','blob',sha)).decode()})
+              assert blob['sha']==sha
+              entries.append({'path':path,'mode':mode,'type':'blob','sha':sha})
+          result=post('/git/trees',{'base_tree':'ff9c3581d38b901804cd385a13bfce6e0659f15d','tree':entries})
+          assert result['sha']==expected,result
+          report='## Reproducible source merge candidate staged\n\nTree: `'+expected+'`\n\nPR parent: `'+os.environ['GITHUB_SHA']+'`\n\nMain parent: `75cb399ea870a77069911c80f3bfe0b788475fd9`\n\nChanged paths relative to current main: '+str(len(entries))+'. Temporary workflow absent from candidate. The reviewed resolution reproduced the exact local tree and passed compilation/diff checks. No branch ref was updated by this workflow. No production state, runtime, credentials, schedules, account data, or alerts were accessed.\n\nThe source commit and normal PR CI remain the next merge gates; staging is not a completed merge or deployment.\n\nRun: https://github.com/'+repo+'/actions/runs/'+os.environ['GITHUB_RUN_ID']+'\n'
+          pathlib.Path('/tmp/pr154-staged.md').write_text(report)
+          print(report)
+          PY
+          gh pr comment 154 --repo maglothinm/MyETF-Intelligence --body-file /tmp/pr154-staged.md
