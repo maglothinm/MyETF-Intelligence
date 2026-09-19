@@ -21,6 +21,8 @@ from scripts.historical_transaction_bootstrap import _original_observation, _rep
 from scripts.oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
 from scripts.source_ocr import VERSION, DOCUMENT_POLICY_VERSION, MAX_BYTES, MAX_PAGES, OCRError, extract, now
 
+SENATE_LAYOUT_REVIEW_CODES = frozenset({"PaperFilingError", "page_image_download_requires_review"})
+
 
 class OfficialSession(requests.Session):
     """Narrow official-host GET transport; redirects are validated before use."""
@@ -58,7 +60,10 @@ def download(filing, config):
             response = tracker._senate_page_response(client, report)
             data = tracker.response_bytes(response, "OCR Senate report", MAX_BYTES, safe_diagnostics=True)
             if data.startswith(b"%PDF") or report.format == "pdf":
-                return tracker._core._senate_pdf_from_viewer(client, response, data, config)[0]
+                try:
+                    return tracker._core._senate_pdf_from_viewer(client, response, data, config)[0]
+                except tracker.PaperFilingError:
+                    raise OCRError("page_image_download_requires_review") from None
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(data, "html.parser")
             if soup.find(["img", "iframe", "embed"]):
@@ -229,6 +234,21 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         if filing.get("branch") != branch or filing.get("source") not in {"house", "senate", "oge"}:
             continue
         receipt = receipts.get(key, {})
+        # Repair the known classification from its retained diagnostic, without
+        # downloading again or pretending an extraction/attempt took place.
+        # Append through this producer's normal atomic snapshot; old receipts,
+        # pending reviews, evidence, attempts and observation dates survive.
+        if (filing.get("source") == "senate" and receipt.get("status") == "retry_delayed"
+            and receipt.get("error_code") in SENATE_LAYOUT_REVIEW_CODES
+            and receipt.get("origin", "official_download") == "official_download"
+            and receipt.get("source_url") == filing.get("source_url")
+            and receipt.get("version") == VERSION):
+            receipt = {**receipt, "status": "needs_review", "classification_updated_at": now(),
+                       "classification_version": "senate-layout-review-v1",
+                       "revalidate_after": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")}
+            receipt.pop("next_attempt_at", None)
+            tracker.append_jsonl(ledger, [receipt])
+            receipts[key] = receipt
         # Retry only outcomes affected by the fixed admission/access policy.
         # Keep successful extraction caches and unrelated review/backoff intact.
         policy_retry = (receipt.get("document_policy_version") != DOCUMENT_POLICY_VERSION
@@ -356,9 +376,11 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
             receipt["error_code"] = code
             invalid_document = code in {"document_byte_limit", "document_page_limit", "document_pixel_limit", "native_text_limit",
                                         "invalid_or_encrypted_pdf", "invalid_image", "unsupported_image_format", "document_inspection_limit"}
-            receipt["status"] = "needs_review" if evidence is not None or invalid_document else "not_applicable" if code == "native_html_not_applicable" else "access_required" if code in {"access_required", "SenateAccessDenied"} else "retry_delayed"
-            delay = min(7 * 86400, 300 * 2 ** min(receipt["attempts"], 11))
-            receipt["next_attempt_at"] = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat().replace("+00:00", "Z")
+            layout_review = code in {"PaperFilingError", "page_image_download_requires_review", "unsupported_scanned_layout", "unsupported_confirmation_layout"}
+            receipt["status"] = "needs_review" if evidence is not None or invalid_document or layout_review else "not_applicable" if code == "native_html_not_applicable" else "access_required" if code in {"access_required", "SenateAccessDenied"} else "retry_delayed"
+            if receipt["status"] in {"retry_delayed", "access_required"}:
+                delay = min(7 * 86400, 300 * 2 ** min(receipt["attempts"], 11))
+                receipt["next_attempt_at"] = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat().replace("+00:00", "Z")
         # Upload-specific result makes a crash after snapshot commit recoverable:
         # caller can replay acknowledgement without resubmitting bytes/imports.
         if upload:

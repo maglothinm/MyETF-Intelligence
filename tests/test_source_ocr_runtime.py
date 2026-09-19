@@ -171,6 +171,95 @@ def test_shadow_cannot_read_uploads_or_download_sources(tmp_path):
         run_pass(directory,"legislative",{**ENV,"POLITITRACK_MODE":"shadow"},loader=lambda *_:pytest.fail("network called"))
 
 
+@pytest.mark.parametrize("format,html", [
+    ("pdf", b"<h1>Filing Document - Print View</h1><p>Page 1 of 2</p><img src='page1.png'>"),
+    ("html", b"<h1>Paper filing</h1><img src='page1.png'>"),
+])
+def test_senate_image_viewer_is_review_required_without_retry(tmp_path, monkeypatch, format, html):
+    from runtime_v2 import source_ocr_worker as worker
+    from unittest.mock import MagicMock
+    directory = source_state(tmp_path)
+    filing = {**FILING, "source": "senate", "document_format": format,
+              "source_url": "https://efdsearch.senate.gov/search/view/paper/TEST/"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    client = MagicMock()
+    monkeypatch.setattr(tracker, "SenateClient", lambda: client)
+    response = SimpleNamespace(headers={"Content-Type": "text/html"}, url=filing["source_url"])
+    monkeypatch.setattr(tracker, "_senate_page_response", lambda *_: response)
+    monkeypatch.setattr(tracker, "response_bytes", lambda *a, **k: html)
+    health = {}
+    before = (directory / "state.json").read_bytes()
+    worker.run_pass(directory, "legislative", ENV, health=health,
+                    extractor=lambda *a, **k: pytest.fail("unsupported viewer entered PDF extraction"))
+    receipt = tracker.read_jsonl(directory / "source-ocr.jsonl")[-1]
+    assert receipt["error_code"] == "page_image_download_requires_review"
+    assert receipt["status"] == "needs_review" and "next_attempt_at" not in receipt
+    assert health["review_remaining"] == 1 and health["retry_remaining"] == 0
+    assert health["documents_completed"] == 0
+    assert (directory / "state.json").read_bytes() == before
+    assert not (directory / "transactions.jsonl").exists()
+    worker.run_pass(directory, "legislative", ENV,
+                    loader=lambda *_: pytest.fail("review retried before source revalidation"))
+
+
+@pytest.mark.parametrize("code", ["PaperFilingError", "page_image_download_requires_review"])
+def test_retained_senate_retry_is_corrected_once_with_no_new_attempt(tmp_path, code):
+    directory = source_state(tmp_path)
+    filing = {**FILING, "source": "senate", "source_url": "https://efdsearch.senate.gov/search/view/paper/TEST/"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    prior = {"filing_key": filing["filing_key"], "source_url": filing["source_url"], "version": VERSION,
+             "status": "retry_delayed", "error_code": code, "origin": "official_download", "attempts": 8,
+             "attempted_at": "2026-09-19T07:40:07Z", "next_attempt_at": "2099-01-01T00:00:00Z"}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    preserved = {p.name: p.read_bytes() for p in directory.iterdir() if p.is_file()}
+    health = {}
+    for _ in range(2):
+        run_pass(directory, "legislative", ENV, health=health,
+                 loader=lambda *_: pytest.fail("classification repair performed a download"))
+    rows = tracker.read_jsonl(directory / "source-ocr.jsonl")
+    assert len(rows) == 2 and rows[0] == prior
+    assert rows[-1]["status"] == "needs_review" and "next_attempt_at" not in rows[-1]
+    assert all(rows[-1][k] == v for k, v in prior.items() if k not in {"status", "next_attempt_at"})
+    assert health["documents_attempted"] == 0 and health["retry_remaining"] == 0 and health["review_remaining"] == 1
+    assert set(p.name for p in directory.iterdir()) == set(preserved)
+    for name, data in preserved.items():
+        current = (directory / name).read_bytes()
+        assert current.startswith(data) if name == "source-ocr.jsonl" else current == data
+
+
+@pytest.mark.parametrize("change", [
+    {"source_url": "https://efdsearch.senate.gov/changed"},
+    {"version": "older-version"}, {"origin": "user_upload"}, {"error_code": "Timeout"},
+])
+def test_retained_retry_without_matching_source_evidence_is_not_reclassified(tmp_path, change):
+    directory = source_state(tmp_path)
+    filing = {**FILING, "source": "senate"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    prior = {"filing_key": filing["filing_key"], "source_url": filing["source_url"], "version": VERSION,
+             "status": "retry_delayed", "error_code": "PaperFilingError", "origin": "official_download",
+             "next_attempt_at": "2099-01-01T00:00:00Z", **change}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    run_pass(directory, "legislative", ENV, loader=lambda *_: pytest.fail("existing backoff ignored"))
+    assert tracker.read_jsonl(directory / "source-ocr.jsonl") == [prior]
+
+
+@pytest.mark.parametrize("error,status", [
+    (tracker.PaperFilingError("private source text"), "needs_review"),
+    (OCRError("unsupported_scanned_layout"), "needs_review"),
+    (OCRError("access_required"), "access_required"),
+    (TimeoutError("private URL"), "retry_delayed"),
+])
+def test_layout_review_does_not_mask_access_or_transport_failures(tmp_path, error, status):
+    directory = source_state(tmp_path)
+    def loader(*_):
+        raise error
+    run_pass(directory, "legislative", ENV, loader=loader)
+    receipt = tracker.read_jsonl(directory / "source-ocr.jsonl")[-1]
+    assert receipt["status"] == status
+    assert ("next_attempt_at" in receipt) == (status != "needs_review")
+    assert "private" not in json.dumps(receipt)
+
+
 def test_official_transport_rejects_nonofficial_hosts_before_network():
     with OfficialSession("house") as session:
         for url in ["http://disclosures-clerk.house.gov/file.pdf","https://127.0.0.1/file.pdf", "https://house.gov.evil.test/file.pdf", "https://user:pass@house.gov/file.pdf", "https://house.gov:8443/file.pdf"]:
