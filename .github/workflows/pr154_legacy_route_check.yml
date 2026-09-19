@@ -1,0 +1,31 @@
+name: PR 154 retired route verification
+on:
+  push:
+    branches: [codex/current-opportunity-v1]
+    paths: [.github/workflows/pr154_legacy_route_check.yml]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+jobs:
+  verify:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read legacy workflow states without changing them
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '## PR #154 source-merge legacy route verification' > /tmp/routes.md
+          echo 'Read-only workflow state check; no dispatch, settings change or deployment.' >> /tmp/routes.md
+          for file in publish_trade_dashboard.yml legislative_trade_tracker_v2.yml executive_trade_tracker.yml ai_filing_analyst.yml; do
+            payload=$(gh api "repos/maglothinm/MyETF-Intelligence/actions/workflows/$file")
+            state=$(jq -r .state <<< "$payload")
+            printf '\n- `%s`: `%s`\n' "$file" "$state" >> /tmp/routes.md
+            test "$state" = disabled_manually
+          done
+          printf '\nRun: https://github.com/maglothinm/MyETF-Intelligence/actions/runs/%s\n' "$GITHUB_RUN_ID" >> /tmp/routes.md
+          gh pr comment 154 --repo maglothinm/MyETF-Intelligence --body-file /tmp/routes.md
