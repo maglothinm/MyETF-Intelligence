@@ -1,0 +1,57 @@
+name: PR 154 isolated merge inspection
+
+on:
+  push:
+    branches: [codex/current-opportunity-v1]
+    paths: [.github/workflows/pr154_merge_probe.yml]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  inspect:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/codex/current-opportunity-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Inspect pinned merge in disposable checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse origin/main)" = 75cb399ea870a77069911c80f3bfe0b788475fd9
+          git config user.name 'PolitiTrack merge inspection'
+          git config user.email '225069210+maglothinm@users.noreply.github.com'
+          set +e
+          git merge --no-commit --no-ff 75cb399ea870a77069911c80f3bfe0b788475fd9 > /tmp/pr154-merge.log 2>&1
+          result=$?
+          set -e
+          printf '%s\n' "$result" > /tmp/pr154-merge-exit
+          python - <<'PY'
+          import os, pathlib, subprocess
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True)
+          conflicts = git('diff', '--name-only', '--diff-filter=U').splitlines()
+          report = ['## PR #154 isolated merge inspection', '',
+                    'Main: `75cb399ea870a77069911c80f3bfe0b788475fd9`',
+                    'Inspected branch head: `' + os.environ['GITHUB_SHA'] + '`',
+                    'Run: https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
+                    '', 'No source refs, production state, deployments, schedules, or live alerts were changed by this inspection.', '',
+                    'Merge exit: ' + pathlib.Path('/tmp/pr154-merge-exit').read_text().strip(),
+                    'Conflicting files: ' + str(len(conflicts)), '',
+                    '```text', pathlib.Path('/tmp/pr154-merge.log').read_text()[:5000], '```']
+          diff = git('diff', '--cc', '--unified=8')
+          report += ['', '### Conflict hunks', '```diff', diff[:48000], '```']
+          if len(diff) > 48000:
+              report += ['Conflict output truncated; do not treat this as complete resolution evidence.']
+          pathlib.Path('/tmp/pr154-report.md').write_text('\n'.join(report))
+          print('\n'.join(report))
+          PY
+      - name: Record inspection on the authorized PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment 154 --repo maglothinm/MyETF-Intelligence --body-file /tmp/pr154-report.md
