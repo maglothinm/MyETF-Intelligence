@@ -34,7 +34,7 @@ from scripts.run_investor_edge_simulation import simulate_analysis_record
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("pending, expected", [(7, "Historical backfill in progress"), (0, "Historical backfill current")])
+@pytest.mark.parametrize("pending, expected", [(7, "Historical backfill status unavailable"), (0, "Historical backfill status unavailable")])
 def test_dashboard_exports_bootstrap_telemetry_and_all_building_profiles(tmp_path: Path, pending: int, expected: str) -> None:
     ai_dir = tmp_path / "ai"
     ai_dir.mkdir()

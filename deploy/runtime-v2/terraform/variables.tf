@@ -59,6 +59,23 @@ variable "vault_enabled" {
   default     = false
 }
 
+variable "personal_reviews_enabled" {
+  description = "Enable personal review accounts after the additive review schema migration and acceptance checks."
+  type        = bool
+  default     = false
+}
+
+variable "personal_review_origin" {
+  description = "Exact HTTPS dashboard origin allowed to change personal review state."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.personal_review_origin == "" || can(regex("^https://[A-Za-z0-9.-]+(:[0-9]+)?$", var.personal_review_origin))
+    error_message = "personal_review_origin must be empty or one exact HTTPS origin without a path."
+  }
+}
+
 variable "schedules_enabled" {
   description = "Activate Cloud Scheduler only after imports and acceptance checks pass."
   type        = bool

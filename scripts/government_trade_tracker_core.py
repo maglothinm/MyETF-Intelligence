@@ -28,6 +28,8 @@ from bs4 import BeautifulSoup
 from requests import Response, Session
 
 try:  # Support both ``python -m scripts...`` and direct script execution.
+    from .oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
+    from .review_identity import ACCESS_REQUIRED, PAPER_REVIEW, UNPARSEABLE_TABLE, logical_review_id
     from .run_trigger import trigger_source
     from .monitor_disclosures import (
         DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -53,6 +55,8 @@ try:  # Support both ``python -m scripts...`` and direct script execution.
         utc_now,
     )
 except ImportError:  # pragma: no cover - direct execution path
+    from oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
+    from review_identity import ACCESS_REQUIRED, PAPER_REVIEW, UNPARSEABLE_TABLE, logical_review_id
     from run_trigger import trigger_source
     from monitor_disclosures import (  # type: ignore
         DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -189,6 +193,10 @@ class NotificationError(MonitorError):
 class PaperFilingError(MonitorError):
     """Raised for a known paper filing that requires a human review."""
 
+    def __init__(self, message: str, *, exception_code: str = PAPER_REVIEW) -> None:
+        super().__init__(message)
+        self.exception_code = exception_code
+
 
 @dataclass(frozen=True)
 class Trade:
@@ -255,6 +263,8 @@ class PendingReview:
     reason: str
     title: str = ""
     agency: str = ""
+    exception_code: str = ""
+    logical_review_id: str = ""
 
 
 @dataclass
@@ -1046,6 +1056,14 @@ def parse_generic_transactions_text(
         if owner_match:
             owner = owner_match.group(1)
             prefix = prefix[owner_match.end() :]
+        if source == "oge" and "received over 30 days ago" in prefix.casefold():
+            # Newly reachable OGE PDFs can split the notification header across
+            # several lines. The generic parser would otherwise import it as
+            # part of the first asset (and may misassign wrapped asset tails).
+            # Reject the entire parse until that layout is validated, rather
+            # than promoting syntactically matched rows as accurate trades.
+            raise PaperFilingError("OGE wrapped transaction headers require layout review",
+                                   exception_code=UNPARSEABLE_TABLE)
         asset_type = infer_asset_type(prefix)
         parsed.append(
             make_trade(
@@ -1067,7 +1085,8 @@ def parse_generic_transactions_text(
         buffer = []
 
     if not parsed and paper_is_pending:
-        raise PaperFilingError("Filing text does not preserve enough row structure for reliable parsing")
+        raise PaperFilingError("Filing text does not preserve enough row structure for reliable parsing",
+                               exception_code=UNPARSEABLE_TABLE)
     if not parsed:
         raise SourceChangedError("Electronic filing contains no parseable transaction rows")
     return parsed
@@ -1360,6 +1379,25 @@ def _selected_legislative_sources(value: str) -> tuple[str, ...]:
     return ("house", "senate") if value == "all" else (value,)
 
 
+def _source_pdf_text(data: bytes, max_pages: int, *, safe_diagnostics: bool = False) -> str:
+    """With durable OCR enabled, leave optical work to its single bounded pass."""
+    if (not parse_bool(os.environ.get("RUNTIME_SOURCE_OCR_ENABLED"), default=False)
+        or os.environ.get("POLITITRACK_MODE", "production").lower() != "production"):
+        return extract_pdf_text(data, max_pages, safe_diagnostics=safe_diagnostics)
+    try:
+        try:
+            from .source_ocr_limits import inspect_bounded
+        except ImportError:
+            from source_ocr_limits import inspect_bounded
+        info = inspect_bounded(data)
+        text = "\n".join(info["native_pages"]).strip()
+        if len(normalize_text(text)) < 20:
+            raise ValueError("no native text")
+        return text
+    except Exception:
+        raise PaperFilingError("Source document is queued for bounded OCR extraction and layout review") from None
+
+
 def scan_house_report(session: Session, report: Report, config: TrackerConfig) -> tuple[list[Trade], PendingReview | None]:
     pdf_bytes = fetch_pdf_bytes(
         session,
@@ -1368,7 +1406,7 @@ def scan_house_report(session: Session, report: Report, config: TrackerConfig) -
         f"House PTR {report.metadata.get('document_id', report.report_id)}",
     )
     try:
-        text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
+        text = _source_pdf_text(pdf_bytes, config.max_ocr_pages)
         return parse_house_transactions(text, report), None
     except PaperFilingError as exc:
         review = make_pending_review(
@@ -1379,6 +1417,7 @@ def scan_house_report(session: Session, report: Report, config: TrackerConfig) -
             filed_date=report.filed_date,
             source_url=report.url,
             reason=str(exc),
+            exception_code=exc.exception_code,
         )
         return [], review
 
@@ -1453,10 +1492,11 @@ def _parse_senate_report_response(
                 filed_date=report.filed_date,
                 source_url=report.url,
                 reason=str(exc),
+                exception_code=exc.exception_code,
             )
 
         try:
-            text = extract_pdf_text(pdf_bytes, config.max_ocr_pages, safe_diagnostics=True)
+            text = _source_pdf_text(pdf_bytes, config.max_ocr_pages, safe_diagnostics=True)
             transactions = parse_generic_transactions_text(
                 text,
                 report,
@@ -1474,6 +1514,7 @@ def _parse_senate_report_response(
                 filed_date=report.filed_date,
                 source_url=report.url,
                 reason=str(exc),
+                exception_code=exc.exception_code,
             )
 
     html = data.decode(response.encoding or "utf-8", errors="replace")
@@ -1491,10 +1532,16 @@ def make_pending_review(
     reason: str,
     title: str = "",
     agency: str = "",
+    exception_code: str = PAPER_REVIEW,
 ) -> PendingReview:
-    review_id = stable_id("review", (source, report_id, filer, source_url, reason))
+    if not exception_code.strip():
+        raise ValueError("Pending reviews require a structured exception code")
+    identity = logical_review_id({"source": source, "report_id": report_id,
+                                  "source_url": source_url, "exception_code": exception_code})
+    if not identity:
+        raise ValueError("Pending reviews require a stable source record identity")
     return PendingReview(
-        review_id=review_id,
+        review_id=identity,
         observed_at_utc=iso_utc(),
         branch=branch,
         source=source,
@@ -1505,6 +1552,8 @@ def make_pending_review(
         reason=normalize_text(reason),
         title=normalize_text(title),
         agency=normalize_text(agency),
+        exception_code=exception_code,
+        logical_review_id=identity,
     )
 
 
@@ -1523,12 +1572,13 @@ def load_oge_listings(path: Path) -> list[dict[str, Any]]:
         listing_id = str(item.get("listing_id") or "")
         if not listing_id:
             raise MonitorError(f"OGE listing is missing listing_id: {item!r}")
-        normalized.append(dict(item))
+        normalized.append(normalize_oge_listing_access(item))
     deduped = {str(item["listing_id"]): item for item in normalized}
     return sorted(deduped.values(), key=lambda item: (str(item.get("date", "")), str(item["listing_id"])))
 
 
 def resolve_oge_pdf(session: Session, listing: Mapping[str, Any], config: TrackerConfig) -> bytes | None:
+    listing = normalize_oge_listing_access(listing)
     access_mode = normalize_text(str(listing.get("access_mode", "unknown"))).casefold()
     if access_mode == "request":
         return None
@@ -1586,11 +1636,12 @@ def scan_oge_listing(
             filed_date=filed_date,
             source_url=source_url,
             reason="OGE Form 278-T is listed, but access requires an OGE Form 201 request or no direct PDF was published",
+            exception_code=ACCESS_REQUIRED,
             title=str(listing.get("title") or ""),
             agency=str(listing.get("agency") or ""),
         )
     try:
-        text = extract_pdf_text(pdf_bytes, config.max_ocr_pages)
+        text = _source_pdf_text(pdf_bytes, config.max_ocr_pages)
         transactions = parse_generic_transactions_text(
             text,
             listing,
@@ -1608,6 +1659,7 @@ def scan_oge_listing(
             filed_date=filed_date,
             source_url=source_url,
             reason=str(exc),
+            exception_code=exc.exception_code,
             title=str(listing.get("title") or ""),
             agency=str(listing.get("agency") or ""),
         )
@@ -1640,15 +1692,27 @@ def _pushover_post(
     message: str,
     url: str,
     url_title: str,
+    notification_key: str = "",
+    filed_date: str = "",
 ) -> bool:
     if config.no_notify:
         LOGGER.warning("Notification suppressed (--no-notify): %s — %s", title, message)
         return False
+    try:
+        from .runtime_notifications import deferred, stage_notification
+    except ImportError:
+        from runtime_notifications import deferred, stage_notification
     if not config.pushover_api_token or not config.pushover_user_key:
-        if config.require_pushover:
+        if config.require_pushover and not deferred():
             raise NotificationError("Pushover credentials are required but missing")
-        LOGGER.warning("Pushover credentials are absent; notification logged only: %s", title)
-        return False
+        if not config.require_pushover:
+            LOGGER.warning("Pushover credentials are absent; notification logged only: %s", title)
+            return False
+    if stage_notification(
+        channel="pushover", key=notification_key, filed_date=filed_date,
+        payload={"title": _truncate(title, 250), "message": _truncate(message, 1024), "url": url, "url_title": url_title},
+    ):
+        return False  # Queued is not provider acceptance.
     response = session.post(
         PUSHOVER_MESSAGES_URL,
         data={
@@ -1705,6 +1769,8 @@ def send_purchase_notification(
         message="\n".join(lines),
         url=selected[0].source_url,
         url_title=f"Open {filing_label}",
+        notification_key=json.dumps(["filing", selected[0].source, selected[0].report_id], separators=(",", ":")),
+        filed_date=selected[0].filed_date,
     )
 
 
@@ -1757,6 +1823,8 @@ def send_filing_notification(
         message="\n".join(lines),
         url=transactions[0].source_url,
         url_title=f"Open {filing_label}",
+        notification_key=json.dumps(["filing", transactions[0].source, transactions[0].report_id], separators=(",", ":")),
+        filed_date=transactions[0].filed_date,
     )
 
 
@@ -1775,6 +1843,8 @@ def send_pending_notification(
         message=message,
         url=review.source_url,
         url_title="Open filing or request page",
+        notification_key=json.dumps(["review", logical_review_id(asdict(review))], separators=(",", ":")),
+        filed_date=review.filed_date,
     )
 
 
@@ -1792,6 +1862,17 @@ def commit_filing_outcome(
     review: PendingReview | None,
     filing_index: dict[str, dict[str, Any]],
 ) -> None:
+    # Reprocessing a retained filing must not create a second exception or alert
+    # merely because diagnostic wording changed. Keep the original evidence ID,
+    # including pre-migration IDs, and leave the append-only ledger untouched.
+    retained_review = None
+    if review:
+        identity = logical_review_id(asdict(review))
+        retained_review = next((row for row in read_jsonl(config.pending_path)
+                                if row.get("review_id") and logical_review_id(row) == identity), None)
+        if retained_review:
+            review = replace(review, review_id=str(retained_review["review_id"]))
+    new_review = bool(review and not retained_review and review.review_id not in state.seen_reviews)
     fresh_transactions = [trade for trade in trades if trade.trade_id not in state.seen_trades]
     fresh_purchases = purchases_only(fresh_transactions)
     alerted = False
@@ -1802,7 +1883,7 @@ def commit_filing_outcome(
             filing_label,
             fresh_transactions,
         )
-    if review and review.review_id not in state.seen_reviews:
+    if new_review:
         alerted = send_pending_notification(session, config, review) or alerted
 
     timestamp = iso_utc()
@@ -1825,7 +1906,7 @@ def commit_filing_outcome(
             result.purchase_counts.get(source, 0) + len(fresh_purchases)
         )
 
-    if review and review.review_id not in state.seen_reviews:
+    if new_review:
         append_jsonl(config.pending_path, (asdict(review),))
         state.seen_reviews[review.review_id] = timestamp
         result.pending_reviews.append(asdict(review))
@@ -2009,6 +2090,24 @@ def run_legislative(
             senate_client.close()
 
 
+def refresh_oge_document_access(path: Path, filing_index: dict[str, dict[str, Any]]) -> None:
+    """Append corrected access metadata for historical PDFs, never replace IDs.
+
+    Also covers filings no longer returned by current discovery. Seen state,
+    outcomes, review history, first-observation dates and original rows survive.
+    This is called only inside the existing source producer's working snapshot.
+    """
+    updates = []
+    for key, row in filing_index.items():
+        if (row.get("branch") == "executive" and row.get("source") == "oge"
+                and is_direct_oge_pdf_url(str(row.get("source_url") or ""))
+                and (row.get("access_mode") != "direct" or row.get("document_format") != "pdf")):
+            updated = {**row, "access_mode": "direct", "document_format": "pdf", "updated_at_utc": iso_utc()}
+            updates.append(updated)
+            filing_index[key] = updated
+    append_jsonl(path, updates)
+
+
 def run_executive(
     config: TrackerConfig,
     state: TrackerState,
@@ -2027,6 +2126,8 @@ def run_executive(
     result.alerted_filing_counts[source] = 0
     if not listings and not config.allow_empty_sources:
         raise SourceChangedError("OGE discovery returned zero Form 278-T listings")
+
+    refresh_oge_document_access(config.filings_path, filing_index)
 
     source_bootstrap = should_baseline_source(state, source, config)
     unseen = [item for item in listings if not state.is_filing_seen(source, str(item["listing_id"]))]
@@ -2211,6 +2312,10 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
     result = TrackerResult(branch=config.branch, started_utc=started)
     session = session or build_session(config.user_agent)
     try:
+        try:
+            from .runtime_notifications import deferred
+        except ImportError:
+            from runtime_notifications import deferred
         if not config.terms_acknowledged:
             raise MonitorError(
                 "DISCLOSURE_TERMS_ACKNOWLEDGED is false. Review the statutory use restrictions, "
@@ -2220,6 +2325,7 @@ def run_tracker(config: TrackerConfig, session: Session | None = None) -> Tracke
             config.require_pushover
             and not config.no_notify
             and (not config.pushover_api_token or not config.pushover_user_key)
+            and not deferred()
         ):
             raise NotificationError(
                 "REQUIRE_PUSHOVER is enabled, but PUSHOVER_API_TOKEN/PUSHOVER_USER_KEY are missing"

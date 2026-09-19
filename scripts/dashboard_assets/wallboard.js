@@ -6,7 +6,7 @@
   const state={data:null,nextRefreshAt:Date.now()+refreshSeconds*1000,wakeLock:null,loading:false,changes:{},healthViewKey:null,refreshError:false};
   const healthClock=PT.createHealthClock();
   PT.setupDialogsAndTooltips();const notices=new PolitiTrackNotifications({onChange:renderSound});
-  function renderSound(){const s=notices.getState();el("wall-sound").textContent=s.settings.mode==="off"?"Sound off":s.sound.armed?"Sound armed":"Sound muted / unarmed";el("wall-sound").setAttribute("aria-label",`${el("wall-sound").textContent}. ${s.sound.status}. Browser-local sound only.`);}
+  function renderSound(){const s=notices.getState();el("wall-sound").textContent=s.settings.mode==="off"?"Sound off":s.sound.armed?"Sound on":"Sound on · activate";el("wall-sound").setAttribute("aria-label",`${el("wall-sound").textContent}. ${s.sound.status}. Browser-local sound only.`);}
   function renderMonitoring(m,changes={}) {
     const summary=PT.monitoringSummary(m),status=m.health.status;
     el("situation-brief").textContent=brief(m,changes);

@@ -101,21 +101,13 @@ class LockedNamespace:
         )
 
     def assert_retry_safe(self) -> None:
-        """Fail closed after an unretained run may have emitted an alert."""
-        with closing(self.connection.cursor()) as cursor:
-            cursor.execute(
-                "SELECT r.run_id::text FROM runtime_job_runs r "
-                "JOIN runtime_state_heads h ON h.namespace = r.namespace "
-                "WHERE r.namespace = %s AND r.status = 'failure' "
-                "AND r.side_effects_possible = true AND r.started_at > h.updated_at "
-                "ORDER BY r.started_at DESC LIMIT 1",
-                (self.namespace,),
-            )
-            row = cursor.fetchone()
-        if row is not None:
-            raise StateStoreError(
-                f"{self.namespace} retry is blocked because the last unretained run may have sent an alert"
-            )
+        """Compatibility entry: isolate old delivery uncertainty, never latch collection."""
+        self.prepare_notification_delivery()
+
+    def prepare_notification_delivery(self) -> None:
+        from .notifications import prepare_legacy_fences
+
+        prepare_legacy_fences(self.connection, self.namespace)
 
     def restore(self, destination: Path) -> SnapshotHead:
         with closing(self.connection.cursor()) as cursor:
@@ -158,6 +150,7 @@ class LockedNamespace:
         provenance: Mapping[str, Any],
         allow_initial: bool = False,
         successful_run_id: str | None = None,
+        notification_intents: list[dict[str, Any]] | None = None,
     ) -> SnapshotHead:
         if self.namespace == "ai":
             from scripts.opportunity_state import validate_directory
@@ -207,6 +200,12 @@ class LockedNamespace:
                     source_revision,
                     provenance_payload,
                 )
+                if notification_intents is not None:
+                    from .notifications import enqueue_in_snapshot_transaction
+
+                    if successful_run_id is None or provenance_payload.get("mode") != "production":
+                        raise StateStoreError("notification intents require a production producer run")
+                    enqueue_in_snapshot_transaction(cursor, self.namespace, snapshot_id, successful_run_id, notification_intents)
                 cursor.execute(
                     "INSERT INTO runtime_state_heads "
                     "(namespace, generation, snapshot_id, snapshot_sha256, updated_at) "
@@ -233,7 +232,10 @@ class LockedNamespace:
                         "UPDATE runtime_job_runs AS job_run "
                         "SET status = 'success', finished_at = now(), "
                         "snapshot_id = %s::uuid, snapshot_sha256 = %s, error_code = '', "
-                        "side_effects_possible = false, runtime_mode_evidence = %s::jsonb "
+                        "side_effects_possible = false, runtime_mode_evidence = %s::jsonb || "
+                        "CASE WHEN job_run.runtime_mode_evidence ? 'source_ocr' "
+                        "THEN jsonb_build_object('source_ocr', job_run.runtime_mode_evidence -> 'source_ocr') "
+                        "ELSE '{}'::jsonb END "
                         "FROM runtime_state_snapshots AS committed_snapshot "
                         "WHERE job_run.run_id = %s::uuid AND job_run.namespace = %s "
                         "AND job_run.status = 'running' "
@@ -287,6 +289,10 @@ class LockedNamespace:
             "kind": "runner_explicit",
             "mode": runtime_mode,
         }
+        if runtime_mode == "production" and self.namespace in {"legislative", "executive", "ai"}:
+            from scripts.runtime_notifications import CONTRACT
+
+            mode_evidence["notification_contract"] = CONTRACT
         with closing(self.connection.cursor()) as cursor:
             cursor.execute(
                 "INSERT INTO runtime_job_runs "
@@ -304,6 +310,24 @@ class LockedNamespace:
                 ),
             )
         return run_id
+
+    def record_ocr_health(self, run_id: str, metrics: Mapping[str, Any]) -> None:
+        """Update only this producer's OCR-stage telemetry, never its outcome/state."""
+        from scripts.source_ocr_health import safe_metrics
+
+        if self.namespace not in {"legislative", "executive"}:
+            raise StateStoreError("OCR telemetry requires a source namespace")
+        payload = safe_metrics(metrics)
+        with closing(self.connection.cursor()) as cursor:
+            cursor.execute(
+                "UPDATE runtime_job_runs SET runtime_mode_evidence = "
+                "jsonb_set(runtime_mode_evidence, '{source_ocr}', %s::jsonb, true) "
+                "WHERE run_id = %s::uuid AND namespace = %s AND runtime_mode = 'production' "
+                "RETURNING run_id::text",
+                (json.dumps(payload, sort_keys=True), run_id, self.namespace),
+            )
+            if cursor.fetchone() is None:
+                raise StateStoreError("OCR telemetry has no matching production run")
 
     def finish_run(
         self,
@@ -379,6 +403,10 @@ class PostgresSnapshotStore:
             with closing(connection.cursor()) as cursor:
                 cursor.execute(sql)
             connection.commit()
+            if migration is None:
+                with closing(connection.cursor()) as cursor:
+                    cursor.execute(path.with_name("20260909_runtime_notification_outbox.sql").read_text(encoding="utf-8"))
+                connection.commit()
         except Exception:
             connection.rollback()
             raise

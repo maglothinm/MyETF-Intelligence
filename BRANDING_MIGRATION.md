@@ -23,7 +23,7 @@ state. These established identities remain unchanged:
 - cache keys, state versions, completed analysis IDs, trade IDs, filing IDs, and paper-portfolio ledgers;
 - existing `MYETF_*` environment-variable names that are still consumed by compatibility or recovery tooling;
 - installer boundary comments such as `MYETF-GOVERNMENT-TRADE-TRACKER` where changing them would break idempotent historical overlays;
-- legacy distribution and provenance filenames, including `MyETF-government-trade-tracker-fast-track.zip` and `myetf-investor-edge-implementation.zip`;
+- historical distribution/provenance names in retained receipts; the obsolete `myetf-investor-edge-implementation.zip` installer was removed during the September 18 repository cleanup;
 - historical recovery reports and commit messages that accurately record the repository name at the time.
 
 A preserved compatibility string is not permission to target the legacy public

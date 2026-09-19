@@ -134,9 +134,10 @@ def test_nonfinite_quote_and_removed_membership_withdraw_badge_durably(tmp_path)
 class SnapshotLock:
     """Transport fake only: production pack/unpack/validation execute at each boundary."""
     def __init__(self,directory):
-        self.packed=pack_directory(directory); self.commits=[]; self.failures=[]
+        self.packed=pack_directory(directory); self.commits=[]; self.failures=[]; self.prepared=0
     def head(self): return SnapshotHead('ai',len(self.commits)+1,'TEST-snapshot',self.packed.sha256,'2026-09-08T15:00:00Z','b'*40,{})
     def assert_retry_safe(self): pass
+    def prepare_notification_delivery(self): self.prepared+=1
     def restore(self,directory):
         unpack_directory(self.packed.payload,directory,expected_sha256=self.packed.sha256,expected_manifest=self.packed.manifest)
         return self.head()
@@ -164,11 +165,20 @@ def test_existing_runner_checkpoints_live_fakes_and_restart_under_same_owner(tmp
     store=SnapshotStore(original,c); provider=Delivery(); market=Market(c); evidence=Evidence(c)
     env={**ENV,'OPPORTUNITY_MODE':'live','AI_ANALYSIS_ENABLED':'true','PUSHOVER_API_TOKEN':'TEST-token','PUSHOVER_USER_KEY':'TEST-user'}
     runner=JobRunner(store,source_revision='b'*40,environment=env)
+    from scripts.runtime_notifications import CONTRACT, PATH_KEY, delivery_id, record_key
+    key=record_key('candidate','TEST-trade','TEST-analysis',1)
+    queued={'schema_version':1,'namespace':'ai','delivery_id':delivery_id('ai','gmail',key),
+            'channel':'gmail','record_key':key,'available_on':'2026-09-08',
+            'payload':{'title':'TEST retained alert','message':'TEST only','url':'','url_title':'',
+                       'recipient':'research@example.test'}}
+    dispatches=[]
+    monkeypatch.setattr(runner,'_dispatch_notifications',lambda lock,namespace:dispatches.append(namespace))
     monkeypatch.setattr(runtime,'read_history',lambda *a,**kw:[trade()])
     def execute(command):
         cfg=runtime.analyst_config(command,runner._env())
         feature=runtime.OpportunityRuntime(cfg,rules('live'),clock=c,environment=runner._env())
         feature.evaluate(object(),market_provider=market,evidence_provider=evidence)
+        Path(runner._env()[PATH_KEY]).write_text(json.dumps(queued)+'\n',encoding='utf-8')
     monkeypatch.setattr(runner,'_execute',execute)
     actual_delivery=runtime.deliver_runtime
     def fake_delivery(config,environment,checkpoint):
@@ -179,6 +189,13 @@ def test_existing_runner_checkpoints_live_fakes_and_restart_under_same_owner(tmp
     assert any(v['provenance'].get('phase')=='opportunity_delivery_checkpoint' for v in store.lock.commits)
     assert store.lock.commits[-1]['successful_run_id']=='TEST-run'
     runner.run('ai'); assert len(provider.calls)==1
+    assert store.lock.prepared==2 and dispatches==['ai','ai']
+    # Every intermediate checkpoint must retain the newer recipient-aware outbox.
+    # Otherwise persisted queue markers could strand an alert after a later failure.
+    for commit in store.lock.commits:
+        assert commit['notification_intents']==[queued]
+        assert commit['provenance']['notification_contract']==CONTRACT
+        assert commit['provenance']['notification_intent_count']==1
 
 
 def test_rule_schema_rejects_unknown_fields_and_hash_excludes_mode(tmp_path):
@@ -206,3 +223,53 @@ def test_live_primary_routing_preserves_informational_and_shadow_behavior(tmp_pa
         assert old.candidate_alert_deliveries['bullish']['opportunity_superseded']
     else:
         assert all(c['title'].startswith('TEST ') for c in calls)
+
+
+@pytest.mark.parametrize('mode',['off','shadow','live'])
+def test_current_opportunity_preserves_deferred_recipients_and_information_labels(tmp_path,monkeypatch,mode):
+    from scripts import ai_filing_analyst_hardened as hardened
+    from scripts.runtime_notifications import CONTRACT, MODE_KEY, PATH_KEY, NAMESPACE_KEY, read_intents
+    cfg=replace(_config(tmp_path),suppress_alerts=False)
+    cfg.ai_dir.mkdir()
+    outbox=tmp_path/'notification-intents.jsonl'
+    monkeypatch.setenv(MODE_KEY,CONTRACT)
+    monkeypatch.setenv(PATH_KEY,str(outbox))
+    monkeypatch.setenv(NAMESPACE_KEY,'ai')
+    deliveries={direction:{'analysis_id':direction,'trade_id':'TEST-'+direction,
+                           'requested_channels':['gmail'],'delivered_channels':{},'channel_errors':{},
+                           'gmail_recipient':'reviewer@example.test',
+                           'alert':{'title':'TEST '+direction,'message':'TEST only','url':''}}
+                for direction in ('bullish','bearish','neutral')}
+    old=analyst.AIState(candidate_alert_deliveries=deliveries)
+    analyst.save_state(cfg.ai_dir/'state.json',old)
+    (cfg.ai_dir/'analyses.jsonl').write_text(''.join(json.dumps({'analysis_id':d,'signal_direction':d})+'\n' for d in deliveries),encoding='utf-8')
+    monkeypatch.setattr(analyst,'_notification_post',lambda *a,**kw:pytest.fail('deferred path must not send'))
+    monkeypatch.setattr(hardened,'_send_candidate_email_with_evidence',lambda *a,**kw:pytest.fail('deferred path must not send email'))
+    result=hardened.AnalystRunResult(started_utc=analyst.iso_utc())
+    hardened._deliver_pending_candidate_alerts(cfg,result,old,cfg.ai_dir/'state.json',opportunity_live=mode=='live')
+    intents=read_intents(outbox,'ai')
+    assert len(intents)==(2 if mode=='live' else 3)
+    assert all(i['payload']['recipient']=='reviewer@example.test' for i in intents)
+    assert all(i['payload']['title'].startswith('Filing information' if mode=='live' else 'TEST ') for i in intents)
+    before=outbox.read_bytes()
+    hardened._deliver_pending_candidate_alerts(cfg,result,old,cfg.ai_dir/'state.json',opportunity_live=mode=='live')
+    assert outbox.read_bytes()==before
+
+
+def test_opportunity_reviews_do_not_disable_existing_initial_edge_backfill(tmp_path,monkeypatch):
+    c=Clock(); cfg=_config(tmp_path); state(cfg.ai_dir,c)
+    _isolate_runtime(monkeypatch)
+    monkeypatch.setattr(analyst,'load_complete_retained_transaction_history',lambda config:([],{}))
+    monkeypatch.setattr(runtime,'read_history',lambda *a,**kw:[trade()])
+    feature=runtime.OpportunityRuntime(cfg,rules(),clock=c)
+    actual_evaluate=feature.evaluate
+    monkeypatch.setattr(feature,'evaluate',lambda session:actual_evaluate(session,market_provider=Market(c),evidence_provider=Evidence(c)))
+    monkeypatch.setattr(runtime,'prepare',lambda config:feature)
+    passes=[]
+    def maintain(*args,**kwargs):
+        passes.append(kwargs.get('allow_backfill',True))
+        return True
+    monkeypatch.setattr(analyst,'maintain_investor_edge',maintain)
+    result=analyst.run_analyst(cfg)
+    assert result.state_publishable
+    assert passes==[True,False]

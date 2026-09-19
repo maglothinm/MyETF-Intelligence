@@ -2271,6 +2271,12 @@ def format_candidate_alert(
 
 
 def _send_candidate_email(config: AnalystConfig, alert: Mapping[str, str]) -> bool:
+    try:
+        from .runtime_notifications import deferred
+    except ImportError:
+        from runtime_notifications import deferred
+    if deferred():
+        raise AnalystError("Runtime candidate delivery must use the durable outbox")
     address = config.gmail_address.strip()
     password = config.gmail_app_password.strip()
     if not address and not password:
@@ -2308,6 +2314,12 @@ def _notification_post(
     url_title: str,
     priority: int = 0,
 ) -> bool:
+    try:
+        from .runtime_notifications import deferred
+    except ImportError:
+        from runtime_notifications import deferred
+    if deferred():
+        raise AnalystError("Runtime candidate delivery must use the durable outbox")
     if not config.pushover_api_token or not config.pushover_user_key:
         if config.require_pushover:
             raise AnalystError("Pushover credentials are required but not configured")
@@ -2354,7 +2366,13 @@ def _requested_candidate_channels(config: AnalystConfig) -> list[str]:
         config.pushover_api_token and config.pushover_user_key
     ):
         channels.append("pushover")
-    if config.gmail_address and config.gmail_app_password:
+    try:
+        from .investor_notifications import runtime_recipient
+    except ImportError:
+        from investor_notifications import runtime_recipient
+    # Record requested email even while sender credentials are unavailable.
+    # Runtime dispatch retries definite non-submission independently of collection.
+    if runtime_recipient() or (config.gmail_address and config.gmail_app_password):
         channels.append("gmail")
     return channels
 
@@ -2376,6 +2394,10 @@ def _queue_candidate_alert(
     if isinstance(existing, dict):
         return delivery_id
     alert = format_candidate_alert(analysis, config.dashboard_url)
+    try:
+        from .investor_notifications import runtime_recipient
+    except ImportError:
+        from investor_notifications import runtime_recipient
     state.candidate_alert_deliveries[delivery_id] = {
         "delivery_id": delivery_id,
         "analysis_id": str(analysis.get("analysis_id") or ""),
@@ -2387,6 +2409,8 @@ def _queue_candidate_alert(
         "channel_errors": {},
         "alert": alert,
         "source_url": normalize_text(str(analysis.get("source_url") or "")),
+        "filed_date": str(analysis.get("filed_date") or ""),
+        "gmail_recipient": runtime_recipient(),
     }
     return delivery_id
 

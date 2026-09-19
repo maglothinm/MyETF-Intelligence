@@ -10,9 +10,10 @@
   const STORAGE_KEY = 'polititrack.notifications.v1';
   const LIMITS = Object.freeze({history: 150, ids: 2048, baseline: 12000, bloomBytes: 8192});
   const CATEGORIES = ['signals', 'operations', 'simulation', 'records'];
-  const DEFAULT_SETTINGS = Object.freeze({mode: 'off', volume: 0.2,
+  const INCIDENT_DELAY_MS = 60 * 60 * 1000;
+  const DEFAULT_SETTINGS = Object.freeze({mode: 'all', volume: 0.2,
     quietHours: {enabled: false, start: '22:00', end: '07:00'}, mutedCategories: {}});
-  const EXPLANATION = 'History, acknowledgement, snooze, mute and sound settings belong to this browser on this device. They do not change Gmail, Pushover or Healthchecks. In-page sound works only while this dashboard is open and active; existing external alerts remain the background channels.';
+  const EXPLANATION = 'Agent interruptions enter Inbox after 60 minutes of continuing problem evidence. Brief interruptions stay quiet; recovery notices appear only for interruptions that raised an alert. Operations shows problems immediately. History, acknowledgement, snooze, mute and sound settings belong to this browser on this device. They do not change Gmail, Pushover or Healthchecks. In-page sound works only while this dashboard is open and active; existing external alerts remain the background channels.';
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
   function list(value) { return Array.isArray(value) ? value : []; }
@@ -52,7 +53,7 @@
     const source = value && typeof value === 'object' ? value : {};
     const quiet = source.quietHours || {};
     const validTime = value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
-    return {mode: ['off', 'high', 'all'].includes(source.mode) ? source.mode : 'off',
+    return {mode: ['off', 'high', 'all'].includes(source.mode) ? source.mode : DEFAULT_SETTINGS.mode,
       volume: typeof source.volume === 'number' && Number.isFinite(source.volume) ? Math.max(0, Math.min(1, source.volume)) : 0.2,
       quietHours: {enabled: quiet.enabled === true, start: validTime(quiet.start) ? quiet.start : '22:00', end: validTime(quiet.end) ? quiet.end : '07:00'},
       mutedCategories: Object.fromEntries(CATEGORIES.map(category => [category, source.mutedCategories && source.mutedCategories[category] === true]))};
@@ -125,7 +126,8 @@
     const changes = {filings: 0, transactions: 0, signals: 0, simulations: 0};
     const events = [];
     if (firstVisit || (stamp(baseline.at) && Date.parse(snap.at) < Date.parse(baseline.at))) {
-      return {firstVisit, changes, events, currentIncidents: snap.incidents, unresolvedIncidents: snap.incidents, olderSnapshot: !firstVisit};
+      return {firstVisit, changes, events, currentIncidents: snap.incidents,
+        unresolvedIncidents: snap.incidents.map(incident => ({...incident, observedSince: snap.at, notified: false})), olderSnapshot: !firstVisit};
     }
     const newIds = key => {
       if (snap.limited.includes(key) || list(baseline.limited).includes(key)) return [];
@@ -155,20 +157,46 @@
       timestamp: observedAt, summary: [filingIds.length ? filingIds.length + ' new filings' : '', tradeIds.length ? tradeIds.length + ' newly parsed transactions' : ''].filter(Boolean).join(' · '),
       link: '#records', simulation: false, count: filingIds.length + tradeIds.length, pattern: null});
     const oldIncidents = list(baseline.incidents);
-    snap.incidents.filter(incident => !oldIncidents.some(old => old.id === incident.id)).forEach(incident => {
-      add({id: eventId('incident', [incident.branch, incident.kind, incident.id]), category: 'operations', severity: 'warning', icon: '⚠',
-        timestamp: incident.since || observedAt, summary: incident.branch + (incident.kind === 'stale' ? ' is stale according to retained evidence' : ' run requires attention'),
-        link: incident.url, simulation: false, count: 1, pattern: 'failure'});
+    // Keep one episode per branch across changing failed run IDs and failure/stale
+    // transitions. Publication time, not a reloaded page or device clock, earns
+    // time toward the delay. A confirmed success between polls ends the episode.
+    const notified = incident => {
+      const id = eventId('incident', [incident.branch, incident.kind, incident.id]);
+      return incident.notified === true || (incident.notified === undefined && (bloomHas(seen, id) || state.seenIds.includes(id)));
+    };
+    const successes = branch => snap.runRows.filter(row => row.branch === branch &&
+      (row.conclusion || row.status) === 'success' && row.status !== 'failure' && row.error_count === 0 && stamp(row.at))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    const afterIncident = (row, incident) => stamp(incident.since) && Date.parse(row.at) > Date.parse(incident.since) && Date.parse(row.at) <= Date.parse(snap.at);
+    const recover = (incident, current) => {
+      if (notified(incident)) add({id: eventId('recovery', [incident.branch, incident.id, current.id]), category: 'operations', severity: 'success', icon: '✓',
+        timestamp: stamp(current.at), summary: incident.branch + ' recovered from the previously reported interruption',
+        link: safeLink(current.url, '#operations'), simulation: false, count: 1, pattern: null});
+    };
+    const unresolvedIncidents = [];
+    const currentByBranch = new Map();
+    snap.incidents.forEach(incident => {
+      const prior = currentByBranch.get(incident.branch);
+      if (!prior || (Date.parse(incident.since) || 0) >= (Date.parse(prior.since) || 0)) currentByBranch.set(incident.branch, incident);
     });
-    const unresolvedIncidents = snap.incidents.slice();
-    oldIncidents.filter(incident => !snap.incidents.some(current => current.id === incident.id || current.branch === incident.branch)).forEach(incident => {
+    currentByBranch.forEach(incident => {
+      let old = oldIncidents.find(prior => prior.branch === incident.branch);
+      const success = old && successes(incident.branch).find(row => afterIncident(row, old) && Date.parse(row.at) <= Date.parse(incident.since));
+      if (success) { recover(old, success); old = null; }
+      const episode = {...incident, id: old?.id || incident.id,
+        observedSince: stamp(old?.observedSince) || snap.at, notified: old ? notified(old) : false};
+      if (!episode.notified && Date.parse(snap.at) - Date.parse(episode.observedSince) >= INCIDENT_DELAY_MS) {
+        add({id: eventId('incident', [episode.branch, episode.kind, episode.id]), category: 'operations', severity: 'warning', icon: '⚠',
+          timestamp: observedAt, summary: episode.branch + ' monitoring requires attention — interruption has persisted for at least 60 minutes',
+          link: episode.url, simulation: false, count: 1, pattern: 'failure'});
+        episode.notified = true;
+      }
+      unresolvedIncidents.push(episode);
+    });
+    oldIncidents.filter(incident => !currentByBranch.has(incident.branch)).forEach(incident => {
       const current = snap.runRows.filter(row => row.branch === incident.branch).sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))[0];
-      const successful = current && (current.conclusion === 'success' || current.status === 'success') && current.error_count === 0;
-      if (successful && stamp(current.at) && stamp(incident.since) && Date.parse(current.at) > Date.parse(incident.since)) {
-        add({id: eventId('recovery', [incident.branch, incident.id, current.id]), category: 'operations', severity: 'success', icon: '✓',
-          timestamp: stamp(current.at), summary: incident.branch + ' recovered from the previously observed ' + incident.kind + ' incident',
-          link: safeLink(current.url, '#operations'), simulation: false, count: 1, pattern: null});
-      } else unresolvedIncidents.push(incident);
+      if (current && successes(incident.branch).includes(current) && afterIncident(current, incident)) recover(incident, current);
+      else unresolvedIncidents.push(incident);
     });
     const simulationIds = newIds('simulations'), simulationSet = new Set(simulationIds);
     const simulations = snap.simulationRows.filter(row => simulationSet.has(digest(row.simulation_id)) && row.kind === 'historical_replay');
@@ -198,12 +226,17 @@
       this._audioFactory = options.audioFactory || (() => { const Audio = this._host.AudioContext || this._host.webkitAudioContext; return Audio ? new Audio() : null; });
       this._context = null; this._armed = false; this._audioStatus = 'Off'; this._queue = Promise.resolve();
       this._state = this._read() || freshState();
-      if (this._state.settings.mode !== 'off') this._audioStatus = 'Use Enable sound after reopening this page';
+      if (this._state.settings.mode !== 'off') this._audioStatus = 'Sound is on; click or press a key to activate audio';
       this._currentIncidents = this._state.baseline ? list(this._state.baseline.incidents) : [];
       this._storageListener = event => {
         if (event.key === STORAGE_KEY) { this._sync(); this._onChange(this.getState()); }
       };
-      if (this._host.addEventListener) this._host.addEventListener('storage', this._storageListener);
+      this._interactionListener = event => { this.armOnInteraction(event).catch(() => {}); };
+      if (this._host.addEventListener) {
+        this._host.addEventListener('storage', this._storageListener);
+        this._host.addEventListener('click', this._interactionListener);
+        this._host.addEventListener('keydown', this._interactionListener);
+      }
     }
     _read() {
       if (!this._storage) return null;
@@ -294,6 +327,19 @@
         return true;
       } catch (_) { this._armed = false; this._audioStatus = 'Audio was blocked or is unavailable'; this._onChange(this.getState()); return false; }
     }
+    async armOnInteraction(event) {
+      this._sync();
+      if (this._state.settings.mode === 'off' || this._armed || !this._gesture(event)) return false;
+      if (!await this._unlockAudio(event)) { this._onChange(this.getState()); return false; }
+      // A stored explicit Off stays off, including a change from another tab.
+      this._sync();
+      if (this._state.settings.mode === 'off') return false;
+      this._armed = true;
+      this._audioStatus = this._locks && this._locks.request && this._storageAvailable
+        ? 'On while open and active' : 'Automatic sound unavailable; browser coordination or storage is missing';
+      this._onChange(this.getState());
+      return true;
+    }
     async enableSound(event) {
       if (!await this._unlockAudio(event)) { this._onChange(this.getState()); return false; }
       if (this._state.settings.mode === 'off') await this.setSettings({mode: 'high'});
@@ -349,7 +395,11 @@
       } catch (_) { this._armed = false; this._audioStatus = 'Audio is unavailable; visual notifications remain active'; return false; }
     }
     destroy() {
-      if (this._host.removeEventListener) this._host.removeEventListener('storage', this._storageListener);
+      if (this._host.removeEventListener) {
+        this._host.removeEventListener('storage', this._storageListener);
+        this._host.removeEventListener('click', this._interactionListener);
+        this._host.removeEventListener('keydown', this._interactionListener);
+      }
       if (this._context && this._context.close) Promise.resolve(this._context.close()).catch(() => {});
       this._armed = false;
     }

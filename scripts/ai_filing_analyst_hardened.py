@@ -445,7 +445,9 @@ def _pending_channels(delivery: Mapping[str, Any]) -> set[str]:
         if isinstance(delivered_value, Mapping)
         else set()
     )
-    return requested - delivered
+    queued_value = delivery.get("runtime_queued_channels") or {}
+    queued = set(queued_value) if isinstance(queued_value, Mapping) else set()
+    return requested - delivered - queued
 
 
 def _checkpoint_result(
@@ -460,6 +462,13 @@ def _send_candidate_email_with_evidence(
     config: legacy.AnalystConfig, alert: Mapping[str, str]
 ) -> bool:
     """Send Gmail while distinguishing rejection from unknown acceptance."""
+
+    try:
+        from .runtime_notifications import deferred
+    except ImportError:
+        from runtime_notifications import deferred
+    if deferred():
+        raise FatalAnalystConfigurationError("Runtime candidate delivery must use the durable outbox")
 
     address = config.gmail_address.strip()
     password = config.gmail_app_password.strip()
@@ -517,6 +526,38 @@ def _deliver_pending_candidate_alerts(
             if analysis.get("signal_direction") not in {"bearish", "neutral"}:
                 delivery["opportunity_superseded"] = "primary bullish alerts now require Current Opportunity gates"
         legacy.save_state(state_path, state)
+    try:
+        from .runtime_notifications import deferred, record_key, stage_notification
+    except ImportError:
+        from runtime_notifications import deferred, record_key, stage_notification
+    if deferred():
+        try:
+            from .investor_notifications import runtime_recipient
+        except ImportError:
+            from investor_notifications import runtime_recipient
+        email_recipient = runtime_recipient()
+        for delivery in state.candidate_alert_deliveries.values():
+            alert = delivery.get("alert") or {}
+            if not isinstance(alert, Mapping):
+                raise FatalAnalystConfigurationError("Invalid queued candidate alert")
+            key = record_key("candidate", delivery.get("trade_id", ""), delivery.get("analysis_id", ""), delivery.get("analysis_revision", 1))
+            title = str(alert.get("title") or "PolitiTrack candidate")
+            if opportunity_live:
+                title = "Filing information — " + title
+            queued = dict(delivery.get("runtime_queued_channels") or {})
+            for channel in sorted(_pending_channels(delivery)):
+                stage_notification(channel=channel, key=key, filed_date=str(delivery.get("filed_date") or ""), payload={
+                    "title": title[:250],
+                    "message": str(alert.get("message") or ""),
+                    "url": str(alert.get("url") or delivery.get("source_url") or ""),
+                    "url_title": "Open PolitiTrack analysis",
+                    **({"recipient": delivery.get("gmail_recipient") or email_recipient} if channel == "gmail" and (delivery.get("gmail_recipient") or email_recipient) else {}),
+                })
+                queued[channel] = key
+            delivery["runtime_queued_channels"] = queued
+        legacy.save_state(state_path, state)
+        _checkpoint_result(config, result)
+        return
     pending_ids = [
         delivery_id
         for delivery_id in sorted(state.candidate_alert_deliveries)
@@ -917,7 +958,6 @@ def run_analyst(
                 opportunity.restore_edge_after_failure()
         maintenance_ok = legacy.maintain_investor_edge(
             investor_edge, historical_transactions, result.warnings,
-            **({"allow_backfill": False} if opportunity is not None else {}),
         )
         if maintenance_ok is False and opportunity is not None:
             opportunity.restore_edge_after_failure()
@@ -1202,6 +1242,14 @@ def run_analyst(
             )
 
         if not result.errors:
+            try:
+                from .investor_notifications import stage_profile_alerts
+            except ImportError:
+                from investor_notifications import stage_profile_alerts
+            if investor_edge is not None and final_maintenance_ok is True:
+                stage_profile_alerts(config.ai_dir, getattr(investor_edge, "profiles", {}),
+                                     dashboard_url=config.dashboard_url,
+                                     suppress_alerts=config.suppress_alerts)
             _deliver_pending_candidate_alerts(
                 config, result, state, state_path,
                 opportunity_live=opportunity is not None and opportunity.rules["mode"] == "live",

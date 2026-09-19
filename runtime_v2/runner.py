@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -99,6 +100,7 @@ class JobRunner:
         mode: RuntimeMode | str | None = None,
     ):
         self.store = store
+        self._notification_context: dict[str, str] = {}
         self.root = (repository_root or Path(__file__).resolve().parents[1]).resolve()
         self.environment = dict(os.environ if environment is None else environment)
         self.mode = resolve_runtime_mode(self.environment) if mode is None else _coerce_mode(mode)
@@ -156,6 +158,14 @@ class JobRunner:
                 ):
                     result.pop(key, None)
             result["POLITITRACK_EXTERNAL_CALLBACKS_ENABLED"] = "false"
+        from scripts.runtime_notifications import CONTRACT, MODE_KEY, PATH_KEY, NAMESPACE_KEY
+
+        # Force the collection subprocess to stage, never submit. Do not inherit
+        # an operator-supplied outbox path or delivery namespace.
+        result[MODE_KEY] = "disabled" if self.mode.is_shadow else CONTRACT
+        result.pop(PATH_KEY, None)
+        result.pop(NAMESPACE_KEY, None)
+        result.update(self._notification_context)
         return result
 
     def _execute(self, args: Sequence[str]) -> None:
@@ -225,6 +235,37 @@ class JobRunner:
             command.append("--no-notify")
         return command
 
+    def _prepare_notifications(self, locked, namespace: str, directory: Path) -> Path:
+        from scripts.runtime_notifications import PATH_KEY, NAMESPACE_KEY
+
+        path = directory / "notification-intents.jsonl"
+        self._notification_context = {PATH_KEY: str(path), NAMESPACE_KEY: namespace}
+        if not self.mode.is_shadow:
+            locked.prepare_notification_delivery()
+        return path
+
+    def _notification_commit_options(self, path: Path, namespace: str) -> tuple[dict, dict]:
+        if self.mode.is_shadow:
+            return {}, {}
+        from scripts.runtime_notifications import CONTRACT, read_intents
+
+        intents = read_intents(path, namespace)
+        digest = hashlib.sha256(json.dumps(intents, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return {"notification_intents": intents}, {"notification_contract": CONTRACT, "notification_intent_count": len(intents), "notification_intents_sha256": digest}
+
+    def _dispatch_notifications(self, locked, namespace: str) -> None:
+        if self.mode.is_shadow or (self._alerts_suppressed() if namespace == "ai" else self._notifications_suppressed()):
+            return
+        from .notifications import NotificationDispatcher
+
+        try:
+            counts = NotificationDispatcher(locked.connection, namespace, self.environment).dispatch()
+            print(json.dumps({"result": "notification_delivery_processed", "namespace": namespace, "counts": counts}), flush=True)
+        except Exception as exc:
+            # Snapshot/run success is already committed. Pending or uncertain
+            # per-record claims survive for subsequent scheduled collection runs.
+            print(json.dumps({"result": "notification_delivery_deferred", "namespace": namespace, "error_code": type(exc).__name__}), flush=True)
+
     def _ai_command(
         self,
         legislative: Path,
@@ -261,17 +302,29 @@ class JobRunner:
         with self.store.locked(branch) as locked, tempfile.TemporaryDirectory(
             prefix=f"polititrack-{branch}-"
         ) as raw:
-            locked.assert_retry_safe()
             workspace = Path(raw)
             state_dir, output_dir = workspace / "state", workspace / "output"
             output_dir.mkdir()
             parent = locked.restore(state_dir)
             _require_success_state(state_dir)
-            run_id = locked.start_run(
-                branch, trigger, self.source_revision, self.mode.value
-            )
-            side_effects_possible = False
+            outbox = self._prepare_notifications(locked, branch, output_dir)
+            run_id = locked.start_run(branch, trigger, self.source_revision, self.mode.value)
+            ocr_health = None
+            ocr_enabled = _truthy(self.environment.get("RUNTIME_SOURCE_OCR_ENABLED")) and not self.mode.is_shadow
+            def record_ocr():
+                if ocr_health is not None:
+                    from scripts.source_ocr import now
+                    ocr_health["heartbeat_at"] = now()
+                    locked.record_ocr_health(run_id, ocr_health)
+                    from scripts.source_ocr_health import safe_metrics
+                    print(json.dumps({"event": "source_ocr_health", "run_id": run_id,
+                                      "branch": branch, **safe_metrics(ocr_health)}, sort_keys=True), flush=True)
             try:
+                if ocr_enabled:
+                    from scripts.source_ocr import now
+                    ocr_health = {"enabled": True, "stage": "waiting_for_collection", "started_at": now(),
+                                  "intake_status": "pending", "cleanup_status": "pending"}
+                    record_ocr()
                 command = self._tracker_command(branch, state_dir, output_dir)
                 if branch == "legislative":
                     command.extend(["--source", "all"])
@@ -286,7 +339,6 @@ class JobRunner:
                         ]
                     )
                     command.extend(["--oge-listings-file", str(listings)])
-                side_effects_possible = not self.mode.is_shadow
                 self._execute(command)
                 if branch == "legislative":
                     self._execute(
@@ -298,7 +350,28 @@ class JobRunner:
                             str(output_dir / "legislative-result.json"),
                         ]
                     )
+                ocr_uploads, ocr_outcomes = None, []
+                if ocr_enabled:
+                    from .source_uploads import SourceUploadStore
+                    from .source_ocr_worker import run_pass
+                    ocr_uploads = SourceUploadStore()
+                    # The existing source namespace lock is the sole consumer.
+                    # Intake failure must not stop ordinary source collection.
+                    try:
+                        queued = ocr_uploads.pending(branch)
+                        ocr_health["intake_status"] = "ok"
+                    except Exception as exc:
+                        queued = []
+                        ocr_health.update(intake_status="failed", intake_error_code=type(exc).__name__)
+                        print(json.dumps({"result": "ocr_intake_deferred", "error_code": type(exc).__name__}), flush=True)
+                    ocr_health["stage"] = "processing"
+                    record_ocr()
+                    ocr_outcomes = run_pass(state_dir, branch, self.environment, queued,
+                                           health=ocr_health, on_progress=lambda metrics: record_ocr())
+                    ocr_health["stage"] = "awaiting_commit"
+                    record_ocr()
                 state = _require_success_state(state_dir)
+                notification_options, notification_provenance = self._notification_commit_options(outbox, branch)
                 snapshot = locked.commit(
                     state_dir,
                     expected_parent_sha256=parent.snapshot_sha256,
@@ -310,24 +383,53 @@ class JobRunner:
                         "mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
+                        **notification_provenance,
                     },
+                    **notification_options,
                 )
-                return snapshot
             except Exception as exc:
+                if ocr_health is not None:
+                    from scripts.source_ocr import now
+                    ocr_health.update(stage="skipped" if ocr_health["stage"] == "waiting_for_collection" else "failed",
+                                      finished_at=now(), error_code=type(exc).__name__)
+                    try:
+                        record_ocr()
+                    except Exception as telemetry_error:
+                        print(json.dumps({"result": "ocr_health_unavailable", "error_code": type(telemetry_error).__name__}), flush=True)
                 locked.finish_run(
                     run_id,
                     status="failure",
                     error_code=type(exc).__name__,
-                    side_effects_possible=side_effects_possible,
+                    side_effects_possible=False,
                 )
                 raise
+            if ocr_health is not None:
+                ocr_health["cleanup_status"] = "not_needed"
+            if ocr_uploads is not None and ocr_outcomes:
+                try:
+                    ocr_uploads.acknowledge(ocr_outcomes, snapshot.snapshot_sha256)
+                    ocr_health["cleanup_status"] = "complete"
+                except Exception as exc:
+                    # A later run replays the committed receipt, not the import.
+                    ocr_health.update(cleanup_status="deferred", cleanup_error_code=type(exc).__name__)
+                    print(json.dumps({"result": "ocr_cleanup_deferred", "error_code": type(exc).__name__}), flush=True)
+            if ocr_health is not None:
+                from scripts.source_ocr import now
+                ocr_health.update(stage="complete", finished_at=now())
+                try:
+                    record_ocr()
+                except Exception as exc:
+                    # The snapshot is already committed. The persisted unfinished
+                    # stage remains unconfirmed/stale, never a manufactured success.
+                    print(json.dumps({"result": "ocr_health_unavailable", "error_code": type(exc).__name__}), flush=True)
+            self._dispatch_notifications(locked, branch)
+            return snapshot
 
     def _run_ai(self) -> SnapshotHead:
         trigger = self._env()["POLITITRACK_TRIGGER_SOURCE"]
         with self.store.locked("ai") as locked, tempfile.TemporaryDirectory(
             prefix="polititrack-ai-"
         ) as raw:
-            locked.assert_retry_safe()
             workspace = Path(raw)
             legislative, executive, ai_dir = (
                 workspace / "legislative",
@@ -341,25 +443,29 @@ class JobRunner:
             parent = locked.restore(ai_dir)
             for directory in (legislative, executive, ai_dir):
                 _require_success_state(directory)
+            outbox = self._prepare_notifications(locked, "ai", workspace)
             run_id = locked.start_run(
                 "ai", trigger, self.source_revision, self.mode.value
             )
-            side_effects_possible = False
             try:
                 command = self._ai_command(legislative, executive, ai_dir, workspace)
-                side_effects_possible = not self.mode.is_shadow
                 self._execute(command)
                 state = _require_success_state(ai_dir)
+                notification_options, notification_provenance = self._notification_commit_options(outbox, "ai")
                 if self._env().get("OPPORTUNITY_MODE") == "live" and not self._alerts_suppressed():
                     from scripts.opportunity_runtime import deliver_runtime, analyst_config
                     def checkpoint():
+                        # Retain the current outbox transaction with each intermediate
+                        # AI snapshot, not just the final successful-run commit.
                         nonlocal parent
                         _require_success_state(ai_dir)
                         parent = locked.commit(
                             ai_dir, expected_parent_sha256=parent.snapshot_sha256,
                             source_revision=self.source_revision,
                             provenance={"authority": "runtime_v2", "job": "ai", "mode": self.mode.value,
-                                        "trigger_source": trigger, "phase": "opportunity_delivery_checkpoint"},
+                                        "trigger_source": trigger, "phase": "opportunity_delivery_checkpoint",
+                                        **notification_provenance},
+                            **notification_options,
                         )
                     deliver_runtime(analyst_config(command, self._env()), self._env(), checkpoint)
                 snapshot = locked.commit(
@@ -373,6 +479,7 @@ class JobRunner:
                         "mode": self.mode.value,
                         "trigger_source": trigger,
                         "last_success_utc": state["last_success_utc"],
+                        **notification_provenance,
                         "inputs": {
                             name: {
                                 "generation": input_head.generation,
@@ -381,16 +488,18 @@ class JobRunner:
                             for name, input_head in input_heads.items()
                         },
                     },
+                    **notification_options,
                 )
-                return snapshot
             except Exception as exc:
                 locked.finish_run(
                     run_id,
                     status="failure",
                     error_code=type(exc).__name__,
-                    side_effects_possible=side_effects_possible,
+                    side_effects_possible=False,
                 )
                 raise
+            self._dispatch_notifications(locked, "ai")
+            return snapshot
 
     def _run_dashboard(self) -> SnapshotHead:
         trigger = self._env()["POLITITRACK_TRIGGER_SOURCE"]

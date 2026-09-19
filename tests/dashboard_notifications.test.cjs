@@ -43,6 +43,9 @@ function model(update = {}) {
 }
 const signal = (id, classification = 'high_priority') => ({analysis_id: id, classification, ticker: 'TEST', analyzed_at: '2026-08-30T12:00:00Z', link: '#signals'});
 async function render(engine, data) { const pending = engine.prepare(data); await pending.commit(); return pending; }
+function published(minutes, update = {}) {
+  return {...model(update), generated_at: new Date(Date.parse('2026-08-30T12:00:00Z') + minutes * 60000).toISOString()};
+}
 
 test('first hydration establishes baseline only after render commit, without events or audio', async () => {
   const env = setup();
@@ -50,7 +53,7 @@ test('first hydration establishes baseline only after render commit, without eve
   assert.equal(pending.firstVisit, true);
   assert.deepEqual(pending.events, []);
   assert.equal(env.storage.writes, 0);
-  assert.equal(env.engine.getState().settings.mode, 'off');
+  assert.equal(env.engine.getState().settings.mode, 'all');
   await pending.commit();
   assert.equal(env.engine.getState().unread, 0);
   assert.equal(env.created, 0);
@@ -171,15 +174,20 @@ test('high-priority mode excludes watchlist audio; ordinary mode changes do not 
 
 test('high-priority mode includes supported operation failures and stale incidents', async () => {
   const env = setup();
+  await env.engine.setSettings({mode: 'high'});
   await render(env.engine, model()); await env.engine.enableSound(gesture);
   assert.equal(env.engine.getState().settings.mode, 'high');
   await render(env.engine, model({current_incidents: [{id: 'failure-high', branch: 'executive', kind: 'failure', since: '2026-08-30T12:00:00Z'}]}));
+  assert.deepEqual(env.context.notes, []);
+  await render(env.engine, published(60, {current_incidents: [{id: 'failure-high', branch: 'executive', kind: 'failure', since: '2026-08-30T12:00:00Z'}]}));
   assert.deepEqual(env.context.notes, [440, 329.63]);
-  await render(env.engine, model({current_incidents: [{id: 'failure-high', branch: 'executive', kind: 'failure', since: '2026-08-30T12:00:00Z'}, {id: 'stale-high', branch: 'legislative', kind: 'stale', since: '2026-08-30T12:00:00Z'}]}));
+  const both = {current_incidents: [{id: 'failure-high', branch: 'executive', kind: 'failure', since: '2026-08-30T12:00:00Z'}, {id: 'stale-high', branch: 'legislative', kind: 'stale', since: '2026-08-30T13:00:00Z'}]};
+  await render(env.engine, published(60, both));
+  await render(env.engine, published(120, both));
   assert.deepEqual(env.context.notes, [440, 329.63, 440, 329.63]);
 });
 
-test('first visit failure is current status without historical unread entries; same branch later recovers', async () => {
+test('first visit failure is current status and short recovery stays quiet', async () => {
   const env = setup();
   const failure = {id: 'legislative:bad', branch: 'legislative', kind: 'failure', since: '2026-08-30T10:00:00Z', url: '#operations'};
   await render(env.engine, model({current_incidents: [failure], runs: [{id: 'legislative:bad', branch: 'legislative', at: failure.since, status: 'failure', error_count: 1}]}));
@@ -189,10 +197,8 @@ test('first visit failure is current status without historical unread entries; s
   await render(env.engine, model({runs: []}));
   assert.equal(env.engine.getState().unread, 0);
   await render(env.engine, model());
-  assert.equal(env.engine.getState().events.length, 1);
-  assert.match(env.engine.getState().events[0].summary, /legislative recovered/);
-  assert.equal(env.engine.getState().events[0].severity, 'success');
-  assert.equal(env.engine.getState().events[0].pattern, null);
+  assert.equal(env.engine.getState().events.length, 0);
+  assert.equal(JSON.parse(env.storage.getItem(STORAGE_KEY)).baseline.incidents.length, 0);
 });
 
 test('new failure sounds once; another branch success cannot resolve it', async () => {
@@ -200,8 +206,9 @@ test('new failure sounds once; another branch success cannot resolve it', async 
   await render(env.engine, model()); await env.engine.setSettings({mode: 'all'}); await env.engine.enableSound(gesture);
   const failure = {id: 'executive:bad', branch: 'executive', kind: 'failure', since: '2026-08-30T11:30:00Z'};
   await render(env.engine, model({current_incidents: [failure]}));
+  await render(env.engine, published(60, {current_incidents: [failure]}));
   assert.deepEqual(env.context.notes, [440, 329.63]);
-  await render(env.engine, model());
+  await render(env.engine, published(65));
   assert.equal(env.engine.getState().events.length, 1);
   assert.equal(env.context.notes.length, 2);
 });
@@ -291,6 +298,7 @@ test('unsupported or blocked audio is handled; explicit test never creates exter
   const blocked = setup({audioFactory: () => ({state: 'suspended', resume: () => Promise.reject(new Error('blocked'))})});
   assert.equal(await blocked.engine.enableSound(gesture), false);
   const working = setup();
+  await working.engine.setSettings({mode: 'off'});
   assert.equal(await working.engine.testSound({isTrusted: false, type: 'click'}), false);
   assert.equal(await working.engine.testSound(gesture), true);
   assert.equal(working.context.notes.length, 2);
@@ -307,9 +315,9 @@ test('pre-armed first hydration and mixed-category burst produce no initial floo
   await render(env.engine, model({qualifying_signals: [signal('retained'), signal('new')],
     current_incidents: [{id: 'executive:new', branch: 'executive', kind: 'failure', since: '2026-08-30T12:00:00Z'}],
     simulation_results: [{simulation_id: 'new-replay', kind: 'historical_replay', status: 'success'}]}));
-  assert.equal(env.engine.getState().events.length, 3);
+  assert.equal(env.engine.getState().events.length, 2);
   assert.equal(env.context.notes.length, 2);
-  assert.equal(JSON.parse(env.storage.getItem(STORAGE_KEY)).playedIds.length, 3);
+  assert.equal(JSON.parse(env.storage.getItem(STORAGE_KEY)).playedIds.length, 2);
 });
 
 test('bounded bloom memory prevents replay after exact event-ID list eviction', async () => {
@@ -361,4 +369,21 @@ test('hostile text stays data and unsafe supporting URLs are rejected', async ()
   assert.match(env.engine.getState().events[0].summary, /<img/);
   assert.equal(env.engine.getState().events[0].link, '#signals');
   assert.equal(globalThis.alert, undefined);
+});
+
+test('sound defaults on, arms from a trusted interaction, and retains explicit Off on reload', async () => {
+  const env=setup();
+  assert.equal(env.engine.getState().settings.mode,'all');
+  assert.equal(await env.engine.armOnInteraction({isTrusted:false,type:'click'}),false);
+  assert.equal(env.created,0);
+  await render(env.engine,model());
+  assert.equal(await env.engine.armOnInteraction(gesture),true);
+  await render(env.engine,model({qualifying_signals:[signal('watch-default','watchlist')]}));
+  assert.equal(env.context.notes.length,2);
+  await env.engine.setSettings({mode:'off'});
+  const reopened=setup({storage:env.storage});
+  assert.equal(await reopened.engine.armOnInteraction(gesture),false);
+  assert.equal(reopened.engine.getState().settings.mode,'off');
+  assert.equal(reopened.created,0);
+  env.engine.destroy();reopened.engine.destroy();
 });

@@ -128,3 +128,23 @@ Python 3.11 artifact `10022299097`:
 The earlier artifact upload omitted `.nojekyll`; the corrected upload includes
 all checksummed TEST files. This entry records the tested implementation tree,
 not a production certificate or a claim about later commits.
+
+## September 19, 2026 — current-main merge reconciliation
+
+Owner authorized source merge of PR #154, not production activation. The merge
+base is current main `75cb399ea870a77069911c80f3bfe0b788475fd9`. Preserve its
+OCR/OGE repair, recipient-aware outbox, durable acknowledgements and Edge progress.
+The runner's intermediate opportunity checkpoints now carry the current outbox
+intents/provenance atomically with the AI snapshot. Deferred informational alerts
+retain their recipient and informational title; the initial Edge backfill pass is
+not disabled by opportunity review. Added integration regressions exercise these
+contracts, checkpoint/restart delivery and duplicate suppression with TEST fakes.
+
+Focused local checks: 171 passed, 11 environment-dependent skips. Broader local
+checks: 435 passed, 12 skipped, with six OCR-health failures due to unavailable
+Werkzeug; the full local collection also lacks Flask. These dependency limits are
+not waived checks. Fresh canonical PR CI is the merge gate for supported Python,
+PostgreSQL, OCR, dashboard DOM and current runtime/Edge regression coverage. Exact
+head/run outcomes are recorded on PR #154. The temporary source inspection
+workflow is absent from the integrated tree. Mode remains off; no live provider
+capability, delivery, deployment, or new never-crossed-threshold feature is claimed.

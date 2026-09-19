@@ -1095,6 +1095,302 @@ merge/import, or Phase 6.
 
 **Release verification:** Canonical run `34059488724`, attempt 1, job `101557337973`, succeeded. Artifact `9997087643` and both internal evidence hashes were independently verified. The final certificate records two scheduled AI writers, a following Dashboard writer, AI generation 70, Dashboard generation 79, enabled producer schedulers, paused Filing Vault, and completed temporary execution/logging cleanup. Independent GCP reads confirmed Scheduler creator identity and approved image for the exact three executions, and absence of temporary project logging/Scheduler/IAM-role-viewer grants. The public Dashboard 79 snapshot matched the durable status captured by the certification run. The repaired Runtime v2 recovery is certified; Phase 6 remains outside scope.
 
+## D-2026-09-08-046 — Preserve parser acknowledgement history by logical identity
+
+**Decision:** Issue #155 supersedes the absence-based discard rule in
+D-2026-09-01-037. Current-publication absence never erases acknowledgement history.
+Acknowledgements remain browser-local and reversible; deliberate storage retention
+keeps the 500 most recently acknowledged records.
+
+**Identity:** New pending reviews carry a structured exception code and versioned
+logical identity derived from source and stable filing identity, excluding reason
+and other display text. Retained evidence IDs and JSONL bytes remain intact.
+Reprocessing checks retained logical identities before appending or notifying.
+Publication adds the same identity map to complete reviews and compact insights;
+existing count/category/ID consistency validation remains mandatory.
+
+**Migration:** Existing version-1 browser IDs and timestamps are preserved and
+learn logical identities from successful publications. All matching stored aliases
+are removed by Restore to active review. A known changed logical identity is active
+even when an evidence ID is reused. Unclassified legacy records retain their own
+identity rather than being guessed into a shared exception. See
+[the acknowledgement contract](parser-review-acknowledgements.md).
+
+**Verification:** 1,157 canonical Python tests passed locally, with two optional
+integration skips; this includes the generated dashboard's 74 DOM tests and all
+required tracker/dashboard suites. Repository verify.sh passed. Four pre-existing
+AI test failures were reproduced on untouched main: fixed August sample trades
+were scored against wall-clock time. A test-only scoring-clock fixture makes
+those expectations deterministic without changing production scoring.
+
+**Boundary:** This is implementation and regression evidence, not a Runtime v2
+release certificate. No production state, protected artifact, scheduler, alert,
+legacy route, deployment, or live browser acknowledgement was changed.
+
+## 2026-09-08 — Classify reviews after identity normalization
+
+**Decision:** Normalize exception codes before selecting the publication category. Complete exports and insights must classify from the same enriched fields, including retained wording inherited from a matched filing.
+
+**Evidence and consequence:** Live acceptance of PR #156 found two House paper/scanned PTRs switching from `other` to `manual_exception` between enrichment passes. Tests reproduced the defect before correction. JSON, CSV and insights now agree on the four retained manual exceptions; the original Senate IDs retain their logical identity and legacy acknowledgement mapping. Validation remains strict. The rejected publication was retained and a valid old-image publication appended through the existing Dashboard writer; no snapshot or history was rewound or deleted.
+
+## 2026-09-08 — Accept the corrected acknowledgement publication before resuming schedules
+
+**Decision:** Release corrected source `19e894ef1262a86d4e54e24a8a34f6b7f230f688` on all six existing Runtime v2 resources and run the changed Dashboard producer under the established writer contract. Require live publication consistency, the exact legacy-Senate/four-record browser sequence, and served-bundle replay before schedule resume.
+
+**Consequence:** Dashboard advanced with exact parent continuity while the other namespace heads and Legislative incident guard remained intact. All original schedules were restored. The rejected publication remains in history and its rollback was a new valid publication, not a head rewind. Issue #155 is accepted live; the separate Senate access/retry incident remains unresolved. This is feature-release evidence, not new Phase 5 or all-pipeline certification. See [the release report](releases/2026-09-08-parser-acknowledgements.md).
+
+## D-2026-09-09-047 — Keep acknowledgements in each person's durable account
+
+**Decision:** The owner explicitly rejected browser-only storage because browser
+data is regularly cleared and selected separate acknowledgements per person.
+Issue #159 supersedes the storage/500-record eviction portions of D-2026-09-08-046.
+Stable logical review identity and retained evidence rules remain unchanged.
+
+**Implementation:** Use additive tables in the existing private PostgreSQL
+database, a stable account UUID, password sign-in, hashed single-use invitations
+and sessions, same-origin protected writes, and no-store personal responses.
+Serialize changes per account with revision checks and idempotent request IDs;
+commit state and audit together before showing success. Restores leave tombstones.
+No publication, browser clear, deployment, or password recovery erases history.
+
+**Migration:** Import legacy browser data only after a signed-in person's explicit
+action. Recover the owner's four verified original acknowledgements into only the
+owner's account, preserving timestamps. Imports never overwrite existing state,
+including Restore tombstones. Personal rows never enter public exports or producer
+snapshots. Public dashboard reading remains available without sign-in.
+
+**Release:** Default the feature off until the additive schema is ready. Use
+existing database networking/credentials without IAM expansion. Coordinate the
+shared release with the Legislative repair owner; local tests are not deployment
+evidence. Owner password setup remains a user action through a private link.
+
+## 2026-09-09 — Decouple collection from per-record notification delivery
+
+**Decision:** Legislative, Executive and AI stage alerts and commit them atomically
+with their successful state snapshot. A separate bounded dispatcher under the
+existing namespace lock durably claims each record/channel before sending.
+Uncertain delivery is retained per record and never automatically retried; later
+collection and genuinely new eligible alerts continue. No historical failed run
+is a namespace-wide collection latch.
+
+**Reason:** A transient Senate rejection was followed by a permanent outage because
+an old possible-alert flag prevented every later collection. Even genuinely
+ambiguous alert delivery must not permanently block source collection. The same
+send-before-publication structure affected Executive and AI.
+
+**Consequence:** Preserve original failed rows, flags, snapshots and parent hashes.
+Legacy ambiguous attempts hold only alerts whose official dates could precede
+those attempts. Later official dates remain eligible. The pinned September 8
+execution/image proof resolves only that exact run's notification uncertainty,
+not permission to collect. Completeness and writer locks remain strict. Schema
+installation precedes producer activation; after outbox snapshots exist, use only
+outbox-compatible rollback images. [Contract and evidence](incidents/2026-09-09-legislative-recovery.md).
+
+## 2026-09-09 — Accept durable personal review history after live isolation checks
+
+**Decision:** Accept PR #160 at source `c0eaeb430aa7f665283f9ee560cf72fbe9c257cf` after
+additive schema migration, original-timestamp owner recovery, exact served-source
+verification, live two-account isolation/cookie-clearing/Restore tests, and a
+fresh web revision preserving history. Disable test accounts while retaining
+their audit data. Owner password setup remains a user action through a private
+single-use link. Restore the original schedules only after all acceptance checks.
+
+**Boundary:** Legislative generation 232 and its original failed-run/guard are
+unchanged. The Dashboard writer appended one valid publication with exact parent
+continuity; no protected producer or personal history was rewound or deleted.
+This is bounded feature acceptance, not all-pipeline certification. See
+[the release record](releases/2026-09-09-personal-review-acknowledgements.md).
+
+
+## 2026-09-09 — Let the owner request existing production jobs from Operations
+
+**Decision:** Add one Run now control per Legislative, Executive and AI tile.
+Reuse the existing personal-account identity, with an explicit stable-UUID operator
+allowlist, same-origin writes and durable request receipts. Start only the three
+existing jobs with a fixed manual trigger and request UUID. Preserve writer locks,
+complete-source validation, outbox guarantees and scheduled execution.
+
+**Outcome contract:** Dispatch acceptance is not completion. Show terminal success
+only from a completed, successful execution. Reconcile uncertain starts by UUID
+without resubmission; retain actor/history and block duplicate manual requests.
+Correct the AI cadence description to its existing twice-hourly schedule without
+changing schedules. Default controls off until the additive schema and narrow
+job-scoped service-account permissions are ready. See [issue #164 controls](operations-manual-runs.md).
+
+## 2026-09-09 — Accept collection recovery after a natural scheduled successor
+
+**Decision:** Accept PRs #161/#162 at runtime source `9f1a59105f2ac7cfa6ed3f764d9ab4b3d5483301` only after
+exact-head tests, immutable build `9ad52cb8-5875-4e08-a86c-ea90e512247c`, additive migration, controlled
+Legislative/Executive/AI/Dashboard publication, preserved-history and personal-data
+hash checks, exact schedule restoration, and successful natural Legislative
+execution `polititrack-legislative-nmt57`. Record the new per-record delivery authority without
+editing the original failed run or replacing earlier certificates.
+
+**Consequence:** Legislative collection is live again. Original uncertainty and
+accepted history are retained; missing alert credentials and individual uncertain
+submissions do not latch future collection. Any future rollback must remain
+outbox-compatible. The personal review release and owner setup process remain
+intact. [Acceptance evidence](releases/2026-09-09-legislative-recovery.md).
+
+
+## 2026-09-10 — Owner investor alerts and reachable compact tables
+
+**Decision:** Send the configured owner Gmail notifications through the existing
+Runtime AI outbox for Investor Edge ratings strictly above 60.0 and the existing
+Watchlist/High Priority classifications. Observe complete/partial profiles only
+when their minimum sample is met. An additive per-profile crossing journal is
+committed with AI state and intents; unknown, absent or stale evidence never
+resets it. Initially qualifying profiles alert once, and later observed
+below-to-above crossings receive a new episode. Missing sender credentials leave
+intents queued without blocking collection. Simulations and suppressed/shadow
+execution remain unable to stage owner alerts. Existing outbox payloads remain
+valid; new Gmail payloads carry an explicit validated recipient.
+
+**UI:** Default new-browser sound to all eligible events, requiring the browser's
+normal real-interaction activation and preserving saved Off preferences. Reuse
+the shared accessible reader for short Analysis/Evidence previews, retaining
+full exact text, source links and search. Add synchronized, keyboard-accessible
+top scrolling to wide data tables and avoid creating controls for unopened
+profile details. Operations derives OGE health from the mandatory OGE step in
+the existing Runtime Executive writer, with explicit unknown/failure/stale
+states; access-required inventory is not a collector failure.
+
+**Release boundary:** No new schedule, writer, protected-state rebaseline,
+notification-history reset or personal-data change. Gmail credentials and a
+coordinated deployment remain separate from implementation. Once recipient-aware
+intents exist, any rollback must preserve both the outbox and recipient contract.
+See [issue #168 implementation](investor-alerts-navigation.md).
+
+
+## 2026-09-11 — Stream growing public dashboard assets
+
+**Decision:** Serve public text assets of at least 64 KiB with negotiated gzip
+streaming, preserving their exact decoded bytes. Remove the buffered response
+length for identity-only responses of at least 32 MiB so the WSGI server can use
+chunked transfer. Preserve range and conditional requests; use Vary and weak ETags
+for the semantically equivalent encoded representation. Do not compress private
+account/API responses or truncate retained ledgers.
+
+**Evidence:** The live Signals ledger returned HTTP 500 on September 11 while
+Cloud Run recorded “Response size was too large.” Its documented non-streaming
+HTTP/1 limit is 32 MiB. A ready snapshot alone does not prove every data endpoint
+loads; live acceptance must fetch and parse the complete Signals JSON.
+[Cloud Run limit](https://docs.cloud.google.com/run/quotas),
+[Flask streaming](https://flask.palletsprojects.com/en/stable/patterns/streaming/).
+
+
+## 2026-09-11 — Accept the owner-authorized alerts and navigation release
+
+**Decision:** Release PRs #169/#171 through the existing Runtime resources using the tested immutable image, a fresh read-only preservation baseline, exact-parent controlled successors, complete live data/asset checks, and a natural scheduled Executive success. Restore each verified producer to its unchanged original schedule; retain paused publication until its controlled acceptance. Preserve all snapshots, incident evidence, personal accounts, acknowledgements and notification history. No new migration or unrelated feature activation is included.
+
+**Consequence:** Sound defaults, compact accessible text, horizontal navigation and OGE health are live. SMTP configuration, provider acceptance and inbox receipt remain distinct evidence states; a missing owner-entered app password does not justify claiming delivery or blocking collection. Keep the recipient-aware outbox and crossing journal on every future release/rollback. [Release evidence](releases/2026-09-11-investor-alerts-navigation.md).
+
+## 2026-09-11 — Separate computable backfill from future outcomes (#172)
+
+**Decision:** Add disjoint evidence-based observation states, an additive bounded
+maintenance journal, cache-computable-only measured ETA and a three-pass stalled
+ready-work warning. Share the read-only presentation between root and standalone
+Investor Edge. No rating or acknowledgement is required to advance normal work.
+
+**Boundary:** Preserve scores/method hashes, provider/date gates, stable identities,
+protected snapshots, notifications/outbox, personal history and all schedules.
+Unknown or stale telemetry cannot imply completion. Dashboard rendering is not a
+successful processing event. The new journal is carried inside the existing AI
+snapshot; it is not an alternate state authority or production writer.
+
+**Release:** Branch implementation and CI remain distinct from immutable-image
+runtime deployment and live acceptance. Preserve the recipient-aware #169 source
+and the existing release coordination boundaries. See
+[progress contract](investor-edge-backfill-progress.md) and PR #173.
+
+## 2026-09-14 — Complete backfill telemetry without weakening runtime gates
+
+**Decision:** Resume PR #173 on the current accepted release. Incomplete price
+coverage cannot prove immaturity; stale/contradictory telemetry cannot prove
+completion. Measure ready-work throughput separately from attempts. Add the new
+backend, DOM and responsive checks to permanent canonical CI. Remove temporary
+source-export, patch-application workflows and bundle parts before merge.
+
+**Boundary:** Preserve Runtime v2, all producer schedules, outbox/recipient and
+profile-crossing history, personal reviews and source evidence. Deployment must
+use the existing coordinated release process with a fresh baseline; source or
+CI success is not production acceptance.
+
+## 2026-09-14 — Accept backfill progress only after actual-interpreter and live verification
+
+**Decision:** Accept #172 through PRs #173/#176/#177 only after successful corrected immutable image `us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404`, controlled producer successors, exact snapshot parent continuity, observation/profile key preservation, personal-history hashes and six real-data browser checks. Preserve the first failed AI execution rather than resetting its history. Compile affected entry points in the actual image and run Investor Edge CI on production Python 3.11.
+
+**Outcome:** Backfill progress, measured ready-work ETA and retry/maturity/stall explanations are live. All original producer schedules are restored unchanged and Vault remains paused. Historical processing completion and measured ETA availability remain data-dependent, not consequences of deploying UI. [Release evidence](releases/2026-09-14-investor-edge-backfill-progress.md).
+
+## 2026-09-15 — Delay Inbox interruption alerts for 60 minutes (#179)
+
+Use one browser-persisted interruption episode per branch. Allow 60 minutes of
+continuing published problem evidence before creating an Inbox warning or sound.
+That spans two scheduled opportunities for the twice-hourly agents. Changing
+failed run IDs or failure/stale classification does not restart or duplicate an
+episode. A verified success between failed observations resets the duration.
+Recovery notices require a prior alert for that episode; brief interruptions and
+their recoveries stay quiet. Previously delivered legacy alerts remain eligible
+for one recovery, while unreported legacy incidents start a fresh waiting period.
+
+Publication timestamps advance the waiting period. Refreshing cached data,
+changing the device clock, or opening another tab cannot earn outage duration.
+First hydration remains quiet. Unknown evidence cannot manufacture recovery.
+Operations status remains immediate; no external notification channel, collector,
+freshness threshold, source-date calculation, or stored user history is changed.
+
+
+## 2026-09-17 — Source OCR development boundaries (issue #182)
+
+- Keep direct source uploads in an additive, expiring private SQL inbox, not public Actions artifacts, a new writer, browser-local state or the paused Filing Vault.
+- Run optical extraction after validated normal source collection and before the existing canonical source snapshot commit. Separate content/version OCR receipts from seen IDs and personal review history; revalidate known URLs without re-OCRing identical successful bytes.
+- Treat user uploads and uncertain checkbox/asset readings as reviewable evidence. Require owner confirmation of complete supported tables; preserve row/page identity, unknown ownership and disclosed ranges. Existing trusted transaction conflicts remain blocked rather than replaced.
+- Acknowledge/clear raw upload bytes only after canonical commit. Retain SHA-keyed derived evidence and retry/approval receipts; suppress historical alert and backdated paper-trade replay through the existing bootstrap contract.
+- This decision records development scope, not deployment or production certification. The separate release gates and current limitations are in `docs/SOURCE_OCR.md`.
+
+
+## 2026-09-17 — Independent OCR health within existing producer reporting (#182)
+
+The owner requires OCR in run-health reporting. Store bounded stage telemetry in
+existing production run metadata, preserve it during the canonical atomic commit,
+and confirm cleanup separately. Collector success cannot establish OCR success.
+No new scheduler, state writer, health database, provider credential or alert
+channel is introduced. Keep human interpretation/access backlog distinct from
+technical failure and stalls; show both in Operations and include required OCR in
+the monitoring rollup. Retain the existing Inbox interruption-delay policy.
+
+Unknown or unreadable continuation-page layout blocks partial import. Use the
+v2 extraction version to invalidate older layout acceptance evidence, and bound
+untrusted document inspection before admission to the application process. This
+records source design and owner authorization, not production release acceptance.
+
+
+## 2026-09-18 — Preserve recovered OCR attempts and use one reviewed successor (#182)
+
+A closed recovered journal is immutable evidence. Reject deployment/recovery before constructor writes or recovery handlers. For the specific inventory failure before any submission, permit one explicitly selected successor bound to the reviewed predecessor checksum and all retained receipt hashes. Keep the predecessor in place and retain the workspace-wide lock, fresh preflight/baseline, exact image and existing production safeguards. Status/recovery cannot create a successor, and a closed successor cannot automatically start another one. This controller lifecycle design does not override tool safety review or certify deployment. See [continuation evidence](releases/2026-09-18-ocr-recovered-continuation.md).
+
+
+## 2026-09-18 — Prune obsolete repository copies; keep two recent versions (#184)
+
+Apply the owner's September 18 retention request to obsolete update packages and merged development copies older than September 11. Retain the two latest useful versions, active dependencies, open PRs and unique unmerged work. Preserve ordinary Git ancestry and operational data; a versioned filename alone does not establish obsolescence. Exact pinned migration/cutover evidence and the latest provenance-valid state must survive any artifact pruning. Remove the unused August 29 Investor Edge installer ZIP; its integrated, evolved source remains canonical. Branch and output-artifact removal is pending authenticated deletion access, separately from this source cleanup. No runtime deployment or state reset is part of this task.
+
+
+## D-2026-09-18-003 — Validate public OCR telemetry before generic privacy projection (#182)
+
+The exact `runtime_mode_evidence.source_ocr` envelope uses the bounded `safe_metrics()` projection before generic key-based redaction. OCR health depends on its validated heartbeat timestamp; deleting that field produces unknown health and disagrees with canonical producer evidence. Private heartbeat URLs, raw documents and arbitrary extra configuration remain excluded. Invalid telemetry never becomes success. Verify this boundary through `build_site()` output, not only direct insights-builder unit tests. This decision does not weaken independent deployment acceptance or permit editing failed release journals.
+
+
+## D-2026-09-18-004 — Release the heartbeat correction from sealed recovered configuration (#182)
+
+A reviewed wrapper reuses the exact v2.2 release engine, holds its original workspace lock, and requires both closed journal hashes plus all retained receipt hashes. It permits one deterministic new preparation for source `a2a15edb30895ece37b690e50e0f95fb1eaa2649`, after live configuration/build/database verification. Both prior attempts remain closed. The successor starts empty and repeats fresh baseline/acceptance; prior recovery evidence is never promoted to new release success. The original audit bytes and SQL remain pinned; only explicit verified release identity constants are rebound. [Procedure and tests](releases/2026-09-18-ocr-health-repair-release.md).
+
+
+## D-2026-09-19-001 — Correct document eligibility without replacing identities (#182)
+
+Keep the legacy document/request URL-slot calculation solely for OGE listing-ID hashing while classifying verified official PDF paths for access. Append retained access corrections through the canonical producer; never rewrite old rows, seen identities, public-observation dates or historical alert state. Use a separate document-policy version to retry affected access/inspection failures without invalidating successful extraction caches or pending owner confirmations.
+
+Readable PDFs with an empty user password may pass the existing bounded decoder even when they contain permission-encryption metadata. Password-required and invalid documents still fail closed; no password guessing, permission removal or weakening of resource bounds is authorized. Newly reachable OGE documents with known header contamination remain under layout review until their transaction rows can be validated. Source/CI acceptance remains separate from deployment and live import. See [repair evidence](releases/2026-09-19-oge-pdf-repair.md).
+
 
 ## D-2026-09-07-001 - Current Opportunity v1, off by default
 
@@ -1116,3 +1412,24 @@ Default mode remains off. PR tests and local fixtures are not deployment or
 investment-performance proof. Entitlement/identity/coverage verification,
 deployed shadow observation and explicit live approval remain separate gates.
 See `docs/CURRENT_OPPORTUNITY.md` and `docs/validation/current-opportunity-v1.md`.
+
+
+## 2026-09-19 — Reconcile Current Opportunity #154 for owner-authorized source merge
+
+**Decision:** The owner requested closing and merging PR #154. Reconcile it with
+canonical main `75cb399ea870a77069911c80f3bfe0b788475fd9`, retaining the subsequent
+OCR/OGE repairs, recipient-aware notification outbox, and Investor Edge backfill.
+Current Opportunity remains off by default. This authorization does not enable
+live opportunity delivery, change production configuration, or deploy a runtime.
+
+**Integration:** Preserve both bullish-alert supersession and the current
+recipient-aware deferred staging path. Every intermediate opportunity snapshot
+also commits the staged legacy notification intents and their provenance, so a
+later failure cannot persist queue markers without their durable outbox entries.
+Do not disable the existing initial Edge backfill pass when opportunity review is
+active. Keep the current OCR repair handoff and all historic decision entries.
+
+**Release boundary:** Provider capability, recipient configuration, quote latency,
+deployed shadow observation, and live activation remain separately unverified.
+The new never-crossed-percentage flag discussed before this merge is not part of
+PR #154 and is not claimed implemented by this reconciliation.

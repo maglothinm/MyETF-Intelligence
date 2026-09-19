@@ -1,0 +1,143 @@
+{
+  "result": "backfill_progress_deployed_and_verified",
+  "accepted_at": "2026-09-14T15:05:00.702173+00:00",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "source_revision": "0483e8c1f66a9328ec6f46d1ba003594c9aa75fc",
+  "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:14a8ec467ad9893048086349b8675de8967878c5610cad0071f1a6b1d6d24404",
+  "build_id": "b27a9df0-8c09-42df-a39b-01b1d0f985b8",
+  "web_revision": "polititrack-web-00043-29c",
+  "heads": [
+    {
+      "generation": 439,
+      "namespace": "ai",
+      "snapshot_id": "e950dca0-4815-4db8-b1ae-d2170d9a82e0",
+      "snapshot_sha256": "75b7b3238980411fae8ab7a7231078904e7e4505341f1996bc273ebcc61b636a",
+      "updated_at": "2026-09-14T14:55:11.726238+00:00"
+    },
+    {
+      "generation": 814,
+      "namespace": "dashboard",
+      "snapshot_id": "308f438b-99b7-427d-9b5a-a333d769a984",
+      "snapshot_sha256": "87e2da66b5649fd222c4288272743663cf9edde810360c28fe7379089356ac70",
+      "updated_at": "2026-09-14T14:59:34.737525+00:00"
+    },
+    {
+      "generation": 391,
+      "namespace": "executive",
+      "snapshot_id": "20b7f868-f77e-42d1-a823-f06ddc76c307",
+      "snapshot_sha256": "e6fafed969006bac8a4509651b41edf7407bb42fa13df242c3e0da597305f383",
+      "updated_at": "2026-09-14T14:45:51.798918+00:00"
+    },
+    {
+      "generation": 714,
+      "namespace": "legislative",
+      "snapshot_id": "5e7fcb90-8467-44f4-a808-00bc30af97af",
+      "snapshot_sha256": "85deb157763c7fa1b95113965b2672d3d7c66b18b7859569ce6e336040efb6f0",
+      "updated_at": "2026-09-14T14:40:28.622224+00:00"
+    }
+  ],
+  "history_preserved": true,
+  "all_original_observation_profile_keys_retained": true,
+  "accounts_preserved": 3,
+  "acknowledgements_preserved": 8,
+  "failure_evidence_preserved": true,
+  "producer_schedules": "ENABLED, original configuration unchanged",
+  "filing_vault_schedule": "PAUSED, unchanged",
+  "browser_checks": [
+    {
+      "view": "root-1280",
+      "responsive": true,
+      "filters": true,
+      "vertical_containment": true,
+      "table_height": 336
+    },
+    {
+      "view": "standalone-1280",
+      "responsive": true,
+      "filters": true,
+      "vertical_containment": true,
+      "table_height": 675
+    },
+    {
+      "view": "root-700",
+      "responsive": true,
+      "filters": true,
+      "vertical_containment": true,
+      "table_height": 336
+    },
+    {
+      "view": "standalone-700",
+      "responsive": true,
+      "filters": true,
+      "vertical_containment": true,
+      "table_height": 675
+    },
+    {
+      "view": "root-390",
+      "responsive": true,
+      "filters": true,
+      "vertical_containment": true,
+      "table_height": 336
+    },
+    {
+      "view": "standalone-390",
+      "responsive": true,
+      "filters": true,
+      "vertical_containment": true,
+      "table_height": 675
+    }
+  ],
+  "progress": {
+    "schema_version": 1,
+    "status": "unknown",
+    "counts": {
+      "awaiting_maturity": 0,
+      "awaiting_retry": 1148,
+      "blocked": 0,
+      "completed": 0,
+      "missing_data": 77,
+      "queued": 0,
+      "ready": 0,
+      "unknown": 80
+    },
+    "total_observations": 1305,
+    "last_successful_run_at": "2026-09-14T14:47:29.076840Z",
+    "last_advancement_at": "2026-09-14T14:20:25.251089Z",
+    "eta": null,
+    "eta_unavailable_reason": "no_currently_computable_work",
+    "next_retry_at": "2026-09-15T00:00:00Z"
+  },
+  "source_pr": 173,
+  "correction_pr": 176,
+  "ci_runs": [
+    34835594191,
+    34835594336,
+    34835773385,
+    34852747585,
+    34852747430,
+    34856903296,
+    34857488327
+  ],
+  "controlled_executions": {
+    "legislative": "polititrack-legislative-95kdc",
+    "executive": "polititrack-executive-mv8wx",
+    "ai": "polititrack-ai-6wsjc",
+    "dashboard": "polititrack-dashboard-8ndjg",
+    "acceptance": "polititrack-admin-fh4mk"
+  },
+  "core_engine_source": "4717b770b943c6afa36eab1182fe7d2b8285f563",
+  "presentation_pr": 177,
+  "presentation_only_successor": true,
+  "presentation_executions": {
+    "dashboard": "polititrack-dashboard-9cmhb",
+    "acceptance": "polititrack-admin-kwzgx"
+  },
+  "natural_engine_verification": {
+    "execution": "polititrack-ai-2chrw",
+    "source_revision": "4717b770b943c6afa36eab1182fe7d2b8285f563",
+    "conclusion": "success",
+    "created_by_existing_scheduler": true,
+    "completed_at": "2026-09-14T14:55:16.839643Z"
+  }
+}

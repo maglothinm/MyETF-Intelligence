@@ -1,0 +1,32 @@
+name: OCR release controller safety
+on:
+  pull_request:
+    paths:
+      - 'scripts/ocr_release_controller.py'
+      - 'tests/test_ocr_release_controller.py'
+      - 'scripts/ocr_health_repair_release.py'
+      - 'tests/test_ocr_health_repair_release.py'
+      - '.github/workflows/ocr_release_controller_tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ocr_release_controller.py'
+      - 'tests/test_ocr_release_controller.py'
+      - 'scripts/ocr_health_repair_release.py'
+      - 'tests/test_ocr_health_repair_release.py'
+      - '.github/workflows/ocr_release_controller_tests.yml'
+permissions:
+  contents: read
+jobs:
+  recovery-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_ocr_release_controller.py tests/test_ocr_health_repair_release.py

@@ -10,13 +10,22 @@
   const {el,esc,helpButton,numeric,number,money,percent,title,date,age,safeUrl,link,workflowUrl,checkedJson,statusText,fact,emptySignals,signalCard,healthCards,replay,brief}=PT;
   const PAGE_SIZE = 50;
   const REVIEW_ACK_STORAGE_KEY = "polititrack.manual-review-acknowledgements.v1";
-  const REVIEW_ACK_LIMIT = 500;
   const reviewLabels={manual_exception:"Manual Parser Exceptions",access_required:"Access / request required",other:"Other / uncategorized"};
   const filterLabel=field=>field==="category"?"Review status":title(field);
   const allLabel=field=>field==="source"?"All Sources":field==="category"?"All review statuses":`All ${title(field).toLowerCase()}`;
   const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",showAcknowledgedReviews:false,nextRefreshAt:Date.now()+300000,renderedAt:null,healthViewKey:null,changes:{},refreshError:false};
-  let reviewAcknowledgementStorageAvailable=true;
-  let reviewAcknowledgements=readReviewAcknowledgements();
+  let reviewAcknowledgements=[],reviewSavePending=false,reviewMessage="";
+  let runControls=null,runAccountId=null;
+  let reviewActivation=new URLSearchParams(location.hash.startsWith("#review-account?")?location.hash.split("?",2)[1]:"").get("activate")||"";
+  if(reviewActivation)history.replaceState(null,"","#records/reviews?category=manual_exception");
+  const personalReviews=new PolitiTrackPersonalReviews({onChange:value=>{
+    reviewAcknowledgements=value.acknowledged;
+    const accountId=value.status==="ready"?value.account.id:null;
+    if(runControls&&accountId!==runAccountId){runAccountId=accountId;runControls.changedAccount();if(state.section==="operations")runControls.load();}
+    if(value.status!=="ready")state.showAcknowledgedReviews=false;
+    renderReviewAccount();if(state.model)renderReviewAcknowledgementViews();
+  }});
+  runControls=new PolitiTrackOperations({account:()=>personalReviews.state,onChange:()=>runControls.render(el("operations-health")),onComplete:()=>loadData()});
   const healthClock=PT.createHealthClock();
   const openDialog=PT.setupDialogsAndTooltips();
   const notifications=new PolitiTrackNotifications({onChange:()=>renderNotifications()});
@@ -34,41 +43,48 @@
     investor_edge_relevant_followable_alpha: "followableAlpha", investor_edge_sector_alpha: "sectorEdge"
   });
   function get(row,path){return path.split(".").reduce((v,k)=>v&&typeof v==="object"?v[k]:undefined,row);}
-  function normalizeReviewAcknowledgements(value){
-    if(!value||value.version!==1||!Array.isArray(value.acknowledged))return {};
-    const normalized={};
-    for(const record of value.acknowledged.slice(-REVIEW_ACK_LIMIT)){
-      if(!record||typeof record.id!=="string"||!record.id||record.id.length>500||typeof record.acknowledged_at_utc!=="string"||!Number.isFinite(Date.parse(record.acknowledged_at_utc)))continue;
-      normalized[record.id]=record.acknowledged_at_utc;
-    }
-    return normalized;
-  }
-  function readReviewAcknowledgements(){
-    try{const raw=localStorage.getItem(REVIEW_ACK_STORAGE_KEY);return raw?normalizeReviewAcknowledgements(JSON.parse(raw)):{};}
-    catch{reviewAcknowledgementStorageAvailable=false;return {};}
-  }
-  function saveReviewAcknowledgements(){
-    const acknowledged=Object.entries(reviewAcknowledgements).sort((a,b)=>Date.parse(a[1])-Date.parse(b[1])).slice(-REVIEW_ACK_LIMIT).map(([id,acknowledged_at_utc])=>({id,acknowledged_at_utc}));
-    reviewAcknowledgements=Object.fromEntries(acknowledged.map(record=>[record.id,record.acknowledged_at_utc]));
-    try{localStorage.setItem(REVIEW_ACK_STORAGE_KEY,JSON.stringify({version:1,acknowledged}));reviewAcknowledgementStorageAvailable=true;return true;}
-    catch{reviewAcknowledgementStorageAvailable=false;return false;}
+  function legacyReviewAcknowledgements(){
+    try{const value=JSON.parse(localStorage.getItem(REVIEW_ACK_STORAGE_KEY));
+      return value?.version===1&&Array.isArray(value.acknowledged)&&value.acknowledged.length>0&&value.acknowledged.length<=500?value:null;
+    }catch{return null;}
   }
   function reconcileReviewAcknowledgements(model){
-    const current=new Set(model?.reviews?.manual_exception_ids||[]);let changed=false;
-    for(const id of Object.keys(reviewAcknowledgements))if(!current.has(id)){delete reviewAcknowledgements[id];changed=true;}
-    if(changed)saveReviewAcknowledgements();if(!manualReviewStats(model).acknowledged)state.showAcknowledgedReviews=false;
+    // The publication never writes personal state or evicts absent identities.
+    if(!manualReviewStats(model).acknowledged)state.showAcknowledgedReviews=false;
   }
-  const reviewAcknowledgedAt=row=>row?.category==="manual_exception"&&typeof row.review_id==="string"?reviewAcknowledgements[row.review_id]||"":"";
+  function acknowledgementFor(id,identity){
+    if(personalReviews.state.status!=="ready")return undefined;
+    return reviewAcknowledgements.find(record=>identity?record.logical_review_id===identity:record.id===id);
+  }
+  function renderReviewAccount(){
+    const account=personalReviews.state.account,ready=personalReviews.state.status==="ready",legacy=legacyReviewAcknowledgements();
+    el("review-account-button").textContent=ready?account.username:"Sign in";
+    el("review-account-button").setAttribute("aria-label",ready?`Review account: ${account.username}`:"Sign in to your review account");
+    el("review-account-title").textContent=reviewActivation?"Set up your review account":ready?"Your review account":"Sign in to save your reviews";
+    el("review-account-form").hidden=ready;el("review-account-signed-in").hidden=!ready;
+    el("review-username-field").hidden=Boolean(reviewActivation);el("review-username").required=!reviewActivation;
+    el("review-password").autocomplete=reviewActivation?"new-password":"current-password";
+    el("review-password").minLength=reviewActivation?14:1;
+    el("review-account-submit").textContent=reviewActivation?"Save password and continue":"Sign in";
+    el("review-account-signin-toggle").hidden=!reviewActivation;
+    el("review-account-explanation").textContent=personalReviews.state.status==="unavailable"?"Saved review status is temporarily unavailable. Your account history has not been changed.":reviewActivation?"Choose a password or passphrase with at least 14 characters. Your reviews stay with this account when browser data is cleared.":"Your acknowledgements are saved to your personal account. Sign in again after clearing browser data to pick up where you left off.";
+    el("review-account-name").textContent=ready?account.username:"";
+    el("review-legacy-import").hidden=!ready||!legacy;
+    el("review-legacy-note").textContent=ready&&legacy?`${legacy.acknowledged.length} older acknowledgements were saved on this browser. Import them into ${account.username} only if they belong to you. Later restores in your account will be preserved.`:"";
+    el("review-account-error").textContent=reviewMessage;el("review-account-error").hidden=!reviewMessage;
+    el("review-save-note").textContent=reviewMessage;el("review-save-note").hidden=!reviewMessage;
+  }
+  const reviewAcknowledgedAt=row=>row?.category==="manual_exception"?acknowledgementFor(row.review_id,row.logical_review_id||state.model?.reviews?.manual_exception_identities?.[row.review_id])?.acknowledged_at_utc||"":"";
   function manualReviewStats(model=state.model){
     const ids=Array.isArray(model?.reviews?.manual_exception_ids)?model.reviews.manual_exception_ids:[];
-    const acknowledged=ids.filter(id=>reviewAcknowledgements[id]).length;
-    return {total:ids.length,acknowledged,active:Math.max(0,ids.length-acknowledged)};
+    const acknowledged=ids.filter(id=>acknowledgementFor(id,model.reviews.manual_exception_identities?.[id])).length;
+    return {total:ids.length,acknowledged,active:Math.max(0,ids.length-acknowledged),known:personalReviews.state.status==="ready"};
   }
-  const activeReviewBrief=(model,changes,active)=>brief({...model,reviews:{...model.reviews,manual_exception:active}},changes,active);
+  const activeReviewBrief=(model,changes,active)=>brief({...model,reviews:{...model.reviews,manual_exception:personalReviews.state.status==="ready"?active:0}},changes,personalReviews.state.status==="ready"?active:0)+(personalReviews.state.status==="ready"?"":personalReviews.state.status==="unavailable"?" Saved parser review status is temporarily unavailable.":" Sign in to see your saved parser review status.");
   function renderReviewAttention(model=state.model){
     if(!model)return;const stats=manualReviewStats(model);
-    const counter=el("attention-exceptions");counter.textContent=number(stats.active);counter.classList.toggle("attention-active",stats.active>0);
-    el("attention-review-note").textContent=`${number(stats.acknowledged)} acknowledged here · ${number(model.reviews.access_required)} access/request required`;
+    const counter=el("attention-exceptions");counter.textContent=stats.known?number(stats.active):"—";counter.classList.toggle("attention-active",stats.known&&stats.active>0);
+    el("attention-review-note").textContent=stats.known?`${number(stats.acknowledged)} acknowledged by you · ${number(model.reviews.access_required)} access/request required`:personalReviews.state.status==="unavailable"?"Saved review status unavailable":"Sign in to load your acknowledgements";
     el("situation-brief").textContent=activeReviewBrief(model,state.changes,stats.active);
   }
   function renderExceptionInventory(model=state.model){
@@ -81,10 +97,14 @@
     if(Array.isArray(state.data.filings))renderTable("filings");
     if(focusId){const replacement=[...document.querySelectorAll("[data-review-ack]")].find(node=>node.dataset.reviewAck===focusId);replacement?.focus({preventScroll:true});}
   }
-  function setReviewAcknowledged(id,acknowledged){
-    if(!state.model?.reviews?.manual_exception_ids?.includes(id))return;
-    if(acknowledged)reviewAcknowledgements[id]=new Date().toISOString();else delete reviewAcknowledgements[id];
-    saveReviewAcknowledgements();if(!manualReviewStats().acknowledged)state.showAcknowledgedReviews=false;renderReviewAcknowledgementViews(id);
+  async function setReviewAcknowledged(id,acknowledged){
+    if(reviewSavePending||!state.model?.reviews?.manual_exception_ids?.includes(id))return;
+    if(personalReviews.state.status!=="ready"){openDialog("review-account-dialog");return;}
+    const identity=state.model.reviews.manual_exception_identities?.[id]||"";
+    reviewSavePending=true;reviewMessage="";renderReviewAccount();renderReviewAcknowledgementViews(id);
+    try{await personalReviews.save(id,identity,acknowledged);}
+    catch(error){reviewMessage=error.message;if(error.code==="SIGN_IN_REQUIRED")openDialog("review-account-dialog");}
+    finally{reviewSavePending=false;renderReviewAccount();renderReviewAcknowledgementViews(id);}
   }
   const dateLabel=key=>({filed_date:"Filing date",transaction_date:"Transaction date",observed_at_utc:"PolitiTrack observation date",first_seen_utc:"First observed date",analyzed_at_utc:"Analysis date",opened_at_utc:"Position opened date",last_updated_utc:"Valuation date",finished_utc:"Run finished date",started_utc:"Run started date"}[key]||title(key));
   function resetTable(key){
@@ -108,7 +128,7 @@
   function reviewSummary(model=state.model){
     if(!model)return;
     const active=state.tables.reviews.filters.category,stats=manualReviewStats(model),showingAcknowledged=active==="manual_exception"&&state.showAcknowledgedReviews;
-    el("review-categories").innerHTML=`<div class="review-summary"><a class="${active==="manual_exception"?"badge caution":"text-link"}" href="#records/reviews?category=manual_exception">Manual Parser Exceptions: ${number(stats.active)} active</a><span>${number(stats.acknowledged)} acknowledged on this browser · ${number(stats.total)} retained · Access / request required: ${number(model.reviews.access_required)} · Other: ${number(model.reviews.other)}</span>${active==="manual_exception"&&stats.acknowledged?`<button id="toggle-acknowledged-reviews" class="text-button">${showingAcknowledged?"Hide":"Show"} acknowledged (${number(stats.acknowledged)})</button>`:""}${active?`<button id="clear-review-category" class="text-button" aria-label="Remove ${esc(reviewLabels[active])} filter">${esc(reviewLabels[active])} ×</button>`:""}</div><p>${active==="manual_exception"?(showingAcknowledged?"Showing active and browser-acknowledged parser exceptions. Acknowledgement is reversible and does not alter retained evidence.":"Showing unacknowledged records requiring manual parser review. Select a record to inspect its retained filing."):"Select Manual Parser Exceptions to review parsing issues. Access requests are a separate inventory."}</p>`;
+    el("review-categories").innerHTML=`<div class="review-summary"><a class="${active==="manual_exception"?"badge caution":"text-link"}" href="#records/reviews?category=manual_exception">Manual Parser Exceptions: ${stats.known?`${number(stats.active)} active`:`${number(stats.total)} retained`}</a><span>${stats.known?`${number(stats.acknowledged)} acknowledged by you · ${number(stats.total)} retained`:personalReviews.state.status==="unavailable"?"Saved review status unavailable":"Sign in to see your review status"} · Access / request required: ${number(model.reviews.access_required)} · Other: ${number(model.reviews.other)}</span>${active==="manual_exception"&&stats.acknowledged?`<button id="toggle-acknowledged-reviews" class="text-button">${showingAcknowledged?"Hide":"Show"} acknowledged (${number(stats.acknowledged)})</button>`:""}${active?`<button id="clear-review-category" class="text-button" aria-label="Remove ${esc(reviewLabels[active])} filter">${esc(reviewLabels[active])} ×</button>`:""}</div><p>${active==="manual_exception"?(showingAcknowledged?"Showing active and personally acknowledged parser exceptions. Acknowledgement is reversible and does not alter retained evidence.":stats.known?"Showing your unacknowledged parser exceptions. Select a record to inspect its retained filing.":"Showing retained parser exceptions. Sign in to apply your saved acknowledgements; select a record to inspect its filing."):"Select Manual Parser Exceptions to review parsing issues. Access requests are a separate inventory."}</p>`;
     el("toggle-acknowledged-reviews")?.addEventListener("click",()=>{state.showAcknowledgedReviews=!state.showAcknowledgedReviews;state.tables.reviews.page=0;renderTable("reviews");el("toggle-acknowledged-reviews")?.focus({preventScroll:true});});
     el("clear-review-category")?.addEventListener("click",()=>{state.tables.reviews.filters.category="";state.tables.reviews.page=0;el("reviews-category").value="";syncRecordRoute("reviews");renderTable("reviews");el("reviews-category").focus();});
   }
@@ -118,6 +138,8 @@
     const manualIds=production.filter(r=>r.category==="manual_exception").map(r=>r.review_id).sort();
     if(production.some(r=>!Object.hasOwn(reviewLabels,r.category))||production.length!==model.reviews.total||Object.keys(reviewLabels).some(category=>production.filter(r=>r.category===category).length!==model.reviews[category])||JSON.stringify(manualIds)!==JSON.stringify(model.reviews.manual_exception_ids))
       throw new Error("Review data and dashboard counts belong to different publications. Refresh data to retry");
+    if(model.reviews.manual_exception_identities&&production.some(r=>r.category==="manual_exception"&&r.logical_review_id!==model.reviews.manual_exception_identities[r.review_id]))
+      throw new Error("Review identities belong to different publications. Refresh data to retry");
   }
   function initTables(){for(const [key,def] of Object.entries(definitions)){
     state.tables[key]={query:"",filters:{},page:0,sort:def.date,descending:true,dateBasis:def.date,from:"",to:"",selected:""};
@@ -130,13 +152,30 @@
     el(`${key}-clear`).onclick=()=>{resetTable(key);syncRecordRoute(key);renderTable(key);};
   }
   document.addEventListener("click",e=>{const b=e.target.closest("[data-sort]");if(!b)return;const t=state.tables[b.dataset.table];t.descending=t.sort===b.dataset.sort?!t.descending:false;t.sort=b.dataset.sort;t.page=0;renderTable(b.dataset.table);});}
+  function compactCell(value,label,kind="Analysis") {
+    if(typeof value!=="string"||!value.trim())return "Unavailable";
+    const preview=Array.from(value.replace(/\s+/g," ").trim());
+    return `<button type="button" class="help cell-preview" data-tooltip="${esc(value)}" data-tooltip-title="${esc(kind+" · "+label)}" aria-label="${esc("Read full "+kind.toLowerCase()+" for "+label)}"><span>${esc(preview.slice(0,220).join("")+(preview.length>220?"…":""))}</span></button>`;
+  }
+  function signalValue(row,field,type){
+    const html=cell(row,field,type),reader=document.createElement("div");
+    reader.innerHTML=html;
+    reader.querySelectorAll("small").forEach(node=>node.prepend(" "));
+    return `<div class="cell-value" tabindex="0" data-tooltip="${esc(reader.textContent.trim())}">${html}</div>`;
+  }
   function cell(row,field,type){let v=get(row,field);if(["investor_edge_relevant_followable_alpha","investor_edge_sector_alpha","investor_edge_score"].includes(field)&&(["insufficient_data","unavailable","disabled","error","neutral"].includes(row.investor_edge_status)||row.investor_edge?.minimum_sample_met===false))v=null;if(field==="final_score")v=v??row.score;
     if(type==="review")return `<a class="record-link" href="${esc(reviewHref(row))}"><strong>${esc(row.filer||"Unknown filer")}</strong><small>${esc(row.report_id||row.review_id||"Record ID unavailable")}</small><span>Inspect record →</span></a><small>${esc([row.title,row.agency].filter(Boolean).join(" · "))}</small>${row.is_synthetic_test===true?'<small class="caution">TEST / SIMULATED</small>':""}`;
     if(type==="age")return `${esc(date(v))}<small>${esc(age(v))}</small>`;
-    if(field==="category"){const acknowledged=reviewAcknowledgedAt(row);return `<span class="badge ${v==="manual_exception"?"caution":""}">${esc(reviewLabels[v]||"Uncategorized")}</span>${acknowledged?`<small class="success">✓ Acknowledged here ${esc(date(acknowledged))}</small>`:""}`;}
+    if(field==="category"){const acknowledged=reviewAcknowledgedAt(row);return `<span class="badge ${v==="manual_exception"?"caution":""}">${esc(reviewLabels[v]||"Uncategorized")}</span>${acknowledged?`<small class="success">✓ Acknowledged by you ${esc(date(acknowledged))}</small>`:""}`;}
     if(field==="source"||field==="branch")return esc(title(v||"Unavailable"));
     if(type==="date")return esc(date(v));if(type==="money")return esc(money(v));if(type==="percent")return esc(percent(v));if(type==="number")return esc(number(v));if(type==="link")return field==="run_url"?link(v,"Open run"):PT.filingActions(row);
-    if(type==="evidence")return PT.filingActions(row)+ (Array.isArray(row.ai?.evidence_sources)?row.ai.evidence_sources.filter(s=>s&&typeof s==="object"&&typeof s.url==="string").slice(0,4).map(s=>link(s.url,s.title||"Evidence")).join(""):"");
+    if(field==="ai.analysis_summary")return compactCell(v,row.ticker||row.asset||row.filer||"record");
+    if(type==="evidence"){
+      const sources=(Array.isArray(row.ai?.evidence_sources)?row.ai.evidence_sources:[]).filter(s=>s&&typeof s==="object"&&typeof s.url==="string");
+      const full=[row.source_url?`Official filing: ${row.source_url}`:"",...sources.map(s=>`${s.title||"Evidence"}: ${s.url}`)].filter(Boolean).join("\n\n");
+      const links=PT.filingActions(row)+sources.map(s=>link(s.url,s.title||"Evidence")).join("");
+      return `<div class="cell-evidence">${compactCell(full,row.ticker||row.asset||row.filer||"record","Evidence")}<details><summary>Open sources</summary><div class="evidence-links">${links}</div></details></div>`;
+    }
     if(type==="status"){if(row.errors && (Array.isArray(row.errors)?row.errors.length:typeof row.errors==="object"?Object.keys(row.errors).length:String(row.errors).trim().length))v=false;return `<span class="status ${v===true?"success":v===false?"failure":"unknown"}">${v===true?"✓ Success":v===false?"! Failed":"◌ Unknown"}</span>`;}
     if(type==="array")return esc(Array.isArray(v)?v.join("; ")||"None recorded":v||"None recorded");
     if(type==="sum")return v&&typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(x=>numeric(x)!==null)?number(Object.values(v).reduce((a,b)=>a+Number(b),0)):"Unavailable";
@@ -147,8 +186,8 @@
   }
   function recordDetails(row,key){
     const review=key==="reviews",retainedReviews=(review?[row]:(state.data.reviews||[]).filter(r=>r.filing_available===true&&r.filing_key===row.filing_key)).filter(r=>r.is_synthetic_test!==true),manualReviews=retainedReviews.filter(r=>r.category==="manual_exception"),acknowledged=manualReviews.map(reviewAcknowledgedAt).filter(Boolean);
-    const acknowledgementControls=manualReviews.map(item=>{const at=reviewAcknowledgedAt(item);return `<button type="button" data-review-ack="${esc(item.review_id)}" data-acknowledged="${at?"true":"false"}">${at?"Restore to active review":"Acknowledge manual review"}</button>`;}).join("");
-    return `<tr class="record-details"><td colspan="${definitions[key].columns.length}"><h3 tabindex="-1" id="selected-${key}-title">Selected source record · ${esc(row.filer||row.report_id||"Unknown filer")}</h3><dl class="facts">${fact("Filing / source ID",row.report_id)}${fact("Retained record ID",review?row.review_id:row.filing_key)}${fact("Source / branch",[title(row.source),title(row.branch)].join(" / "))}${fact("Coverage status",title(row.filing_status||row.status||"Unavailable"))}${fact("Document date",date(row.filed_date))}${fact("Observed by PolitiTrack",date(row.observed_at_utc||row.first_seen_utc))}${fact("Review status",review?reviewLabels[row.category]:retainedReviews.length?reviewLabels[retainedReviews[0].category]:title(row.status))}${manualReviews.length?fact("Local acknowledgement",acknowledged.length===manualReviews.length?`Acknowledged on this browser ${date(acknowledged[0])}`:"Needs acknowledgement"):""}</dl><p class="record-reason">${esc(retainedReviews.map(r=>r.reason).filter(Boolean).join(" · ")||row.review_reason||"No retained review reason.")}</p>${PT.filingActions(row)}${acknowledgementControls?`<div class="review-acknowledgement-actions">${acknowledgementControls}</div>`:""}<p class="chart-note">${review?"No matching filing is retained in this publication. This is the original review record. ":""}${manualReviews.length?`Acknowledgement belongs to this browser${reviewAcknowledgementStorageAvailable?" and persists on this device":" only until this page closes because storage is unavailable"}; it does not resolve, delete, or modify the production review record. `:""}Production evidence remains read-only. Parser retry actions are not available from this dashboard.</p><a href="#records/reviews?category=manual_exception">Back to active Manual Parser Exceptions →</a></td></tr>`;
+    const acknowledgementControls=manualReviews.map(item=>{const at=reviewAcknowledgedAt(item);return `<button type="button" data-review-ack="${esc(item.review_id)}" data-acknowledged="${at?"true":"false"}" ${reviewSavePending?"disabled":""}>${reviewSavePending?"Saving…":personalReviews.state.status!=="ready"?"Sign in to acknowledge":at?"Restore to active review":"Acknowledge manual review"}</button>`;}).join("");
+    return `<tr class="record-details"><td colspan="${definitions[key].columns.length}"><h3 tabindex="-1" id="selected-${key}-title">Selected source record · ${esc(row.filer||row.report_id||"Unknown filer")}</h3><dl class="facts">${fact("Filing / source ID",row.report_id)}${fact("Retained record ID",review?row.review_id:row.filing_key)}${fact("Source / branch",[title(row.source),title(row.branch)].join(" / "))}${fact("Coverage status",title(row.filing_status||row.status||"Unavailable"))}${fact("Document date",date(row.filed_date))}${fact("Observed by PolitiTrack",date(row.observed_at_utc||row.first_seen_utc))}${fact("Review status",review?reviewLabels[row.category]:retainedReviews.length?reviewLabels[retainedReviews[0].category]:title(row.status))}${manualReviews.length?fact("Your acknowledgement",personalReviews.state.status!=="ready"?"Sign in to see your saved status":acknowledged.length===manualReviews.length?`Saved to your account ${date(acknowledged[0])}`:"Needs acknowledgement"):""}</dl><p class="record-reason">${esc(retainedReviews.map(r=>r.reason).filter(Boolean).join(" · ")||row.review_reason||"No retained review reason.")}</p>${PT.filingActions(row)}${window.PT.sourceOcrActions ? window.PT.sourceOcrActions(row) : ""}${acknowledgementControls?`<div class="review-acknowledgement-actions">${acknowledgementControls}</div>`:""}<p class="chart-note">${review?"No matching filing is retained in this publication. This is the original review record. ":""}${manualReviews.length?`Acknowledgements are saved to your personal account and remain available after browser data is cleared. They do not resolve, delete, or modify the production review record. `:""}Source uploads are staged for the existing producer; they do not directly overwrite published evidence.</p><a href="#records/reviews?category=manual_exception">Back to active Manual Parser Exceptions →</a></td></tr>`;
   }
   function renderTable(key){const def=definitions[key],t=state.tables[key],data=state.data[key];if(!Array.isArray(data))return;
     const rows=data.filter(r=>(!t.selected||String(r[key==="filings"?"filing_key":"review_id"])===t.selected)&&(!t.query||JSON.stringify(r).toLowerCase().includes(t.query))&&Object.entries(t.filters).every(([f,v])=>{
@@ -161,7 +200,7 @@
     t.page=Math.min(t.page,Math.max(0,Math.ceil(rows.length/PAGE_SIZE)-1));const start=t.page*PAGE_SIZE,shown=rows.slice(start,start+PAGE_SIZE);
     const parserOnly=key==="reviews"&&t.filters.category==="manual_exception",reviewStats=manualReviewStats();
     const empty=parserOnly?(reviewStats.active===0&&!state.showAcknowledgedReviews?"No unacknowledged records currently require manual parser review.":"No parser exceptions match these additional filters. Clear filters to see all review records."):t.selected?"This source record is not retained in the current publication. Clear filters to browse available records.":key==="portfolio"&&!data.length?"No open paper positions. No performance implied.":"No matching records.";
-    el(`${key}-body`).innerHTML=shown.length?shown.map(row=>`<tr ${key==="reviews"?`class="review-row ${reviewAcknowledgedAt(row)?"acknowledged":""}"`:""} ${t.selected?'data-selected-record="true"':""}>${def.columns.map(([field,label,type])=>`<td>${cell(row,field,type)}</td>`).join("")}</tr>${t.selected?recordDetails(row,key):""}`).join(""):`<tr><td colspan="${def.columns.length}" class="empty">${empty}</td></tr>`;
+    el(`${key}-body`).innerHTML=shown.length?shown.map(row=>`<tr ${key==="reviews"?`class="review-row ${reviewAcknowledgedAt(row)?"acknowledged":""}"`:""} ${t.selected?'data-selected-record="true"':""}>${def.columns.map(([field,label,type])=>`<td data-field="${field}">${key==="ai"&&!["ai.analysis_summary","source_url"].includes(field)?signalValue(row,field,type):cell(row,field,type)}</td>`).join("")}</tr>${t.selected?recordDetails(row,key):""}`).join(""):`<tr><td colspan="${def.columns.length}" class="empty">${empty}</td></tr>`;
     el(`panel-${key}`).querySelector(".table-wrap").hidden=parserOnly&&!rows.length&&reviewStats.active===0&&!state.showAcknowledgedReviews;
     if(parserOnly&&reviewStats.active===0&&!state.showAcknowledgedReviews)el(`${key}-count-label`).textContent=empty;
     else
@@ -207,12 +246,13 @@
   const edgeCount=value=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0?value:null;
   const edgeStats=[["published_profile_count","Profiles"],["completed_profile_count","Complete"],["building_profile_count","Building"],["historical_transaction_count","Historical trades"],["backfill_processed_this_run","Processed this run"],["backfill_pending_observation_count","Pending observations"]];
   function renderEdge(edge){
-    const profiles=edge?.investors||[],pending=edgeCount(edge?.backfill_pending_observation_count),metadata=edge||{};
-    el("edge-bootstrap-status").textContent=pending===null?"Historical backfill status unavailable":pending>0?"Historical backfill in progress":"Historical backfill current";
-    el("edge-bootstrap-status").className=`status ${pending===null?"unknown":pending>0?"caution":"success"}`;
+    const profiles=edge?.investors||[],metadata=edge||{};
+    el("edge-bootstrap-status").textContent="Historical backfill status unavailable";
+    el("edge-bootstrap-status").className="status unknown";
     el("edge-bootstrap-counts").innerHTML=edgeStats.map(([key,label])=>fact(label,number(key==="published_profile_count"&&edgeCount(metadata[key])===null&&edge?profiles.length:edgeCount(metadata[key])))).join("");
     el("edge-bootstrap-coverage").textContent=`Eligible purchases: ${number(edgeCount(metadata.eligible_purchase_count))} · Eligible filer / owner identities: ${number(edgeCount(metadata.unique_investor_identity_count))} · Legislative trades: ${number(edgeCount(metadata.branch_transaction_counts?.legislative))} · Executive trades: ${number(edgeCount(metadata.branch_transaction_counts?.executive))}`;
     el("edge-bootstrap-budget").textContent=`Observation budget per run: ${number(edgeCount(metadata.backfill_limit_per_run))} · Market requests this run: ${number(edgeCount(metadata.network_requests_this_run))}. Complete profiles meet the sample minimum and have no pending observations. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns.`;
+    if(window.PTBackfill)PTBackfill.render(el("edge-backfill-detail"),metadata.backfill_progress);
     el("edge-history-label").textContent=edge?`${number(profiles.length)} published investor profiles`:"Investor Edge data unavailable";
     el("edge-history-note").textContent=edge?"Full retained profile inventory, independent of qualifying signals. Building-history profiles remain visible; missing outcomes remain unavailable.":"Profile inventory and history counts could not refresh. No completeness or zero-count assumption is made.";
     el("edge-profile-body").innerHTML=profiles.length?profiles.map(p=>{
@@ -232,8 +272,16 @@
     const focusKey=focused?{href:focused.getAttribute("href"),label:focused.getAttribute("aria-label"),text:focused.textContent}:null;
     const offsets=[...host.querySelectorAll(".timeline")].map(node=>node.scrollLeft);
     host.innerHTML=healthCards(m,detailed);
+    if(detailed)runControls.render(host);
     if(preserveHistory)host.querySelectorAll(".timeline").forEach((node,index)=>{node.scrollLeft=offsets[index]||0;});
     if(focusKey)[...host.querySelectorAll("a,button")].find(node=>node.getAttribute("href")===focusKey.href&&node.getAttribute("aria-label")===focusKey.label&&node.textContent===focusKey.text)?.focus({preventScroll:true});
+  }
+  function renderOGE(m) {
+    const oge=m.health.oge||{},worker=m.health.branches.find(b=>b.branch==="executive")||{};
+    const verified=oge.checks_included===true;
+    const status=worker.status==="failure"?"failure":worker.status==="stale"?"stale":verified&&worker.status==="success"?"success":"unknown";
+    const explanation=status==="failure"?"The Executive monitoring run failed. OGE coverage is not confirmed by that attempt; the last successful check remains below.":status==="stale"?"The Executive collector is overdue. OGE monitoring needs a fresh successful check.":status==="success"?"OGE discovery completed as part of the successful Executive run.":"A successful OGE check is not established by the available execution evidence.";
+    el("oge-health").innerHTML=`<header class="section-heading"><h2 id="oge-health-title">OGE disclosures</h2><span class="status ${status}">${status==="success"?"✓ Current":statusText(status)}</span></header><p>${esc(explanation)}</p><dl class="facts health-facts">${fact("Monitored by","Executive collector")}${fact("Last attempt",date(worker.last_attempt_utc))}${fact("Last successful OGE check",verified?date(worker.last_success_utc):"Unavailable")}${fact("Expected cadence",PT.cadenceText(worker))}${fact("Next expected run",date(worker.next_expected_utc))}${fact("Successful check age",verified?PT.durationMinutes(worker.age_minutes):"Unavailable")}${fact("Retained OGE filings",number(oge.filing_count))}${fact("Processed filings",number(oge.processed_count))}${fact("Parsed transactions",number(oge.transaction_count))}${fact("Access / request required",number(oge.access_required_count))}${fact("Manual parser exceptions",number(oge.manual_exception_count))}</dl><p class="chart-note">Access-required disclosures need the official document request process; they are not collector failures. OGE is checked by the existing Executive schedule.</p><a href="#records/reviews">Review source records →</a>`;
   }
   function renderHealth(m,changes={},preserveHistory=false) {
     const summary=PT.monitoringSummary(m),status=m.health.status;
@@ -246,7 +294,7 @@
     el("attention-health").className=`health-metric ${status}`;
     el("situation-brief").textContent=activeReviewBrief(m,changes,manualReviewStats(m).active);
     updateHealthCards("health-chart",m,false,preserveHistory);updateHealthCards("operations-health",m,true,preserveHistory);
-    renderExceptionInventory(m);
+    renderExceptionInventory(m);renderOGE(m);
     el("build-details").textContent=`Dashboard generated ${date(m.generated_utc)} · build ${m.build_sha||"unavailable"} · Source data through ${date(m.data_through_utc)}. Publication does not establish collector success.`;
     state.healthViewKey=PT.healthViewKey(m);
   }
@@ -273,7 +321,7 @@
   }
   function notificationEvidence(url){return /^#[\w/-]+$/.test(url||"")?`<a href="${esc(url)}" data-notification-link>View evidence →</a>`:link(url,"Evidence");}
   function renderNotifications(){const s=notifications.getState(),focused=document.activeElement,focusKeys=["ack","snooze","mute"],focusKey=focusKeys.find(key=>focused?.dataset?.[key]),focusValue=focusKey?focused.dataset[focusKey]:null;el("notification-count").textContent=number(s.unread);el("notification-button").setAttribute("aria-label",`Notification Center, ${s.unread} unread, ${s.actionable} actionable`);el("notification-summary").textContent=`${s.unread} unread · ${s.actionable} actionable`;
-    el("sound-button").textContent=s.settings.mode==="off"?"Sound off":s.sound.armed?"Sound armed":"Sound unarmed";el("sound-status").textContent=s.sound.status||"Sound is off.";
+    el("sound-button").textContent=s.settings.mode==="off"?"Sound off":s.sound.armed?"Sound on":"Sound on · activate";el("sound-status").textContent=s.sound.status||"Sound is off.";
     el("notification-storage-note").hidden=s.storageAvailable;el("notification-storage-note").textContent="Browser storage unavailable. History cannot persist; automatic sound remains silent.";
     el("notification-list").innerHTML=s.events.length?s.events.map(e=>`<article class="notification-item ${e.acknowledged?"acknowledged":""}"><header><strong class="${e.severity==="high"?"positive":e.severity==="warning"?"caution":e.severity==="success"?"success":"muted"}">${esc(e.icon)} ${esc(title(e.severity))}${e.simulation?" · SIMULATED":""}</strong><time>${esc(date(e.timestamp))}</time></header><p>${esc(e.summary)}</p><small>${e.acknowledged?"Acknowledged":s.settings.mutedCategories[e.category]?"Category muted":e.snoozedUntil&&Date.parse(e.snoozedUntil)>Date.now()?`Snoozed until ${esc(date(e.snoozedUntil))}`:"Unread"}</small><div class="event-controls">${notificationEvidence(e.link)}<button data-ack="${esc(e.id)}" ${e.acknowledged?"disabled":""}>Acknowledge</button><button data-snooze="${esc(e.id)}">Snooze 1h</button></div></article>`).join(""):'<p class="empty">No new events on this browser. Initial records establish a quiet baseline.</p>';
     el("recent-changes").innerHTML=s.events.length?s.events.slice(0,4).map(e=>`<div class="activity-row"><span aria-hidden="true">${esc(e.icon)}</span><div><strong>${esc(e.summary)}</strong><small>${esc(title(e.severity))} · ${esc(date(e.timestamp))}${e.simulation?" · SIMULATED":""}</small></div></div>`).join(""):'<p class="empty">No new activity since your browser baseline. Existing records were not marked as new.</p>';
@@ -284,7 +332,8 @@
   }
   async function notificationAction(action){try{await action();renderNotifications();return true;}catch{el("notification-storage-note").hidden=false;el("notification-storage-note").textContent="This browser-local change could not be saved. Try again; external alert settings are unchanged.";return false;}}
   async function loadData(){if(state.loading)return;state.loading=true;el("refresh-button").disabled=true;try{
-    const model=PT.validateModel(await checkedJson("data/dashboard-insights.json"));reconcileReviewAcknowledgements(model);
+    const [payload]=await Promise.all([checkedJson("data/dashboard-insights.json"),personalReviews.load()]);
+    const model=PT.validateModel(payload);
     // Stage open datasets as well; a partial fetch never advances the browser baseline.
     const staged={};
     // Navigation can finish a first lazy load during any await below. Include
@@ -292,15 +341,19 @@
     for(;;){const key=Object.keys(state.data).find(key=>!Object.hasOwn(staged,key));if(!key)break;staged[key]=await fetchTable(key);}
     if(staged.reviews)validateReviews(staged.reviews,model);
     const change=notifications.prepare(model),previous=state.model,oldData=state.data; if(change.olderSnapshot)throw new Error("Older publication rejected; keeping the last successful review");
+    reconcileReviewAcknowledgements(model);
     try{state.model=model;renderModel(model,change);state.data={...state.data,...staged};for(const key of Object.keys(staged)){populateFilters(key);renderTable(key);}}
     catch(e){state.model=previous;state.data=oldData;if(previous){renderModel(previous,{changes:{},firstVisit:false});for(const key of Object.keys(oldData)){populateFilters(key);renderTable(key);}}throw e;}
     state.model=model;state.changes=change.changes||{};state.renderedAt=Date.now();state.nextRefreshAt=Date.now()+300000;state.refreshError=false;el("error-banner").hidden=true;refreshHealth();
     await change.commit();renderNotifications();if(state.section==="investor-edge")await loadEdge();if(change.events.length){document.querySelectorAll(".attention-card").forEach(n=>n.classList.add("changed"));setTimeout(()=>document.querySelectorAll(".attention-card").forEach(n=>n.classList.remove("changed")),1200);}
   }catch(e){el("error-banner").textContent=`Refresh unavailable — ${e.message}. ${state.model?"Last successfully rendered data remains visible; this view may be stale.":"No successful data load yet. Status is Unknown."}`;state.refreshError=true;el("error-banner").hidden=false;if(state.model)renderHealth(healthClock(state.model),state.changes);else{el("overall-state").textContent="! Refresh unavailable";el("overall-state").className="status unknown";}state.nextRefreshAt=Date.now()+300000;}finally{state.loading=false;el("refresh-button").disabled=false;}}
   function clock(){el("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});const s=Math.max(0,Math.ceil((state.nextRefreshAt-Date.now())/1000));el("refresh-countdown").textContent=`Next refresh ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;refreshHealth(false);}
-  initTables();window.addEventListener("hashchange",()=>navigate());el("refresh-button").onclick=loadData;
+  initTables();window.addEventListener("hashchange",()=>{navigate();if(state.section==="operations")runControls.load();});el("refresh-button").onclick=loadData;
   document.addEventListener("click",e=>{
     if(e.defaultPrevented)return;
+    const run=e.target.closest("[data-run-now]");
+    if(run){if(personalReviews.state.status!=="ready")openDialog("review-account-dialog");else runControls.start(run.dataset.runNow);}
+    if(e.target.closest("[data-operation-refresh]"))runControls.load();
     const row=e.target.closest(".review-row");
     if(row&&!e.target.closest("a,button,input,select")&&!window.getSelection()?.toString())location.hash=row.querySelector(".record-link").getAttribute("href");
     const same=e.target.closest('a[href^="#records/"]');if(same&&same.getAttribute("href")===location.hash)navigate();
@@ -312,8 +365,24 @@
   el("sound-mode").onchange=e=>notificationAction(()=>notifications.setSettings({mode:e.target.value}));el("sound-volume").onchange=e=>notificationAction(()=>notifications.setSettings({volume:Number(e.target.value)/100}));
   for(const id of ["quiet-enabled","quiet-start","quiet-end"])el(id).onchange=()=>notificationAction(()=>notifications.setSettings({quietHours:{enabled:el("quiet-enabled").checked,start:el("quiet-start").value,end:el("quiet-end").value}}));
   el("enable-sound").onclick=e=>notificationAction(()=>notifications.enableSound(e));el("test-sound").onclick=e=>notificationAction(()=>notifications.testSound(e));
-  setInterval(clock,1000);setInterval(loadData,300000);clock();renderNotifications();loadData().then(()=>navigate(true));
-  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshHealth();});
-  window.addEventListener("pageshow",refreshHealth);
-  window.addEventListener("storage",event=>{if(event.key===REVIEW_ACK_STORAGE_KEY){reviewAcknowledgements=readReviewAcknowledgements();if(state.model)reconcileReviewAcknowledgements(state.model);renderReviewAcknowledgementViews();}});
+  el("review-account-form").addEventListener("submit",async event=>{
+    event.preventDefault();const button=el("review-account-submit");if(button.disabled)return;
+    button.disabled=true;reviewMessage="";renderReviewAccount();
+    try{await personalReviews.authenticate(reviewActivation?{invitation:reviewActivation,password:el("review-password").value}:{username:el("review-username").value,password:el("review-password").value},Boolean(reviewActivation));
+      reviewActivation="";el("review-password").value="";el("review-account-dialog").close();
+    }catch(error){reviewMessage=error.message;}
+    finally{button.disabled=false;renderReviewAccount();}
+  });
+  el("review-account-signin-toggle").onclick=()=>{reviewActivation="";reviewMessage="";el("review-password").value="";renderReviewAccount();el("review-username").focus();};
+  el("review-account-logout").onclick=async()=>{try{await personalReviews.logout();reviewMessage="";}catch(error){reviewMessage=error.message;}renderReviewAccount();};
+  el("review-import-button").onclick=async()=>{
+    const value=legacyReviewAcknowledgements();if(!value)return;const button=el("review-import-button");button.disabled=true;
+    try{const result=await personalReviews.importLegacy(value);reviewMessage=`${result.imported} acknowledgements imported into your account. Existing account history was preserved.`;}
+    catch(error){reviewMessage=error.message;}finally{button.disabled=false;renderReviewAccount();}
+  };
+  setInterval(clock,1000);setInterval(loadData,300000);setInterval(()=>{if(state.section==="operations"&&document.visibilityState==="visible")runControls.load();},15000);clock();renderNotifications();renderReviewAccount();
+  loadData().then(()=>{navigate(true);if(state.section==="operations")runControls.load();if(reviewActivation)openDialog("review-account-dialog");});
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){refreshHealth();personalReviews.load();}});
+  window.addEventListener("pageshow",()=>{refreshHealth();personalReviews.load();});
+  window.addEventListener("storage",event=>{if(event.key===REVIEW_ACK_STORAGE_KEY||event.key===null)renderReviewAccount();});
 })();

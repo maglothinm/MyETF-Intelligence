@@ -1,0 +1,187 @@
+{
+  "accepted_export": {
+    "format": "zip",
+    "manifest": {
+      "content_sha256": "742183065f156dca7a9e804b862a635d4a57c4012f2d4fe33e02fb7fc8e0fcab",
+      "file_count": 8,
+      "files": [
+        {
+          "path": "controlled-validation-receipt.json",
+          "sha256": "bd4dea0eb346e383f23a765c3cace9205c7cc0f28cdf126a572693cb4b4f3d35",
+          "size": 3004
+        },
+        {
+          "path": "filings.jsonl",
+          "sha256": "3855eeccdac5cae64bee44a8bf6b271b2ee752bd7ff00362fe8b695b857b47e3",
+          "size": 1260900
+        },
+        {
+          "path": "historical-backfill.jsonl",
+          "sha256": "240bbad3163a59a1e388e66cad18f6995f4665a645e25db374156b4affe1a2da",
+          "size": 484098
+        },
+        {
+          "path": "pending-review.jsonl",
+          "sha256": "96732e89a973ed8208fc97bba44f2a5b7183a87cb6614fab49b86c7904b70383",
+          "size": 1972
+        },
+        {
+          "path": "purchases.jsonl",
+          "sha256": "de6876cedd47b1b7964aef50078d30666e696a718b698ac0183f95f8c0c84073",
+          "size": 5578793
+        },
+        {
+          "path": "runs.jsonl",
+          "sha256": "91ac0ae2b05a37e9ed14a69f290e6c5f5b3fba533ba1cb71b7bcc73ccc6c632a",
+          "size": 253567
+        },
+        {
+          "path": "state.json",
+          "sha256": "9bbe6ad352265d7855bad857db97cffa3ca3e305d2a29c84ac945f3a28ae0bef",
+          "size": 900253
+        },
+        {
+          "path": "transactions.jsonl",
+          "sha256": "6cedca3c6b70b989679f362cbf08a2559a84aee0dc2b1197bd0092e346aa3408",
+          "size": 10727423
+        }
+      ],
+      "schema_version": 1,
+      "uncompressed_bytes": 19210010
+    },
+    "sha256": "7fda615a19c31165fefa91b2501ffab8f2c677325aeffdc35b7ff444c2d609df",
+    "size_bytes": 1435125
+  },
+  "accepted_parent": {
+    "generation": 232,
+    "namespace": "legislative",
+    "snapshot_id": "13d95d99-94bc-4e12-be9c-e08f0b9254b5",
+    "snapshot_sha256": "7fda615a19c31165fefa91b2501ffab8f2c677325aeffdc35b7ff444c2d609df"
+  },
+  "case": "legislative-20260908-no-delivery",
+  "delivery_finding": "delivery_impossible_without_credentials",
+  "evidence_sha256": {
+    "failed-legislative-logs.json": "f9af03899980754ce6fadb6db77a7443a7b355fb0c864fd8891d31c57544b360",
+    "original-execution.json": "9b11c529c32cde2d65aac29a2135be1dc050ab9689e6dccb1c039380f57c9362",
+    "original-image-config.json": "2667b57a0d00bca2a041b626d1170d62403d08c0da3c5ed999c3c672fdaef522",
+    "original-image-manifest.json": "2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd",
+    "probes/state-export-receipt.json": "fc9d19afabee9e4bb2f0f418cc996e7bd2c7cdf4ae015e8fb2ab72c2970408a1"
+  },
+  "failed_run": {
+    "error_code": "CalledProcessError",
+    "finished_at": "2026-09-08T10:41:24.714055+00:00",
+    "job_name": "legislative",
+    "namespace": "legislative",
+    "run_id": "065d5330-abca-4eda-b683-64e85f2dcbe7",
+    "runtime_mode": "production",
+    "runtime_mode_evidence": {
+      "kind": "runner_explicit",
+      "mode": "production",
+      "schema_version": 1
+    },
+    "side_effects_possible": true,
+    "snapshot_id": null,
+    "snapshot_sha256": null,
+    "source_revision": "72c1ca8c74a7af4b11f2e677c7a296d5e2358578",
+    "started_at": "2026-09-08T10:37:33.311733+00:00",
+    "status": "failure",
+    "trigger_source": "external_scheduler"
+  },
+  "finding_basis": "The exact image and execution contain neither delivery credential. Verified original tracker code reads these only from the supplied environment and returns before its sole notification HTTP request if either credential is absent. The runner invokes only the tracker and validation-only healthcheck. Original failed run and side_effects_possible flag remain unchanged.",
+  "issue": "https://github.com/maglothinm/MyETF-Intelligence/issues/8",
+  "observed_at": "2026-09-09T12:17:27.927489+00:00",
+  "original_code_proof": {
+    "files": {
+      "runtime_v2/cli.py": "718fc2905d37d9e4967d96e37fb657dabca3d460567a7ee6374222866e5bae4d",
+      "runtime_v2/runner.py": "bdb717d1db831a887a1451e042f19e6d30822bbb48a1b419ac072680116d7bc7",
+      "scripts/government_trade_tracker.py": "3454a2906deb4be5d92568491ab207ed1d22a4446331203ff95a94b93f955af5",
+      "scripts/government_trade_tracker_core.py": "ab0b77948440aaa77bdd5126f9417e0214f882c73ed98d796ba686c495012df0",
+      "scripts/legislative_healthcheck.py": "c8a62cce67385090b4cdaeb515b9ea4eed49e4d2e393700cc60ad01da5b4da9b",
+      "scripts/monitor_disclosures.py": "97d331164d00612b59540ef33cbb3c07b9cf7cf4b191c934c59befbc5928f1a1",
+      "scripts/run_legislative_sources_resilient.py": "04c8afff61875db329d04d37b94af9d2de3eff8a9ceaf7824719b39a2ea55e6f"
+    },
+    "following_layer_command": "/bin/sh -c useradd --create-home --uid 10001 polititrack     && chown -R polititrack:polititrack /srv/polititrack /ms-playwright",
+    "source_revision": "72c1ca8c74a7af4b11f2e677c7a296d5e2358578",
+    "verified_layers": [
+      "sha256:2654aae12eb5b30d747fa5a7859531e3a29565a7220c03fd2bb363eecdaac716",
+      "sha256:fcbe944c54fee4b9897b0a96ff3003007b9877dd08d16be2ed89f9dd056ac6b1"
+    ]
+  },
+  "original_execution_and_image": {
+    "args": [
+      "-m",
+      "runtime_v2",
+      "run",
+      "legislative"
+    ],
+    "command": [
+      "python"
+    ],
+    "execution": "polititrack-legislative-gnkrk",
+    "execution_environment_names": [
+      "AI_ANALYSIS_ENABLED",
+      "AI_FETCH_DOCUMENT_TEXT",
+      "AI_MAX_ANALYSES_PER_RUN",
+      "AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS",
+      "AI_PAPER_TRADING_ONLY",
+      "AI_REQUIRE_PUSHOVER",
+      "AI_WEB_SEARCH_ENABLED",
+      "ALLOW_EMPTY_SOURCES",
+      "ALPHAVANTAGE_API_KEY",
+      "DASHBOARD_URL",
+      "DB_NAME",
+      "DB_PASSWORD",
+      "DB_USER",
+      "DISCLOSURE_TERMS_ACKNOWLEDGED",
+      "FINNHUB_API_KEY",
+      "INSTANCE_CONNECTION_NAME",
+      "INVESTOR_EDGE_ENABLED",
+      "NOTIFY_ALL_FILINGS",
+      "NOTIFY_EQUITY_ONLY",
+      "NOTIFY_PENDING_REVIEWS",
+      "OPENAI_API_KEY",
+      "OPENAI_MODEL",
+      "OPENAI_REASONING_EFFORT",
+      "POLITITRACK_MODE",
+      "POLITITRACK_TRIGGER_SOURCE",
+      "PRIVATE_IP",
+      "REQUIRE_PUSHOVER",
+      "SEC_USER_AGENT",
+      "SOURCE_REVISION"
+    ],
+    "execution_file_sha256": "9b11c529c32cde2d65aac29a2135be1dc050ab9689e6dccb1c039380f57c9362",
+    "execution_uid": "11906594-34ec-4ae0-b42a-99c498114c27",
+    "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd",
+    "image_config_digest": "sha256:2667b57a0d00bca2a041b626d1170d62403d08c0da3c5ed999c3c672fdaef522",
+    "image_environment_names": [
+      "GPG_KEY",
+      "LANG",
+      "PATH",
+      "PLAYWRIGHT_BROWSERS_PATH",
+      "PORT",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHONUNBUFFERED",
+      "PYTHON_SHA256",
+      "PYTHON_VERSION"
+    ],
+    "image_manifest_verified": true,
+    "volume_mounts": [],
+    "volumes": []
+  },
+  "original_final_layer_proof": {
+    "files": {
+      "runtime_v2/cli.py": "718fc2905d37d9e4967d96e37fb657dabca3d460567a7ee6374222866e5bae4d",
+      "runtime_v2/runner.py": "bdb717d1db831a887a1451e042f19e6d30822bbb48a1b419ac072680116d7bc7",
+      "scripts/government_trade_tracker.py": "3454a2906deb4be5d92568491ab207ed1d22a4446331203ff95a94b93f955af5",
+      "scripts/government_trade_tracker_core.py": "ab0b77948440aaa77bdd5126f9417e0214f882c73ed98d796ba686c495012df0",
+      "scripts/legislative_healthcheck.py": "c8a62cce67385090b4cdaeb515b9ea4eed49e4d2e393700cc60ad01da5b4da9b",
+      "scripts/monitor_disclosures.py": "97d331164d00612b59540ef33cbb3c07b9cf7cf4b191c934c59befbc5928f1a1",
+      "scripts/run_legislative_sources_resilient.py": "04c8afff61875db329d04d37b94af9d2de3eff8a9ceaf7824719b39a2ea55e6f"
+    },
+    "source_revision": "72c1ca8c74a7af4b11f2e677c7a296d5e2358578",
+    "verified_layer": "sha256:d8e10972971673a0b055931da9f5e205fbc08f0fe6ac4e1fde9cdcce5f3369d9"
+  },
+  "repository_id": 1349678672,
+  "schema_version": 1,
+  "state_probe_execution": "polititrack-admin-frw5s"
+}

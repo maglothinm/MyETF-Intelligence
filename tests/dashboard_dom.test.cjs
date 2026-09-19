@@ -13,6 +13,8 @@ const axe = require(path.join(toolModules, 'axe-core'));
 const build = process.env.POLITITRACK_TEST_BUILD || path.resolve(__dirname, '../.remediation/ui-preview');
 const builtModel = JSON.parse(fs.readFileSync(path.join(build, 'data/dashboard-insights.json'), 'utf8'));
 const KEY = 'polititrack.notifications.v1';
+const createReviewServer = require('./personal_review_fixture.cjs');
+const createOperationsServer = require('./operations_fixture.cjs');
 const copy = value => JSON.parse(JSON.stringify(value));
 const tick = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -95,7 +97,7 @@ function fixtures() {
     health: {status: 'success', as_of_utc: '2026-08-30T12:00:00Z', required_branches: ['legislative', 'executive', 'ai'], policy: {
       legislative: {expected_interval_minutes: 15, stale_after_minutes: 30},
       executive: {expected_interval_minutes: 30, stale_after_minutes: 60},
-      ai: {expected_interval_minutes: 15, stale_after_minutes: 75, cadence_label: 'After collector success (about every 15m)'}},
+      ai: {expected_interval_minutes: 30, stale_after_minutes: 75, cadence_label: 'Every 30 minutes'}},
     branches: runs.map(row => ({branch: row.branch, status: 'success', last_run_utc: row.at, last_attempt_utc: row.started_utc, last_success_utc: row.at,
       latest_run_success: true, latest_conclusion: 'success', trigger_source: 'schedule', evidence_incomplete: false,
       error_count: 0, errors: [], new_record_count: 0, run_url: row.run_url, timeline: [row]}))},
@@ -139,9 +141,13 @@ async function dashboard(options = {}) {
   window.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new window.Event('close')); };
   window.addEventListener('error', event => errors.push(event.error?.message || event.message));
   window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
-  window.fetch = async value => {
+  const reviewServer=options.reviewServer||createReviewServer(),reviewSession={account:options.signedOut?null:options.reviewAccount||'alice'};
+  const operationsServer=options.operationsServer||createOperationsServer();
+  window.fetch = async (value, fetchOptions = {}) => {
     const url = new URL(value, window.location.href);
     assert.equal(url.origin, window.location.origin, 'No external browser requests permitted');
+    if(url.pathname.startsWith('/api/operations'))return operationsServer.handle(url.pathname.slice('/api/operations'.length),fetchOptions,reviewSession,reviewServer);
+    if(url.pathname.includes('/api/reviews/'))return reviewServer.handle(url.pathname.split('/api/reviews/')[1],fetchOptions,reviewSession,data['dashboard-insights']);
     const match = url.pathname.match(/\/data\/([\w-]+)\.json$/);
     assert.ok(match, 'Only published JSON fixtures may be fetched');
     const name = match[1]; requests.push(name);
@@ -168,7 +174,7 @@ async function dashboard(options = {}) {
     await waitFor(() => !byId('refresh-button').disabled, 'refresh completion');
     await tick(5);
   }
-  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh,
+  return {dom, window, doc, byId, data, requests, errors, failures, navigate, refresh, reviewServer, reviewSession, operationsServer,
     advanceTime(milliseconds, {wall = true} = {}) { if(wall)now += milliseconds;elapsedNow += milliseconds;intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     setWallTime(value) { now=Date.parse(value);intervals.filter(timer => timer.delay === 1000).forEach(timer => timer.callback()); },
     close: () => {
@@ -198,6 +204,60 @@ test('Overview loads only compact insights; sections fetch their ledgers lazily'
   await env.navigate('#operations', () => env.requests.includes('ai-runs'));
   assert.ok(env.requests.includes('runs'));
   assert.deepEqual(env.errors, []);
+});
+
+test('Operations exposes one run button above each service and tracks real completion', async t => {
+  const env=await dashboard({hash:'#operations'});t.after(env.close);
+  await waitFor(()=>[...env.doc.querySelectorAll('[data-run-now]')].every(button=>!button.disabled),'owner run controls');
+  const buttons=[...env.doc.querySelectorAll('[data-run-now]')];assert.equal(buttons.length,3);
+  for(const button of buttons){assert.ok(button.closest('article').querySelector('header').compareDocumentPosition(button)&env.window.Node.DOCUMENT_POSITION_PRECEDING);}
+  let release;env.operationsServer.beforeStart=()=>new Promise(resolve=>{release=resolve;});
+  const button=env.doc.querySelector('[data-run-now="legislative"]');button.click();button.click();
+  assert.equal(button.disabled,true);assert.equal(env.operationsServer.requests.length,1);
+  release();await waitFor(()=>button.textContent.includes('progress'),'accepted request');
+  const group=button.closest('[data-run-control]');assert.doesNotMatch(group.textContent,/completed successfully/);
+  const request=env.operationsServer.requests[0];assert.equal(request.options.headers['X-PolitiTrack-Operation-Request'],'1');
+  assert.equal(request.options.credentials,'same-origin');assert.equal(request.options.cache,'no-store');
+  env.operationsServer.jobs.legislative.latest_request.state='running';group.querySelector('[data-operation-refresh]').click();
+  await waitFor(()=>button.textContent==='Running…','running request');
+  Object.assign(env.operationsServer.jobs.legislative,{busy:false,latest_request:{...env.operationsServer.jobs.legislative.latest_request,state:'succeeded',finished_at:'2026-09-09T13:10:00Z'}});
+  group.querySelector('[data-operation-refresh]').click();
+  await waitFor(()=>env.doc.querySelector('[data-run-control="legislative"]').textContent.includes('completed successfully'),'successful completion');
+  assert.equal(env.operationsServer.requests.length,1);assert.deepEqual(env.errors,[]);
+});
+
+test('Operations requires sign-in and does not give ordinary review accounts run access', async t => {
+  const env=await dashboard({hash:'#operations',signedOut:true});t.after(env.close);
+  await waitFor(()=>env.doc.querySelector('[data-run-now]')?.textContent==='Sign in to run','signed-out controls');
+  env.doc.querySelector('[data-run-now]').click();assert.equal(env.byId('review-account-dialog').open,true);
+  assert.equal(env.operationsServer.requests.length,0);
+  const other=await dashboard({hash:'#operations',reviewAccount:'bob'});t.after(other.close);
+  await waitFor(()=>other.doc.querySelector('[data-run-control]')?.textContent.includes('Only the owner'),'restricted controls');
+  assert.ok([...other.doc.querySelectorAll('[data-run-now]')].every(button=>button.disabled));
+  assert.equal(other.operationsServer.requests.length,0);
+});
+
+test('Operations prevents starts during a scheduled run or unknown connection outcome', async t => {
+  const server=createOperationsServer();server.jobs.ai.busy=true;
+  const env=await dashboard({hash:'#operations',operationsServer:server});t.after(env.close);
+  await waitFor(()=>env.doc.querySelector('[data-run-control="ai"]').textContent.includes('scheduled run'),'scheduled busy state');
+  assert.equal(env.doc.querySelector('[data-run-now="ai"]').disabled,true);
+  server.failStart=true;env.doc.querySelector('[data-run-now="executive"]').click();
+  await waitFor(()=>env.doc.querySelector('[data-run-control="executive"]').textContent.includes('could not be confirmed'),'lost response');
+  assert.equal(server.requests.length,1);
+  assert.equal(env.doc.querySelector('[data-run-now="executive"]').disabled,true);
+  assert.doesNotMatch(env.doc.querySelector('[data-run-control="executive"]').textContent,/completed successfully/);
+  assert.deepEqual(env.errors,[]);
+});
+
+test('Operations failure remains visible through health re-render and permits a new request', async t => {
+  const server=createOperationsServer();server.jobs.executive.latest_request={request_id:'old-request',state:'failed',finished_at:'2026-09-09T13:10:00Z'};
+  const env=await dashboard({hash:'#operations',operationsServer:server});t.after(env.close);
+  await waitFor(()=>env.doc.querySelector('[data-run-control="executive"]').textContent.includes('Manual run failed'),'failed status');
+  env.advanceTime(60000);const button=env.doc.querySelector('[data-run-now="executive"]');
+  assert.equal(button.disabled,false);assert.match(button.closest('[data-run-control]').textContent,/Manual run failed/);
+  button.click();await waitFor(()=>server.requests.length===1,'retry click');assert.notEqual(server.requests[0].body.request_id,'old-request');
+  await waitFor(()=>button.textContent.includes('progress'),'retry dispatch response');
 });
 
 function setBranchAge(data, name, minutes, extra = {}) {
@@ -385,7 +445,7 @@ test('Investor Edge renders the full building population and producer history co
   assert.deepEqual(env.requests, ['dashboard-insights']);
   await env.navigate('#investor-edge', () => env.byId('edge-profile-body').children.length === 12);
   assert.equal(env.byId('attention-signals').textContent, '0');
-  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill in progress');
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
   assert.equal(env.byId('edge-history-label').textContent, '12 published investor profiles');
   assert.match(env.byId('edge-profile-body').textContent, /TEST Filer 11/);
   assert.match(env.byId('edge-profile-body').textContent, /Building history — insufficient completed observations \(n = 0\)/);
@@ -395,7 +455,7 @@ test('Investor Edge renders the full building population and producer history co
   assert.match(env.byId('edge-bootstrap-budget').textContent, /Observation budget per run: 30 · Market requests this run: 7/);
   env.data['investor-edge'].backfill_pending_observation_count = 0;
   await env.refresh();
-  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill current');
+  assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
   assert.equal(env.byId('edge-profile-body').children.length, 12);
   assert.equal(env.byId('notification-count').textContent, '0');
   assert.deepEqual(env.errors, []);
@@ -759,7 +819,7 @@ test('one new qualifying signal renders one local event and unchanged refresh st
   assert.match(env.byId('overview-signals').textContent, /insufficient completed observations \(n = 1\)/);
   await env.refresh();
   assert.equal(env.byId('notification-list').querySelectorAll('.notification-item').length, 1);
-  assert.equal(env.byId('sound-button').textContent, 'Sound off');
+  assert.equal(env.byId('sound-button').textContent, 'Sound on · activate');
   assert.deepEqual(env.errors, []);
 });
 
@@ -1196,45 +1256,149 @@ test('parser links survive reload and history; chip and clear filters restore no
   assert.equal(env.window.location.hash, '#records/reviews');
 });
 
-test('manual parser acknowledgement clears local attention, persists, and remains reversible', async t => {
-  const env = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', appSourceTransform: withCachedBriefFormatter}); t.after(env.close);
-  await waitFor(() => env.byId('reviews-body').children.length === 1, 'active parser exception');
-  assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), true);
-  assert.match(env.byId('situation-brief').textContent, /1 manual parsing exception/);
-  env.byId('reviews-body').querySelector('.record-link').click();
-  await waitFor(() => env.byId('selected-filings-title'), 'retained filing detail');
-  const acknowledge = env.doc.querySelector('[data-review-ack]');
-  assert.equal(acknowledge.textContent, 'Acknowledge manual review');
-  acknowledge.click();
-  await waitFor(() => env.byId('attention-exceptions').textContent === '0', 'acknowledged attention count');
-  assert.equal(env.byId('attention-exceptions').classList.contains('attention-active'), false);
-  assert.doesNotMatch(env.byId('situation-brief').textContent, /manual parsing exception/);
-  assert.match(env.byId('filings-body').textContent, /Acknowledged on this browser/);
-  assert.equal(env.doc.activeElement.textContent, 'Restore to active review');
-  const stored = env.window.localStorage.getItem('polititrack.manual-review-acknowledgements.v1');
-  assert.match(stored, /review:paper/);
+const REVIEW_KEY = 'polititrack.manual-review-acknowledgements.v1';
+const savedReviews = env => env.reviewServer.state(env.reviewSession.account || 'alice').acknowledged;
 
-  await env.navigate('#records/reviews?category=manual_exception', () => env.byId('reviews-count-label').textContent.includes('No unacknowledged'));
-  assert.equal(env.doc.querySelector('#panel-reviews .table-wrap').hidden, true);
-  assert.match(env.byId('review-categories').textContent, /0 active/);
-  assert.match(env.byId('review-categories').textContent, /1 acknowledged on this browser/);
-  env.byId('toggle-acknowledged-reviews').click();
-  assert.equal(env.byId('reviews-body').children.length, 1);
-  assert.match(env.byId('reviews-body').textContent, /Acknowledged here/);
+function publishReviews(data, rows, stable = true) {
+  data['pending-reviews'] = copy(rows);
+  const production=rows.filter(row=>!row.is_synthetic_test),manual=production.filter(row=>row.category==='manual_exception');
+  Object.assign(data['dashboard-insights'].reviews,{manual_exception:manual.length,manual_exception_ids:manual.map(row=>row.review_id).sort(),
+    access_required:production.filter(row=>row.category==='access_required').length,other:production.filter(row=>row.category==='other').length,
+    total:production.length,latest:copy(production.slice(0,8))});
+  if(stable)data['dashboard-insights'].reviews.manual_exception_identities=Object.fromEntries(manual.map(row=>[row.review_id,row.logical_review_id]));
+  else delete data['dashboard-insights'].reviews.manual_exception_identities;
+}
 
-  const reload = await dashboard({change: reviewFixture, hash: '#records/reviews?category=manual_exception', appSourceTransform: withCachedBriefFormatter, beforeScript(window) {
-    window.localStorage.setItem('polititrack.manual-review-acknowledgements.v1', stored);
-  }}); t.after(reload.close);
-  await waitFor(() => reload.byId('attention-exceptions').textContent === '0', 'persisted acknowledgement');
-  reload.byId('toggle-acknowledged-reviews').click();
-  reload.byId('reviews-body').querySelector('.record-link').click();
-  await waitFor(() => reload.doc.querySelector('[data-review-ack]'), 'restore control');
-  reload.doc.querySelector('[data-review-ack]').click();
-  await waitFor(() => reload.byId('attention-exceptions').textContent === '1', 'restored active count');
-  assert.equal(reload.byId('attention-exceptions').classList.contains('attention-active'), true);
-  assert.match(reload.byId('situation-brief').textContent, /1 manual parsing exception/);
-  assert.equal(reload.doc.activeElement.textContent, 'Acknowledge manual review');
-  assert.deepEqual(env.errors, []); assert.deepEqual(reload.errors, []);
+function stableReviewFixture(data,count=1){
+  reviewFixture(data,count);
+  publishReviews(data,data['pending-reviews'].slice(0,count).map((row,i)=>({...row,filing_available:false,filing_key:'',report_id:'retained-'+i,
+    logical_review_id:'review-logical-v1:'+String(i+1).padStart(32,'0'),exception_code:'paper_filing_manual_review'})));
+}
+
+async function selectReview(env,id){
+  await env.navigate('#records/reviews?category=manual_exception',()=>!env.byId('records').hidden);
+  const toggle=env.byId('toggle-acknowledged-reviews');
+  if(toggle?.textContent.startsWith('Show'))toggle.click();
+  await env.navigate('#records/reviews?category=manual_exception&review='+encodeURIComponent(id),()=>env.doc.querySelector('[data-review-ack]')?.dataset.reviewAck===id);
+  return env.doc.querySelector('[data-review-ack]');
+}
+async function acknowledgeReview(env,id){
+  (await selectReview(env,id)).click();
+  await waitFor(()=>savedReviews(env).some(record=>record.id===id)&&!env.doc.querySelector('[data-review-ack]')?.disabled,'server acknowledgement');
+}
+async function signIn(env,name='alice'){
+  env.byId('review-account-button').click();env.byId('review-username').value=name;env.byId('review-password').value='test fixture password only';
+  env.byId('review-account-form').dispatchEvent(new env.window.Event('submit',{bubbles:true,cancelable:true}));
+  await waitFor(()=>env.byId('review-account-button').textContent===name&&!env.byId('review-account-submit').disabled,'sign in');
+}
+
+test('account acknowledgement survives clearing all browser storage, reload and signing in again',async t=>{
+  const server=createReviewServer();
+  const env=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(env.close);
+  const id=env.data['pending-reviews'][0].review_id;
+  await acknowledgeReview(env,id);
+  assert.equal(env.byId('attention-exceptions').textContent,'0');
+  assert.match(env.byId('review-categories').textContent,/1 acknowledged by you/);
+  assert.equal(env.window.localStorage.getItem(REVIEW_KEY),null,'The browser is not the acknowledgement authority');
+  env.window.localStorage.clear();env.window.dispatchEvent(new env.window.StorageEvent('storage',{key:null}));
+  assert.equal(savedReviews(env).length,1);
+  const reload=await dashboard({change:stableReviewFixture,reviewServer:server,signedOut:true,hash:'#records/reviews?category=manual_exception'});t.after(reload.close);
+  assert.equal(reload.byId('attention-exceptions').textContent,'—');
+  assert.match(reload.byId('review-categories').textContent,/Sign in to see your review status/);
+  assert.doesNotMatch(reload.byId('review-categories').textContent,/0 acknowledged/);
+  await signIn(reload);
+  assert.equal(reload.byId('attention-exceptions').textContent,'0');
+  assert.equal(reload.byId('review-password').value,'');
+  assert.deepEqual(env.errors,[]);assert.deepEqual(reload.errors,[]);
+});
+
+test('two accounts have separate acknowledgement and restore state',async t=>{
+  const server=createReviewServer(),alice=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(alice.close);
+  const id=alice.data['pending-reviews'][0].review_id;await acknowledgeReview(alice,id);
+  const bob=await dashboard({change:stableReviewFixture,reviewServer:server,reviewAccount:'bob'});t.after(bob.close);
+  assert.equal(bob.byId('attention-exceptions').textContent,'1');
+  assert.equal(alice.byId('attention-exceptions').textContent,'0');
+  (await selectReview(alice,id)).click();await waitFor(()=>alice.byId('attention-exceptions').textContent==='1','restore');
+  assert.equal(server.state('alice').acknowledged.length,0);assert.equal(server.state('bob').acknowledged.length,0);
+  assert.equal(alice.doc.activeElement.textContent,'Acknowledge manual review');
+});
+
+test('durable acknowledgements survive repeated zero, partial and returning publications',async t=>{
+  const env=await dashboard({change:data=>stableReviewFixture(data,2)});t.after(env.close);
+  const rows=copy(env.data['pending-reviews']);for(const row of rows)await acknowledgeReview(env,row.review_id);
+  const stored=copy(savedReviews(env));
+  for(const count of [0,1,2,0,2]){publishReviews(env.data,rows.slice(0,count));await env.refresh();
+    assert.equal(env.byId('attention-exceptions').textContent,'0');assert.deepEqual(savedReviews(env),stored);}
+  publishReviews(env.data,[...rows,{...rows[0],review_id:'new-defect',logical_review_id:'review-logical-v1:'+'f'.repeat(32)}]);await env.refresh();
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(savedReviews(env).length,2);
+});
+
+test('wording and evidence aliases retain acknowledgement while a different logical identity remains active',async t=>{
+  const env=await dashboard({change:stableReviewFixture});t.after(env.close);
+  const original=copy(env.data['pending-reviews'][0]);await acknowledgeReview(env,original.review_id);
+  const alias={...original,review_id:'new-evidence-alias',reason:'New display wording'};
+  publishReviews(env.data,[alias]);await env.refresh();assert.equal(env.byId('attention-exceptions').textContent,'0');
+  publishReviews(env.data,[original],false);await env.refresh();assert.equal(env.byId('attention-exceptions').textContent,'0');
+  publishReviews(env.data,[{...alias,logical_review_id:'review-logical-v1:'+'e'.repeat(32)}]);await env.refresh();
+  assert.equal(env.byId('attention-exceptions').textContent,'1');
+});
+
+test('saving waits for server commit and a failed save leaves the prior count unchanged',async t=>{
+  const server=createReviewServer(),env=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(env.close);
+  let release;server.beforeSave=()=>new Promise(resolve=>{release=resolve;});server.failSave=true;
+  (await selectReview(env,env.data['pending-reviews'][0].review_id)).click();await waitFor(()=>release,'pending save');
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(env.doc.querySelector('[data-review-ack]').textContent,'Saving…');
+  release();await waitFor(()=>!env.byId('review-save-note').hidden,'save failure');
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(savedReviews(env).length,0);
+  assert.match(env.byId('review-save-note').textContent,/unavailable/);assert.doesNotMatch(env.byId('review-save-note').textContent,/SQL/);
+});
+
+test('unavailable personal service does not masquerade as zero acknowledged records',async t=>{
+  const server=createReviewServer();server.failRead=true;
+  const env=await dashboard({change:stableReviewFixture,reviewServer:server,hash:'#records/reviews?category=manual_exception'});t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent,'—');assert.match(env.byId('review-categories').textContent,/Saved review status unavailable/);
+  assert.doesNotMatch(env.byId('review-categories').textContent,/0 acknowledged/);
+  assert.equal(env.byId('error-banner').hidden,true,'Public source data remains independently available');
+});
+
+test('browser migration is explicit and cannot revive a restored account acknowledgement',async t=>{
+  let original;const env=await dashboard({change:data=>{stableReviewFixture(data);original=copy(data['pending-reviews'][0]);},beforeScript(window){
+    window.localStorage.setItem(REVIEW_KEY,JSON.stringify({version:1,acknowledged:[{id:original.review_id,acknowledged_at_utc:'2026-08-29T12:00:00Z'}]}));
+  }});t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent,'1');assert.equal(savedReviews(env).length,0);
+  env.byId('review-account-button').click();assert.match(env.byId('review-legacy-note').textContent,/only if they belong to you/);
+  env.byId('review-import-button').click();await waitFor(()=>savedReviews(env).length===1,'explicit import');
+  assert.equal(savedReviews(env)[0].acknowledged_at_utc,'2026-08-29T12:00:00Z');
+  env.byId('review-account-dialog').close();(await selectReview(env,original.review_id)).click();await waitFor(()=>savedReviews(env).length===0,'restore imported review');
+  env.byId('review-import-button').click();await waitFor(()=>!env.byId('review-import-button').disabled,'repeat import');
+  assert.equal(savedReviews(env).length,0);assert.equal(env.byId('attention-exceptions').textContent,'1');
+});
+
+test('a different account cookie in a stale tab cannot receive the previous account action',async t=>{
+  const env=await dashboard({change:stableReviewFixture});t.after(env.close);
+  const button=await selectReview(env,env.data['pending-reviews'][0].review_id);env.reviewSession.account='bob';button.click();
+  await waitFor(()=>!env.byId('review-save-note').hidden,'account change message');
+  assert.match(env.byId('review-save-note').textContent,/account changed/);assert.equal(env.byId('review-account-button').textContent,'bob');
+  assert.equal(env.reviewServer.state('alice').acknowledged.length,0);assert.equal(env.reviewServer.state('bob').acknowledged.length,0);
+});
+
+test('server acknowledgement history is not evicted by the old 500 browser-record limit',async t=>{
+  const server=createReviewServer();let rows;
+  const env=await dashboard({reviewServer:server,change:data=>{stableReviewFixture(data,501);rows=data['pending-reviews'];
+    for(const row of rows)server.people.get('alice').rows.set(row.logical_review_id,{id:row.review_id,logical_review_id:row.logical_review_id,acknowledged_at_utc:'2026-08-29T12:00:00Z'});
+  }});t.after(env.close);
+  assert.equal(env.byId('attention-exceptions').textContent,'0');assert.equal(savedReviews(env).length,501);
+});
+
+test('activation token leaves the URL and is sent only in the account setup request',async t=>{
+  const token='fixture-activation-token-only',env=await dashboard({signedOut:true,hash:'#review-account?activate='+token});t.after(env.close);
+  await waitFor(()=>env.byId('review-account-dialog').open,'activation form');
+  assert.ok(!env.window.location.href.includes(token));assert.equal(env.byId('review-username-field').hidden,true);
+  assert.equal(env.byId('review-password').autocomplete,'new-password');
+  env.byId('review-password').value='test fixture new password';env.byId('review-account-form').dispatchEvent(new env.window.Event('submit',{bubbles:true,cancelable:true}));
+  await waitFor(()=>env.byId('review-account-button').textContent==='alice','activation');
+  assert.equal(env.reviewServer.requests.find(r=>r.route==='activate').body.invitation,token);
+  assert.equal(env.window.localStorage.getItem(REVIEW_KEY),null);
 });
 
 test('complete parser collection is paginated beyond the compact eight-row overview', async t => {
@@ -1547,4 +1711,66 @@ test('shell header measurement follows viewport resizing when ResizeObserver is 
   height = 84; env.window.dispatchEvent(new env.window.Event('resize'));
   assert.equal(measuredHeight(), '84px');
   assert.deepEqual(env.errors, []);
+});
+
+test('Signals compact exact analysis and evidence with safe hover, focus, tap and full-text search', async t => {
+  const data=fixtures();
+  const full='Original "quoted" <img src=x onerror=alert(1)> & text. '.repeat(30)+'TAIL_SEARCH_ONLY';
+  const sources=Array.from({length:7},(_,i)=>({title:'Source '+i+' '+('long evidence '.repeat(10)),url:'https://example.test/evidence/'+i}));
+  data['ai-analyses']=[{analysis_id:'analysis-long',trade_id:'trade-long',ticker:'LONG',classification:'weak_signal',
+    analyzed_at_utc:'2026-08-30T10:00:00Z',asset:'Full asset name',filer:'Filer',owner:'Spouse',investor_edge_score:85,investor_edge_status:'insufficient_data',source_url:'https://example.test/filing',ai:{analysis_summary:full,evidence_sources:sources}}];
+  const env=await dashboard({change:target=>Object.assign(target,data),hash:'#signals'});t.after(env.close);
+  await waitFor(()=>env.byId('ai-body').querySelector('.cell-preview'),'compact analysis');
+  const control=env.byId('ai-body').querySelector('[data-field="ai.analysis_summary"] button');
+  assert.equal(control.dataset.tooltip,full);
+  assert.ok(control.textContent.length<=221);
+  assert.equal(control.getAttribute('aria-label'),'Read full analysis for LONG');
+  assert.equal(env.byId('ai-body').querySelector('img'),null);
+  assert.equal(env.byId('ai-body').querySelector('[data-field="investor_edge_score"] .cell-value').dataset.tooltip,'Unavailable');
+  assert.match(env.byId('ai-body').querySelector('[data-field="ticker"] .cell-value').dataset.tooltip,/Full asset name/);
+  assert.match(env.byId('ai-body').querySelector('[data-field="filer"] .cell-value').dataset.tooltip,/Spouse/);
+  control.focus();
+  assert.equal(env.byId('tooltip').querySelector('.tooltip-body').textContent,full);
+  assert.equal(control.getAttribute('aria-describedby'),'tooltip');
+  control.click();env.doc.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  assert.equal(env.byId('tooltip').hidden,true);
+  pointer(env,control,'pointerdown',{pointerType:'touch'});pointer(env,control,'click',{pointerType:'touch'});
+  assert.equal(env.byId('tooltip').hidden,false);
+  const evidence=env.byId('ai-body').querySelector('[data-field="source_url"] .cell-preview');
+  assert.ok(evidence.dataset.tooltip.includes(sources[6].url));
+  assert.equal(env.byId('ai-body').querySelectorAll('.evidence-links a').length,9);
+  env.byId('ai-search').value='TAIL_SEARCH_ONLY';env.byId('ai-search').dispatchEvent(new env.window.Event('input',{bubbles:true}));
+  await tick(220);
+  assert.match(env.byId('ai-count-label').textContent,/1.*of 1/);
+  assert.deepEqual(env.errors,[]);
+});
+
+test('wide tables get synchronized top navigation that reaches both ends', async t => {
+  const env=await dashboard({hash:'#signals'});t.after(env.close);
+  const wrap=env.byId('panel-ai').querySelector('.table-wrap');
+  Object.defineProperties(wrap,{clientWidth:{get:()=>400},scrollWidth:{get:()=>2400}});
+  env.window.dispatchEvent(new env.window.Event('resize'));
+  await waitFor(()=>wrap.previousElementSibling.classList.contains('table-navigation'),'navigation added');
+  const bar=wrap.previousElementSibling;
+  await waitFor(()=>!bar.hidden,'wide table navigation visible');
+  const track=bar.querySelector('.table-scroll-track');
+  track.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'End',bubbles:true}));
+  assert.equal(wrap.scrollLeft,2400); // JSDOM does not implement native clamping.
+  assert.equal(track.scrollLeft,wrap.scrollLeft);
+  track.dispatchEvent(new env.window.KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+  assert.equal(wrap.scrollLeft,0);
+  bar.querySelector('[data-scroll-right]').click();
+  assert.ok(wrap.scrollLeft>0);
+  assert.deepEqual(env.errors,[]);
+});
+
+test('Operations shows OGE inventory and ages the same mandatory Executive check', async t => {
+  const data=fixtures();data['dashboard-insights'].health.oge={checks_included:true,filing_count:25,processed_count:2,transaction_count:6,access_required_count:23,manual_exception_count:0};
+  const env=await dashboard({change:target=>Object.assign(target,data),hash:'#operations'});t.after(env.close);
+  const card=env.byId('oge-health');
+  assert.match(card.textContent,/OGE disclosures.*Current/);
+  assert.match(card.textContent,/Access \/ request required23/);
+  assert.equal(card.querySelector('[data-run-now]'),null);
+  env.advanceTime(61*60000);
+  assert.match(card.textContent,/overdue/i);
 });

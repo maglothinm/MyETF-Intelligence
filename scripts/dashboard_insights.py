@@ -18,9 +18,13 @@ from typing import Any, Callable, Mapping
 from urllib.parse import parse_qsl, urlsplit
 
 try:
+    from .source_ocr_health import branch_health, safe_metrics
+    from .review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
     from .collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                       nonproduction_evidence, overall_status, production_run, trigger_source)
 except ImportError:  # pragma: no cover - direct-script execution
+    from source_ocr_health import branch_health, safe_metrics
+    from review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
     from collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                      nonproduction_evidence, overall_status, production_run, trigger_source)
 
@@ -146,6 +150,16 @@ def public_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(value, Mapping):
             result = {}
             for key, item in value.items():
+                if key == "source_ocr" and path[-1:] == ("runtime_mode_evidence",) and isinstance(item, Mapping):
+                    # OCR stage timestamps are public evidence. Validate this
+                    # exact telemetry envelope before the generic private-key
+                    # filter, which must still remove healthcheck credentials
+                    # and arbitrary heartbeat configuration everywhere else.
+                    try:
+                        result[key] = safe_metrics(item)
+                    except ValueError:
+                        result[key] = {"enabled": item.get("enabled") is True, "invalid": True}
+                    continue
                 if not isinstance(key, str) or _PRIVATE_KEY.search(key):
                     continue
                 if key == "notification" and isinstance(item, Mapping):
@@ -189,6 +203,11 @@ def _filing_identity(row: Mapping[str, Any]) -> tuple[str, str]:
 
 def review_category(row: Mapping[str, Any], filing: Mapping[str, Any] | None = None) -> str:
     """Separate request inventory from parser exceptions using retained fields."""
+    code = row.get("exception_code")
+    if code == ACCESS_REQUIRED:
+        return "access_required"
+    if code in PARSER_CODES:
+        return "manual_exception"
     filing = _mapping(filing)
     access = str(_first(row.get("access_mode"), filing.get("access_mode")) or "").casefold().replace("-", "_")
     reason = " ".join(str(value or "") for value in (row.get("reason"), row.get("review_reason"), filing.get("review_reason"))).casefold()
@@ -266,7 +285,11 @@ def review_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
         if enriched.get("filing_status") in (None, "") and filing.get("status") not in (None, ""):
             enriched["filing_status"] = filing["status"]
         enriched["filing_available"] = bool(filing)
-        enriched["category"] = review_category(row, filing)
+        enriched["exception_code"] = exception_code(enriched)
+        # Classify from the same normalized identity fields on every pass;
+        # build_site publishes these rows and build_insights enriches them again.
+        enriched["category"] = review_category(enriched, filing)
+        enriched["logical_review_id"] = logical_review_id(enriched)
         enriched["is_synthetic_test"] = is_test(row)
         result.append(enriched)
     return result
@@ -303,7 +326,7 @@ def _flat_record(row: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, A
 
 
 _FILING_PUBLIC = ("filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "status", "access_mode")
-_REVIEW_PUBLIC = ("review_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
+_REVIEW_PUBLIC = ("review_id", "logical_review_id", "exception_code", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
 _SIGNAL_PUBLIC = ("analysis_id", "trade_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "owner", "ticker", "asset", "amount", "transaction_type", "classification")
 
 
@@ -433,7 +456,14 @@ def _run(row: Mapping[str, Any], branch: str) -> dict[str, Any]:
     evidence_source = row.get("evidence_source")
     if evidence_source not in {"github_actions", "runtime_v2"}:
         evidence_source = "retained_state"
-    return {"id": f"{branch}:{key}", "branch": branch, "started_utc": optional_timestamp(row.get("started_utc")),
+    ocr_metrics = _mapping(_mapping(row.get("runtime_mode_evidence")).get("source_ocr")) if evidence_source == "runtime_v2" and row.get("runtime_mode_verified") is True else {}
+    if ocr_metrics:
+        try:
+            ocr_metrics = safe_metrics(ocr_metrics)
+        except ValueError:
+            ocr_metrics = {"enabled": ocr_metrics.get("enabled") is True, "invalid": True}
+    return {"id": f"{branch}:{key}", "branch": branch, "source_ocr_metrics": ocr_metrics,
+            "started_utc": optional_timestamp(row.get("started_utc")),
             "workflow_started_utc": optional_timestamp(row.get("workflow_started_utc")),
             "producer_job_started_utc": optional_timestamp(row.get("producer_job_started_utc")),
             "workflow_created_utc": optional_timestamp(row.get("workflow_created_utc")),
@@ -540,7 +570,13 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
                          "errors": last.get("errors", []), "error_count": last.get("error_count", 0),
                          "new_record_count": last.get("new_record_count"),
                          "run_url": newest.get("run_url"), "timeline": ordered[:10]})
-    return {"status": overall_status(branches), "branches": branches,
+    for item in branches:
+        if item["branch"] in {"legislative", "executive"}:
+            item["source_ocr"] = branch_health(item["timeline"], as_of, item.get("stale_after_minutes") or 90)
+    required_ocr = [item["source_ocr"] for item in branches if item.get("source_ocr", {}).get("required")]
+    combined = [{"status": overall_status(branches), "branch": "collectors"}] + [{"status": item["status"], "branch": "ocr"} for item in required_ocr]
+    combined_status = next((status for status in ("failure", "stale", "unknown") if any(item["status"] == status for item in combined)), "success")
+    return {"status": combined_status, "branches": branches,
             "as_of_utc": optional_timestamp(as_of.isoformat()) if as_of else None,
             "required_branches": list(REQUIRED_BRANCHES),
             "policy": {branch: dict(policy) for branch, policy in FRESHNESS_POLICY.items()},
@@ -656,6 +692,30 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
     production_runs = [row for row in runs if not is_synthetic(row) and production_run(row, str(row.get("branch") or ""))]
     production_ai_runs = [row for row in ai_runs if not is_synthetic(row) and production_run(row, "ai")]
     health, normalized_runs = _health(production_runs, production_ai_runs, clock, _mapping(payload.get("workflow_evidence")))
+    # Retained OCR inventory keeps monitoring required even if a later producer
+    # stops reporting OCR. Seven newer parent successes must not erase an outage.
+    for branch in health["branches"]:
+        if "source_ocr" in branch and any(row.get("branch") == branch["branch"] and row.get("ocr_status") for row in filings):
+            branch["source_ocr"]["required"] = True
+    monitored_statuses = [branch["status"] for branch in health["branches"]] + [
+        branch["source_ocr"]["status"] for branch in health["branches"] if branch.get("source_ocr", {}).get("required")]
+    health["status"] = next((state for state in ("failure", "stale", "unknown") if state in monitored_statuses), "success")
+    executive_health = next((branch for branch in health["branches"] if branch["branch"] == "executive"), {})
+    oge_filings = [row for row in filings if str(row.get("source") or "").casefold() == "oge"]
+    oge_reviews = [row for row in categories if str(row.get("source") or "").casefold() == "oge"]
+    # Every successful Runtime Executive attempt includes the mandatory OGE
+    # browser discovery step. Older workflow-only evidence is not a source probe.
+    health["oge"] = {
+        "monitoring_branch": "executive",
+        "checks_included": any(row.get("evidence_source") == "runtime_v2" and row.get("status") == "success"
+                               and row.get("finished_utc") == executive_health.get("last_success_utc")
+                               for row in executive_health.get("timeline", [])),
+        "filing_count": len(oge_filings),
+        "processed_count": sum(row.get("status") == "processed" for row in oge_filings),
+        "transaction_count": sum(str(row.get("source") or "").casefold() == "oge" for row in transactions),
+        "access_required_count": sum(row.get("category") == "access_required" for row in oge_reviews),
+        "manual_exception_count": sum(row.get("category") == "manual_exception" for row in oge_reviews),
+    }
     simulation = _simulation(payload.get("simulation"))
     data_through = source_data_through(payload, as_of=clock)
     incidents = []
@@ -685,6 +745,11 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
                 for row in categories
                 if row["category"] == "manual_exception" and row.get("review_id")
             ),
+            "manual_exception_identities": {
+                str(row["review_id"]): row["logical_review_id"]
+                for row in categories
+                if row["category"] == "manual_exception" and row.get("review_id")
+            },
             "other": review_counts["other"],
             "total": len(reviews),
             "latest": categories[:8],

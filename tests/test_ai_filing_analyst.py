@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,17 @@ from scripts.ai_filing_analyst import (
     signal_direction,
     update_paper_positions,
 )
+
+
+@pytest.fixture(autouse=True)
+def fixed_sample_trade_age(monkeypatch):
+    # These August fixtures assert a recent trade's score/classification. Keep
+    # their scoring clock fixed as the real calendar advances; live rules stay
+    # unchanged, and tests supplying an explicit clock still control their age.
+    from scripts import ai_filing_analyst as analyst
+    original = analyst.transaction_age_days
+    observed = datetime(2026, 8, 26, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(analyst, "transaction_age_days", lambda trade, now=None: original(trade, now or observed))
 
 
 def write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:

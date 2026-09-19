@@ -6,10 +6,11 @@ import os
 import tempfile
 import threading
 import time
+import zlib
 from pathlib import Path
 from typing import Any, Mapping
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import safe_join
 
 from .store import PostgresSnapshotStore, StateStoreError
@@ -17,6 +18,45 @@ from .store import PostgresSnapshotStore, StateStoreError
 
 def _truthy(value: Any) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _stream_dashboard_response(response, target: Path):
+    """Keep growing public ledgers below Cloud Run's buffered response limit."""
+    text_asset = target.suffix.lower() in {".json", ".csv", ".html", ".js", ".css", ".svg", ".txt"}
+    compressible = text_asset and target.stat().st_size >= 65536
+    if compressible:
+        response.vary.add("Accept-Encoding")
+    if response.status_code == 200 and compressible and request.accept_encodings["gzip"] > 0:
+        response.headers["Content-Encoding"] = "gzip"
+        etag, _ = response.get_etag()
+        if etag:
+            # Identity and gzip are semantically equivalent, not byte-identical.
+            response.set_etag(etag, weak=True)
+        response.headers.pop("Content-Length", None)
+        response.automatically_set_content_length = False
+        if request.method != "HEAD":
+            original = response.response
+
+            def encoded():
+                compressor = zlib.compressobj(wbits=31)
+                try:
+                    for chunk in original:
+                        compressed = compressor.compress(chunk)
+                        if compressed:
+                            yield compressed
+                    yield compressor.flush()
+                finally:
+                    original.close()
+
+            response.response = encoded()
+            response.direct_passthrough = False
+            response.call_on_close(original.close)
+    elif response.status_code in {200, 206} and request.method != "HEAD" and (response.content_length or 0) >= 32 * 1024 * 1024:
+        # Identity-only clients also need streaming. Let the WSGI server select
+        # chunked transfer encoding; application code must not set that header.
+        response.headers.pop("Content-Length", None)
+        response.automatically_set_content_length = False
+    return response
 
 
 class DashboardCache:
@@ -63,6 +103,10 @@ def create_app(
     config: Mapping[str, Any] | None = None,
     *,
     store: PostgresSnapshotStore | None = None,
+    review_store=None,
+    operation_store=None,
+    operation_cloud=None,
+    source_upload_store=None,
 ) -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config.update({key: value for key, value in os.environ.items() if key.startswith(("VAULT_", "RUNTIME_"))})
@@ -72,6 +116,17 @@ def create_app(
     cache = DashboardCache(runtime_store, int(app.config.get("RUNTIME_DASHBOARD_REFRESH_SECONDS", 30)))
     app.extensions["runtime_v2_store"] = runtime_store
     app.extensions["runtime_v2_dashboard"] = cache
+
+    from .review_accounts import PersonalReviewStore
+    from .review_api import create_blueprint
+
+    personal_reviews = review_store or PersonalReviewStore()
+    app.extensions["personal_reviews"] = personal_reviews
+    app.register_blueprint(create_blueprint(personal_reviews, cache))
+    from .operations_api import create_blueprint as operations_blueprint
+    app.register_blueprint(operations_blueprint(personal_reviews, operation_store, operation_cloud))
+    from .source_ocr_api import create_blueprint as source_ocr_blueprint
+    app.register_blueprint(source_ocr_blueprint(personal_reviews, cache, source_upload_store))
 
     if _truthy(app.config.get("VAULT_ENABLED")):
         from backend.filing_vault import init_app
@@ -111,7 +166,7 @@ def create_app(
                 target = root / "index.html"
             if not target.is_file():
                 return jsonify(code="NOT_FOUND", message="The requested dashboard resource does not exist."), 404
-        response = send_from_directory(root, target.relative_to(root).as_posix())
+        response = _stream_dashboard_response(send_from_directory(root, target.relative_to(root).as_posix()), target)
         response.headers["X-PolitiTrack-Snapshot"] = cache.sha256
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
