@@ -6,7 +6,8 @@ The owner requested deployment of the tested PDF repair and correct review
 classification for Senate image-only filings. PR #191 is merged at
 `a9607c88e10959c0cd3844f008915aec12dd0935`, with the same tree as tested build
 source `df5bb5a850942ff54f6b73a4936fc9ec18d8e548`. Canonical OCR, Runtime safety
-and Current Opportunity checks passed. It is not yet deployed.
+and Current Opportunity checks passed. The new image is installed, but rollout
+acceptance failed and recovery disabled OCR; see the current checkpoint below.
 Unsupported Senate page viewers and paper
 layouts become `needs_review`, without a retry timer. Matching retained Senate
 retry receipts receive an append-only classification correction, preserving old
@@ -21,16 +22,26 @@ at 14:00:48. Failed and successful executions had identical image/specifications
 The earlier TCP failure is established; its upstream internal cause and any claim
 that our testing forced recovery are not established.
 
-Current live image remains `sha256:31d09bce4ee2ca7e32343f6fa84a7c354afde245f64c52b8ff6c3c48a5ba3f7d`.
-All four original schedules are enabled; Vault remains paused. Legislative's two
-retained Senate `PaperFilingError` retries account for the technical OCR failure
-despite successful collection. The broad House PDF rejection is separately
-addressed by PR #188; complete OGE pagination is addressed by PR #190.
+**Recovery completed at 15:27:16 UTC.** Build
+`55696595-ff36-411f-922f-65a3657490ab` produced installed image
+`sha256:ae9b21488499dd8e7f7bbbacac5ccaea5bea0e86a817b0f9ceeea8d79d2586eb`.
+The fresh baseline and schema/image checks passed. Legislative
+`polititrack-legislative-7bwpp` committed generation 1183 with five OCR documents,
+11/11 pages, zero technical retries and five review outcomes. Executive
+`polititrack-executive-thrvb` failed before OCR on two bounded OGE loading waits.
+Independent preservation `polititrack-admin-hfd2g` passed. All six resources
+retain the new image; OCR is disabled on Legislative, Executive and web. All four
+original schedules are ENABLED unchanged; Vault stays PAUSED. No controller is active.
 
-Next: verify build `55696595-ff36-411f-922f-65a3657490ab`, then use the
-[new reviewed continuation](releases/2026-09-19-senate-pdf-release.md) retaining all
-four closed journals, a fresh successful baseline and independent acceptance. Current
-Opportunity stays off. Keep the accepted House upload and owner review intact.
+The fifth journal is closed as `recovered_new_image_ocr_disabled`, SHA-256
+`ed2e9e56e3f770d66fa45bf69f47a2c3f20a34ff02db993ab9c130802d931f2d`.
+Preserve all five attempts and committed history. Read-only production-browser
+diagnostics prove the table can be fully ready while the collector wait times
+out; this is an application readiness defect, not a proven current upstream outage.
+Next: isolate/correct that wait, verify real collection and finish activation via
+an explicitly reviewed continuation. Do not reopen a journal or weaken the
+baseline/acceptance gates. Current Opportunity stays off; the original House
+upload still requires owner review. [Evidence](releases/2026-09-19-senate-pdf-release.md).
 
 ## Historical OGE diagnosis — September 19, 12:23 UTC (#182)
 
