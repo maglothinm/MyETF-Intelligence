@@ -112,7 +112,8 @@ class MarketProvider:
             factor *= split
         result = {'security_id':sid,'share_class':row['share_class'],'currency':row['currency'],
                   'basis':'split_adjusted','basis_date':today,'actions_complete':True,'provider_conflict':False,
-                  'history_provider':'alphavantage_daily_adjusted_raw_ohlc_and_splits','bars':bars,'adjustment_events':actions,
+                  'history_provider':'alphavantage_daily_adjusted_raw_ohlc_and_splits',
+                  'history_observed_at':utc(self.clock()), 'adjustments_through':max((b['date'] for b in bars), default=None), 'bars':bars,'adjustment_events':actions,
                   'quote':{'price':number(quote.get('c')),'at':at,'observed_at':utc(observed),'provider':'finnhub',
                            'precision':'second','kind':'realtime','feed_delay_seconds':0,
                            'session_high':number(quote.get('h')),'session_low':number(quote.get('l'))}}

@@ -1,5 +1,24 @@
 # PolitiTrack active handoff
 
+## Current Opportunity purchase threshold — production blocked (#197)
+
+The owner authorized implementation followed by production activation. PR #199
+carries the implemented per-purchase crossing history, configurable 8% default,
+explicit incomplete-data states, compact filter and purchase CSV/JSON exports.
+Existing buying/entry/evidence/data gates and paper trading remain unchanged.
+Source/CI/merge receipts are retained in the PR; approval is already recorded.
+
+A read-only check of the production AI credentials at September 19, 17:35:42 UTC
+received a valid Finnhub quote but **no Alpha Vantage daily history**: the
+required `TIME_SERIES_DAILY_ADJUSTED` endpoint returned a premium-access notice.
+This blocks trustworthy price-path evaluation and live activation. Current
+Opportunity remains off; no provider capability is fabricated and no paid
+subscription is purchased. The Executive-only recovery journal separately
+reported complete with schedules restored; this is not proof that the later
+OCR continuation or this feature is deployed. Refresh its ownership before
+any release. See [readiness evidence](releases/2026-09-19-purchase-threshold.md)
+and [feature/runbook](PURCHASE_GAIN_THRESHOLD.md).
+
 ## Authorized PDF/Senate OCR release — September 19 (#182)
 
 **Live activation checkpoint, 17:32 UTC:** the approved Executive-only repair

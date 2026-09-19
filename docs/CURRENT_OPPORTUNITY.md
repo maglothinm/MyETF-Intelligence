@@ -89,3 +89,12 @@ POLITITRACK_TEST_NODE_MODULES=/isolated/ui-tools/node_modules OPPORTUNITY_FIXTUR
 ```
 
 The harness refuses a nonempty output directory and uses injected TEST clocks/providers only. Its comparison executes the existing deterministic legacy scoring/entry functions; it is not a historical production alert or performance backtest. See [acceptance mapping](validation/current-opportunity-v1.md) for evidence and limitations.
+
+## Purchase gain threshold and owner activation request — September 19
+
+Issue #197 adds a per-purchase never-crossed threshold classification and filter.
+See [the precise observation and release contract](PURCHASE_GAIN_THRESHOLD.md).
+The default 8% is provisional and descriptive; it cannot replace a qualification
+gate. The owner has authorized production activation after implementation and
+verification. Preserve the currently active Executive/OCR recovery and complete
+the existing provider, shadow and state-preservation gates before live activation.

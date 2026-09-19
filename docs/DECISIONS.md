@@ -1520,3 +1520,21 @@ OCR evidence and unchanged other producer heads. The completed incident SHA-256
 is `64b2cc0697a7ae2b061eda8941da522a765e56125fc2a63e9606167673f29836`;
 normal activation uses that exact seal. See the
 [recovery receipt](releases/2026-09-19-executive-recovery-receipt.json).
+
+
+## D-2026-09-19-008 — Preserve per-purchase threshold history (#197)
+
+The owner requested the “never crossed +X% since purchase” flag and production
+activation afterward. Add an independent descriptive threshold, default 8%, using
+immutable purchase-date closes and compatible post-reference regular-session
+highs. Preserve positive observations across gaps/restarts and later purchases;
+require complete stated coverage for negatives. Explicitly exclude unknown
+purchase-day ordering/extended hours, and retain reference-correction review.
+Do not infer a future gain or alter existing qualification gates or paper trades.
+
+The additional threshold does not change the qualification method hash or send
+alerts by itself. Existing AI evaluations own the additive history; dashboard
+filters and purchase-level exports reflect that same persisted record. Owner
+authorization now covers activation, but not invented provider capability or
+bypassing the active Executive/OCR release lock. Source defaults stay off until
+verified shadow/production acceptance through the current release procedure.

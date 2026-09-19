@@ -197,6 +197,11 @@
       "type": "number",
       "minimum": 0,
       "maximum": 1
+    },
+    "never_crossed_fraction": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 10
     }
   }
 }
