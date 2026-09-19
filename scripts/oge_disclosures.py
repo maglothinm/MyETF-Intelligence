@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -389,17 +389,93 @@ def _next_locator(page: Any) -> Any | None:
     return None
 
 
-def _wait_for_rendered_table(page: Any, timeout_ms: int) -> None:
-    page.wait_for_function(
-        """() => {
+def _wait_for_rendered_table(
+    page: Any, timeout_ms: int, *, search_term: str | None = None, start: int | None = None,
+) -> dict[str, int]:
+    # OGE uses server-side DataTables. Visible old rows are not evidence that a
+    # newly requested search/page finished. Correlate its public Ajax API's draw
+    # counter, search and offset before reading the rendered rows.
+    handle = page.wait_for_function(
+        """expected => {
             const tables = Array.from(document.querySelectorAll('table'));
-            return tables.some((table) => {
+            for (const table of tables) {
               const text = (table.innerText || '').replace(/\\s+/g, ' ');
-              return /Date/i.test(text) && /Type/i.test(text) && /Name/i.test(text) && !/Loading\\s+Loading/i.test(text);
-            });
+              if (!/Date/i.test(text) || !/Type/i.test(text) || !/Name/i.test(text)
+                  || /Loading\\s+Loading/i.test(text)) continue;
+              const jq = window.jQuery;
+              if (!jq || !jq.fn.dataTable || !jq.fn.dataTable.isDataTable(table)) continue;
+              const api = jq(table).DataTable();
+              const info = api.page.info();
+              const request = api.ajax.params();
+              const response = api.ajax.json();
+              if (!request || !response || !info.serverSide) continue;
+              if (!Number.isInteger(request.draw) || request.draw < 1
+                  || !['number', 'string'].includes(typeof response.draw)
+                  || String(response.draw) !== String(request.draw)) continue;
+              if (expected.search !== null && request.search?.value !== expected.search) continue;
+              if (expected.start !== null && info.start !== expected.start) continue;
+              if (Number(request.start) !== info.start) continue;
+              return {start: info.start, end: info.end, total: info.recordsDisplay,
+                      length: info.length, rows: api.rows({page: 'current'}).count(),
+                      response_rows: Array.isArray(response.data) ? response.data.length : -1,
+                      response_total: response.recordsFiltered, error: response.error || ''};
+            }
+            return false;
         }""",
+        arg={"search": search_term, "start": start},
         timeout=timeout_ms,
     )
+    try:
+        state = handle.json_value()
+    finally:
+        handle.dispose()
+    return _validate_table_page(state)
+
+
+def _validate_table_page(state: Any) -> dict[str, int]:
+    """Refuse partial/malformed pages even when DataTables displays them."""
+    fields = ("start", "end", "total", "length", "rows", "response_rows", "response_total")
+    if not isinstance(state, dict) or state.get("error") or any(
+        type(state.get(key)) is not int or state[key] < 0 for key in fields
+    ):
+        raise SourceChangedError("OGE returned invalid table pagination metadata")
+    start, end, total, length = (state[k] for k in ("start", "end", "total", "length"))
+    if (length == 0 or start > total or end != min(start + length, total)
+            or state["rows"] != end - start or state["response_rows"] != end - start
+            or state["response_total"] != total):
+        raise SourceChangedError("OGE returned an incomplete or inconsistent table page")
+    return {key: state[key] for key in fields}
+
+
+def _load_collection(page: Any, collection_url: str, timeout_ms: int, diagnostics_dir: Path) -> None:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    for attempt in (1, 2):
+        try:
+            if attempt == 1:
+                page.goto(collection_url, wait_until="domcontentloaded", timeout=timeout_ms)
+            else:
+                page.reload(wait_until="domcontentloaded", timeout=timeout_ms)
+            _affirm_terms(page)
+            _wait_for_rendered_table(page, timeout_ms)
+            _dismiss_terms_overlay(page)
+            return
+        except PlaywrightTimeoutError as exc:
+            _save_diagnostics(page, diagnostics_dir, f"oge-loading-timeout-{attempt}")
+            LOGGER.warning("OGE collection did not finish loading (attempt %s/2, timeout %sms)", attempt, timeout_ms)
+            if attempt == 2:
+                raise SourceChangedError(
+                    "OGE collection did not finish loading after two bounded attempts; "
+                    "no complete collection is available"
+                ) from exc
+
+
+def _log_request_failure(request: Any) -> None:
+    # Exclude query strings, headers, cookies and response bodies from logs.
+    url = urlsplit(request.url)
+    if url.hostname in {"oge.gov", "www.oge.gov", "extapps2.oge.gov"}:
+        LOGGER.warning("OGE request failed: %s %s%s (%s)", request.resource_type,
+                       url.hostname, url.path, request.failure)
 
 
 def scrape_oge_listings(
@@ -427,12 +503,9 @@ def scrape_oge_listings(
         )
         page = context.new_page()
         page.set_default_timeout(timeout_ms)
+        page.on("requestfailed", _log_request_failure)
         try:
-            page.goto(collection_url, wait_until="domcontentloaded", timeout=timeout_ms)
-            _affirm_terms(page)
-            _wait_for_rendered_table(page, timeout_ms)
-            # OGE can activate the acknowledgement overlay after DOMContentLoaded.
-            _dismiss_terms_overlay(page)
+            _load_collection(page, collection_url, timeout_ms, diagnostics_dir)
 
             search_input = _find_search_input(page)
             search_terms = ("278-T", "Periodic Transaction") if search_input is not None else ("",)
@@ -442,28 +515,43 @@ def scrape_oge_listings(
                 if search_input is not None:
                     _dismiss_terms_overlay(page)
                     search_input.fill(search_term)
-                    page.wait_for_timeout(1_500)
+                expected_start = 0
+                expected_total = None
                 page_number = 0
                 seen_signatures: set[str] = set()
                 term_found = False
                 while page_number < max_pages:
                     page_number += 1
+                    state = _wait_for_rendered_table(
+                        page, timeout_ms, search_term=search_term, start=expected_start,
+                    )
+                    if expected_total is not None and state["total"] != expected_total:
+                        raise SourceChangedError("OGE result count changed during pagination; collection is incomplete")
+                    expected_total = state["total"]
                     html = page.content()
-                    signature = hashlib.sha256(html.encode("utf-8")).hexdigest()
+                    # Compare data rows, not transient page markup or page-number links.
+                    soup = BeautifulSoup(html, "html.parser")
+                    row_keys = [(normalize_text(row.get_text(" ", strip=True)),
+                                 [str(a["href"]) for a in row.find_all("a", href=True)])
+                                for table in soup.find_all("table")
+                                if {"date", "document_type", "name"}.issubset(_header_map(table))
+                                for row in table.find_all("tr") if row.find("td")]
+                    signature = hashlib.sha256(json.dumps(row_keys).encode("utf-8")).hexdigest()
                     if signature in seen_signatures:
-                        break
+                        raise SourceChangedError("OGE repeated a data page before collection completed")
                     seen_signatures.add(signature)
-                    try:
-                        listings = parse_oge_table_html(html, base_url=page.url)
-                    except SourceChangedError:
-                        listings = []
+                    listings = parse_oge_table_html(html, base_url=page.url)
                     if listings:
                         term_found = True
                         all_listings.update({item.listing_id: item for item in listings})
+                    if state["end"] == state["total"]:
+                        break
+                    if page_number == max_pages:
+                        raise SourceChangedError("OGE page limit reached before collection completed")
                     next_button = _next_locator(page)
                     if next_button is None:
-                        break
-                    before = normalize_text(page.locator("table").first.inner_text())
+                        raise SourceChangedError("OGE next-page control is missing before collection completed")
+                    expected_start = state["end"]
                     _dismiss_terms_overlay(page)
                     try:
                         next_button.click(timeout=min(timeout_ms, 15_000))
@@ -472,15 +560,6 @@ def scrape_oge_listings(
                         if not _dismiss_terms_overlay(page):
                             raise
                         next_button.click(timeout=min(timeout_ms, 15_000))
-                    try:
-                        page.wait_for_function(
-                            "before => document.querySelector('table') && "
-                            "(document.querySelector('table').innerText || '').replace(/\\s+/g, ' ').trim() !== before",
-                            arg=before,
-                            timeout=min(timeout_ms, 30_000),
-                        )
-                    except PlaywrightTimeoutError:
-                        page.wait_for_timeout(1_500)
                 if term_found:
                     break
 

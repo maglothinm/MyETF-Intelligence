@@ -145,3 +145,202 @@ def test_dismiss_terms_overlay_ignores_inactive_overlay() -> None:
     page = _FakePage(overlay)
     assert _dismiss_terms_overlay(page) is False
     assert overlay.clicked is False
+
+
+def _page_state(start=0, total=2, length=1):
+    end = min(start + length, total)
+    return dict(start=start, end=end, total=total, length=length,
+                rows=end-start, response_rows=end-start, response_total=total)
+
+
+@pytest.mark.parametrize("change", [
+    {"rows": 0}, {"response_rows": 0}, {"response_total": 3},
+    {"start": -1}, {"end": 2}, {"length": 0}, {"total": True},
+    {"total": "2"}, {"error": "upstream error"},
+])
+def test_rejects_partial_or_malformed_page_counts(change):
+    from scripts.oge_disclosures import _validate_table_page, SourceChangedError
+    with pytest.raises(SourceChangedError):
+        _validate_table_page({**_page_state(), **change})
+
+
+@pytest.mark.parametrize("state", [_page_state(), _page_state(1), _page_state(total=0)])
+def test_accepts_complete_page_counts_including_empty_search(state):
+    from scripts.oge_disclosures import _validate_table_page
+    assert _validate_table_page(state) == state
+
+
+@pytest.mark.parametrize("timeouts", [1, 2])
+def test_loading_timeout_reloads_only_once_and_never_returns_partial(monkeypatch, tmp_path, timeouts):
+    from types import SimpleNamespace
+    from playwright.sync_api import TimeoutError
+    from scripts import oge_disclosures as oge
+    calls = []
+    page = SimpleNamespace(goto=lambda *a, **kw: calls.append("goto"),
+                           reload=lambda **kw: calls.append("reload"))
+    monkeypatch.setattr(oge, "_affirm_terms", lambda p: calls.append("affirm"))
+    monkeypatch.setattr(oge, "_dismiss_terms_overlay", lambda p: calls.append("dismiss"))
+    monkeypatch.setattr(oge, "_save_diagnostics", lambda p, d, label: calls.append(label))
+    waits = 0
+    def wait(*a, **kw):
+        nonlocal waits
+        waits += 1
+        if waits <= timeouts:
+            raise TimeoutError("upstream still loading")
+    monkeypatch.setattr(oge, "_wait_for_rendered_table", wait)
+    if timeouts == 2:
+        with pytest.raises(oge.SourceChangedError, match="two bounded attempts"):
+            oge._load_collection(page, oge.OGE_COLLECTION_URL, 100, tmp_path)
+    else:
+        oge._load_collection(page, oge.OGE_COLLECTION_URL, 100, tmp_path)
+    assert calls.count("goto") == calls.count("reload") == 1
+    assert calls.count("affirm") == 2
+    assert calls.count("dismiss") == (timeouts == 1)
+    assert "oge-loading-timeout-1" in calls
+    assert waits == 2
+
+
+def test_invalid_source_does_not_trigger_loading_retry(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from scripts import oge_disclosures as oge
+    def fail(*a, **kw):
+        raise oge.SourceChangedError("unrecognized acknowledgement")
+    page = SimpleNamespace(goto=lambda *a, **kw: None,
+                           reload=lambda **kw: pytest.fail("must not retry validation failure"))
+    monkeypatch.setattr(oge, "_affirm_terms", fail)
+    with pytest.raises(oge.SourceChangedError, match="unrecognized acknowledgement"):
+        oge._load_collection(page, oge.OGE_COLLECTION_URL, 100, tmp_path)
+
+
+def _listing_html(name):
+    return f'''<table><tr><th>Date</th><th>Type</th><th>Name</th><th>Title</th><th>Agency</th><th>Level</th></tr>
+    <tr><td>08/06/2026</td><td><a href="{PDF_URL}">OGE Form 278-T</a></td>
+    <td>{name}</td><td>Director</td><td>Department A</td><td>PAS</td></tr></table>'''
+
+
+def _fake_collection(monkeypatch, pages, *, next_control=True):
+    from types import SimpleNamespace
+    from scripts import oge_disclosures as oge
+    import playwright.sync_api
+    calls = []
+    position = 0
+    def click(**kw):
+        nonlocal position
+        position += 1
+    search = SimpleNamespace(fill=lambda value: calls.append(("search", value)))
+    page = SimpleNamespace(
+        url=oge.OGE_COLLECTION_URL, set_default_timeout=lambda v: None,
+        on=lambda *a: None, content=lambda: pages[position][1],
+        wait_for_timeout=lambda *a: pytest.fail("fixed sleeps must not drive discovery"),
+    )
+    context = SimpleNamespace(new_page=lambda: page, close=lambda: calls.append("context_closed"))
+    browser = SimpleNamespace(new_context=lambda **kw: context, close=lambda: calls.append("browser_closed"))
+    class Playwright:
+        def __enter__(self):
+            return SimpleNamespace(chromium=SimpleNamespace(launch=lambda **kw: browser))
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(playwright.sync_api, "sync_playwright", Playwright)
+    monkeypatch.setattr(oge, "_load_collection", lambda *a: None)
+    def wait(p, timeout_ms, **expected):
+        calls.append(expected)
+        assert expected == {"search_term": "278-T", "start": pages[position][0]["start"]}
+        return oge._validate_table_page(pages[position][0])
+    monkeypatch.setattr(oge, "_wait_for_rendered_table", wait)
+    monkeypatch.setattr(oge, "_find_search_input", lambda p: search)
+    monkeypatch.setattr(oge, "_dismiss_terms_overlay", lambda p: False)
+    monkeypatch.setattr(oge, "_next_locator", lambda p: SimpleNamespace(click=click) if next_control else None)
+    monkeypatch.setattr(oge, "_save_diagnostics", lambda *a: calls.append("diagnostic"))
+    return calls
+
+
+def test_complete_collection_waits_for_matching_search_and_every_page(monkeypatch, tmp_path):
+    from scripts import oge_disclosures as oge
+    calls = _fake_collection(monkeypatch, [(_page_state(), _listing_html("A")),
+                                         (_page_state(1), _listing_html("B"))])
+    rows = oge.scrape_oge_listings(collection_url=oge.OGE_COLLECTION_URL, timeout_ms=100,
+                                  max_pages=2, diagnostics_dir=tmp_path)
+    assert {r.name for r in rows} == {"A", "B"}
+    assert len({r.listing_id for r in rows}) == 2
+    assert calls[-2:] == ["context_closed", "browser_closed"]
+    assert "diagnostic" not in calls
+
+
+@pytest.mark.parametrize("failure", ["repeated", "changed_total", "page_limit", "missing_next", "changed_headers"])
+def test_incomplete_collection_fails_after_first_valid_page(monkeypatch, tmp_path, failure):
+    from scripts import oge_disclosures as oge
+    pages = [(_page_state(), _listing_html("A")), (_page_state(1), _listing_html("B"))]
+    if failure == "repeated":
+        pages[1] = (_page_state(1), _listing_html("A"))
+    elif failure == "changed_total":
+        pages[1] = (_page_state(1, total=3), _listing_html("B"))
+    elif failure == "changed_headers":
+        pages[1] = (_page_state(1), "<table><tr><td>Unknown source layout</td></tr></table>")
+    calls = _fake_collection(monkeypatch, pages, next_control=failure != "missing_next")
+    with pytest.raises(oge.SourceChangedError):
+        oge.scrape_oge_listings(collection_url=oge.OGE_COLLECTION_URL, timeout_ms=100,
+                               max_pages=1 if failure == "page_limit" else 2, diagnostics_dir=tmp_path)
+    assert calls[-3:] == ["diagnostic", "context_closed", "browser_closed"]
+
+
+def test_network_diagnostics_exclude_query_credentials_and_headers(caplog):
+    from types import SimpleNamespace
+    from scripts.oge_disclosures import _log_request_failure
+    _log_request_failure(SimpleNamespace(url="https://extapps2.oge.gov/201/Presiden.nsf/API.xsp/v2/rest?secret=value",
+                                        resource_type="xhr", failure="net::ERR_TIMED_OUT"))
+    assert "API.xsp/v2/rest" in caplog.text
+    assert "net::ERR_TIMED_OUT" in caplog.text
+    assert "secret" not in caplog.text and "value" not in caplog.text
+
+
+def test_draw_readiness_correlates_public_datatables_response():
+    """Execute the actual wait predicate against asynchronous draw states."""
+    import json
+    import subprocess
+    from types import SimpleNamespace
+    from scripts.oge_disclosures import _wait_for_rendered_table
+    captured = {}
+    class Handle:
+        def json_value(self):
+            return _page_state()
+        def dispose(self):
+            captured["disposed"] = True
+    def wait(script, **kwargs):
+        captured.update(script=script, **kwargs)
+        return Handle()
+    _wait_for_rendered_table(SimpleNamespace(wait_for_function=wait), 123,
+                             search_term="278-T", start=0)
+    assert captured["disposed"] and captured["timeout"] == 123
+    harness = r'''
+const assert = require('node:assert/strict');
+const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+const predicate = eval('(' + input.script + ')');
+const table = {innerText: 'Date Type Name Report'};
+const request = {draw: 2, start: 0, search: {value: '278-T'}};
+const response = {draw: 1, data: [{}], recordsFiltered: 2};
+const info = {serverSide: true, start: 0, end: 1, recordsDisplay: 2, length: 1};
+const api = {page: {info: () => info}, ajax: {params: () => request, json: () => response},
+             rows: () => ({count: () => 1})};
+global.document = {querySelectorAll: () => [table]};
+const jq = () => ({DataTable: () => api});
+jq.fn = {dataTable: {isDataTable: () => true}};
+global.window = {jQuery: jq};
+assert.equal(predicate(input.arg), false, 'old response must wait');
+response.draw = 2;
+assert.equal(predicate(input.arg).rows, 1, 'completed matching draw is ready');
+request.search.value = '';
+assert.equal(predicate(input.arg), false, 'old search must wait');
+request.search.value = '278-T';
+request.start = 1;
+assert.equal(predicate(input.arg), false, 'pending page must wait');
+request.start = 0;
+info.start = 1;
+assert.equal(predicate(input.arg), false, 'wrong rendered offset must wait');
+info.start = 0;
+table.innerText = 'Date Type Name Loading Loading';
+assert.equal(predicate(input.arg), false, 'placeholder must wait');
+table.innerText = 'Date Type Name Report';
+delete request.draw; delete response.draw;
+assert.equal(predicate(input.arg), false, 'missing counters cannot prove a completed draw');
+'''
+    subprocess.run(["node", "-e", harness], input=json.dumps(captured), text=True, check=True)
