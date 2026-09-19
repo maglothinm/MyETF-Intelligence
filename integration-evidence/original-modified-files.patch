@@ -1,0 +1,379 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index c3b419e..88aba2c 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -43,6 +43,14 @@ Before answering a repository-state question or changing code:
+ 
+ ## Production-state invariants
+ 
++**Runtime authority clarification (2026-09-07):** The certified Runtime v2
++controller and PostgreSQL immutable snapshot heads are the current production
++authority. See `docs/PROJECT_STATE.md`, `docs/HANDOFF.md`, and recovery run
++`34059488724` / artifact `9997087643`. The artifact-selection rules below remain
++required for retained legacy recovery/import inputs; they do not authorize
++reactivating retired artifact writers. Current features must use the existing
++Runtime v2 restore, writer lock, validated snapshot and commit path.
++
+ The following artifact names are protected continuity records:
+ 
+ | Pipeline | Protected artifact |
+@@ -53,8 +61,8 @@ The following artifact names are protected continuity records:
+ 
+ These rules are non-negotiable:
+ 
+-- Provenance-validated GitHub Actions artifacts are the only production-state
+-  authority. Caches may accelerate dependencies, but they must never select,
++- Provenance-validated Runtime v2 snapshots are production-state authority;
++  retained GitHub Actions artifacts are recovery evidence. Caches may accelerate dependencies, but they must never select,
+   restore, replace, or advance Legislative, Executive, or AI state.
+ - Restore the newest provenance-valid, unexpired artifact before a stateful
+   production run. `created_at` ordering alone is not sufficient.
+diff --git a/docs/DECISIONS.md b/docs/DECISIONS.md
+index a52d82f..9390c90 100644
+--- a/docs/DECISIONS.md
++++ b/docs/DECISIONS.md
+@@ -1094,3 +1094,25 @@ merge/import, or Phase 6.
+ **Boundary:** This decision does not alter state authority, immutable runtime bytes, production scheduling, rollback assets, or Phase 6 scope. The original Phase 5 certificate was independently downloaded and checksum-verified; it remains the original transfer receipt, while repaired-runtime certification is separate.
+ 
+ **Release verification:** Canonical run `34059488724`, attempt 1, job `101557337973`, succeeded. Artifact `9997087643` and both internal evidence hashes were independently verified. The final certificate records two scheduled AI writers, a following Dashboard writer, AI generation 70, Dashboard generation 79, enabled producer schedulers, paused Filing Vault, and completed temporary execution/logging cleanup. Independent GCP reads confirmed Scheduler creator identity and approved image for the exact three executions, and absence of temporary project logging/Scheduler/IAM-role-viewer grants. The public Dashboard 79 snapshot matched the durable status captured by the certification run. The repaired Runtime v2 recovery is certified; Phase 6 remains outside scope.
++
++
++## D-2026-09-07-001 - Current Opportunity v1, off by default
++
++**Decision:** Implement independent meaningful-buying, current-entry, current-evidence
++and required-data gates inside the hardened analyst, with Investor Edge used only
++as supplementary context. Persist an additive immutable opportunity journal and
++projection through the existing Runtime v2 AI snapshot owner. Preserve legacy
++scores, incident reference, paper portfolios and retired producer boundaries.
++
++**Reason:** Transaction-age and aggregate-score rules cannot answer whether
++sufficient disclosed buying still has an acceptable current entry after delay.
++Due work must continue without new filings, while stale or incomplete evidence
++must not preserve an actionable badge or pass a queued alert through unchanged.
++
++**Consequence:** Issue #153 / branch `codex/current-opportunity-v1` contains the
++implementation, deterministic TEST replay, fake delivery/restart boundaries,
++source dashboard, configuration/schema and activation/rollback runbook.
++Default mode remains off. PR tests and local fixtures are not deployment or
++investment-performance proof. Entitlement/identity/coverage verification,
++deployed shadow observation and explicit live approval remain separate gates.
++See `docs/CURRENT_OPPORTUNITY.md` and `docs/validation/current-opportunity-v1.md`.
+diff --git a/docs/HANDOFF.md b/docs/HANDOFF.md
+index ff46f18..2b18453 100644
+--- a/docs/HANDOFF.md
++++ b/docs/HANDOFF.md
+@@ -4,6 +4,22 @@ Updated: **2026-09-06 21:03 UTC**
+ 
+ Canonical repository: **1349678672 — maglothinm/MyETF-Intelligence**, default branch **main**.
+ 
++## Current Opportunity implementation branch — not deployed
++
++Issue #153 / branch `codex/current-opportunity-v1` implements Current Opportunity
++v1 from main `061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f`. Defaults remain **off**.
++The feature uses the hardened analyst and existing Runtime v2 AI snapshot owner;
++no scheduler, production job, notification, paper-trading contract or live head
++was changed in this task. The recovery receipt below remains historical evidence,
++not certification of this feature. See [feature/runbook](CURRENT_OPPORTUNITY.md)
++and [requirement-to-test mapping](validation/current-opportunity-v1.md).
++
++The branch includes offline regression/fixture validation and gated live delivery
++tested with fakes. Production provider entitlement, mapping/coverage and latency
++verification, deployed shadow observation, and live activation each require the
++separate approval and evidence gates in that runbook. Preserve the additive
++namespace on rollback; do not reset state or re-enable legacy producers.
++
+ ## Completed task
+ 
+ Runtime v2 / AI Analyst production recovery is certified. PR #151 corrected the natural-certification Dashboard timezone assertion and delayed-log window, merging as `db080d413b5e804a335f575071a62d48a9d4083b`. The existing controller passed on canonical main: run `34059488724`, attempt 1, job `101557337973`, all steps successful including temporary-authority cleanup.
+diff --git a/requirements-ai.txt b/requirements-ai.txt
+index d58b894..95ecf3b 100644
+--- a/requirements-ai.txt
++++ b/requirements-ai.txt
+@@ -1,2 +1,5 @@
+ -r requirements-tracker.txt
+ openai>=2.45.0,<3
++exchange-calendars>=4.11,<5
++jsonschema>=4.23,<5
++tzdata>=2026.1
+diff --git a/runtime_v2/runner.py b/runtime_v2/runner.py
+index e922a91..2efb9a1 100644
+--- a/runtime_v2/runner.py
++++ b/runtime_v2/runner.py
+@@ -72,6 +72,8 @@ def _require_success_state(directory: Path) -> dict:
+         raise RuntimeJobError("producer did not leave a readable state.json") from exc
+     if not isinstance(payload, dict) or not isinstance(payload.get("last_success_utc"), str):
+         raise RuntimeJobError("producer state has no successful-state marker")
++    from scripts.opportunity_state import validate_directory
++    validate_directory(directory)
+     return payload
+ 
+ 
+@@ -140,6 +142,7 @@ class JobRunner:
+                     "POLITITRACK_TRIGGER_SOURCE", "external_scheduler"
+                 ),
+                 "SOURCE_REVISION": self.source_revision,
++                "POLITITRACK_OPPORTUNITY_OWNER": "runtime_v2_ai",
+             }
+         )
+         if self.mode.is_shadow:
+@@ -347,6 +350,18 @@ class JobRunner:
+                 side_effects_possible = not self.mode.is_shadow
+                 self._execute(command)
+                 state = _require_success_state(ai_dir)
++                if self._env().get("OPPORTUNITY_MODE") == "live" and not self._alerts_suppressed():
++                    from scripts.opportunity_runtime import deliver_runtime, analyst_config
++                    def checkpoint():
++                        nonlocal parent
++                        _require_success_state(ai_dir)
++                        parent = locked.commit(
++                            ai_dir, expected_parent_sha256=parent.snapshot_sha256,
++                            source_revision=self.source_revision,
++                            provenance={"authority": "runtime_v2", "job": "ai", "mode": self.mode.value,
++                                        "trigger_source": trigger, "phase": "opportunity_delivery_checkpoint"},
++                        )
++                    deliver_runtime(analyst_config(command, self._env()), self._env(), checkpoint)
+                 snapshot = locked.commit(
+                     ai_dir,
+                     expected_parent_sha256=parent.snapshot_sha256,
+diff --git a/runtime_v2/store.py b/runtime_v2/store.py
+index 2380133..f697312 100644
+--- a/runtime_v2/store.py
++++ b/runtime_v2/store.py
+@@ -144,6 +144,9 @@ class LockedNamespace:
+             expected_sha256=head.snapshot_sha256,
+             expected_manifest=dict(_json(row[6]) or {}),
+         )
++        if self.namespace == "ai":
++            from scripts.opportunity_state import validate_directory
++            validate_directory(destination)
+         return head
+ 
+     def commit(
+@@ -156,6 +159,9 @@ class LockedNamespace:
+         allow_initial: bool = False,
+         successful_run_id: str | None = None,
+     ) -> SnapshotHead:
++        if self.namespace == "ai":
++            from scripts.opportunity_state import validate_directory
++            validate_directory(source)
+         packed = pack_directory(source)
+         provenance_payload = dict(provenance)
+         previous_autocommit = self.connection.autocommit
+diff --git a/scripts/ai_filing_analyst_hardened.py b/scripts/ai_filing_analyst_hardened.py
+index f1ddd20..5bde62a 100644
+--- a/scripts/ai_filing_analyst_hardened.py
++++ b/scripts/ai_filing_analyst_hardened.py
+@@ -26,6 +26,12 @@ except ImportError:  # pragma: no cover - direct execution path
+     import ai_filing_analyst as legacy  # type: ignore
+ 
+ LOGGER = logging.getLogger("polititrack-ai-analyst")
++if __package__:
++    from . import opportunity_runtime
++else:  # Runtime v2 executes this through the compatibility script.
++    import sys
++    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++    from scripts import opportunity_runtime
+ REPOSITORY_ID = 1349678672
+ DEFAULT_OUTPUT_TOKENS = 4_000
+ ESCALATED_OUTPUT_TOKENS = 8_000
+@@ -426,6 +432,8 @@ def _deferred_candidate(
+ 
+ 
+ def _pending_channels(delivery: Mapping[str, Any]) -> set[str]:
++    if delivery.get("opportunity_superseded"):
++        return set()
+     requested = {
+         str(channel)
+         for channel in (delivery.get("requested_channels") or [])
+@@ -490,6 +498,7 @@ def _deliver_pending_candidate_alerts(
+     result: AnalystRunResult,
+     state: legacy.AIState,
+     state_path: Path,
++    *, opportunity_live: bool = False,
+ ) -> None:
+     """Deliver queued alerts with a durable pre-send uncertainty boundary.
+ 
+@@ -501,6 +510,13 @@ def _deliver_pending_candidate_alerts(
+ 
+     if config.suppress_alerts:
+         return
++    if opportunity_live:
++        analyses = {str(r.get("analysis_id")): r for r in legacy.read_jsonl(config.ai_dir / "analyses.jsonl")}
++        for delivery in state.candidate_alert_deliveries.values():
++            analysis = analyses.get(str(delivery.get("analysis_id"))) or {}
++            if analysis.get("signal_direction") not in {"bearish", "neutral"}:
++                delivery["opportunity_superseded"] = "primary bullish alerts now require Current Opportunity gates"
++        legacy.save_state(state_path, state)
+     pending_ids = [
+         delivery_id
+         for delivery_id in sorted(state.candidate_alert_deliveries)
+@@ -522,6 +538,8 @@ def _deliver_pending_candidate_alerts(
+             "message": str(alert_value.get("message") or ""),
+             "url": str(alert_value.get("url") or ""),
+         }
++        if opportunity_live:
++            alert["title"] = "Filing information — " + alert["title"]
+         delivered_value = delivery.get("delivered_channels") or {}
+         delivered = (
+             dict(delivered_value) if isinstance(delivered_value, Mapping) else {}
+@@ -800,6 +818,7 @@ def run_analyst(
+     config.ai_dir.mkdir(parents=True, exist_ok=True)
+     state_path = config.ai_dir / "state.json"
+     try:
++        opportunity = opportunity_runtime.prepare(config)
+         state, _ = legacy.load_state(state_path)
+     except Exception as exc:  # State is not safe to overwrite or promote.
+         result.errors.append(
+@@ -870,6 +889,11 @@ def run_analyst(
+             config.repository_url or "PolitiTrack AI filing analyst"
+         )
+ 
++        if opportunity is not None:
++            telemetry = opportunity.evaluate(session)
++            if telemetry.get("overdue_count") or telemetry.get("reason_counts"):
++                result.warnings.append("Current Opportunity review: " + json.dumps(telemetry, sort_keys=True))
++
+         investor_edge: Any = None
+         try:
+             investor_edge = legacy.InvestorEdgeRuntime.create(
+@@ -889,10 +913,16 @@ def run_analyst(
+                 f"Investor Edge disabled: {type(exc).__name__}: "
+                 f"{_safe_error(exc, config)}"
+             )
++            if opportunity is not None:
++                opportunity.restore_edge_after_failure()
+         maintenance_ok = legacy.maintain_investor_edge(
+-            investor_edge, historical_transactions, result.warnings
++            investor_edge, historical_transactions, result.warnings,
++            **({"allow_backfill": False} if opportunity is not None else {}),
+         )
+-        if maintenance_ok is False:
++        if maintenance_ok is False and opportunity is not None:
++            opportunity.restore_edge_after_failure()
++            result.warnings.append("Investor Edge context maintenance failed; retained predecessor preserved")
++        elif maintenance_ok is False:
+             result.investor_edge_maintenance_status = "failed"
+             result.errors.append(
+                 "Investor Edge global maintenance/persistence failed; protected "
+@@ -970,7 +1000,8 @@ def run_analyst(
+                 )
+                 if upgraded:
+                     result.market_signal_upgrades += 1
+-                    legacy._queue_candidate_alert(config, refreshed, state)
++                    if opportunity is None or opportunity.rules["mode"] != "live" or refreshed.get("signal_direction") != "bullish":
++                        legacy._queue_candidate_alert(config, refreshed, state)
+                 opened = legacy.open_paper_position(refreshed, state, rules)
+                 if opened:
+                     opened["event_id"] = legacy.stable_id(
+@@ -1060,7 +1091,8 @@ def run_analyst(
+                 else:
+                     result.archive_count += 1
+                 if classification in {"high_priority", "watchlist"}:
+-                    legacy._queue_candidate_alert(config, record, state)
++                    if opportunity is None or opportunity.rules["mode"] != "live" or record.get("signal_direction") != "bullish":
++                        legacy._queue_candidate_alert(config, record, state)
+                 opened = legacy.open_paper_position(record, state, rules)
+                 if opened:
+                     opened["event_id"] = legacy.stable_id(
+@@ -1160,7 +1192,10 @@ def run_analyst(
+             if maintenance_ok is None
+             else "complete"
+         )
+-        if result.investor_edge_maintenance_status == "failed":
++        if result.investor_edge_maintenance_status == "failed" and opportunity is not None:
++            opportunity.restore_edge_after_failure()
++            result.warnings.append("Investor Edge context is stale; its predecessor remains retained")
++        elif result.investor_edge_maintenance_status == "failed":
+             result.errors.append(
+                 "Investor Edge global maintenance/persistence failed; protected "
+                 "state must not be promoted"
+@@ -1168,7 +1203,8 @@ def run_analyst(
+ 
+         if not result.errors:
+             _deliver_pending_candidate_alerts(
+-                config, result, state, state_path
++                config, result, state, state_path,
++                opportunity_live=opportunity is not None and opportunity.rules["mode"] == "live",
+             )
+         return _finish_analyst_run(config, result, state, state_path)
+     except Exception as exc:  # Unscoped failures are state-integrity failures.
+diff --git a/scripts/build_trade_dashboard.py b/scripts/build_trade_dashboard.py
+index ed87776..94cafc0 100644
+--- a/scripts/build_trade_dashboard.py
++++ b/scripts/build_trade_dashboard.py
+@@ -14,6 +14,10 @@ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Any, Iterable, Mapping, Sequence
+ 
++if not __package__:  # Keep package-owned opportunity imports valid in the deployed script CLI.
++    import sys
++    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++
+ try:  # Support both package and direct-script execution.
+     from .dashboard_branding import copy_branding_assets
+     from .investor_edge import build_dashboard_addon
+@@ -373,6 +377,7 @@ def load_branch(directory: Path | None, branch: str) -> dict[str, Any]:
+ 
+ 
+ def load_ai(directory: Path | None) -> dict[str, Any]:
++    from scripts.opportunity_dashboard import load_projection
+     if directory is None or not directory.exists():
+         return {"analyses": [], "portfolio": [], "runs": [], "state": {}}
+ 
+@@ -391,6 +396,7 @@ def load_ai(directory: Path | None) -> dict[str, Any]:
+         "portfolio": list(portfolio.values()),
+         "runs": runs,
+         "state": state,
++        "opportunities": load_projection(directory),
+     }
+ 
+ 
+@@ -751,6 +757,7 @@ def build_payload(
+         "ai_runs": ai_runs,
+         "simulation": simulation,
+         "workflow_evidence": dict(workflow_evidence or {}),
++        "opportunities": ai.get("opportunities", {"schema_version": 1, "mode": "off", "records": [], "telemetry": {}}),
+     }
+ 
+ 
+@@ -766,6 +773,7 @@ WALLBOARD_JS = _SHARED_JS + "\n" + (ASSET_DIR / "wallboard.js").read_text(encodi
+ 
+ 
+ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
++    from scripts.opportunity_dashboard import write_exports, integrate_index
+     # Public projection only; never publish private delivery payloads or modify inputs.
+     payload = public_payload(payload)
+     payload["reviews"] = review_rows(payload)
+@@ -799,8 +807,10 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
+         write_csv(data_dir / "ai-analyses.csv", payload["analyses"], ANALYSIS_FIELDS)
+         write_csv(data_dir / "paper-portfolio.csv", payload["portfolio"], PORTFOLIO_FIELDS)
+         write_csv(data_dir / "ai-runs.csv", payload["ai_runs"], AI_RUN_FIELDS)
+-        (temp_dir / "index.html").write_text(INDEX_HTML, encoding="utf-8")
+-        (temp_dir / "404.html").write_text(INDEX_HTML, encoding="utf-8")
++        opportunity_projection = payload.get("opportunities", {"mode": "off", "records": []})
++        write_exports(opportunity_projection, temp_dir, ASSET_DIR)
++        (temp_dir / "index.html").write_text(integrate_index(INDEX_HTML, opportunity_projection), encoding="utf-8")
++        (temp_dir / "404.html").write_text(integrate_index(INDEX_HTML, opportunity_projection), encoding="utf-8")
+         (temp_dir / "styles.css").write_text(STYLES_CSS, encoding="utf-8")
+         (temp_dir / "app.js").write_text(APP_JS, encoding="utf-8")
+         (temp_dir / "wallboard.html").write_text(WALLBOARD_HTML, encoding="utf-8")
+diff --git a/scripts/dashboard_assets/index.html b/scripts/dashboard_assets/index.html
+index 25434ee..6d00312 100644
+--- a/scripts/dashboard_assets/index.html
++++ b/scripts/dashboard_assets/index.html
+@@ -31,6 +31,7 @@
+     <aside class="sidebar">
+       <p class="nav-label">WORKSPACE</p>
+       <nav aria-label="Dashboard sections">
++        <!-- current-opportunities-navigation -->
+         <a href="#overview" data-section="overview"><span aria-hidden="true">◫</span> Overview</a>
+         <a href="#signals" data-section="signals" data-tooltip-key="signalsWorkspace" data-tooltip="" data-tooltip-touch="preview"><span aria-hidden="true">↗</span> Signals <span id="nav-signal-count" class="nav-count">—</span></a>
+         <a href="#investor-edge" data-section="investor-edge" data-tooltip-key="investorEdge" data-tooltip="" data-tooltip-title="Why Investor Edge matters" data-tooltip-touch="preview"><span aria-hidden="true">▦</span> Investor Edge</a>
+@@ -45,6 +46,7 @@
+       <div id="error-banner" class="notice failure" role="status" hidden></div>
+       <div id="manual-test-notice" class="notice caution" hidden><strong>TEST — Run Simulation preview</strong><span id="manual-test-note"></span></div>
+       <section id="overview" class="destination" aria-labelledby="overview-title">
++        <!-- current-opportunities-overview -->
+         <div class="page-heading"><div><p class="eyebrow">THE MONITOR</p><h1 id="overview-title">Your intelligence brief.</h1><p>What changed. What matters. What needs attention.</p></div><span class="pill">Official-source research</span></div>
+         <article class="situation" aria-labelledby="situation-title"><div><p class="eyebrow" id="situation-title">SITUATION BRIEF</p><p id="situation-brief" class="brief-text">Connecting to the latest published evidence…</p><p id="baseline-note" class="muted">Changes are measured on this browser and device, after a successful review.</p></div><a href="#operations" class="text-link">View operations <span aria-hidden="true">→</span></a></article>
+         <div class="attention-grid">

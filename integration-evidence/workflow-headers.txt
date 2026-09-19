@@ -1,0 +1,4309 @@
+### ai_filing_analyst.yml
+name: AI filing analyst and paper portfolio
+
+on:
+  workflow_dispatch:
+    inputs:
+      reanalyze_existing:
+        description: "Reanalyze the newest already-processed purchases with the current model and rules"
+        required: false
+        default: false
+        type: boolean
+      suppress_alerts:
+        description: "Write analyses and paper positions without sending candidate alerts"
+        required: false
+        default: false
+        type: boolean
+      investor_edge_enabled:
+        description: "Enable Investor Edge for this manual run"
+        required: false
+        default: true
+        type: boolean
+      max_analyses:
+        description: "Maximum purchases to analyze in this run"
+        required: false
+        default: "20"
+        type: string
+  workflow_run:
+    workflows:
+      - Legislative purchase tracker v2
+      - Executive purchase tracker
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  # Redundant successful collectors enqueue this same serialized, deduplicating analyst.
+  group: ai-filing-analyst
+  cancel-in-progress: false
+
+env:
+  AI_DIR: ".trade-tracker/ai"
+  AI_ANALYSIS_ENABLED: ${{ vars.AI_ANALYSIS_ENABLED || 'false' }}
+  AI_PAPER_TRADING_ONLY: "true"
+  AI_WEB_SEARCH_ENABLED: ${{ vars.AI_WEB_SEARCH_ENABLED || 'true' }}
+  AI_FETCH_DOCUMENT_TEXT: ${{ vars.AI_FETCH_DOCUMENT_TEXT || 'true' }}
+  AI_MAX_ANALYSES_PER_RUN: ${{ vars.AI_MAX_ANALYSES_PER_RUN || '20' }}
+  AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS: ${{ vars.AI_OPENAI_MIN_REQUEST_INTERVAL_SECONDS || '65' }}
+  AI_REQUIRE_PUSHOVER: ${{ vars.AI_REQUIRE_PUSHOVER || 'false' }}
+  INVESTOR_EDGE_ENABLED: ${{ vars.INVESTOR_EDGE_ENABLED || 'true' }}
+  OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.6-terra' }}
+  OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT || 'medium' }}
+  SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+  ALPHAVANTAGE_ENTITLEMENT: ${{ vars.ALPHAVANTAGE_ENTITLEMENT }}
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  POLITITRACK_REPOSITORY_ID: ${{ github.repository_id }}
+
+jobs:
+  analyze:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref_name == github.event.repository.default_branch &&
+      vars.AI_ANALYSIS_ENABLED == 'true' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+          (
+            github.event.workflow_run.event == 'schedule' ||
+            github.event.workflow_run.event == 'workflow_dispatch'
+          )
+        )
+      )
+
+### executive_trade_tracker.yml
+name: Executive purchase tracker
+
+on:
+  schedule:
+    # Twice hourly, staggered from Legislative and the busy :00/:30 boundaries.
+    - cron: "13,43 * * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  # All trigger sources serialize through this one protected-state writer.
+  group: executive-purchase-tracker
+  cancel-in-progress: false
+
+env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
+  STATE_FILE: ".trade-tracker/executive/state.json"
+  LEDGER_FILE: ".trade-tracker/executive/purchases.jsonl"
+  TRANSACTIONS_FILE: ".trade-tracker/executive/transactions.jsonl"
+  FILINGS_FILE: ".trade-tracker/executive/filings.jsonl"
+  RUN_HISTORY_FILE: ".trade-tracker/executive/runs.jsonl"
+  PENDING_FILE: ".trade-tracker/executive/pending-review.jsonl"
+  RESULT_FILE: "executive-result.json"
+  LATEST_CSV: "executive-latest-purchases.csv"
+  LATEST_TRANSACTIONS_CSV: "executive-latest-transactions.csv"
+  LATEST_FILINGS_CSV: "executive-latest-filings.csv"
+  OGE_LISTINGS_FILE: "oge-listings.json"
+  REQUIRE_PUSHOVER: "false"
+  NOTIFY_EQUITY_ONLY: "true"
+  NOTIFY_PENDING_REVIEWS: "true"
+  NOTIFY_ALL_FILINGS: "true"
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  ALLOW_EMPTY_SOURCES: "false"
+  DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
+
+jobs:
+  track:
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Signal tracker start
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.EXECUTIVE_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "${healthchecks_base}/start" >/dev/null
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+
+### filing_simulation.yml
+name: Run $10K portfolio simulator
+
+on:
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: "UTC ISO-8601 timestamp; leave empty to use the current time"
+        required: false
+        default: ""
+        type: string
+      seed:
+        description: "Optional deterministic random-selection seed"
+        required: false
+        default: ""
+        type: string
+      trade_id:
+        description: "Optional exact eligible trade ID instead of random selection"
+        required: false
+        default: ""
+        type: string
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: filing-simulation
+  cancel-in-progress: false
+
+jobs:
+  simulate:
+    if: ${{ github.run_attempt == 1 && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Resolve immutable simulation cutoff
+        id: parameters
+        shell: bash
+        env:
+          AS_OF_INPUT: ${{ inputs.as_of }}
+          SEED_INPUT: ${{ inputs.seed }}
+          TRADE_ID_INPUT: ${{ inputs.trade_id }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$SEED_INPUT" && -n "$TRADE_ID_INPUT" ]]; then
+            echo "Provide either seed or trade_id, not both." >&2
+            exit 1
+          fi
+          as_of="$AS_OF_INPUT"
+          if [[ -z "$as_of" ]]; then
+            as_of="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          fi
+          if [[ "$as_of" == *$'\r'* || "$as_of" == *$'\n'* ]]; then
+            echo "as_of must be one ISO-8601 timestamp on a single line." >&2
+            exit 1
+          fi
+          echo "as_of=$as_of" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependency
+        shell: bash
+        run: python -m pip install pytest==9.0.2
+
+      - name: Run simulator tests
+        shell: bash
+        run: python -m pytest -q tests/test_filing_simulation.py
+
+      - name: Restore immutable production inputs
+
+### investor_edge_tests.yml
+name: Investor Edge tests
+
+on:
+  pull_request:
+    paths:
+      - "scripts/collector_freshness.py"
+      - "scripts/collect_workflow_evidence.py"
+      - "scripts/ai_retry_guard.py"
+      - "scripts/ai_filing_analyst_hardened.py"
+      - "scripts/runtime_notifications.py"
+      - "scripts/investor_notifications.py"
+      - "runtime_v2/notifications.py"
+      - "config/investor_notifications.json"
+      - "tests/test_investor_notifications.py"
+      - "tests/test_dashboard_notifications.py"
+      - "tests/dashboard_notifications.test.cjs"
+      - "tests/inbox_outage_delay.test.cjs"
+      - "scripts/validate_ai_publication.py"
+      - "scripts/run_trigger.py"
+      - "scripts/dashboard_insights.py"
+      - "scheduler/**"
+      - "tests/test_collector_freshness.py"
+      - "tests/test_scheduler_evidence.py"
+      - "tests/scheduler_dispatch.test.mjs"
+      - ".github/workflows/executive_trade_tracker.yml"
+      - "scripts/investor_edge.py"
+      - "scripts/investor_edge_progress.py"
+      - "tests/test_investor_edge_progress.py"
+      - "tests/backfill_progress_dom.test.cjs"
+      - "tests/backfill_progress_preview.py"
+      - "scripts/ai_filing_analyst.py"
+      - "scripts/ai_filing_analyst_legacy.py"
+      - "scripts/build_trade_dashboard.py"
+      - "scripts/filing_resources.py"
+      - "scripts/dashboard_assets/**"
+      - "backend/filing_vault/**"
+      - "backend/api/__init__.py"
+      - "scripts/create_manual_test_filing.py"
+      - "scripts/run_investor_edge_simulation.py"
+      - "scripts/government_trade_tracker.py"
+      - "scripts/government_trade_tracker_core.py"
+      - "scripts/review_identity.py"
+      - "tests/dashboard_dom.test.cjs"
+      - "tests/personal_review_fixture.cjs"
+      - "tests/operations_fixture.cjs"
+      - "tests/dashboard_notification_integration.test.cjs"
+      - "tests/test_dashboard_dom.py"
+      - "tests/test_dashboard_insights.py"
+      - "scripts/run_legislative_sources_resilient.py"
+      - "scripts/historical_transaction_bootstrap.py"
+      - "scripts/monitor_disclosures.py"
+      - "scripts/legislative_healthcheck.py"
+      - "tests/test_monitor_disclosures.py"
+      - "tests/test_government_trade_tracker.py"
+      - "tests/test_historical_transaction_bootstrap.py"
+      - "tests/test_senate_client.py"
+      - "tests/test_legislative_healthcheck.py"
+      - "tests/test_legislative_resilient_orchestrator.py"
+      - "tests/test_legislative_resilient_integration.py"
+      - ".github/workflows/legislative_trade_tracker_v2.yml"
+      - "config/investor_edge.yml"
+      - "config/signal_rules.yml"
+      - "config/ai-retry-adjudication-*.json"
+      - "schemas/ai_filing_analysis.schema.json"
+      - "tests/test_investor_edge.py"
+      - "tests/test_investor_edge_core.py"
+      - "tests/test_investor_edge_surfaces.py"
+      - "tests/test_ai_filing_analyst.py"
+      - "tests/test_ai_filing_analyst_hardened.py"
+      - "tests/test_ai_retry_guard.py"
+      - "tests/test_validate_ai_publication.py"
+      - "tests/test_trade_dashboard.py"
+      - "tests/test_filing_vault*.py"
+      - "tests/filing_vault_dom.test.cjs"
+      - "tests/filing_pdf_dom.test.cjs"
+
+### legislative_trade_tracker_v2.yml
+name: Legislative purchase tracker v2
+
+on:
+  schedule:
+    # Poll four times per hour, offset from :00 to reduce scheduler congestion.
+    - cron: "7,22,37,52 * * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Non-secret dispatch label (does not bypass production safeguards)"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options:
+          - workflow_dispatch
+          - external_scheduler
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  # All trigger sources serialize through this one protected-state writer.
+  group: legislative-purchase-tracker-v2
+  cancel-in-progress: false
+
+env:
+  POLITITRACK_TRIGGER_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_source || github.event_name }}
+  POLITITRACK_CONTROLLED_VALIDATION: "false"
+  STATE_FILE: ".trade-tracker/legislative/state.json"
+  LEDGER_FILE: ".trade-tracker/legislative/purchases.jsonl"
+  TRANSACTIONS_FILE: ".trade-tracker/legislative/transactions.jsonl"
+  FILINGS_FILE: ".trade-tracker/legislative/filings.jsonl"
+  RUN_HISTORY_FILE: ".trade-tracker/legislative/runs.jsonl"
+  PENDING_FILE: ".trade-tracker/legislative/pending-review.jsonl"
+  RESULT_FILE: "legislative-result.json"
+  SOURCE_STATUS_FILE: ".trade-tracker/legislative/source-status.json"
+  RESTORE_RECEIPT_FILE: ".trade-tracker/legislative/restore-receipt.json"
+  CONTROLLED_VALIDATION_RECEIPT_FILE: ".trade-tracker/legislative/controlled-validation-receipt.json"
+  POLITITRACK_REQUIRE_RESTORE_RECEIPT: "true"
+  LATEST_CSV: "legislative-latest-purchases.csv"
+  LATEST_TRANSACTIONS_CSV: "legislative-latest-transactions.csv"
+  LATEST_FILINGS_CSV: "legislative-latest-filings.csv"
+  SENATE_LOOKBACK_DAYS: "180"
+  REQUIRE_PUSHOVER: "false"
+  NOTIFY_EQUITY_ONLY: "true"
+  NOTIFY_PENDING_REVIEWS: "true"
+  NOTIFY_ALL_FILINGS: "true"
+  DASHBOARD_URL: ${{ vars.DASHBOARD_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+  ALLOW_EMPTY_SOURCES: "false"
+  DISCLOSURE_TERMS_ACKNOWLEDGED: ${{ vars.DISCLOSURE_TERMS_ACKNOWLEDGED }}
+
+jobs:
+  track:
+    if: github.repository_id == '1349678672' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Signal tracker start
+        continue-on-error: true
+        shell: bash
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.LEGISLATIVE_HEALTHCHECKS_PING_URL }}
+        run: |
+          if [[ -n "$HEALTHCHECKS_PING_URL" ]]; then
+            healthchecks_base="${HEALTHCHECKS_PING_URL%/}"
+            healthchecks_base="${healthchecks_base%/start}"
+            healthchecks_base="${healthchecks_base%/fail}"
+            healthchecks_base="${healthchecks_base%/}"
+            curl --fail --silent --show-error --max-time 20 --retry 3 \
+              "${healthchecks_base}/start" >/dev/null
+          fi
+
+
+### manual_test.yml
+name: Run Simulation
+
+on:
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: "Synthetic filing date (YYYY-MM-DD); leave blank to use today's UTC date"
+        required: false
+        default: ""
+        type: string
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: run-simulation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  simulate:
+    name: Run isolated Investor Edge simulation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AI_ANALYSIS_ENABLED: "false"
+      AI_SUPPRESS_ALERTS: "true"
+      AI_REQUIRE_PUSHOVER: "false"
+      AI_PAPER_TRADING_ONLY: "true"
+      INVESTOR_EDGE_ENABLED: "true"
+      REQUIRE_PUSHOVER: "false"
+      PUSHOVER_API_TOKEN: ""
+      PUSHOVER_USER_KEY: ""
+      GMAIL_ADDRESS: ""
+      GMAIL_APP_PASSWORD: ""
+      OPENAI_API_KEY: ""
+      FINNHUB_API_KEY: ""
+      ALPHAVANTAGE_API_KEY: ""
+      ALPHAVANTAGE_ENTITLEMENT: ""
+      SEC_USER_AGENT: ""
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install analyst and dashboard dependencies
+        shell: bash
+        run: python -m pip install --requirement requirements-ai.txt
+
+      - name: Prepare run-specific temporary paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TEMP}/polititrack-simulation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "MANUAL_TEST_INPUT_DIR=${root}/input"
+            echo "MANUAL_TEST_TRACKER_DIR=${root}/tracker"
+            echo "MANUAL_TEST_AI_DIR=${root}/ai"
+            echo "MANUAL_TEST_SITE_DIR=${root}/site"
+            echo "MANUAL_TEST_SUMMARY=${root}/manual-test-summary.json"
+            echo "MANUAL_TEST_SIMULATION_RESULT=${root}/simulation-result.json"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore latest durable artifacts into isolated inputs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$MANUAL_TEST_INPUT_DIR"
+
+### ocr_release_controller_tests.yml
+name: OCR release controller safety
+on:
+  pull_request:
+    paths:
+      - 'scripts/ocr_release_controller.py'
+      - 'tests/test_ocr_release_controller.py'
+      - 'scripts/ocr_health_repair_release.py'
+      - 'tests/test_ocr_health_repair_release.py'
+      - '.github/workflows/ocr_release_controller_tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ocr_release_controller.py'
+      - 'tests/test_ocr_release_controller.py'
+      - 'scripts/ocr_health_repair_release.py'
+      - 'tests/test_ocr_health_repair_release.py'
+      - '.github/workflows/ocr_release_controller_tests.yml'
+permissions:
+  contents: read
+jobs:
+  recovery-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_ocr_release_controller.py tests/test_ocr_health_repair_release.py
+
+### phase3_admin_failure_diagnostic_v2.yml
+name: Phase 3 admin failure diagnostic v2
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      FAILED_EXECUTION: polititrack-admin-snrjx
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      ONESHOT_MARKER: phase3-diagnostics/admin-failure-v6.claimed
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Read failed admin execution and verify cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-admin-failure-v2
+          cd phase3-admin-failure-v2
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 admin failure diagnostic marker already exists; skipping duplicate execution."
+            exit 0
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\nsource_revision=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-current.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-current.json)"
+          command_json="$(jq -c '.command // []' <<<"${container_json}")"
+          args_json="$(jq -c '.args // []' <<<"${container_json}")"
+          [[ "${command_json}" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+          if [[ "${args_json}" == '["-m","runtime_v2","status"]' ]]; then
+            gcloud run jobs update "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --args=-m,runtime_v2,init-db,--with-vault --quiet >/dev/null
+            args_json='["-m","runtime_v2","init-db","--with-vault"]'
+          fi
+          [[ "${args_json}" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Admin job is not at the Terraform Phase 3 baseline." >&2; exit 1; }
+
+          gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.invoker --quiet >/dev/null 2>&1 || true
+
+### phase3_admin_status_diagnose.yml
+name: Phase 3 diagnose admin status execution
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      FAILED_EXECUTION: polititrack-admin-snrjx
+      ONESHOT_MARKER: phase3-diagnostics/admin-status-v3.claimed
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Verify canonical main source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]]
+          echo "diagnostic_source_revision=$(git rev-parse HEAD)"
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Diagnose failure and verify prior cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-admin-diagnose
+          cd phase3-admin-diagnose
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 admin diagnostic one-shot marker already exists; skipping duplicate execution."
+            exit 0
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-current.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-current.json)"
+          command_json="$(jq -c '.command // []' <<<"${container_json}")"
+          args_json="$(jq -c '.args // []' <<<"${container_json}")"
+          [[ "${command_json}" == '["python"]' ]] || { echo "Unexpected admin command after prior audit." >&2; exit 1; }
+          if [[ "${args_json}" == '["-m","runtime_v2","status"]' ]]; then
+
+### phase3_apply_saved_plan.yml
+name: Phase 3 apply exact saved Terraform plan
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      SAVED_SOURCE_REVISION: 7f14bba18130fc1d40d2e5d7891078a65c4d4eec
+      SAVED_PLAN_SHA256: 85101209392051c5abbc3ad5c5671e5f8c3420362ea5a3aaa1ab1a9d2ae1692c
+      RECONCILIATION_CONFIG_SHA256: a59da1f64e5dc11885bc9beeeabc8b723ba0dbfb595491102aa5cc8c2eb94aaa
+      TERRAFORM_LOCK_SHA256: 65dee896a641b225cfb60f7b25ef9bdb8934c8d7adcd81fa47a9754c2280da9b
+      MOVED_TF_SHA256: 5bd25f6d1465796f9d40779af4b290c16e02a0d24dd42cf6cea5d1617e1ce957
+      ACTION_INVENTORY_SHA256: 125f8a5f0946e625be21206f3064c4bbb69d0f530a0a1b7e595e1d34e1999841
+    steps:
+      - name: Check out canonical main trigger revision
+        uses: actions/checkout@v7
+
+      - name: Verify one-shot main trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "${GITHUB_SHA}" ]]; then
+            echo "Trigger checkout does not match the canonical main event revision." >&2
+            exit 1
+          fi
+          echo "Phase 3 exact-plan apply trigger verified at ${GITHUB_SHA}."
+
+      - name: Check out exact saved-plan source revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SAVED_SOURCE_REVISION }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact saved source and frozen files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "${SAVED_SOURCE_REVISION}" ]]; then
+            echo "Saved-plan source checkout mismatch." >&2
+            exit 1
+          fi
+          config_sha="$(sha256sum deploy/runtime-v2/phase3-reconciliation.tfvars.json | awk '{print $1}')"
+          lock_sha="$(sha256sum deploy/runtime-v2/terraform/.terraform.lock.hcl | awk '{print $1}')"
+          moved_sha="$(sha256sum deploy/runtime-v2/terraform/moved.tf | awk '{print $1}')"
+          [[ "${config_sha}" == "${RECONCILIATION_CONFIG_SHA256}" ]] || { echo "Frozen reconciliation config hash mismatch." >&2; exit 1; }
+          [[ "${lock_sha}" == "${TERRAFORM_LOCK_SHA256}" ]] || { echo "Terraform provider lock hash mismatch." >&2; exit 1; }
+          [[ "${moved_sha}" == "${MOVED_TF_SHA256}" ]] || { echo "Terraform moved.tf hash mismatch." >&2; exit 1; }
+          echo "Exact saved-plan source and frozen input hashes verified."
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+
+### phase3_bootstrap_builder_build_identity.yml
+name: Phase 3 bootstrap builder build identity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_bootstrap_builder_build_identity.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Establish narrow build identity edges
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-builder-build-identity
+          member_deployer="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          member_builder="serviceAccount:${BUILDER_SERVICE_ACCOUNT}"
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          # The deployer receives only read-only Cloud Build discovery, allowing it
+          # to resolve the platform-selected execution identity deterministically.
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member_deployer}" \
+            --role roles/cloudbuild.builds.viewer \
+            --condition=None \
+            --quiet \
+            --format=none
+
+          default_build_service_account=""
+          for attempt in $(seq 1 12); do
+            set +e
+            candidate="$(gcloud builds get-default-service-account \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format='value(serviceAccountEmail)' 2> phase3-builder-build-identity/default-build-sa-error.txt)"
+            rc=$?
+            set -e
+            if [[ "${rc}" -eq 0 && -n "${candidate}" ]]; then
+              default_build_service_account="${candidate##*/}"
+              break
+            fi
+            echo "Cloud Build Viewer binding not effective yet (attempt ${attempt}/12)."
+
+### phase3_build_current_runtime_image.yml
+name: Phase 3 build current Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_build_current_runtime_image.yml"
+      - "deploy/runtime-v2/cloudbuild-no-source.yaml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      CURRENT_DEPLOYED_DIGEST: sha256:82b691179c422aba5c3ffa205e1a2d548f8cd6e8e9ed8ac2b5df5f7f8c71a565
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reconcile intended builder project permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+          for role in \
+            roles/cloudbuild.builds.editor \
+            roles/serviceusage.serviceUsageConsumer \
+            roles/serviceusage.serviceUsageViewer; do
+            gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+              --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+              --role "${role}" \
+              --condition=None \
+              --quiet \
+              --format=none
+          done
+
+          policy="$(gcloud projects get-iam-policy "${PROJECT_ID}" --format=json)"
+          for role in \
+            roles/cloudbuild.builds.editor \
+            roles/serviceusage.serviceUsageConsumer \
+            roles/serviceusage.serviceUsageViewer; do
+            jq -e --arg member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" --arg role "${role}" \
+              '[.bindings[]? | select(.role == $role) | .members[]?] | any(. == $member)' \
+              <<<"${policy}" >/dev/null || { echo "Builder is missing intended project role ${role}." >&2; exit 1; }
+          done
+
+      - name: Authenticate as isolated Phase 3 builder
+        id: builder-auth
+        uses: google-github-actions/auth@v3
+
+### phase3_build_current_runtime_image_v2.yml
+name: Phase 3 build current Runtime image v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_build_current_runtime_image_v2.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-image-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Grant builder actAs on the resolved default build identity only
+        id: build-identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          default_build_service_account="$(gcloud builds get-default-service-account \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(serviceAccountEmail)')"
+          default_build_service_account="${default_build_service_account##*/}"
+          [[ "${default_build_service_account}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.gserviceaccount\.com$ ]] || {
+            echo "Cloud Build returned an invalid default execution service account." >&2
+            exit 1
+          }
+          [[ "${default_build_service_account}" != "${BUILDER_SERVICE_ACCOUNT}" ]] || {
+            echo "Refusing to collapse the isolated submitter and build-execution identities." >&2
+            exit 1
+          }
+
+          gcloud iam service-accounts add-iam-policy-binding "${default_build_service_account}" \
+            --project "${PROJECT_ID}" \
+            --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+            --role roles/iam.serviceAccountUser \
+
+### phase3_closeout.yml
+name: Phase 3 closeout
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  close:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify closeout controller is bounded
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/converge-phase3-readiness-v2.sh
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/converge-phase3-readiness-v2.sh').read_text(encoding='utf-8')
+          for forbidden in (
+              'gcloud scheduler jobs run',
+              'gcloud scheduler jobs resume',
+              'runtime_v2,run',
+              'import-gcs',
+              'secrets versions access',
+              'terraform apply',
+              'gcloud run deploy',
+              'gcloud run jobs deploy',
+              'gcloud sql instances patch',
+          ):
+              assert forbidden not in text, forbidden
+          assert text.count('gcloud run jobs execute') == 1
+          assert '--args=-m,runtime_v2,status' in text
+          assert 'validate_phase3_status.py' in text
+          assert 'verify_temporary_access_removed' in text
+          PY
+
+      - name: Check existing immutable readiness tag
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+          if [[ -n "${target}" ]]; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+### phase3_closeout_gcs.yml
+name: Phase 3 closeout through private GCS evidence
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  close:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Prove Phase 3 acceptance through private GCS
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/phase3-closeout-gcs-${GITHUB_RUN_ID}"
+          rm -rf "${work}"
+          mkdir -p "${work}"
+          cd "${work}"
+
+          deployer_member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          admin_member="serviceAccount:${ADMIN_SERVICE_ACCOUNT}"
+          probe_object="phase3-acceptance/probes/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          probe_uri="gs://${STATE_BUCKET}/${probe_object}"
+          execution_access_added=false
+          object_access_added=false
+
+          cleanup() {
+            set +e
+            if [[ "${execution_access_added}" == "true" ]]; then
+              gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+                --project "${PROJECT_ID}" --region "${REGION}" \
+                --member "${deployer_member}" \
+                --role roles/run.jobsExecutorWithOverrides \
+                --quiet >/dev/null 2>&1
+            fi
+            if [[ "${object_access_added}" == "true" ]]; then
+              gcloud storage buckets remove-iam-policy-binding "gs://${STATE_BUCKET}" \
+                --member "${admin_member}" \
+                --role roles/storage.objectCreator \
+                --quiet >/dev/null 2>&1
+            fi
+
+### phase3_closeout_gcs_tests.yml
+name: Phase 3 GCS closeout safety tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3_closeout_gcs.yml"
+      - ".github/workflows/phase3_closeout_gcs_tests.yml"
+      - "deploy/runtime-v2/gcs_status_probe.py"
+      - "tests/test_phase3_closeout_gcs.py"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Compile private probe
+        run: python -m py_compile deploy/runtime-v2/gcs_status_probe.py
+      - name: Install pytest
+        run: python -m pip install "pytest>=8.3,<9"
+      - name: Run focused safety tests
+        run: python -m pytest -q tests/test_phase3_closeout_gcs.py
+
+### phase3_closeout_gcs_v2.yml
+name: Phase 3 GCS closeout v2
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  close:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Close Phase 3 through private GCS evidence
+        shell: bash
+        run: bash deploy/runtime-v2/close-phase3-gcs-v2.sh
+
+      - name: Upload Phase 3 GCS closeout evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-closeout-gcs-v2
+          path: |
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/probe.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/status.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/status-execution.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/phase3-acceptance.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/phase3-acceptance.sha256
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/execute-error.txt
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/admin-before.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/admin-final.json
+          if-no-files-found: warn
+          retention-days: 90
+
+### phase3_closeout_gcs_v2_tests.yml
+name: Phase 3 GCS closeout v2 safety tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3_closeout_gcs_v2.yml"
+      - ".github/workflows/phase3_closeout_gcs_v2_tests.yml"
+      - "deploy/runtime-v2/close-phase3-gcs-v2.sh"
+      - "tests/test_phase3_closeout_gcs_v2.py"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Parse closeout shell
+        run: bash -n deploy/runtime-v2/close-phase3-gcs-v2.sh
+      - name: Install pytest
+        run: python -m pip install "pytest>=8.3,<9"
+      - name: Run focused safety tests
+        run: python -m pytest -q tests/test_phase3_closeout_gcs_v2.py
+
+### phase3_cloud_discovery.yml
+name: Phase 3 read-only cloud boundary discovery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_cloud_discovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  discover:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DISCOVERY_PRINCIPAL_SET: principalSet://iam.googleapis.com/projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/attribute.repository_id/1349678672
+    steps:
+      - name: Check out canonical repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate with direct Workload Identity Federation
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Resolve immutable Google Cloud boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_id="$(gcloud projects describe "${PROJECT_NUMBER}" --format='value(projectId)')"
+          live_project_number="$(gcloud projects describe "${project_id}" --format='value(projectNumber)')"
+          if [[ -z "${project_id}" || "${live_project_number}" != "${PROJECT_NUMBER}" ]]; then
+            echo "Resolved Google Cloud project does not match immutable project number ${PROJECT_NUMBER}." >&2
+            exit 1
+          fi
+          echo "PROJECT_ID=${project_id}" >> "${GITHUB_ENV}"
+          echo "Resolved Phase 3 Google Cloud boundary: project_id=${project_id} project_number=${PROJECT_NUMBER}"
+
+      - name: Collect read-only Phase 3 boundary evidence
+        shell: bash
+        run: |
+          set -uo pipefail
+          report="phase3-cloud-boundary.txt"
+          : > "$report"
+          printf '%s\n' \
+            "schema_version=3" \
+            "repository_id=${GITHUB_REPOSITORY_ID}" \
+            "repository=${GITHUB_REPOSITORY}" \
+            "source_revision=${GITHUB_SHA}" \
+            "project_id=${PROJECT_ID}" \
+            "project_number=${PROJECT_NUMBER}" \
+            "selected_region=${REGION}" \
+            "workload_identity_provider=${WIF_PROVIDER}" \
+            "federation=direct" \
+            "mode=shadow" \
+            "schedules_enabled=false" \
+            "public_dashboard_enabled=false" >> "$report"
+
+          capture() {
+            local label="$1"; shift
+            printf '\n## %s\n' "$label" >> "$report"
+            local output
+            if output=$("$@" 2>&1); then
+              [[ -n "$output" ]] && printf '%s\n' "$output" >> "$report" || printf '[empty]\n' >> "$report"
+
+### phase3_converge_schema_and_close.yml
+name: Phase 3 converge schema and close
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  converge-and-close:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Apply additive schema migration and close Phase 3
+        shell: bash
+        run: bash deploy/runtime-v2/converge-phase3-schema-and-close.sh
+
+      - name: Upload schema and closeout evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase3-schema-convergence-closeout
+          path: |
+            ${{ runner.temp }}/phase3-schema-converge-${{ github.run_id }}/schema-probe.json
+            ${{ runner.temp }}/phase3-schema-converge-${{ github.run_id }}/execute-error.txt
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/probe.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/status.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/status-execution.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/phase3-acceptance.json
+            ${{ runner.temp }}/phase3-closeout-gcs-v2-${{ github.run_id }}/phase3-acceptance.sha256
+          if-no-files-found: warn
+          retention-days: 90
+
+### phase3_current_state_acceptance.yml
+name: Phase 3 current state acceptance
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  accept:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      ONESHOT_MARKER: phase3-acceptance/current-state-v1.claimed
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Execute read-only status and validate Phase 3 data plane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-current-state
+          cd phase3-current-state
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
+
+          cleanup_all() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --member "${member}" --role roles/run.jobsExecutorWithOverrides --quiet >/dev/null 2>&1
+          }
+          trap cleanup_all EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 current-state acceptance marker already exists; refusing duplicate execution." >&2
+            exit 1
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\nsource_revision=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
+
+          # Fail closed unless the persistent admin job is exactly at the Terraform baseline.
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin-before.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin-before.json)"
+          [[ "$(jq -c '.command // []' <<<"${container_json}")" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+
+### phase3_data_plane_audit.yml
+name: Phase 3 data-plane acceptance audit
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      PHASE3_AUTHORIZED_AT: "2026-09-03T09:51:22Z"
+    steps:
+      - name: Check out canonical main trigger revision
+        uses: actions/checkout@v7
+
+      - name: Verify one-shot main trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          echo "Phase 3 data-plane audit trigger verified at ${GITHUB_SHA}."
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Run reversible read-only data-plane audit
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-data-plane-audit
+          cd phase3-data-plane-audit
+
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          baseline_args_json=''
+          mutation_started=false
+          cleaned=false
+
+          cleanup() {
+            set +e
+            if [[ "${mutation_started}" == "true" && -n "${baseline_args_json}" ]]; then
+              restore_args="$(jq -r 'join(",")' <<<"${baseline_args_json}")"
+              gcloud run jobs update "${ADMIN_JOB}" \
+                --project "${PROJECT_ID}" \
+                --region "${REGION}" \
+                --args="${restore_args}" \
+                --quiet >/dev/null 2>&1
+              gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+                --project "${PROJECT_ID}" \
+                --region "${REGION}" \
+                --member "${member}" \
+                --role roles/run.invoker \
+                --quiet >/dev/null 2>&1
+
+### phase3_diagnose_current_status.yml
+name: Phase 3 diagnose current status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3_diagnose_current_status.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - uses: actions/checkout@v7
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Diagnose latest status execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-current-status-diagnose
+          cd phase3-current-status-diagnose
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]]
+          cleanup() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+          }
+          trap cleanup EXIT
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null
+          gcloud logging views add-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null
+          ready=false
+          for attempt in $(seq 1 12); do
+            if gcloud logging read 'resource.type="cloud_run_job"' --project "${PROJECT_ID}" --limit=1 --format=json >/dev/null 2>&1; then ready=true; break; fi
+            sleep 10
+          done
+          [[ "${ready}" == "true" ]]
+          execution="$(gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.latestCreatedExecution.name)')"
+          [[ -n "${execution}" ]]
+          gcloud run jobs executions describe "${execution}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > execution.json
+          gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${ADMIN_JOB}\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" --project "${PROJECT_ID}" --order=asc --limit=200 --format=json > logs.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          execution=json.loads(Path('execution.json').read_text())
+          logs=json.loads(Path('logs.json').read_text())
+          messages=[]
+          for item in logs:
+              t=item.get('textPayload')
+              if isinstance(t,str) and t.strip(): messages.append(t.strip())
+              p=item.get('jsonPayload')
+              if isinstance(p,dict):
+                  for k in ('message','error','exception'):
+                      v=p.get(k)
+                      if isinstance(v,str) and v.strip(): messages.append(v.strip())
+
+### phase3_diagnostic_pulse.yml
+name: Phase 3 diagnostic trigger pulse
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_diagnostic_pulse.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pulse:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Emit diagnostic trigger pulse
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Phase 3 diagnostic trigger pulse: ${GITHUB_SHA}"
+
+### phase3_force_converge.yml
+name: Phase 3 force convergence
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  converge:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Verify force-convergence safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/force-converge-phase3.sh
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/force-converge-phase3.sh').read_text(encoding='utf-8')
+          forbidden = (
+              'gcloud scheduler jobs run',
+              'gcloud scheduler jobs resume',
+              'import-gcs',
+              'runtime_v2,run',
+              'secrets versions access',
+              'terraform apply',
+          )
+          for value in forbidden:
+              assert value not in text, value
+          assert text.count('gcloud run jobs execute') == 1
+          assert '--args=-m,runtime_v2,status' in text
+          assert 'roles/run.jobsExecutorWithOverrides' in text
+          assert 'roles/run.invoker' not in text
+          assert 'phase4_started' in text
+          assert 'production_authority_transferred' in text
+          PY
+
+      - name: Check immutable readiness tag
+        id: ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${target}" ]]; then
+            echo "existing=true" >> "${GITHUB_OUTPUT}"
+            echo "Phase 3 readiness tag already exists at ${target}; no rebuild or execution is required."
+          else
+            echo "existing=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+
+### phase3_gcp_auth_inventory.yml
+name: Phase 3 GCP auth inventory
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_gcp_auth_inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      S_GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      S_GCP_PROJECT_NUMBER: ${{ secrets.GCP_PROJECT_NUMBER }}
+      S_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      S_GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+      S_GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      S_GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+      S_GCP_DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      S_GCP_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT }}
+      S_GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+      S_GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+      S_GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      S_GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+      V_GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      V_GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
+      V_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      V_GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+      V_GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      V_GCP_WIF_SERVICE_ACCOUNT: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
+      V_GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      V_GCP_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+      V_GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+    steps:
+      - name: Record presence only
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=phase3-gcp-auth-inventory.txt
+          : > "$report"
+          printf '%s\n' \
+            "schema_version=1" \
+            "repository_id=${GITHUB_REPOSITORY_ID}" \
+            "repository=${GITHUB_REPOSITORY}" \
+            "source_revision=${GITHUB_SHA}" >> "$report"
+
+          for name in \
+            S_GCP_PROJECT_ID S_GCP_PROJECT_NUMBER \
+            S_GCP_WORKLOAD_IDENTITY_PROVIDER S_GCP_WIF_PROVIDER \
+            S_GCP_SERVICE_ACCOUNT S_GCP_WIF_SERVICE_ACCOUNT \
+            S_GCP_DEPLOY_SERVICE_ACCOUNT S_GCP_RUNTIME_SERVICE_ACCOUNT \
+            S_GOOGLE_CREDENTIALS S_GCP_CREDENTIALS S_GCP_SA_KEY \
+            S_GOOGLE_APPLICATION_CREDENTIALS_JSON \
+            V_GCP_PROJECT_ID V_GCP_PROJECT_NUMBER \
+            V_GCP_WORKLOAD_IDENTITY_PROVIDER V_GCP_WIF_PROVIDER \
+            V_GCP_SERVICE_ACCOUNT V_GCP_WIF_SERVICE_ACCOUNT \
+            V_GCP_DEPLOY_SERVICE_ACCOUNT V_GCP_RUNTIME_SERVICE_ACCOUNT \
+            V_GOOGLE_CLOUD_PROJECT; do
+            value="${!name-}"
+            if [[ -n "$value" ]]; then
+              printf '%s=present\n' "$name" >> "$report"
+            else
+              printf '%s=absent\n' "$name" >> "$report"
+            fi
+          done
+
+          cat "$report"
+
+
+### phase3_harvest_current_runtime_build.yml
+name: Phase 3 harvest hardened Runtime build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_harvest_current_runtime_build.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: phase3-harvest-hardened-runtime-image
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: d580d289-c02e-4f07-93e0-d0acfc17ee4b
+      BUILD_SOURCE_REVISION: 9b77de78203fec04d46404e1b674325517420c5c
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest exact hardened build and immutable digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-runtime-build-harvest
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+          git cat-file -e "${BUILD_SOURCE_REVISION}^{commit}"
+          git merge-base --is-ancestor "${BUILD_SOURCE_REVISION}" "${GITHUB_SHA}" || {
+            echo "Hardened image source is not an ancestor of this harvest commit." >&2
+            exit 1
+          }
+
+          python - <<'PY'
+          from pathlib import Path
+          migration = Path('migrations/20260901_runtime_v2.sql').read_text(encoding='utf-8')
+          required = (
+              "snapshot.source_provenance ->> 'mode'",
+              "cannot provenance-derive runtime_job_runs.runtime_mode for every legacy run",
+          )
+          missing = [value for value in required if value not in migration]
+          if missing:
+              raise SystemExit('Canonical migration is not fail-closed: ' + ', '.join(missing))
+
+### phase3_harvest_current_status.yml
+name: Phase 3 harvest current status
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_harvest_current_status.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  harvest:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+      ONESHOT_MARKER: phase3-acceptance/harvest-current-status-v1.claimed
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest existing read-only status execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-harvest-status
+          cd phase3-harvest-status
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          marker_uri="gs://${STATE_BUCKET}/${ONESHOT_MARKER}"
+
+          cleanup_logging() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" --bucket "${LOG_BUCKET}" --location "${LOG_LOCATION}" --project "${PROJECT_ID}" --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1
+          }
+          trap cleanup_logging EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+          if gcloud storage ls "${marker_uri}" >/dev/null 2>&1; then
+            echo "Phase 3 harvest marker already exists; refusing duplicate execution." >&2
+            exit 1
+          fi
+          printf 'claimed_at=%s\nworkflow_run=%s\nsource_revision=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > oneshot-marker.txt
+          gcloud storage cp oneshot-marker.txt "${marker_uri}" >/dev/null
+
+          gcloud run jobs describe "${ADMIN_JOB}" --project "${PROJECT_ID}" --region "${REGION}" --format=json > admin.json
+          container_json="$(jq -c 'first(.. | objects | select(has("containers")) | .containers[0])' admin.json)"
+          [[ "$(jq -c '.command // []' <<<"${container_json}")" == '["python"]' ]] || { echo "Unexpected admin command baseline." >&2; exit 1; }
+          [[ "$(jq -c '.args // []' <<<"${container_json}")" == '["-m","runtime_v2","init-db","--with-vault"]' ]] || { echo "Unexpected admin argument baseline." >&2; exit 1; }
+
+
+### phase3_prepare_apply_plan.yml
+name: Phase 3 prepare hash-bound apply plan
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_prepare_apply_plan.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  prepare:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      RECONCILIATION_VARS: ../phase3-reconciliation.tfvars.json
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Verify immutable cloud boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          if [[ "${actual_number}" != "${PROJECT_NUMBER}" ]]; then
+            echo "Project ID no longer maps to the expected immutable project number." >&2
+            exit 1
+          fi
+          echo "Phase 3 apply-plan boundary verified: ${PROJECT_ID}/${PROJECT_NUMBER}"
+
+      - name: Initialize exact Terraform toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform init -reconfigure -lockfile=readonly \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="prefix=runtime-v2"
+
+      - name: Create saved reconciliation plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan_file="${RUNNER_TEMP}/phase3-runtime-v2.tfplan"
+          plan_json="${RUNNER_TEMP}/phase3-runtime-v2-plan.json"
+          set +e
+          terraform -chdir=deploy/runtime-v2/terraform plan \
+            -no-color \
+
+### phase3_readiness_gate_v2.yml
+name: Phase 3 readiness gate v2
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  accept:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Verify bounded readiness controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/converge-phase3-readiness-v2.sh
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/converge-phase3-readiness-v2.sh').read_text(encoding='utf-8')
+          forbidden = (
+              'gcloud scheduler jobs run',
+              'gcloud scheduler jobs resume',
+              'runtime_v2,run',
+              'import-gcs',
+              'secrets versions access',
+              'terraform apply',
+              'gcloud run deploy',
+              'gcloud run jobs deploy',
+              'gcloud sql instances patch',
+          )
+          for value in forbidden:
+              assert value not in text, value
+          assert text.count('gcloud run jobs execute') == 1
+          assert '--args=-m,runtime_v2,status' in text
+          assert '--update-env-vars=PRIVATE_IP=true' in text
+          assert 'roles/run.jobsExecutorWithOverrides' in text
+          assert 'roles/run.invoker' not in text
+          assert 'verify_temporary_access_removed' in text
+          assert 'validate_phase3_status.py' in text
+          assert "'phase4_started': False" in text
+          assert "'production_authority_transferred': False" in text
+          PY
+
+      - name: Check immutable readiness tag
+        id: ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(git ls-remote origin refs/tags/phase3-ready | awk '{print $1}')"
+          if [[ -n "${target}" ]]; then
+            echo "existing=true" >> "${GITHUB_OUTPUT}"
+
+### phase3_reconcile_private_ip_acceptance.yml
+name: Phase 3 reconcile private IP and accept
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  reconcile-and-accept:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Reconcile admin private route and prove Phase 3 acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-private-ip-acceptance
+          cd phase3-private-ip-acceptance
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          cleanup_temporary_access() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" \
+              --bucket "${LOG_BUCKET}" \
+              --location "${LOG_LOCATION}" \
+              --project "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.viewAccessor \
+              --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.admin \
+              --condition=None \
+              --quiet >/dev/null 2>&1
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --member "${member}" \
+              --role roles/run.jobsExecutorWithOverrides \
+              --quiet >/dev/null 2>&1
+          }
+          trap cleanup_temporary_access EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+
+### phase3_rollout_current_image_acceptance.yml
+name: Phase 3 rollout current image and accept
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  rollout-and-accept:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      RECONCILIATION_VARS: ../phase3-reconciliation.tfvars.json
+      BUILD_ID: 1db569db-57a1-46fe-a061-0547ac6779b2
+      BUILD_SOURCE_REVISION: 080a3df0f0b912f702a30148cedc831b833a81db
+      IMAGE_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      IMMUTABLE_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      WEB_SERVICE: polititrack-web
+      SQL_INSTANCE: polititrack-runtime-v2
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Verify immutable source, cloud boundary, and inert controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-image-rollout
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          gcloud builds describe "${BUILD_ID}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format=json > phase3-image-rollout/build.json
+          jq -e --arg source "${BUILD_SOURCE_REVISION}" \
+            '.status == "SUCCESS" and .substitutions._SOURCE_REVISION == $source' \
+            phase3-image-rollout/build.json >/dev/null || {
+              echo "Pinned Cloud Build is not a successful exact-source build." >&2
+
+### phase3_runtime_image_routing_diagnostic.yml
+name: Phase 3 Runtime image routing diagnostic
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      LOG_BUCKET: _Default
+      LOG_VIEW: _Default
+      LOG_LOCATION: global
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Probe deployed image routing code without database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase3-runtime-image-diagnostic
+          cd phase3-runtime-image-diagnostic
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          cleanup() {
+            set +e
+            gcloud logging views remove-iam-policy-binding "${LOG_VIEW}" \
+              --bucket "${LOG_BUCKET}" \
+              --location "${LOG_LOCATION}" \
+              --project "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.viewAccessor \
+              --quiet >/dev/null 2>&1
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" \
+              --role roles/logging.admin \
+              --condition=None \
+              --quiet >/dev/null 2>&1
+            gcloud run jobs remove-iam-policy-binding "${ADMIN_JOB}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --member "${member}" \
+              --role roles/run.jobsExecutorWithOverrides \
+              --quiet >/dev/null 2>&1
+          }
+          trap cleanup EXIT
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project boundary mismatch." >&2; exit 1; }
+
+
+### phase3_schema_converge_closeout_tests.yml
+name: Phase 3 schema convergence closeout safety tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3_converge_schema_and_close.yml"
+      - ".github/workflows/phase3_schema_converge_closeout_tests.yml"
+      - "deploy/runtime-v2/converge-phase3-schema-and-close.sh"
+      - "deploy/runtime-v2/gcs_status_probe.py"
+      - "tests/test_phase3_schema_converge_closeout.py"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Parse probe and shell
+        run: |
+          python -m py_compile deploy/runtime-v2/gcs_status_probe.py
+          bash -n deploy/runtime-v2/converge-phase3-schema-and-close.sh
+      - name: Install pytest
+        run: python -m pip install "pytest>=8.3,<9"
+      - name: Run focused safety tests
+        run: python -m pytest -q tests/test_phase3_schema_converge_closeout.py
+
+### phase3_terraform_plan.yml
+name: Phase 3 Terraform reconciliation plan
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase3_terraform_plan.yml"
+      - "deploy/runtime-v2/phase3-reconciliation.tfvars.json"
+      - "deploy/runtime-v2/terraform/moved.tf"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      STATE_BUCKET: project-38008d5f-4918-46e6-920-polititrack-tfstate
+      RECONCILIATION_VARS: ../phase3-reconciliation.tfvars.json
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 3 deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Verify immutable cloud boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          if [[ "${actual_number}" != "${PROJECT_NUMBER}" ]]; then
+            echo "Project ID no longer maps to the expected immutable project number." >&2
+            exit 1
+          fi
+          echo "Phase 3 plan boundary verified: ${PROJECT_ID}/${PROJECT_NUMBER}"
+
+      - name: Initialize existing Terraform state
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform init -reconfigure -lockfile=readonly \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="prefix=runtime-v2"
+
+      - name: Inventory tracked state
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=deploy/runtime-v2/terraform state list | tee phase3-state-list.txt
+
+      - name: Create redacted reconciliation plan
+        id: plan
+
+### phase4_build_quarantine_image.yml
+name: Phase 4 build quarantine-safe Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_build_quarantine_image.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-image-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      OBSOLETE_HARDENED_DIGEST: sha256:310e1042c7fe3e87a996eb0eaa676b6b3abcae0e909cb5e49f6c638935ac12a7
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained Phase 4 recovery deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Grant builder actAs on the resolved default build identity only
+        id: build-identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          default_build_service_account="$(gcloud builds get-default-service-account \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(serviceAccountEmail)')"
+          default_build_service_account="${default_build_service_account##*/}"
+          [[ "${default_build_service_account}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.gserviceaccount\.com$ ]] || {
+            echo "Cloud Build returned an invalid default execution service account." >&2
+            exit 1
+          }
+          [[ "${default_build_service_account}" != "${BUILDER_SERVICE_ACCOUNT}" ]] || {
+            echo "Refusing to collapse the isolated submitter and build-execution identities." >&2
+            exit 1
+          }
+
+          gcloud iam service-accounts add-iam-policy-binding "${default_build_service_account}" \
+            --project "${PROJECT_ID}" \
+            --member "serviceAccount:${BUILDER_SERVICE_ACCOUNT}" \
+
+### phase4_harvest_hardened_image.yml
+name: Phase 4 harvest hardened Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_harvest_hardened_image.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  harvest:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: d580d289-c02e-4f07-93e0-d0acfc17ee4b
+      BUILD_SOURCE_REVISION: 9b77de78203fec04d46404e1b674325517420c5c
+      PRIOR_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest exact hardened build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-hardened-image
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+
+          terminal=false
+          for attempt in $(seq 1 48); do
+            gcloud builds describe "${BUILD_ID}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format=json > phase4-hardened-image/build.json
+            status="$(jq -r '.status // empty' phase4-hardened-image/build.json)"
+            case "${status}" in
+              SUCCESS|FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                terminal=true
+                break
+                ;;
+            esac
+            echo "Cloud Build is ${status:-unknown}; waiting for terminal state (attempt ${attempt}/48)."
+            sleep 10
+          done
+          [[ "${terminal}" == "true" ]] || {
+            echo "Cloud Build did not reach terminal state within the bounded harvest window." >&2
+            exit 1
+          }
+
+
+### phase4_harvest_hardened_image_tests.yml
+name: Phase 4 hardened image harvest safety tests
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase4_harvest_hardened_image.yml"
+      - ".github/workflows/phase4_harvest_hardened_image_tests.yml"
+      - "tests/test_phase4_harvest_hardened_image.py"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install "pytest>=8.3,<9"
+      - name: Run focused safety tests
+        run: python -m pytest -q tests/test_phase4_harvest_hardened_image.py
+
+### phase4_harvest_quarantine_image.yml
+name: Phase 4 harvest submitted quarantine-safe Runtime image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_harvest_quarantine_image.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-image-build
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: d2b84173-eafa-4fb6-b9ac-a3e232d273f4
+      BUILD_SOURCE_REVISION: 8908f067298078f8c013e90cf6b7ad8ad420285b
+      BUILD_TAG: 8908f0672980
+      SUBMIT_WORKFLOW_RUN_ID: "33823547823"
+      SUBMIT_ARTIFACT_ID: "9919214769"
+      SUBMIT_ARTIFACT_SHA256: 81d01fd81f1af062a0976a842ccc15dda4eea8241743d6aba838fcdef007c8cb
+      CURRENT_DEPLOYED_DIGEST: sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+      OBSOLETE_HARDENED_DIGEST: sha256:310e1042c7fe3e87a996eb0eaa676b6b3abcae0e909cb5e49f6c638935ac12a7
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+    steps:
+      - name: Check out canonical main with exact build ancestry
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained Phase 4 recovery deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest only the already-submitted exact build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-quarantine-image-harvest
+
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable project boundary mismatch." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "${BUILD_SOURCE_REVISION}" "${GITHUB_SHA}" || {
+            echo "The exact build source is not an ancestor of canonical main." >&2
+            exit 1
+          }
+          git diff --quiet "${BUILD_SOURCE_REVISION}" -- \
+            runtime_v2/database.py \
+            runtime_v2/store.py \
+            runtime_v2/runner.py \
+            migrations/20260904_runtime_v2_mode_quarantine.sql \
+            deploy/runtime-v2/Dockerfile \
+            deploy/runtime-v2/cloudbuild-no-source.yaml \
+
+### phase4_live_shadow_validation_v5.yml
+name: Phase 4 live shadow validation v5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v5.yml"
+      - ".github/workflows/phase5_production_promotion.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "deploy/runtime-v2/phase4-approved-image.json"
+      - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  controlled-shadow-acceptance:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: phase4-live
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Pin the approved quarantine-safe image receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || { echo "Checkout drifted from live main." >&2; exit 1; }
+          jq -e '.repository_id == 1349678672 and .result == "phase4_quarantine_runtime_image_approved"' \
+            deploy/runtime-v2/phase4-approved-image.json >/dev/null
+          image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+          source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          [[ "${image}" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "Approved image is not immutable." >&2; exit 1; }
+          [[ "${source}" =~ ^[0-9a-f]{40}$ ]] || { echo "Runtime source revision is invalid." >&2; exit 1; }
+          echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
+          echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Execute two serialized, evidence-bound shadow cycles
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+
+          cleanup() {
+            local code=$?
+            trap - EXIT
+
+### phase4_live_shadow_validation_v6.yml
+name: Phase 4 live shadow validation v6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
+      - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
+      - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
+      - "deploy/runtime-v2/phase4-approved-image.json"
+      - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+      - ".github/workflows/legislative_trade_tracker_v2.yml"
+      - ".github/workflows/executive_trade_tracker.yml"
+      - ".github/workflows/ai_filing_analyst.yml"
+      - ".github/workflows/publish_trade_dashboard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  controlled-shadow-acceptance:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: phase4-live
+      RECONCILIATION: deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json
+      LEGISLATIVE_VALIDATION: deploy/runtime-v2/phase4-legislative-validation-evidence.json
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Pin the approved image and immutable reconciliation record
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || { echo "Checkout drifted from live main." >&2; exit 1; }
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${GITHUB_SHA}" ]] || { echo "Canonical main advanced before reconciliation." >&2; exit 1; }
+          jq -e \
+            '.repository_id == 1349678672 and
+             .result == "phase4_shadow_evidence_reconciliation_authorized" and
+             .immutable_inventory_preserved == true and
+             .additional_producer_execution_authorized == false and
+             (.runs | length) == 2' \
+            "${RECONCILIATION}" >/dev/null
+          jq -e '.repository_id == 1349678672 and .result == "phase4_quarantine_runtime_image_approved"' \
+            deploy/runtime-v2/phase4-approved-image.json >/dev/null
+          image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+          source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          [[ "${image}" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "Approved image is not immutable." >&2; exit 1; }
+
+### phase4_record_latest_failure.yml
+name: Phase 4 record latest failure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_record_latest_failure.yml"
+  workflow_run:
+    workflows:
+      - Phase 4 live shadow validation
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: phase4-latest-failure-record
+  cancel-in-progress: true
+
+jobs:
+  record:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Stop when immutable readiness exists
+        id: ready
+        run: |
+          git fetch --tags origin
+          if git rev-parse -q --verify refs/tags/phase5-ready >/dev/null; then
+            echo "value=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "value=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Find and record latest failed Phase 4 run
+        if: steps.ready.outputs.value != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/phase4-failure"
+          rm -rf "${work}"
+          mkdir -p "${work}"
+
+          run_id="$(gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "Phase 4 live shadow validation" and .conclusion == "failure")][0].id // empty' \
+            | sed -n '1p')"
+          [[ -n "${run_id}" ]] || { echo "No failed Phase 4 run is available."; exit 0; }
+
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" > "${work}/run.json"
+          gh run download "${run_id}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern 'phase4-shadow-validation-*' \
+            --dir "${work}/artifact" >/dev/null 2>&1 || true
+
+          failure="$(find "${work}/artifact" -type f -name failure.json -print -quit 2>/dev/null || true)"
+          manifest="$(find "${work}/artifact" -type f -name execution-manifest.json -print -quit 2>/dev/null || true)"
+          python - "${work}/run.json" "${failure}" "${manifest}" > "${work}/PHASE4_LAST_FAILURE.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          run = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+
+### phase4_recover_exact_history.yml
+name: Phase 4 recover exact Runtime history
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_recover_exact_history.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: phase4-exact-history-read
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOURCE_RUN_ID: "33819641464"
+      SOURCE_ARTIFACT_ID: "9917920173"
+      SOURCE_ARTIFACT_SHA256: 7f0851fa00169ed80e92972a32d2e7abbb2825378469b945959226143a06702d
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+
+      - name: Verify evidence reader is bounded
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/phase4_recover_exact_history.yml').read_text(encoding='utf-8')
+          bounded = text.rsplit('# BOUNDED_EVIDENCE_READER', 1)[1]
+          for forbidden in (
+              'google-github-actions/auth',
+              'gcloud ',
+              'run jobs execute',
+              'scheduler jobs',
+              'terraform apply',
+              'secrets versions access',
+              'contents: write',
+          ):
+              assert forbidden not in bounded, forbidden
+          assert 'actions: read' in text
+          assert 'SOURCE_RUN_ID: "33819641464"' in text
+          assert 'SOURCE_ARTIFACT_ID: "9917920173"' in text
+          PY
+
+      # BOUNDED_EVIDENCE_READER
+      - name: Download exact failed closeout artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-history/source
+          curl --fail --location --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" \
+            --output phase4-history/source.zip
+          actual_sha="$(sha256sum phase4-history/source.zip | awk '{print $1}')"
+          [[ "${actual_sha}" == "${SOURCE_ARTIFACT_SHA256}" ]] || {
+            echo "Downloaded evidence artifact digest mismatch." >&2
+            exit 1
+          }
+          unzip -q phase4-history/source.zip -d phase4-history/source
+
+      - name: Extract non-secret append-only history
+
+### phase4_repair_and_redispatch.yml
+name: Phase 4 repair and redispatch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase4_repair_and_redispatch.yml"
+      - "docs/runtime-v2/PHASE4_LAST_FAILURE.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: phase4-live-shadow-validation
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:b9758a697338ffdeb7505473819aec70247ac23ed46b15af5b78701ed1f61f9b
+    steps:
+      - name: Check out canonical main and tags
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Stop safely when Phase 4 is already accepted
+        id: ready
+        run: |
+          git fetch --tags origin
+          if git rev-parse -q --verify refs/tags/phase4-ready >/dev/null; then
+            echo "value=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "value=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Authenticate as constrained deployer
+        if: steps.ready.outputs.value != 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        if: steps.ready.outputs.value != 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Restore inert private shadow prerequisites without execution
+        if: steps.ready.outputs.value != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || { echo "Immutable project mismatch." >&2; exit 1; }
+
+          producer_jobs=(polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard)
+          import_jobs=(polititrack-import-legislative polititrack-import-executive polititrack-import-ai)
+          all_jobs=(polititrack-admin "${producer_jobs[@]}" "${import_jobs[@]}" polititrack-vault-lifecycle)
+          executable_jobs=(polititrack-admin "${producer_jobs[@]}")
+          schedulers=(polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard polititrack-vault-lifecycle)
+
+
+### phase5_apply_shared_execution_lookup.yml
+name: Phase 5 apply shared execution lookup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_apply_shared_execution_lookup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  patch-and-launch:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET: deploy/runtime-v2/runtime_promotion_control.sh
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Replace and validate the obsolete lookup
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ['TARGET'])
+          text = path.read_text(encoding='utf-8')
+          obsolete = 'gcloud run jobs executions describe-latest'
+          pattern = re.compile(
+              r'''latest_execution_name\(\) \{\n'''
+              r'''  local job="\$1"\n'''
+              r'''  gcloud run jobs executions describe-latest --job "\$\{job\}" --project "\$\{PROJECT_ID\}" --region "\$\{REGION\}" \\\n'''
+              r'''    --format='value\(metadata\.name\)'\n'''
+              r'''\}\n'''
+          )
+          replacement = '''latest_execution_name() {
+            local job="$1" execution=""
+            for attempt in $(seq 1 24); do
+              execution="$(gcloud run jobs describe "${job}" \\
+                --project "${PROJECT_ID}" \\
+                --region "${REGION}" \\
+                --format='value(status.latestCreatedExecution.name)')"
+              if [[ -n "${execution}" ]]; then
+                printf '%s\\n' "${execution}"
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Unable to resolve the latest execution for ${job}." >&2
+            return 1
+          }
+          '''
+
+          changed = False
+          if obsolete in text:
+              text, count = pattern.subn(replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit('Obsolete lookup did not match the reviewed function exactly.')
+
+### phase5_control_plane_tests.yml
+name: Phase 4/5 promotion control tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v5.yml"
+      - ".github/workflows/phase5_production_promotion.yml"
+      - ".github/workflows/phase5_control_plane_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "deploy/runtime-v2/phase4-approved-image.json"
+      - "deploy/runtime-v2/phase4-legacy-run-inventory.json"
+      - "tests/test_validate_runtime_promotion.py"
+      - "docs/runtime-v2/PHASE5_PRODUCTION_PROMOTION.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_control_plane_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/validate_runtime_promotion.py"
+      - "tests/test_validate_runtime_promotion.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-control-plane:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out proposed control revision
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest PyYAML
+
+      - name: Validate evidence logic and negative paths
+        run: |
+          set -euo pipefail
+          python -m py_compile deploy/runtime-v2/validate_runtime_promotion.py
+          python -m pytest -q tests/test_validate_runtime_promotion.py
+
+      - name: Validate shell and workflow syntax
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/runtime_promotion_control.sh
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          expected = {
+              "phase4_live_shadow_validation_v5.yml": "Phase 4 live shadow validation v5",
+              "phase5_production_promotion.yml": "Phase 5 Runtime v2 production promotion",
+          }
+          for filename, name in expected.items():
+              path = Path(".github/workflows") / filename
+              data = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+              if data.get("name") != name:
+                  raise SystemExit(f"{filename} workflow name changed")
+          PY
+
+      - name: Enforce fail-closed promotion invariants
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+### phase5_failed_promotion_retry.yml
+name: Reconcile failed Phase 5 promotion 33979778020
+
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_main_sha:
+        description: Exact 40-character canonical main SHA to freeze for this retry
+        required: true
+        type: string
+      failed_phase5_run_id:
+        description: Exact failed Phase 5 run being reconciled (33979778020)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  reconcile-and-retry:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.failed_phase5_run_id == '33979778020' &&
+      inputs.frozen_main_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      PRIVATE_WEB_AUDIENCE: https://polititrack-web-s6icmprjvq-uc.a.run.app
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:420670e057036ebd78527aefdadaae30eeb360fcbe82865173861b19b303dc21
+      RUNTIME_SOURCE_REVISION: 8908f067298078f8c013e90cf6b7ad8ad420285b
+      PHASE5_RETRY_DESCRIPTOR: deploy/runtime-v2/phase5-retry-evidence-33979778020.json
+      EVIDENCE_DIR: phase5-retry-live
+      ROLLBACK_EVIDENCE_DIR: phase5-retry-rollback-publication
+      CONTROL_REVISION: ${{ inputs.frozen_main_sha }}
+      RETRY_FAILED_RUN_ID: ${{ inputs.failed_phase5_run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the acknowledged frozen main revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CONTROL_REVISION }}
+          fetch-depth: 0
+
+      - name: Bind the exact incident and download immutable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          [[ "${APPROVED_IMAGE}" == "$(jq -er '.immutable_image' "${PHASE5_RETRY_DESCRIPTOR}")" ]]
+          [[ "${RUNTIME_SOURCE_REVISION}" == "$(jq -er '.runtime_source_revision' "${PHASE5_RETRY_DESCRIPTOR}")" ]]
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase4_reconciliation_control.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          # These exact workflows are manually frozen before dispatch so the
+          # protected-artifact high-water cannot move while it is downloaded.
+          phase5_retry_write_frozen_legacy_states
+          verify_legacy_workflows_match_observed
+          drain_legacy_workflows
+          phase5_retry_verify_descriptor_identity
+          [[ "${RETRY_FAILED_RUN_ID}" == "$(jq -r '.failed_phase5.run_id | tostring' "${PHASE5_RETRY_DESCRIPTOR}")" ]] || {
+            echo "The acknowledged failed run does not match the checked-in incident descriptor." >&2
+            exit 1
+
+### phase5_observed_state_tests.yml
+name: Phase 5 observed legacy-state tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
+      - ".github/workflows/phase5_observed_state_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
+      - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
+      - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
+      - "tests/test_runtime_promotion_control.sh"
+      - "tests/test_reconcile_phase4_shadow_evidence.py"
+      - "tests/test_verify_legacy_route_contract.py"
+      - "tests/test_verify_legislative_validation_evidence.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4_live_shadow_validation_v6.yml"
+      - ".github/workflows/phase5_production_promotion_v2.yml"
+      - ".github/workflows/phase5_observed_state_tests.yml"
+      - "deploy/runtime-v2/runtime_promotion_control.sh"
+      - "deploy/runtime-v2/runtime_promotion_observed_state.sh"
+      - "deploy/runtime-v2/phase4_reconciliation_control.sh"
+      - "deploy/runtime-v2/verify_legacy_route_contract.py"
+      - "deploy/runtime-v2/verify_legislative_validation_evidence.py"
+      - "deploy/runtime-v2/phase4-legislative-validation-evidence.json"
+      - "deploy/runtime-v2/reconcile_phase4_shadow_evidence.py"
+      - "deploy/runtime-v2/phase4-shadow-evidence-reconciliation.json"
+      - "tests/test_runtime_promotion_control.sh"
+      - "tests/test_reconcile_phase4_shadow_evidence.py"
+      - "tests/test_verify_legacy_route_contract.py"
+      - "tests/test_verify_legislative_validation_evidence.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-observed-state-controller:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest PyYAML
+      - name: Validate syntax, receipts, status logs, and exact-state invariants
+        run: |
+          set -euo pipefail
+          bash -n deploy/runtime-v2/runtime_promotion_control.sh
+          bash -n deploy/runtime-v2/runtime_promotion_observed_state.sh
+          bash -n deploy/runtime-v2/phase4_reconciliation_control.sh
+          bash -n tests/test_runtime_promotion_control.sh
+          python -m py_compile deploy/runtime-v2/reconcile_phase4_shadow_evidence.py
+          python -m py_compile deploy/runtime-v2/verify_legacy_route_contract.py
+          python -m py_compile deploy/runtime-v2/verify_legislative_validation_evidence.py
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          phase4 = Path('.github/workflows/phase4_live_shadow_validation_v6.yml').read_text()
+          phase5 = Path('.github/workflows/phase5_production_promotion_v2.yml').read_text()
+          control = Path('deploy/runtime-v2/runtime_promotion_control.sh').read_text()
+          overlay = Path('deploy/runtime-v2/runtime_promotion_observed_state.sh').read_text()
+          reconciliation = Path('deploy/runtime-v2/reconcile_phase4_shadow_evidence.py').read_text()
+          reconciliation_control = Path('deploy/runtime-v2/phase4_reconciliation_control.sh').read_text()
+
+### phase5_production_promotion.yml
+name: Phase 5 Runtime v2 production promotion
+
+on:
+  workflow_run:
+    workflows: ["Phase 4 live shadow validation v5"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  promote-production-authority:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.id == 1349678672
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: phase5-live
+      PHASE4_RUN_ID: ${{ github.event.workflow_run.id }}
+      CONTROL_REVISION: ${{ github.event.workflow_run.head_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the certified canonical revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CONTROL_REVISION }}
+          fetch-depth: 0
+
+      - name: Verify and bind the Phase 4 readiness certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${CONTROL_REVISION}" ]] || { echo "Certified checkout mismatch." >&2; exit 1; }
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${CONTROL_REVISION}" ]] || { echo "Canonical main advanced after Phase 4 certification." >&2; exit 1; }
+
+          mkdir -p "${EVIDENCE_DIR}/phase4"
+          gh run download "${PHASE4_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name phase4-readiness --dir "${EVIDENCE_DIR}/phase4"
+          (cd "${EVIDENCE_DIR}/phase4" && sha256sum -c phase4-ready.sha256)
+
+          image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+          source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          jq -e \
+            --arg control "${CONTROL_REVISION}" \
+            --arg image "${image}" \
+            --arg source "${source}" \
+            '.repository_id == 1349678672 and
+             .result == "phase4_ready_for_phase5" and
+             .phase5_ready == true and
+             .control_revision == $control and
+             .runtime_source_revision == $source and
+             .immutable_image == $image and
+             .unique_successful_execution_receipts == 8 and
+             .production_authority_transferred == false and
+             .temporary_authority_removed == true' \
+            "${EVIDENCE_DIR}/phase4/phase4-ready.json" >/dev/null
+          echo "APPROVED_IMAGE=${image}" >> "${GITHUB_ENV}"
+          echo "RUNTIME_SOURCE_REVISION=${source}" >> "${GITHUB_ENV}"
+
+      - name: Authenticate as constrained deployer
+
+### phase5_production_promotion_v2.yml
+name: Phase 5 Runtime v2 production promotion v2
+
+on:
+  workflow_run:
+    workflows: ["Phase 4 live shadow validation v6"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: runtime-v2-live-controller
+  cancel-in-progress: false
+
+jobs:
+  promote-production-authority:
+    if: >-
+      github.repository_id == '1349678672' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.id == 1349678672
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: phase5-live
+      PHASE4_RUN_ID: ${{ github.event.workflow_run.id }}
+      CONTROL_REVISION: ${{ github.event.workflow_run.head_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the certified canonical revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CONTROL_REVISION }}
+          fetch-depth: 0
+
+      - name: Verify and bind the Phase 4 readiness certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${CONTROL_REVISION}" ]] || { echo "Certified checkout mismatch." >&2; exit 1; }
+          live_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          [[ "${live_sha}" == "${CONTROL_REVISION}" ]] || { echo "Canonical main advanced after Phase 4 certification." >&2; exit 1; }
+
+          mkdir -p "${EVIDENCE_DIR}/phase4"
+          gh run download "${PHASE4_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name phase4-readiness --dir "${EVIDENCE_DIR}/phase4"
+          (cd "${EVIDENCE_DIR}/phase4" && sha256sum -c phase4-ready.sha256)
+
+          image="$(jq -r '.immutable_image' deploy/runtime-v2/phase4-approved-image.json)"
+          source="$(jq -r '.runtime_source_revision' deploy/runtime-v2/phase4-approved-image.json)"
+          jq -e \
+            --arg control "${CONTROL_REVISION}" \
+            --arg image "${image}" \
+            --arg source "${source}" \
+            '.repository_id == 1349678672 and
+             .result == "phase4_ready_for_phase5" and
+             .phase5_ready == true and
+             .control_revision == $control and
+             .runtime_source_revision == $source and
+             .immutable_image == $image and
+             .unique_successful_execution_receipts == 8 and
+             .production_authority_transferred == false and
+             .temporary_authority_removed == true and
+             .reconciliation.kind == "artifact_pinned_failed_run_replay" and
+             .reconciliation.control_files_match_evidence_revision == true and
+             .reconciliation.immutable_inventory_preserved == true and
+             .reconciliation.cross_artifact_chain_verified == true and
+             .reconciliation.completed_two_cycle_history_verified == true and
+
+### phase5_vault_admin_iam_repair.yml
+name: Phase 5 Vault metadata repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5_vault_admin_iam_repair.yml"
+      - "deploy/runtime-v2/terraform/vault_admin_metadata.tf"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  repair-and-prove:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_SERVICE_ACCOUNT: polititrack-admin-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      WEB_SERVICE_ACCOUNT: polititrack-web-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      VAULT_SERVICE_ACCOUNT: polititrack-vault-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      ADMIN_JOB: polititrack-admin
+      VAULT_JOB: polititrack-vault-lifecycle
+      WEB_SERVICE: polititrack-web
+      VAULT_BUCKET: project-38008d5f-4918-46e6-920-polititrack-vault
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate durable Terraform bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase5-vault-metadata
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/runtime-v2/terraform/vault_admin_metadata.tf').read_text()
+          required = (
+              'resource "google_storage_bucket_iam_member" "vault_admin_metadata_viewer"',
+              'resource "google_storage_bucket_iam_member" "vault_runtime_metadata_viewer"',
+              'google_service_account.admin.email',
+              'google_service_account.web.email',
+              'google_service_account.vault.email',
+              'roles/storage.bucketViewer',
+          )
+          missing = [token for token in required if token not in text]
+          if missing:
+              raise SystemExit(f'Vault metadata bindings incomplete: {missing}')
+          Path('phase5-vault-metadata/static-validation.txt').write_text(
+              'metadata-only bindings validated\n', encoding='utf-8')
+          PY
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Apply bindings and prove schema initialization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          deployer_member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+          admin_member="serviceAccount:${ADMIN_SERVICE_ACCOUNT}"
+          web_member="serviceAccount:${WEB_SERVICE_ACCOUNT}"
+          vault_member="serviceAccount:${VAULT_SERVICE_ACCOUNT}"
+
+          cleanup() {
+
+### pr154_integration_check.yml
+name: PR154 isolated integration inspection
+
+on:
+  push:
+    branches: [integration/pr154-20260919]
+    paths: [.github/workflows/pr154_integration_check.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr154-isolated-integration-inspection
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/integration/pr154-20260919'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inspect pinned source merge without production access
+        shell: bash
+        env:
+          PR_HEAD: eb0747a7d61624f1f0a6424f4d3f265999f0b31d
+          MAIN_HEAD: 75cb399ea870a77069911c80f3bfe0b788475fd9
+          MERGE_BASE: 061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git worktree add --detach "$RUNNER_TEMP/pr154-check" "$PR_HEAD"
+          export INSPECT_TREE="$RUNNER_TEMP/pr154-check"
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['GITHUB_WORKSPACE'])
+          check = pathlib.Path(os.environ['INSPECT_TREE'])
+          out = root / 'integration-evidence'
+          out.mkdir(exist_ok=True)
+          def git(*args, cwd=check):
+              return subprocess.check_output(['git', *args], cwd=cwd, text=True)
+          result = subprocess.run(['git', 'merge', '--no-commit', '--no-ff', os.environ['MAIN_HEAD']], cwd=check, text=True, capture_output=True)
+          conflicts = git('diff', '--name-only', '--diff-filter=U').splitlines()
+          report = {'repository_id': 1349678672, 'main': os.environ['MAIN_HEAD'], 'head': os.environ['PR_HEAD'], 'merge_base': os.environ['MERGE_BASE'], 'merge_returncode': result.returncode, 'merge_stdout': result.stdout, 'merge_stderr': result.stderr, 'conflicts': conflicts, 'run_id': os.environ['GITHUB_RUN_ID'], 'production_access': False}
+          (out / 'inspection.json').write_text(json.dumps(report, indent=2) + '\n')
+          for path in conflicts:
+              name = path.replace('/', '__')
+              (out / (name + '.conflict.patch')).write_text(git('diff', '--cc', '--', path))
+          modified = git('diff', '--name-only', '--diff-filter=M', os.environ['MERGE_BASE'], os.environ['PR_HEAD']).splitlines()
+          (out / 'original-modified-files.patch').write_text(git('diff', os.environ['MERGE_BASE'], os.environ['PR_HEAD'], '--', *modified))
+          workflow_headers = []
+          for path in sorted((root / '.github/workflows').glob('*.yml')):
+              workflow_headers.append('### ' + path.name + '\n' + '\n'.join(path.read_text().splitlines()[:75]))
+          (out / 'workflow-headers.txt').write_text('\n\n'.join(workflow_headers))
+          print(json.dumps(report, indent=2))
+          if result.returncode not in (0, 1) or (result.returncode == 1 and not conflicts):
+              raise SystemExit('Unexpected merge failure; no integration attempted')
+          PY
+          git add -- integration-evidence
+          git commit -m 'test: record PR 154 isolated merge inspection'
+          git push origin HEAD:refs/heads/integration/pr154-20260919
+
+### publish_trade_dashboard.yml
+name: Publish government trade dashboard
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish_trade_dashboard.yml"
+      - "scripts/build_trade_dashboard.py"
+      - "scripts/dashboard_insights.py"
+      - "scripts/collector_freshness.py"
+      - "scripts/collect_workflow_evidence.py"
+      - "scripts/dashboard_assets/**"
+      - "scripts/investor_edge.py"
+      - "config/investor_edge.yml"
+      - "requirements-ai.txt"
+  workflow_run:
+    workflows:
+      - Legislative purchase tracker v2
+      - Executive purchase tracker
+      - AI filing analyst and paper portfolio
+      - Run $10K portfolio simulator
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: government-trade-dashboard-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (
+        (
+          github.event.workflow_run.conclusion == 'success' ||
+          github.event.workflow_run.name != 'Run $10K portfolio simulator'
+        ) &&
+        github.event.workflow_run.head_branch == github.event.repository.default_branch
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dashboard dependencies
+        shell: bash
+        run: python -m pip install --requirement requirements-ai.txt
+
+      - name: Restore latest tracker state artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          mkdir -p dashboard-input
+          consumer_sha="$(git rev-parse HEAD)"
+          live_default_sha="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+
+### runtime_v2_execution_diagnosis.yml
+name: Runtime v2 execution diagnosis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/runtime_v2_execution_diagnosis.yml"
+  workflow_dispatch:
+    inputs:
+      execution_name:
+        description: Cloud Run execution name to inspect
+        required: false
+        default: polititrack-admin-b9nw8
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    if: github.repository_id == '1349678672'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      DEFAULT_EXECUTION_NAME: polititrack-admin-b9nw8
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Capture execution metadata and application logs
+        shell: bash
+        env:
+          REQUESTED_EXECUTION_NAME: ${{ inputs.execution_name }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p runtime-v2-diagnosis
+          execution="${REQUESTED_EXECUTION_NAME:-${DEFAULT_EXECUTION_NAME}}"
+          member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}"
+
+          cleanup() {
+            set +e
+            gcloud logging views remove-iam-policy-binding _Default \
+              --bucket _Default --location global --project "${PROJECT_ID}" \
+              --member "${member}" --role roles/logging.viewAccessor --quiet >/dev/null 2>&1 || true
+            gcloud projects remove-iam-policy-binding "${PROJECT_ID}" \
+              --member "${member}" --role roles/logging.admin --condition=None --quiet >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          gcloud run jobs executions describe "${execution}" \
+            --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+            > runtime-v2-diagnosis/execution.json
+
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.admin --condition=None --quiet --format=none
+          gcloud logging views add-iam-policy-binding _Default \
+            --bucket _Default --location global --project "${PROJECT_ID}" \
+            --member "${member}" --role roles/logging.viewAccessor --quiet --format=none
+
+          : > runtime-v2-diagnosis/logs.json
+          for attempt in $(seq 1 18); do
+            if gcloud logging read \
+              "resource.type=\"cloud_run_job\" AND resource.labels.location=\"${REGION}\" AND labels.\"run.googleapis.com/execution_name\"=\"${execution}\"" \
+
+### runtime_v2_natural_ai_certification.yml
+name: Certify Runtime v2 natural AI schedule
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_natural_ai_certification.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd
+      RUNTIME_SOURCE_REVISION: 72c1ca8c74a7af4b11f2e677c7a296d5e2358578
+      ACTIVATION_TIME: "2026-09-06T16:45:54Z"
+      CERTIFICATION_NOT_BEFORE: "2026-09-06T18:08:00Z"
+      EVIDENCE_DIR: runtime-v2-natural-ai-certification
+      CONTROL_REVISION: ${{ github.sha }}
+      PRIVATE_WEB_AUDIENCE: https://polititrack-web-497412818801.us-central1.run.app
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained deployer for preflight
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify natural-schedule preflight
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}/preflight" "${EVIDENCE_DIR}/natural"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          verify_canonical_context
+          verify_project_boundary
+          verify_cloud_sql_private
+          verify_vault_scheduler_paused
+          verify_legacy_workflows_state disabled_manually
+          verify_runtime_configuration production
+          verify_producer_scheduler_state ENABLED
+          phase5_retry_verify_scheduler_control_removed
+          phase5_retry_verify_role_viewer_removed
+
+          ai_schedule="$(gcloud scheduler jobs describe polititrack-ai \
+            --project "${PROJECT_ID}" --location "${REGION}" \
+
+### runtime_v2_production_recovery.yml
+name: Runtime v2 production recovery after concurrency repair
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_production_recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      SOURCE_REPOSITORY: https://github.com/maglothinm/MyETF-Intelligence.git
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: runtime-v2-production-recovery
+      RUNTIME_SOURCE_REVISION: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained deployer for preflight
+        id: deployer-preflight
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify live production boundary before mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}/preflight"
+          actual_number="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          [[ "${actual_number}" == "${PROJECT_NUMBER}" ]] || {
+            echo "Immutable GCP project boundary mismatch." >&2
+            exit 1
+          }
+
+          gcloud sql instances describe polititrack-runtime-v2 --project "${PROJECT_ID}" --format=json \
+            > "${EVIDENCE_DIR}/preflight/cloud-sql.json"
+          jq -e '(.settings.ipConfiguration.ipv4Enabled // false) == false and ((.settings.ipConfiguration.privateNetwork // "") | length > 0)' \
+            "${EVIDENCE_DIR}/preflight/cloud-sql.json" >/dev/null || {
+              echo "Cloud SQL is not private-only." >&2
+              exit 1
+            }
+
+          for job in polititrack-legislative polititrack-executive polititrack-ai polititrack-dashboard; do
+            gcloud run jobs describe "${job}" --project "${PROJECT_ID}" --region "${REGION}" --format=json \
+
+### runtime_v2_production_recovery_resume.yml
+name: Resume Runtime v2 production recovery from submitted build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_production_recovery_resume.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      REPOSITORY: polititrack
+      IMAGE_NAME: runtime-v2
+      BUILD_ID: acdaa3ae-b4ca-42c4-a71d-c8954f83e299
+      RUNTIME_SOURCE_REVISION: 72c1ca8c74a7af4b11f2e677c7a296d5e2358578
+      RUNTIME_TAG: 72c1ca8c74a7
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      BUILDER_SERVICE_ACCOUNT: polititrack-phase3-builder@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      EVIDENCE_DIR: runtime-v2-production-recovery-resume
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as isolated builder
+        id: builder-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.BUILDER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Harvest submitted build and bind immutable image
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${EVIDENCE_DIR}/build"
+
+          terminal=false
+          for attempt in $(seq 1 120); do
+            gcloud builds describe "${BUILD_ID}" \
+              --project "${PROJECT_ID}" \
+              --region "${REGION}" \
+              --format=json > "${EVIDENCE_DIR}/build/build.json"
+            status="$(jq -r '.status // empty' "${EVIDENCE_DIR}/build/build.json")"
+            printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${status}" \
+              >> "${EVIDENCE_DIR}/build/status-history.tsv"
+            case "${status}" in
+              SUCCESS)
+                terminal=true
+                break
+
+### runtime_v2_scheduler_reactivation.yml
+name: Reactivate Runtime v2 producer schedulers after repaired smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime_v2_scheduler_reactivation.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: runtime-v2-production-recovery
+  cancel-in-progress: false
+
+jobs:
+  reactivate:
+    if: github.repository_id == '1349678672' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_ID: project-38008d5f-4918-46e6-920
+      PROJECT_NUMBER: "497412818801"
+      REGION: us-central1
+      WIF_PROVIDER: projects/497412818801/locations/global/workloadIdentityPools/polititrack-github-phase3/providers/phase3-main
+      DEPLOYER_SERVICE_ACCOUNT: polititrack-phase3-deployer@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com
+      APPROVED_IMAGE: us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:2902dc72b23bccfdcff95f71e2ea79d699c96352d9ae3195e8d2940f02bfb4bd
+      RUNTIME_SOURCE_REVISION: 72c1ca8c74a7af4b11f2e677c7a296d5e2358578
+      PRIVATE_WEB_AUDIENCE: https://polititrack-web-497412818801.us-central1.run.app
+      CONTROL_REVISION: ${{ github.sha }}
+      EVIDENCE_DIR: runtime-v2-scheduler-reactivation
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate as constrained deployer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify repaired production and reactivate exact four schedulers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}"
+          source deploy/runtime-v2/runtime_promotion_control.sh
+          source deploy/runtime-v2/runtime_promotion_observed_state.sh
+          source deploy/runtime-v2/phase5_failed_promotion_retry_control.sh
+
+          verify_canonical_context
+          verify_project_boundary
+          verify_cloud_sql_private
+          verify_vault_scheduler_paused
+          verify_legacy_workflows_state disabled_manually
+          verify_runtime_configuration production
+          verify_producer_scheduler_state PAUSED
+          phase5_retry_verify_scheduler_control_removed
+
+          touch "${EVIDENCE_DIR}/live-mutation-started"
+          phase5_retry_capture_scheduler_snapshot before
+          phase5_retry_grant_scheduler_control
+          touch "${EVIDENCE_DIR}/scheduler-control-granted"
+          phase5_retry_enable_exact_producer_schedulers_last
+
+### runtime_v2_tests.yml
+name: Runtime v2 safety tests
+
+on:
+  pull_request:
+    paths:
+      - "runtime_v2/**"
+      - "scripts/investor_edge.py"
+      - "scripts/investor_edge_progress.py"
+      - "tests/test_investor_edge_progress.py"
+      - "scripts/runtime_notifications.py"
+      - "scripts/investor_notifications.py"
+      - "config/investor_notifications.json"
+      - "tests/test_investor_notifications.py"
+      - "scripts/government_trade_tracker_core.py"
+      - "scripts/ai_filing_analyst_hardened.py"
+      - "scripts/ai_filing_analyst_legacy.py"
+      - "migrations/20260909_runtime_notification_outbox.sql"
+      - "config/runtime-retry-adjudications/**"
+      - "tests/test_runtime_v2_legislative_recovery.py"
+      - "migrations/20260901_runtime_v2.sql"
+      - "migrations/20260904_runtime_v2_mode_quarantine.sql"
+      - "deploy/runtime-v2/**"
+      - "docs/runtime-v2/phase3/**"
+      - "requirements-runtime-v2.txt"
+      - "tests/test_runtime_v2.py"
+      - "tests/test_personal_reviews.py"
+      - "tests/test_operations.py"
+      - "tests/test_runtime_v2_atomic_commit.py"
+      - "tests/test_runtime_v2_shadow_mode.py"
+      - "tests/test_runtime_v2_bootstrap_safety.py"
+      - "tests/test_runtime_v2_database.py"
+      - "tests/test_runtime_v2_provenance.py"
+      - "tests/test_runtime_v2_mode_quarantine.py"
+      - "tests/test_runtime_v2_terraform_safety.py"
+      - "tests/test_runtime_v2_scheduler_concurrency.py"
+      - "tests/test_runtime_v2_phase3_receipts.py"
+      - "tests/test_phase3_cloud_discovery.py"
+      - "tests/test_phase3_gcp_auth_inventory.py"
+      - "tests/test_phase3_wif_bootstrap.py"
+      - "tests/test_phase3_execution_identities.py"
+      - "tests/test_phase3_terraform_plan.py"
+      - "tests/test_phase3_prepare_apply_plan.py"
+      - "tests/test_phase3_apply_saved_plan.py"
+      - "tests/test_phase3_data_plane_audit.py"
+      - "tests/test_phase3_admin_status_diagnose.py"
+      - "tests/test_phase3_admin_failure_diagnostic_v2.py"
+      - "tests/test_phase3_current_state_acceptance.py"
+      - "tests/test_phase3_harvest_current_status.py"
+      - "tests/test_phase3_reconcile_private_ip_acceptance.py"
+      - "tests/test_phase3_runtime_image_routing_diagnostic.py"
+      - "tests/test_phase3_build_current_runtime_image.py"
+      - "tests/test_phase3_build_current_runtime_image_v2.py"
+      - "tests/test_phase3_bootstrap_builder_build_identity.py"
+      - "tests/test_phase3_harvest_current_runtime_build.py"
+      - "tests/test_phase3_rollout_current_image_acceptance.py"
+      - "tests/test_dashboard_insights.py"
+      - ".github/workflows/phase3_cloud_discovery.yml"
+      - ".github/workflows/phase3_gcp_auth_inventory.yml"
+      - ".github/workflows/phase3_terraform_plan.yml"
+      - ".github/workflows/phase3_prepare_apply_plan.yml"
+      - ".github/workflows/phase3_apply_saved_plan.yml"
+      - ".github/workflows/phase3_data_plane_audit.yml"
+      - ".github/workflows/phase3_admin_status_diagnose.yml"
+      - ".github/workflows/phase3_admin_failure_diagnostic_v2.yml"
+      - ".github/workflows/phase3_current_state_acceptance.yml"
+      - ".github/workflows/phase3_harvest_current_status.yml"
+      - ".github/workflows/phase3_diagnose_current_status.yml"
+      - ".github/workflows/phase3_reconcile_private_ip_acceptance.yml"
+      - ".github/workflows/phase3_runtime_image_routing_diagnostic.yml"
+      - ".github/workflows/phase3_build_current_runtime_image.yml"
+      - ".github/workflows/phase3_build_current_runtime_image_v2.yml"
+      - ".github/workflows/phase3_bootstrap_builder_build_identity.yml"
+      - ".github/workflows/phase3_harvest_current_runtime_build.yml"
+      - ".github/workflows/phase3_rollout_current_image_acceptance.yml"
+      - ".github/workflows/phase4_recover_exact_history.yml"
+
+### source_ocr_tests.yml
+name: Source upload and OCR tests
+
+on:
+  pull_request:
+    paths:
+      - 'runtime_v2/**'
+      - 'scripts/source_ocr*.py'
+      - 'scripts/oge*.py'
+      - 'scripts/dashboard_insights.py'
+      - 'scripts/government_trade_tracker_core.py'
+      - 'scripts/build_trade_dashboard.py'
+      - 'scripts/dashboard_assets/**'
+      - 'tests/test_source_ocr*.py'
+      - 'tests/test_oge_disclosures.py'
+      - 'tests/fixtures/source-ocr/**'
+      - 'tests/source_ocr_browser_preview.py'
+      - 'tests/source_ocr_health.test.cjs'
+      - 'requirements*.txt'
+      - '.github/workflows/source_ocr_tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime_v2/**'
+      - 'scripts/source_ocr*.py'
+      - 'scripts/oge*.py'
+      - 'scripts/dashboard_insights.py'
+      - 'scripts/government_trade_tracker_core.py'
+      - 'scripts/build_trade_dashboard.py'
+      - 'scripts/dashboard_assets/**'
+      - 'tests/test_source_ocr*.py'
+      - 'tests/test_oge_disclosures.py'
+      - 'tests/fixtures/source-ocr/**'
+      - 'tests/source_ocr_browser_preview.py'
+      - 'tests/source_ocr_health.test.cjs'
+      - 'requirements*.txt'
+      - '.github/workflows/source_ocr_tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUNTIME_V2_TEST_POSTGRES: '1'
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: runtime-v2-test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install OCR and application test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr poppler-utils
+          python -m pip install --requirement requirements-runtime-v2.txt
+          python -m playwright install --with-deps chromium
+      - name: Compile and run intake, OCR and preservation tests
+        run: |
+          python -m compileall -q runtime_v2 scripts/source_ocr.py
+          node --check scripts/dashboard_assets/source-ocr.js
+          node --test tests/source_ocr_health.test.cjs

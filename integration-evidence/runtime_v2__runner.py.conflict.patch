@@ -1,0 +1,33 @@
+diff --cc runtime_v2/runner.py
+index 2efb9a1,71580af..0000000
+--- a/runtime_v2/runner.py
++++ b/runtime_v2/runner.py
+@@@ -344,24 -444,11 +447,26 @@@ class JobRunner
+              run_id = locked.start_run(
+                  "ai", trigger, self.source_revision, self.mode.value
+              )
+-             side_effects_possible = False
+              try:
+                  command = self._ai_command(legislative, executive, ai_dir, workspace)
+-                 side_effects_possible = not self.mode.is_shadow
+                  self._execute(command)
+                  state = _require_success_state(ai_dir)
+++<<<<<<< HEAD
+ +                if self._env().get("OPPORTUNITY_MODE") == "live" and not self._alerts_suppressed():
+ +                    from scripts.opportunity_runtime import deliver_runtime, analyst_config
+ +                    def checkpoint():
+ +                        nonlocal parent
+ +                        _require_success_state(ai_dir)
+ +                        parent = locked.commit(
+ +                            ai_dir, expected_parent_sha256=parent.snapshot_sha256,
+ +                            source_revision=self.source_revision,
+ +                            provenance={"authority": "runtime_v2", "job": "ai", "mode": self.mode.value,
+ +                                        "trigger_source": trigger, "phase": "opportunity_delivery_checkpoint"},
+ +                        )
+ +                    deliver_runtime(analyst_config(command, self._env()), self._env(), checkpoint)
+++=======
++                 notification_options, notification_provenance = self._notification_commit_options(outbox, "ai")
+++>>>>>>> 75cb399ea870a77069911c80f3bfe0b788475fd9
+                  snapshot = locked.commit(
+                      ai_dir,
+                      expected_parent_sha256=parent.snapshot_sha256,

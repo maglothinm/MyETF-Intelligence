@@ -1,0 +1,17 @@
+{
+  "repository_id": 1349678672,
+  "main": "75cb399ea870a77069911c80f3bfe0b788475fd9",
+  "head": "eb0747a7d61624f1f0a6424f4d3f265999f0b31d",
+  "merge_base": "061b8a4dda7f6c0940e8d3f92c6aed3dbb957f0f",
+  "merge_returncode": 1,
+  "merge_stdout": "Auto-merging docs/DECISIONS.md\nCONFLICT (content): Merge conflict in docs/DECISIONS.md\nAuto-merging docs/HANDOFF.md\nCONFLICT (content): Merge conflict in docs/HANDOFF.md\nAuto-merging runtime_v2/runner.py\nCONFLICT (content): Merge conflict in runtime_v2/runner.py\nAuto-merging runtime_v2/store.py\nAuto-merging scripts/ai_filing_analyst_hardened.py\nCONFLICT (content): Merge conflict in scripts/ai_filing_analyst_hardened.py\nAuto-merging scripts/build_trade_dashboard.py\nAuto-merging scripts/dashboard_assets/index.html\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+  "merge_stderr": "",
+  "conflicts": [
+    "docs/DECISIONS.md",
+    "docs/HANDOFF.md",
+    "runtime_v2/runner.py",
+    "scripts/ai_filing_analyst_hardened.py"
+  ],
+  "run_id": "35439271675",
+  "production_access": false
+}

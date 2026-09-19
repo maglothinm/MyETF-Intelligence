@@ -1,0 +1,69 @@
+diff --cc scripts/ai_filing_analyst_hardened.py
+index 5bde62a,7907e1e..0000000
+--- a/scripts/ai_filing_analyst_hardened.py
++++ b/scripts/ai_filing_analyst_hardened.py
+@@@ -510,13 -510,35 +519,45 @@@ def _deliver_pending_candidate_alerts
+  
+      if config.suppress_alerts:
+          return
+++<<<<<<< HEAD
+ +    if opportunity_live:
+ +        analyses = {str(r.get("analysis_id")): r for r in legacy.read_jsonl(config.ai_dir / "analyses.jsonl")}
+ +        for delivery in state.candidate_alert_deliveries.values():
+ +            analysis = analyses.get(str(delivery.get("analysis_id"))) or {}
+ +            if analysis.get("signal_direction") not in {"bearish", "neutral"}:
+ +                delivery["opportunity_superseded"] = "primary bullish alerts now require Current Opportunity gates"
+ +        legacy.save_state(state_path, state)
+++=======
++     try:
++         from .runtime_notifications import deferred, record_key, stage_notification
++     except ImportError:
++         from runtime_notifications import deferred, record_key, stage_notification
++     if deferred():
++         try:
++             from .investor_notifications import runtime_recipient
++         except ImportError:
++             from investor_notifications import runtime_recipient
++         email_recipient = runtime_recipient()
++         for delivery in state.candidate_alert_deliveries.values():
++             alert = delivery.get("alert") or {}
++             if not isinstance(alert, Mapping):
++                 raise FatalAnalystConfigurationError("Invalid queued candidate alert")
++             key = record_key("candidate", delivery.get("trade_id", ""), delivery.get("analysis_id", ""), delivery.get("analysis_revision", 1))
++             queued = dict(delivery.get("runtime_queued_channels") or {})
++             for channel in sorted(_pending_channels(delivery)):
++                 stage_notification(channel=channel, key=key, filed_date=str(delivery.get("filed_date") or ""), payload={
++                     "title": str(alert.get("title") or "PolitiTrack candidate")[:250],
++                     "message": str(alert.get("message") or ""),
++                     "url": str(alert.get("url") or delivery.get("source_url") or ""),
++                     "url_title": "Open PolitiTrack analysis",
++                     **({"recipient": delivery.get("gmail_recipient") or email_recipient} if channel == "gmail" and (delivery.get("gmail_recipient") or email_recipient) else {}),
++                 })
++                 queued[channel] = key
++             delivery["runtime_queued_channels"] = queued
++         legacy.save_state(state_path, state)
++         _checkpoint_result(config, result)
++         return
+++>>>>>>> 75cb399ea870a77069911c80f3bfe0b788475fd9
+      pending_ids = [
+          delivery_id
+          for delivery_id in sorted(state.candidate_alert_deliveries)
+@@@ -1202,9 -1205,16 +1243,17 @@@ def run_analyst
+              )
+  
+          if not result.errors:
++             try:
++                 from .investor_notifications import stage_profile_alerts
++             except ImportError:
++                 from investor_notifications import stage_profile_alerts
++             if investor_edge is not None and final_maintenance_ok is True:
++                 stage_profile_alerts(config.ai_dir, getattr(investor_edge, "profiles", {}),
++                                      dashboard_url=config.dashboard_url,
++                                      suppress_alerts=config.suppress_alerts)
+              _deliver_pending_candidate_alerts(
+ -                config, result, state, state_path
+ +                config, result, state, state_path,
+ +                opportunity_live=opportunity is not None and opportunity.rules["mode"] == "live",
+              )
+          return _finish_analyst_run(config, result, state, state_path)
+      except Exception as exc:  # Unscoped failures are state-integrity failures.
