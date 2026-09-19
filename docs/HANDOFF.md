@@ -1,19 +1,23 @@
 # PolitiTrack active handoff
 
-## Current Opportunity purchase threshold — source implementation (#197)
+## Current Opportunity purchase threshold — production blocked (#197)
 
-The owner authorized implementation followed by production activation. The
-per-purchase threshold classifies prior crossings rather than endpoint returns,
-with configurable 8% default, preserved positive evidence, explicit unknown
-coverage and compact UI/filter plus purchase-level CSV/JSON provenance. It does
-not alter the four opportunity gates or paper trading. Source defaults stay off.
-See [feature and activation gates](PURCHASE_GAIN_THRESHOLD.md).
+The owner authorized implementation followed by production activation. PR #199
+carries the implemented per-purchase crossing history, configurable 8% default,
+explicit incomplete-data states, compact filter and purchase CSV/JSON exports.
+Existing buying/entry/evidence/data gates and paper trading remain unchanged.
+Source/CI/merge receipts are retained in the PR; approval is already recorded.
 
-Implementation is isolated on `codex/never-crossed-threshold-20260919` from
-`2f90ad7f04bfae657cbbbf3780ab75f0be9cf077`. Initial local feature tests pass; final
-CI, merge and deployment evidence are pending. The #182/#196 Executive-only
-recovery below retains production ownership; do not start a competing controller
-or rewrite its journals. No production configuration/state is changed by #197.
+A read-only check of the production AI credentials at September 19, 17:35:42 UTC
+received a valid Finnhub quote but **no Alpha Vantage daily history**: the
+required `TIME_SERIES_DAILY_ADJUSTED` endpoint returned a premium-access notice.
+This blocks trustworthy price-path evaluation and live activation. Current
+Opportunity remains off; no provider capability is fabricated and no paid
+subscription is purchased. The Executive-only recovery journal separately
+reported complete with schedules restored; this is not proof that the later
+OCR continuation or this feature is deployed. Refresh its ownership before
+any release. See [readiness evidence](releases/2026-09-19-purchase-threshold.md)
+and [feature/runbook](PURCHASE_GAIN_THRESHOLD.md).
 
 ## Authorized PDF/Senate OCR release — September 19 (#182)
 
