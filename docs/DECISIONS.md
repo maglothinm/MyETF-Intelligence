@@ -1493,3 +1493,22 @@ regression exercises initial readiness plus stale search/page draws. This fixes
 the application defect reproduced during the failed release; it does not explain
 the earlier, independently observed upstream TCP interruption or waive deployment
 health, state preservation, owner review or acceptance requirements.
+
+## D-2026-09-19-007 — Execute the owner's one-time Executive repair exception
+
+The owner explicitly approved an Executive-only repair with OCR disabled, followed
+by normal activation and acceptance. Bind it to tested source `77aadf541b034072f58dba5e7107c2c8e8ba4bd1`
+and built digest `6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`.
+Permit the known latest Executive failure only as an honestly retained incident
+baseline; require every other producer to be successful and all current snapshot
+hashes/chains, history, accounts and outbox to remain valid. Pause/drain under the
+original lock, change only Executive image/source with OCR off, execute the
+canonical writer, and verify its new successful snapshot and preserved evidence.
+Unknown submissions are never resubmitted. No other resource may be updated by
+this phase. Failed recovery stays closed with OCR off and restored schedules.
+
+The succeeding OCR activation is a separate sealed continuation using the
+unchanged successful-latest-run and complete acceptance checks. Preserve all five
+older journals and seal the completed incident by its explicit SHA-256. No state
+reset, successful-run relabeling, old-snapshot substitution, duplicate writer or
+automatic owner row confirmation is authorized.

@@ -53,12 +53,15 @@ That source fix is built, not deployed. Independent `polititrack-admin-c6wmp`
 confirmed both Senate transitions, unchanged seven-attempt history, no retry
 timers, preserved OCR ledger and the original House upload awaiting review.
 
-Next: obtain specific approval for the concrete Executive-only incident recovery
-in the release report, keeping OCR off and preserving the failed run. The existing
-successful-latest-run gate otherwise prevents installing the collector correction.
-After actual authoritative recovery, a new OCR continuation must still pass a
-fresh successful baseline and full acceptance. No gate exception or production
-source-recovery action has been taken. Current Opportunity stays off; the original House
+The owner explicitly approved the one-time Executive-only repair with OCR disabled,
+followed by normal activation and acceptance. The new reviewed procedure
+`scripts/ocr_executive_recovery_release.py` binds that exception to the exact
+built source/image and seals all five closed attempts. It changes only Executive,
+requires independent incident preservation and genuine authoritative recovery,
+then seals the successful incident before a separate ordinary OCR continuation.
+That continuation retains the original successful-baseline and acceptance code.
+Procedure tests and deployment are in progress. No source-recovery action has
+yet been taken. Current Opportunity stays off; the original House
 upload still requires owner review. [Evidence](releases/2026-09-19-senate-pdf-release.md).
 
 ## Historical OGE diagnosis — September 19, 12:23 UTC (#182)
