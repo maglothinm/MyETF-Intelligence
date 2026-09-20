@@ -91,6 +91,67 @@ def test_blocked_access_retries_with_backoff_without_rewriting_history(tmp_path)
     run_pass(directory,"legislative",ENV,loader=lambda *_:pytest.fail("retry backoff ignored"))
 
 
+@pytest.mark.parametrize("future", [False, True])
+def test_due_technical_retry_precedes_untouched_history_without_bypassing_backoff(tmp_path, future):
+    directory = source_state(tmp_path)
+    untouched = {**FILING, "filing_key": "house:untouched", "report_id": "untouched"}
+    tracker.append_jsonl(directory / "filings.jsonl", [untouched])
+    prior = {"filing_key": FILING["filing_key"], "source_url": FILING["source_url"], "version": VERSION,
+             "status": "retry_delayed", "error_code": "incomplete_page_ocr", "attempts": 1,
+             "attempted_at": "2026-09-19T00:00:00Z",
+             "next_attempt_at": "2099-01-01T00:00:00Z" if future else "2020-01-01T00:00:00Z"}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    prefix = (directory / "source-ocr.jsonl").read_bytes()
+    loaded = []
+    def loader(row, config):
+        loaded.append(row["filing_key"])
+        return b"test"
+    run_pass(directory, "legislative", {**ENV, "RUNTIME_SOURCE_OCR_FILES_PER_RUN": "1"},
+             loader=loader, extractor=lambda *a, **k: evidence())
+    assert loaded == [untouched["filing_key"] if future else FILING["filing_key"]]
+    assert (directory / "source-ocr.jsonl").read_bytes().startswith(prefix)
+
+
+def test_new_filing_precedes_due_retry_then_oldest_due_retry_leads(tmp_path):
+    directory = source_state(tmp_path)
+    new = {**FILING, "filing_key": "house:new", "report_id": "new",
+           "first_seen_utc": datetime.now(timezone.utc).isoformat()}
+    newer_retry = {**FILING, "filing_key": "house:newer-retry", "report_id": "newer-retry"}
+    tracker.append_jsonl(directory / "filings.jsonl", [new, newer_retry])
+    for filing, stamp in [(FILING, "2020-01-01T00:00:00Z"), (newer_retry, "2020-01-02T00:00:00Z")]:
+        tracker.append_jsonl(directory / "source-ocr.jsonl", [{"filing_key": filing["filing_key"],
+            "source_url": filing["source_url"], "version": VERSION, "status": "retry_delayed",
+            "attempted_at": stamp, "next_attempt_at": "2020-01-03T00:00:00Z"}])
+    loaded = []
+    def loader(row, config):
+        loaded.append(row["filing_key"])
+        return row["filing_key"].encode()
+    run_pass(directory, "legislative", {**ENV, "RUNTIME_SOURCE_OCR_FILES_PER_RUN": "2"},
+             loader=loader, extractor=lambda data, **k: evidence(data))
+    assert loaded == [new["filing_key"], FILING["filing_key"]]
+
+
+def test_completed_no_text_page_is_review_not_retry_or_partial_import(tmp_path):
+    directory = source_state(tmp_path)
+    before = {p.name: p.read_bytes() for p in directory.iterdir()}
+    health = {}
+    partial = {**evidence(), "page_count": 2, "completed_pages": [1, 2], "empty_ocr_pages": [2]}
+    run_pass(directory, "legislative", ENV, loader=lambda *_: b"test",
+             extractor=lambda *a, **k: partial, health=health)
+    receipt = tracker.read_jsonl(directory / "source-ocr.jsonl")[-1]
+    assert receipt["status"] == "needs_review"
+    assert receipt["error_code"] == "unreadable_page_needs_review"
+    assert "next_attempt_at" not in receipt
+    assert health["documents_completed"] == 1 and health["pages_completed"] == 2
+    assert health["retry_remaining"] == 0 and health["review_remaining"] == 1
+    assert not (directory / "transactions.jsonl").exists()
+    for name, content in before.items():
+        assert (directory / name).read_bytes() == content
+    from runtime_v2.source_ocr_worker import _parse
+    with pytest.raises(OCRError, match="unreadable_page_needs_review"):
+        _parse(FILING, partial, [ROW])
+
+
 def test_old_pdf_rejection_retries_once_without_invalidating_successful_evidence(tmp_path):
     directory = source_state(tmp_path)
     rejected = {"filing_key": FILING["filing_key"], "source_url": FILING["source_url"], "version": VERSION,

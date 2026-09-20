@@ -1,5 +1,34 @@
 # PolitiTrack active handoff
 
+## Active: OCR page completion and overdue retries (#203)
+
+Owner request: check OCR services and fix. Source is based on canonical main
+`2404ca2347e703b5699b31efbbcc56027d44fb37`, repository ID 1349678672.
+Branch: `codex/ocr-page-retry-repair-20260920`. Source/test repair is prepared;
+production remains on the accepted September 19 image. No live write occurred.
+
+The 12:04:33 UTC published snapshot has successful collectors/AI but 18 overdue
+OCR retry receipts (15 House page-coverage failures, three Executive errors).
+The actual four-page 8220754 PDF reproduces incomplete combined Tesseract TSV
+coverage. Explicit per-page bounded calls complete 4/4; a second failing filing
+20034351 completes 3/3. Unsupported layouts/disagreement stay review-required.
+No-text pages cannot enter automatic or owner-confirmed partial import. Due
+retries now precede historical work without changing backoff or alert behavior.
+Local verification: 346 passed, 22 integration skips, four Node checks passed;
+focused subset 83 passed, 5 skips. Exact-head CI remains pending.
+
+**Blocker:** Remote Desktop Commander reports no devices available. Reconnect
+Beast/the existing authenticated release environment. Do not extract credentials,
+reactivate legacy workflows, weaken release gates, replay a closed journal,
+reset receipts or auto-approve the original House upload. Once connected, verify
+current ownership/configuration and use a fresh sealed release successor with
+the new tested source, fresh preservation baseline and independent acceptance.
+Keep #203 open until deployed and published retry outcomes are verified; #182's
+owner correction/import acceptance is separate. See
+[evidence and release checklist](releases/2026-09-20-ocr-page-retry-repair.md).
+
+Earlier task checkpoints follow; they are not authorization to replay a release.
+
 ## Current Opportunity purchase threshold — production blocked (#197)
 
 The owner authorized implementation followed by production activation. PR #199

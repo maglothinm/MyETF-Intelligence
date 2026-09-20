@@ -1559,3 +1559,21 @@ changed. Permission denials, other authentication errors, job failures, timeouts
 mutations and submissions keep their original behavior. The rejected token's
 underlying issuance cause is not established; it is distinct from both the earlier
 OGE TCP interruption and the repaired Playwright polling defect.
+
+## D-2026-09-20-001 - Bind OCR completion to physical pages; service due retries (#203)
+
+Use explicit single-page Tesseract invocations under one document-wide OCR
+deadline and cumulative output bounds. Combined image-list TSV coverage can
+omit a page even when the engine logs processing all inputs. Retain each physical
+page number and require successful execution plus valid output per page. A
+no-text result is preserved as review evidence, not inferred blank content or
+automatic partial transaction acceptance. Missing/malformed output and failed
+processes remain technical failures. Existing validated caches and pending owner
+confirmations retain extractor version/identity; no global reprocessing occurs.
+
+Prioritize due technical retry receipts after uploads/new filings but before
+parser failures/untouched history, oldest attempt first; preserve backoff and
+request-only access restrictions. Do not suppress the health failure merely
+because the latest batch succeeded. All updates use the existing canonical
+producer and append-only snapshot/receipt path. Source tests are not live release
+or backlog-recovery proof; deployment requires the established preservation gates.

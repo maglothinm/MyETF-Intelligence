@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -244,8 +245,61 @@ def house_rows(images, words: list[dict[str, Any]]) -> dict[str, Any]:
     return {"recognized": bool(form_groups), "rows": rows, "problems": sorted(set(problems))}
 
 
+def _ocr_pages(paths, root, timeout, environment):
+    """Bind each successful engine call to one physical page, including no-text pages.
+
+    Tesseract's multi-image TSV omits pages with no recognized text and may
+    renumber subsequent pages. A per-page invocation prevents those omissions
+    from shifting word coordinates onto the wrong source page. Missing output,
+    malformed coverage and process failures still reject the whole document.
+    """
+    deadline = time.monotonic() + timeout
+    texts, words, empty_pages = [], [], []
+    text_bytes = tsv_bytes = 0
+    required = {"level", "page_num", "left", "top", "width", "height", "conf", "text"}
+    for number, path in enumerate(paths, 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise OCRError("ocr_engine_failed")
+        output = root / f"result-{number}"
+        try:
+            subprocess.run(["tesseract", str(path), str(output), "-l", "eng", "--psm", "11", "txt", "tsv"],
+                           check=True, timeout=remaining, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           env=environment, cwd=root)
+        except (subprocess.SubprocessError, OSError):
+            raise OCRError("ocr_engine_failed") from None
+        try:
+            text_path, tsv_path = output.with_suffix(".txt"), output.with_suffix(".tsv")
+            text_bytes += text_path.stat().st_size
+            tsv_bytes += tsv_path.stat().st_size
+            if text_bytes > 8_000_000 or tsv_bytes > 12_000_000:
+                raise OCRError("ocr_output_limit")
+            text, tsv = text_path.read_text(encoding="utf-8"), tsv_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            raise OCRError("incomplete_page_ocr") from None
+        reader = csv.DictReader(io.StringIO(tsv), delimiter="\t")
+        if not required.issubset(reader.fieldnames or []):
+            raise OCRError("incomplete_page_ocr")
+        rows = list(reader)
+        headers = [row for row in rows if row.get("level") == "1"]
+        if (any(row.get("page_num") != "1" for row in rows) or len(headers) > 1
+                or (not headers and (rows or text.strip()))):
+            raise OCRError("incomplete_page_ocr")
+        page_words = read_tsv(tsv)
+        if not page_words:
+            empty_pages.append(number)
+        words.extend({**word, "page_num": number} for word in page_words)
+        texts.append(text)
+        if len(words) > 100_000:
+            raise OCRError("ocr_word_limit")
+    text = "\f".join(texts)
+    if len(text) > 2_000_000:
+        raise OCRError("ocr_output_limit")
+    return text, words, empty_pages
+
+
 def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> dict[str, Any]:
-    """One bounded Tesseract process for the complete document; no silent truncation."""
+    """Bounded complete-document OCR; every rendered page is explicitly attempted."""
     try:
         from .source_ocr_limits import inspect_bounded, decoder_environment
     except ImportError:
@@ -274,22 +328,7 @@ def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> d
         if len(paths) != info["pages"]:
             raise OCRError("incomplete_page_render")
         # No generated file or model result can inject a command; shell=False.
-        (root / "pages.txt").write_text("\n".join(str(path) for path in paths), encoding="utf-8")
-        try:
-            subprocess.run(["tesseract", str(root / "pages.txt"), str(root / "result"), "-l", "eng", "--psm", "11", "txt", "tsv"],
-                           check=True, timeout=timeout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=decoder_environment(), cwd=root)
-        except (subprocess.SubprocessError, OSError):
-            raise OCRError("ocr_engine_failed") from None
-        if (root / "result.txt").stat().st_size > 8_000_000 or (root / "result.tsv").stat().st_size > 12_000_000:
-            raise OCRError("ocr_output_limit")
-        text = (root / "result.txt").read_text(encoding="utf-8")
-        tsv = (root / "result.tsv").read_text(encoding="utf-8")
-        if len(text) > 2_000_000 or len(tsv) > 12_000_000:
-            raise OCRError("ocr_output_limit")
-        page_ids = {int(row["page_num"]) for row in csv.DictReader(io.StringIO(tsv), delimiter="\t") if row.get("level") == "1"}
-        if page_ids != set(range(1, info["pages"] + 1)):
-            raise OCRError("incomplete_page_ocr")
-        words = read_tsv(tsv)
+        text, words, empty_pages = _ocr_pages(paths, root, timeout, decoder_environment())
         images = [Image.open(path) for path in paths]
         try:
             table = house_rows(images, words)
@@ -299,5 +338,6 @@ def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> d
         return {"version": VERSION, "sha256": hashlib.sha256(data).hexdigest(),
                 "format": info["format"], "page_count": info["pages"],
                 "completed_pages": list(range(1, info["pages"] + 1)), "ocr_completed_at": now(),
+                "empty_ocr_pages": empty_pages,
                 "native_pages": info["native_pages"], "ocr_text": text, "words": words,
-                "house_table": table, "ocr_status": "complete" if words else "needs_review"}
+                "house_table": table, "ocr_status": "complete" if words and not empty_pages else "needs_review"}

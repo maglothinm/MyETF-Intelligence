@@ -1,5 +1,35 @@
 # PolitiTrack project state
 
+## September 20 OCR page/retry repair - source prepared, not deployed (#203)
+
+The published 12:04:33 UTC snapshot shows successful Legislative, Executive and
+AI producers, but 18 technical OCR retries: 15 House `incomplete_page_ocr` and
+three OGE transport/library errors. All retry times had elapsed; untouched
+history sorted before earlier attempts. The latest batches completed 5/5 and
+20/20 pages respectively, so this is degraded document processing, not a stopped
+collector or website outage.
+
+Reproduced `incomplete_page_ocr` on official four-page House filing 8220754:
+Tesseract logged all four inputs but its combined TSV had only three page
+headers. Source repair explicitly invokes each page under one OCR deadline and
+cumulative output limits, preserves physical page coordinates and treats no-text
+pages as review evidence, never automatic partial import. Due technical retries
+now precede untouched history while preserving backoff, upload/new-file priority,
+official access restrictions, successful caches and owner confirmations.
+
+Local focused checks: 83 passed, 5 integration skips. Broader OCR/runtime suite:
+346 passed, 22 environment-dependent skips; four Node health checks passed.
+Real extraction now completed 4/4 pages for 8220754 and 3/3 for 20034351; both
+remain conservatively review-required for layout/text disagreement. No document
+was imported into production. Exact-head CI and live release remain pending.
+
+Deployment is blocked because Remote Desktop Commander reports no connected
+device. No Cloud Run image, schedule, database, snapshot, upload or health state
+was changed. Reconnect the existing authenticated deployment device, use a fresh
+reviewed successor of the accepted September 19 release, and independently verify
+preservation, retry progress and published health before claiming recovery.
+[Diagnosis and acceptance plan](releases/2026-09-20-ocr-page-retry-repair.md).
+
 ## Current Opportunity purchase threshold — production blocked (#197)
 
 The owner authorized implementation followed by production activation. PR #199
