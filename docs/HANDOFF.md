@@ -4,7 +4,7 @@
 
 Owner request: check OCR services and fix. Source is based on canonical main
 `2404ca2347e703b5699b31efbbcc56027d44fb37`, repository ID 1349678672.
-Branch: `codex/ocr-page-retry-repair-20260920`. Source/test repair is prepared;
+Branch: `codex/ocr-page-retry-repair-20260920`, PR #204. Source/test repair is prepared;
 production remains on the accepted September 19 image. No live write occurred.
 
 The 12:04:33 UTC published snapshot has successful collectors/AI but 18 overdue
@@ -15,10 +15,25 @@ coverage. Explicit per-page bounded calls complete 4/4; a second failing filing
 No-text pages cannot enter automatic or owner-confirmed partial import. Due
 retries now precede historical work without changing backoff or alert behavior.
 Local verification: 346 passed, 22 integration skips, four Node checks passed;
-focused subset 83 passed, 5 skips. Exact-head CI remains pending.
+focused subset 83 passed, 5 skips. Exact source head
+`ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed OCR `35510220534`, Runtime
+safety `35510220533`, and Current Opportunity offline `35510220529`. Unmerged.
 
-**Blocker:** Remote Desktop Commander reports no devices available. Reconnect
-Beast/the existing authenticated release environment. Do not extract credentials,
+**Current blocker:** Beast is connected (device
+`2cf9a73a-facb-4848-88c6-52344ff96055`); Google Cloud reads work using the existing
+sign-in. The live web revision is `polititrack-web-00055-ktr` on the accepted
+September 19 image. Cloud Shell SSH through the new local tunnel refused host
+trust confirmation in batch mode. The existing local SSH key was selected, not
+created or modified; no host key was accepted and no SSH command ran. The CLI's
+three automatic connection attempts ended with exit 1. Its `--ssh-key-file`
+option also has a local argument/type defect; passing the existing key through
+`--ssh-flag=-i` reached the host verification boundary, not a successful session.
+
+Next: ask the owner to run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`
+inside the trusted Google Cloud Console Cloud Shell and share the public
+fingerprint. Independently verify it before pinning a new connection; do not
+disable host checks or blindly accept the observed network key.
+Do not extract credentials,
 reactivate legacy workflows, weaken release gates, replay a closed journal,
 reset receipts or auto-approve the original House upload. Once connected, verify
 current ownership/configuration and use a fresh sealed release successor with

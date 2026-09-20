@@ -1,6 +1,6 @@
 # OCR page completion and overdue retries - issue #203
 
-Status: source prepared and locally verified; not deployed.
+Status: source and canonical CI verified; PR #204 unmerged and not deployed.
 Repository: `maglothinm/MyETF-Intelligence`, ID `1349678672`.
 Baseline main: `2404ca2347e703b5699b31efbbcc56027d44fb37`.
 
@@ -67,7 +67,11 @@ unchanged. Health remains degraded while actual technical retries exist.
 - Real Tesseract synthetic no-text middle page retains page 3 coordinates and
   flags review; missing/malformed/failed output, shared deadline, cumulative size,
   retry ordering/backoff and no-partial-import tests pass.
-- `git diff --check` passed. Exact-head canonical CI still required.
+- `git diff --check` passed. Exact source head
+  `ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed canonical OCR
+  [35510220534](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510220534),
+  Runtime safety [35510220533](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510220533),
+  and Current Opportunity offline [35510220529](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510220529).
 
 The local environment's initial NumPy install failed on import; reinstalling the
 same pinned version repaired the test environment. No application requirement
@@ -75,10 +79,24 @@ or production dependency was changed for that incidental failure.
 
 ## Deployment boundary and next safe action
 
-Remote Desktop Commander reports no connected deployment device. This session
-did not read private cloud/database state or change any live image, schedule,
-upload, account, acknowledgement, snapshot, alert or OCR receipt. The September
-19 release remains the deployed authority; its immutable journals must stay closed.
+The original source-repair session was blocked by an offline deployment device.
+On reconnect, Beast and its existing Google Cloud sign-in were verified. A
+read-only service description confirmed revision `polititrack-web-00055-ktr`
+still uses accepted image
+`sha256:6be7d1e5236746d02d872303fa6192c29a824d0f55178df33a51c343eb0f18de`.
+The source PR is still open, and no production image, schedule, database, upload,
+account, acknowledgement, snapshot, alert or OCR receipt was changed.
+
+Cloud Shell was started through the normal Google CLI. SSH using the existing
+local key stopped at an uncached host-key confirmation, which batch mode refused.
+No key was accepted and no remote command executed. The CLI's three automatic
+attempts ended with exit 1. Do not suppress this check or blindly trust a key
+seen on the network. Ask the owner to obtain the public ED25519 fingerprint
+inside the trusted Google Cloud Console Cloud Shell with
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, then compare it before pinning
+the connection. The September 19 release remains the deployed authority; its
+immutable journals must stay closed. Current private heads, release ownership,
+schedules and retry outcomes have not yet been revalidated in this continuation.
 
 After reconnecting the existing authenticated deployment environment:
 
