@@ -4,8 +4,10 @@
 
 Owner request: check OCR services and fix. Source is based on canonical main
 `2404ca2347e703b5699b31efbbcc56027d44fb37`, repository ID 1349678672.
-Branch: `codex/ocr-page-retry-repair-20260920`, PR #204. Source/test repair is prepared;
-production remains on the accepted September 19 image. No live write occurred.
+PR #204 merged at `aba0285689d649d94e3e11444b582c748927bbc4`, identical to tested
+PR tree `1ed514667bbd40aed9413427c129192e4ad2590e`. Active procedure branch:
+`codex/ocr-page-retry-release-20260920`. Production remains on the accepted
+September 19 image. No production write occurred.
 
 The 12:04:33 UTC published snapshot has successful collectors/AI but 18 overdue
 OCR retry receipts (15 House page-coverage failures, three Executive errors).
@@ -17,22 +19,27 @@ retries now precede historical work without changing backoff or alert behavior.
 Local verification: 346 passed, 22 integration skips, four Node checks passed;
 focused subset 83 passed, 5 skips. Exact source head
 `ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed OCR `35510220534`, Runtime
-safety `35510220533`, and Current Opportunity offline `35510220529`. Unmerged.
+safety `35510220533`, and Current Opportunity offline `35510220529`. Final PR
+head also passed OCR `35510840684`, Runtime `35510840687`, and Current Opportunity
+`35510840685` before merge.
 
-**Current blocker:** Beast is connected (device
-`2cf9a73a-facb-4848-88c6-52344ff96055`); Google Cloud reads work using the existing
-sign-in. The live web revision is `polititrack-web-00055-ktr` on the accepted
-September 19 image. Cloud Shell SSH through the new local tunnel refused host
-trust confirmation in batch mode. The existing local SSH key was selected, not
-created or modified; no host key was accepted and no SSH command ran. The CLI's
-three automatic connection attempts ended with exit 1. Its `--ssh-key-file`
-option also has a local argument/type defect; passing the existing key through
-`--ssh-flag=-i` reached the host verification boundary, not a successful session.
+**Access restored:** owner independently supplied ED25519 fingerprint
+`SHA256:owVHUvlU3NLcXIoKVQESUl/C3z8/kvzvuzfcMiwjuLM`; pinned Cloud Shell SSH
+works with the existing local key. All six current resources match the accepted
+September 19 configurations, four schedules remain enabled, Vault paused and
+the controller lock is free. Accepted journal hash
+`54014b843890d0f845fe72e5c85c6750b444adaa21baa781fae210a491e34613` and the
+2,096 preceding sealed files match. Build `7e079133-a433-4d1d-beba-e32bfd2bce83`
+was submitted for source `aba0285689d649d94e3e11444b582c748927bbc4`.
 
-Next: ask the owner to run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`
-inside the trusted Google Cloud Console Cloud Shell and share the public
-fingerprint. Independently verify it before pinning a new connection; do not
-disable host checks or blindly accept the observed network key.
+The fresh wrapper `scripts/ocr_page_retry_release.py` seals all eight prior
+attempts and reuses the unchanged successful-baseline, state, account, submission,
+activation and acceptance gates. The separate read-only verifier compares old
+OCR receipts/extraction bytes, real due-retry attempts and the unchanged owner
+upload. Local controller/verifier tests: 172 passed. Next: verify canonical CI,
+build completion/digest, install checksum-verified new helpers without replacing
+old procedures, then prepare and execute the fresh successor. Independently
+verify retry progress after normal acceptance and a natural scheduled run.
 Do not extract credentials,
 reactivate legacy workflows, weaken release gates, replay a closed journal,
 reset receipts or auto-approve the original House upload. Once connected, verify

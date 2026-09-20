@@ -1,6 +1,6 @@
 # OCR page completion and overdue retries - issue #203
 
-Status: source and canonical CI verified; PR #204 unmerged and not deployed.
+Status: PR #204 merged; successor procedure prepared; not deployed.
 Repository: `maglothinm/MyETF-Intelligence`, ID `1349678672`.
 Baseline main: `2404ca2347e703b5699b31efbbcc56027d44fb37`.
 
@@ -116,3 +116,35 @@ After reconnecting the existing authenticated deployment environment:
 
 Keep #203 open until live recovery is verified. The original uploaded House
 document and separate owner correction/import acceptance in #182 are unchanged.
+
+## Verified reconnection and release preparation
+
+The owner independently supplied Cloud Shell's public ED25519 fingerprint
+`SHA256:owVHUvlU3NLcXIoKVQESUl/C3z8/kvzvuzfcMiwjuLM`. Pinning that exact key
+restored SSH using the existing local private key; no key or IAM change occurred.
+The earlier connection-blocker narrative is retained as history.
+
+Final PR #204 head `a430ed1658efad0ca430a04a657b88f0d9b41ca0` passed OCR
+`35510840684`, Runtime safety `35510840687`, and Current Opportunity offline
+`35510840685`. Merge `aba0285689d649d94e3e11444b582c748927bbc4` has the identical
+tested tree `1ed514667bbd40aed9413427c129192e4ad2590e` and is the pinned image source.
+Build `7e079133-a433-4d1d-beba-e32bfd2bce83` was submitted at 12:50:17 UTC.
+An earlier local CLI argument rejection submitted no build; an explicit empty
+build inventory was verified before the corrected submission.
+
+Read-only checks verified all six resources against their accepted configuration,
+the four enabled original schedules, paused Vault, free controller lock, accepted
+September 19 journal hash and all 2,096 preceding sealed files. A fresh wrapper
+extends the seal to the eighth accepted release, preserving its full records.
+It selects workspace `ocr-page-retry-aba0285689d6` under the original release root
+and reuses the unchanged normal lifecycle and read-only audit. Current Opportunity
+stays off. The existing additive schema initialization remains idempotent; this
+application repair introduces no schema change.
+
+Local controller and independent-verifier suite: **172 passed**. The verifier
+requires unchanged old OCR ledger bytes and extraction evidence, actual due-retry
+attempt progress, correct source/snapshot identity, and preservation of the
+original owner upload. It reports remaining technical retries separately from
+progress; a PASS does not mean that all documents are approved or every failure
+has cleared. Procedure CI, completed build, fresh baseline and live acceptance
+remain prerequisites; no production resource or state mutation is claimed yet.

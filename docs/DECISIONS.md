@@ -1577,3 +1577,19 @@ request-only access restrictions. Do not suppress the health failure merely
 because the latest batch succeeded. All updates use the existing canonical
 producer and append-only snapshot/receipt path. Source tests are not live release
 or backlog-recovery proof; deployment requires the established preservation gates.
+
+## D-2026-09-20-002 - Seal the accepted release before OCR retry deployment (#203)
+
+Bind the new release to merged application source
+`aba0285689d649d94e3e11444b582c748927bbc4`. Preserve all eight prior attempts and
+their receipts, including the completed September 19 release, under a new
+deterministic workspace. Reuse checksum-pinned normal preparation, controller,
+audit and exact status-read retry. No Executive-only exception or successful-run
+gate waiver applies. Keep original resource configuration and feature flags.
+
+After normal acceptance, independently compare source-OCR ledger prefixes and
+extraction bytes against the fresh frozen baseline, verify actual due-retry
+attempt advancement and report remaining failures honestly. A document moving
+from technical failure to human review is successful extraction, not an approved
+trade import. Preserve the original two-page/five-row owner upload and its cleared
+raw payload. Natural scheduled operation must be verified separately.

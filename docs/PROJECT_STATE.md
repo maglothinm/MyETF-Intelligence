@@ -1,6 +1,6 @@
 # PolitiTrack project state
 
-## September 20 OCR page/retry repair - source prepared, not deployed (#203)
+## September 20 OCR page/retry repair - merged, release preparation (#203)
 
 The published 12:04:33 UTC snapshot shows successful Legislative, Executive and
 AI producers, but 18 technical OCR retries: 15 House `incomplete_page_ocr` and
@@ -24,17 +24,21 @@ remain conservatively review-required for layout/text disagreement. No document
 was imported into production. PR #204 source head
 `ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed all three canonical workflows:
 OCR `35510220534`, Runtime safety `35510220533`, and Current Opportunity offline
-`35510220529`. The PR remains unmerged; live release remains pending.
+`35510220529`. Final PR head `a430ed1658efad0ca430a04a657b88f0d9b41ca0`
+also passed OCR `35510840684`, Runtime `35510840687`, and Current Opportunity
+`35510840685`. PR #204 merged at `aba0285689d649d94e3e11444b582c748927bbc4`
+with the identical tested tree. Live release remains pending.
 
-Beast is now connected and its existing Google Cloud sign-in can read the live
-web service. It still uses the accepted September 19 image, revision
-`polititrack-web-00055-ktr`. Cloud Shell SSH stopped because its host key is not
-cached for the new local tunnel; batch mode refused trust confirmation. No host
-key was accepted, SSH session established, or production image, schedule,
-database, snapshot, upload or health state changed. Independently verify the
-Cloud Shell host fingerprint with the owner before continuing. Then use a fresh
-reviewed successor of the accepted September 19 release and independently verify
-preservation, retry progress and published health before claiming recovery.
+Beast and Cloud Shell are connected using the existing SSH key and the ED25519
+fingerprint independently supplied by the owner. The old trust blocker is
+resolved. All six live configurations match the accepted September 19 release;
+four original schedules are enabled and Vault is paused. The completed journal
+hash and all 2,096 preceding sealed files verify; the release lock is available.
+Build `7e079133-a433-4d1d-beba-e32bfd2bce83` was submitted for the exact merged
+source. New successor procedure and independent retry/preservation audit passed
+172 local checks; their canonical CI and live release are pending. No production
+image, schedule, database, snapshot, upload or OCR receipt has changed in this
+continuation. Current Opportunity stays off, and owner review remains separate.
 [Diagnosis and acceptance plan](releases/2026-09-20-ocr-page-retry-repair.md).
 
 ## Current Opportunity purchase threshold — production blocked (#197)
