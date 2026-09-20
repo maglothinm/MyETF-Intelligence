@@ -1,0 +1,964 @@
+{
+  "audit_execution": {
+    "created_at": "2026-09-20T19:20:28.241721Z",
+    "execution": "polititrack-admin-zgs5z",
+    "status": {
+      "completionTime": "2026-09-20T19:22:27.312463Z",
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-09-20T19:22:27.312463Z",
+          "message": "Execution completed successfully in 1m50.37s.",
+          "status": "True",
+          "type": "Completed"
+        },
+        {
+          "lastTransitionTime": "2026-09-20T19:20:29.466809Z",
+          "message": "Provisioned imported containers.",
+          "status": "True",
+          "type": "ResourcesAvailable"
+        },
+        {
+          "lastTransitionTime": "2026-09-20T19:22:13.684566Z",
+          "message": "Started deployed execution in 1m44.21s.",
+          "status": "True",
+          "type": "Started"
+        },
+        {
+          "lastTransitionTime": "2026-09-20T19:20:29.094506Z",
+          "message": "Imported container image.",
+          "status": "True",
+          "type": "ContainerReady"
+        }
+      ],
+      "logUri": "https://console.cloud.google.com/logs/viewer?project=project-38008d5f-4918-46e6-920&advancedFilter=resource.type%3D%22cloud_run_job%22%0Aresource.labels.job_name%3D%22polititrack-admin%22%0Aresource.labels.location%3D%22us-central1%22%0Alabels.%22run.googleapis.com/execution_name%22%3D%22polititrack-admin-zgs5z%22",
+      "observedGeneration": 1,
+      "startTime": "2026-09-20T19:20:36.935074Z",
+      "succeededCount": 1
+    }
+  },
+  "audit_intent": {
+    "accepted_workspace_files": 512,
+    "audit_id": "ocr-live-continuity-20260920-1915",
+    "continuity_baseline_execution": "polititrack-admin-65ggm",
+    "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+    "predecessor_files_verified": 2689,
+    "producer_or_schedule_mutation": false,
+    "query_sha256": "ec1d791c3290ab91ad4975dd41749a7c754df72f5dfa1b0fbd0efd91abd1ff98",
+    "read_only": true,
+    "release_journal_sha256": "9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd",
+    "requested_at": "2026-09-20T19:20:26.226117+00:00",
+    "retry_baseline_execution": "polititrack-admin-2pvks",
+    "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+  },
+  "availability_limitation": {
+    "cause_proven": false,
+    "code_observation": "DashboardCache.refresh takes the dashboard namespace writer lock. PostgresSnapshotStore.locked raises NamespaceBusy immediately on contention. Web routes suppress exception details and return 503.",
+    "inference": "Concurrent web refreshes or a publisher can contend on this lock; recorded HTTP logs do not identify which exception caused these responses.",
+    "intermittent_503_reproduced": true,
+    "next_safe_action": "Reproduce refresh contention and capture a non-sensitive exception type before a separate reviewed web repair. Do not suppress failures or serve an unverified baseline.",
+    "ready_and_filings_recheck_status": 200
+  },
+  "base_main": "6c9edb5b5759050764985a1f5c0d7bea355588b7",
+  "ci_rechecked": [
+    {
+      "conclusion": "success",
+      "head_sha": "a430ed1658efad0ca430a04a657b88f0d9b41ca0",
+      "run_id": 35510840684,
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510840684"
+    },
+    {
+      "conclusion": "success",
+      "head_sha": "c59e16786e38036edc2f3a42d2a92e8643b9f03a",
+      "run_id": 35512024741,
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35512024741"
+    }
+  ],
+  "configuration": {
+    "accepted_journal_unchanged": true,
+    "observed_at": "2026-09-20T19:13:19.025535+00:00",
+    "redeployment_needed": false,
+    "resources": [
+      {
+        "accepted_configuration_matches": true,
+        "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+        "ocr_enabled": null,
+        "opportunity_mode": "off (application default)",
+        "resource": "polititrack-admin",
+        "source": null
+      },
+      {
+        "accepted_configuration_matches": true,
+        "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+        "ocr_enabled": "true",
+        "opportunity_mode": "off (application default)",
+        "resource": "polititrack-legislative",
+        "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+      },
+      {
+        "accepted_configuration_matches": true,
+        "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+        "ocr_enabled": "true",
+        "opportunity_mode": "off (application default)",
+        "resource": "polititrack-executive",
+        "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+      },
+      {
+        "accepted_configuration_matches": true,
+        "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+        "ocr_enabled": null,
+        "opportunity_mode": "off (application default)",
+        "resource": "polititrack-ai",
+        "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+      },
+      {
+        "accepted_configuration_matches": true,
+        "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+        "ocr_enabled": null,
+        "opportunity_mode": "off (application default)",
+        "resource": "polititrack-dashboard",
+        "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+      },
+      {
+        "accepted_configuration_matches": true,
+        "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+        "ocr_enabled": "true",
+        "opportunity_mode": "off (application default)",
+        "ready_revision": "polititrack-web-00057-8m5",
+        "resource": "polititrack-web",
+        "source": null
+      }
+    ],
+    "schedules": [
+      {
+        "lastAttemptTime": "2026-09-20T19:11:10.059810Z",
+        "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-executive",
+        "schedule": "11,41 * * * *",
+        "state": "ENABLED",
+        "timeZone": "Etc/UTC"
+      },
+      {
+        "lastAttemptTime": "2026-09-20T18:44:05.154607Z",
+        "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-ai",
+        "schedule": "14,44 * * * *",
+        "state": "ENABLED",
+        "timeZone": "America/New_York"
+      },
+      {
+        "lastAttemptTime": "2026-09-20T19:02:09.700411Z",
+        "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-dashboard",
+        "schedule": "2,17,32,47 * * * *",
+        "state": "ENABLED",
+        "timeZone": "Etc/UTC"
+      },
+      {
+        "lastAttemptTime": "2026-09-20T19:05:03.200118Z",
+        "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-legislative",
+        "schedule": "5,20,35,50 * * * *",
+        "state": "ENABLED",
+        "timeZone": "Etc/UTC"
+      },
+      {
+        "lastAttemptTime": null,
+        "name": "projects/project-38008d5f-4918-46e6-920/locations/us-central1/jobs/polititrack-vault-lifecycle",
+        "schedule": "17 3 * * *",
+        "state": "PAUSED",
+        "timeZone": "Etc/UTC"
+      }
+    ],
+    "sealed_predecessor_files_verified": 2689
+  },
+  "continuity_audit": {
+    "account_identity_sha256": "99030605e1de0da77f3c0b355e93c55d0d3bbacc8c6431f2a6004839a603b916",
+    "acknowledgements": {
+      "row_count": 9,
+      "rows_sha256": "ba656c46c1bfd8cd0cce22b04ff458e0d712ad96db20f0dfdb3a17e96a70a237"
+    },
+    "audit_id": "ocr-live-continuity-20260920-1915",
+    "baseline_preservation_verified": true,
+    "completed_run_history": {
+      "row_count": 4125,
+      "rows_sha256": "574e48275ca71ca2fedab4c5ceb321184bb70201bae0d7c7bd50f6130db3c62b"
+    },
+    "execution": "polititrack-admin-zgs5z",
+    "heads": {
+      "ai": {
+        "all_file_hashes_verified": true,
+        "file_count": 1448,
+        "generation": 727,
+        "manifest_sha256": "7d1d3a1152910efd9e455e8b1f4dcce683e4d29aa7d86c7f73894d800429665e",
+        "parent_sha256": "2ac68e10f2f06457e1f7304dfee1de2935e28c12ab85f801dcc2c60d31d5ebec",
+        "payload_sha256": "15f9b8b9bc914657b68940ea2aa0071f1dccc3731add7f4ff383c440e3e2cc35",
+        "producer_run_id": "d7f96773-f350-40a8-b568-410b154552af",
+        "snapshot_id": "ce2ec215-954f-4043-bff7-2c0cca5fec39",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 83962441
+      },
+      "dashboard": {
+        "all_file_hashes_verified": true,
+        "file_count": 257,
+        "generation": 1386,
+        "manifest_sha256": "a0be5727728b9bc22b2a508c6cfe8d328248cb23898368d1d05ca84da85c6e90",
+        "parent_sha256": "9972f0f26a596c64a0787f46545e09675d19e138f586f333d84fc0d06e99853a",
+        "payload_sha256": "1afdbfde207a3abfbac4e5412ba7fe00da1e18a739f3ad23554f2d2008e423d4",
+        "producer_run_id": "df9d4b58-832e-430c-989d-dea84d5d99ee",
+        "snapshot_id": "0d1c65de-edd7-4977-83e7-0bcf6bc855cc",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 193961559
+      },
+      "executive": {
+        "all_file_hashes_verified": true,
+        "file_count": 185,
+        "generation": 659,
+        "manifest_sha256": "e050885a81e743b5019f43376506872ef646e3aad0ab80e7230e42e747f1dbdb",
+        "parent_sha256": "42d14591f4843214a56cd5ad2f9f7d13dd31ed3706f696e2b778741033a197cc",
+        "payload_sha256": "c09dd6ee88cec664dec15e2832f55f936035f1bd202d4372c1e2f38db037a7f9",
+        "producer_run_id": "0dd051da-a82a-44fc-bae4-620906f9be12",
+        "snapshot_id": "9c431f2d-8002-4b37-90b1-6314d1406b28",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 9793981
+      },
+      "legislative": {
+        "all_file_hashes_verified": true,
+        "file_count": 476,
+        "generation": 1286,
+        "manifest_sha256": "265b6158bb60d7af249696b064c1a231a06e349a0230ea08dd4023b231f3b840",
+        "parent_sha256": "fd367aa2865f91ec4a4bfb48f0d469c5f0a0aec8b025ba7a4b616cb8784e3b88",
+        "payload_sha256": "056ed4002b383b5cbad86e7ac67b4baceb7483bdf072c0db801e4234e2f89078",
+        "producer_run_id": "76f59715-2386-45a9-af9e-8d41c4bfb3c7",
+        "snapshot_id": "363d7789-a6e1-42c0-8a0a-c11fa8bbe5f9",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 24488759
+      }
+    },
+    "history": {
+      "ai": {
+        "metadata_sha256": "adeea65c3b5d69877b082360e23c9a94ac6b2e5ed7d5d687625a8010a7dd86cd",
+        "parent_chain_verified": true,
+        "row_count": 727,
+        "through_generation": 727
+      },
+      "dashboard": {
+        "metadata_sha256": "c9cf3c4c1ced81c1eab17d19f14dac40839cb3ee81df251324439a749edc4ba4",
+        "parent_chain_verified": true,
+        "row_count": 1386,
+        "through_generation": 1386
+      },
+      "executive": {
+        "metadata_sha256": "e1dc327bc18aa6b0318017a36f4051b4b4972dfd7730c4114c8c54191678c14d",
+        "parent_chain_verified": true,
+        "row_count": 659,
+        "through_generation": 659
+      },
+      "legislative": {
+        "metadata_sha256": "aaddd875200ce80bd14b0e55f86766c66fbecd70c3769c03ad64dc6e02463524",
+        "parent_chain_verified": true,
+        "row_count": 1286,
+        "through_generation": 1286
+      }
+    },
+    "immutable_notifications": {
+      "row_count": 0,
+      "rows_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "latest_production_runs": [
+      {
+        "finished_at": "2026-09-20T19:18:13.121378+00:00",
+        "namespace": "ai",
+        "run_id": "d7f96773-f350-40a8-b568-410b154552af",
+        "started_at": "2026-09-20T19:16:05.241376+00:00",
+        "status": "success"
+      },
+      {
+        "finished_at": "2026-09-20T19:18:42.397402+00:00",
+        "namespace": "dashboard",
+        "run_id": "df9d4b58-832e-430c-989d-dea84d5d99ee",
+        "started_at": "2026-09-20T19:17:57.040889+00:00",
+        "status": "success"
+      },
+      {
+        "finished_at": "2026-09-20T19:16:33.802822+00:00",
+        "namespace": "executive",
+        "run_id": "0dd051da-a82a-44fc-bae4-620906f9be12",
+        "started_at": "2026-09-20T19:14:10.295426+00:00",
+        "status": "success"
+      },
+      {
+        "finished_at": "2026-09-20T19:09:04.873037+00:00",
+        "namespace": "legislative",
+        "run_id": "76f59715-2386-45a9-af9e-8d41c4bfb3c7",
+        "started_at": "2026-09-20T19:07:52.140575+00:00",
+        "status": "success"
+      }
+    ],
+    "notification_events": {
+      "row_count": 0,
+      "rows_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "observed_at": "2026-09-20T19:22:17.058596+00:00",
+    "probe": "polititrack_ocr_release_audit_v1",
+    "read_only": true,
+    "result": "PASS",
+    "retained_state_verified": {
+      "ai": {
+        "append_only_ledgers_verified": 2,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      },
+      "executive": {
+        "append_only_ledgers_verified": 5,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      },
+      "legislative": {
+        "append_only_ledgers_verified": 5,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      }
+    },
+    "review_events": {
+      "row_count": 10,
+      "rows_sha256": "a726fc12b3110dbe63156f5c1350b1fb770e46b567f0e7fc402de6fb00a02cfb"
+    }
+  },
+  "evidence_branch": "codex/ocr-live-continuity-20260920",
+  "executive_collection_failure": {
+    "execution": "polititrack-executive-xxm2l",
+    "logs": [
+      {
+        "at": "2026-09-20T18:42:53.958414Z",
+        "error": null,
+        "event": "source_ocr_health",
+        "execution": "polititrack-executive-xxm2l",
+        "text": ""
+      },
+      {
+        "at": "2026-09-20T18:43:05.082620Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "2026-09-20 18:43:05,081 WARNING OGE request failed: font www.oge.gov/web/fonts/source-sans-pro/sourcesanspro-regular-webfont.woff2 (net::ERR_ABORTED)"
+      },
+      {
+        "at": "2026-09-20T18:43:05.177396Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "2026-09-20 18:43:05,176 WARNING OGE request failed: font www.oge.gov/web/fonts/source-sans-pro/sourcesanspro-regular-webfont.woff (net::ERR_ABORTED)"
+      },
+      {
+        "at": "2026-09-20T18:43:05.253774Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "2026-09-20 18:43:05,252 WARNING OGE request failed: font www.oge.gov/web/fonts/source-sans-pro/sourcesanspro-regular-webfont.ttf (net::ERR_ABORTED)"
+      },
+      {
+        "at": "2026-09-20T18:43:05.266849Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "2026-09-20 18:43:05,266 INFO OGE acknowledgement overlay is not active; continuing with rendered collection"
+      },
+      {
+        "at": "2026-09-20T18:43:05.798317Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "2026-09-20 18:43:05,797 INFO Accepted OGE statutory-use acknowledgement overlay"
+      },
+      {
+        "at": "2026-09-20T18:45:42.117663Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "2026-09-20 18:45:42,116 ERROR Unexpected OGE discovery failure"
+      },
+      {
+        "at": "2026-09-20T18:45:42.117734Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "Traceback (most recent call last):\n  File \"/srv/polititrack/scripts/oge_disclosures.py\", line 612, in main\n    listings = scrape_oge_listings(\n               ^^^^^^^^^^^^^^^^^^^^\n  File \"/srv/polititrack/scripts/oge_disclosures.py\", line 529, in scrape_oge_listings\n    state = _wait_for_rendered_table(\n            ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/srv/polititrack/scripts/oge_disclosures.py\", line 398, in _wait_for_rendered_table\n    handle = page.wait_for_function(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/playwright/sync_api/_generated.py\", line 11595, in wait_for_function\n    self._sync(\n  File \"/usr/local/lib/python3.11/site-packages/playwright/_impl/_sync_base.py\", line 115, in _sync\n    return task.result()\n           ^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/playwright/_impl/_page.py\", line 1110, in wait_for_function\n    return await self._main_frame.wait_for_function(**locals_to_params(locals()))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/playwright/_impl/_frame.py\", line 878, in wait_for_function\n    await self._channel.send(\"waitForFunction\", self._timeout, params)\n  File \"/usr/local/lib/python3.11/site-packages/playwright/_impl/_connection.py\", line 69, in send\n    return await self._connection.wrap_api_call(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/playwright/_impl/_connection.py\", line 559, in wrap_api_call\n    raise rewrite_error(error, f\"{parsed_st['apiName']}: {error}\") from None\nplaywright._impl._errors.TimeoutError: Page.wait_for_function: Timeout 120000ms exceeded."
+      },
+      {
+        "at": "2026-09-20T18:45:42.308956Z",
+        "error": "CalledProcessError",
+        "event": "source_ocr_health",
+        "execution": "polititrack-executive-xxm2l",
+        "text": ""
+      },
+      {
+        "at": "2026-09-20T18:45:42.326869Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/srv/polititrack/runtime_v2/__main__.py\", line 5, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/srv/polititrack/runtime_v2/cli.py\", line 261, in main\n    head = JobRunner(store, mode=selected_mode).run(args.job)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/srv/polititrack/runtime_v2/runner.py\", line 182, in run\n    return self._run_tracker(job_name)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/srv/polititrack/runtime_v2/runner.py\", line 333, in _run_tracker\n    self._execute(\n  File \"/srv/polititrack/runtime_v2/runner.py\", line 172, in _execute\n    subprocess.run(\n  File \"/usr/local/lib/python3.11/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['/usr/local/bin/python', '/srv/polititrack/scripts/oge_disclosures.py', '--output', '/tmp/polititrack-executive-loz2ng4g/output/oge-listings.json']' returned non-zero exit status 1."
+      },
+      {
+        "at": "2026-09-20T18:45:42.424480Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": "Container called exit(1)."
+      },
+      {
+        "at": "2026-09-20T18:45:48.043200Z",
+        "error": null,
+        "event": null,
+        "execution": "polititrack-executive-xxm2l",
+        "text": ""
+      }
+    ]
+  },
+  "executive_recovery": [
+    {
+      "at": "2026-09-20T19:16:33.885176Z",
+      "execution": "polititrack-executive-h5qwl",
+      "json": {
+        "access_remaining": 39,
+        "access_required_count": 0,
+        "acknowledgements_replayed": 0,
+        "branch": "executive",
+        "cleanup_status": "not_needed",
+        "complete_count": 0,
+        "documents_attempted": 5,
+        "documents_completed": 4,
+        "duration_seconds": 66.516,
+        "eligible_count": 3965,
+        "enabled": true,
+        "engine_version": "source-ocr-v2",
+        "event": "source_ocr_health",
+        "extractions_reused": 0,
+        "finished_at": "2026-09-20T19:16:33.877861Z",
+        "heartbeat_at": "2026-09-20T19:16:33.877876Z",
+        "intake_status": "ok",
+        "inventory_count": 4141,
+        "last_document_completed_at": "2026-09-20T19:16:33.468344Z",
+        "needs_review_count": 4,
+        "not_applicable_count": 0,
+        "oldest_ready_at": "2026-08-26T12:14:33Z",
+        "pages_completed": 17,
+        "pages_expected": 17,
+        "ready_remaining": 3960,
+        "retry_delayed_count": 1,
+        "retry_remaining": 2,
+        "review_remaining": 179,
+        "run_id": "0dd051da-a82a-44fc-bae4-620906f9be12",
+        "schema_version": 1,
+        "stage": "complete",
+        "started_at": "2026-09-20T19:14:10.307369Z",
+        "transactions_appended": 0,
+        "unobserved_remaining": 3921
+      },
+      "text": ""
+    },
+    {
+      "at": "2026-09-20T19:16:33.903596Z",
+      "execution": "polititrack-executive-h5qwl",
+      "json": {
+        "generation": 659,
+        "mode": "production",
+        "namespace": "executive",
+        "result": "success",
+        "snapshot_sha256": "c09dd6ee88cec664dec15e2832f55f936035f1bd202d4372c1e2f38db037a7f9"
+      },
+      "text": ""
+    }
+  ],
+  "http_checks": [
+    {
+      "at": "2026-09-20T19:22:11.568050+00:00",
+      "body_sha256": "d88269887ab0908ca4be6bca1d2c74daeb5c1a64a3afe7f6d1d5920b9be75d1c",
+      "bytes": 24697,
+      "name": "/",
+      "status": 200,
+      "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/"
+    },
+    {
+      "at": "2026-09-20T19:22:11.568770+00:00",
+      "name": "/readyz",
+      "status": 503,
+      "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/readyz"
+    },
+    {
+      "at": "2026-09-20T19:22:11.569279+00:00",
+      "body_sha256": "8550598be504a47b1bb13069be8e847527702196254eb8a597ab3c05a14c5b32",
+      "bytes": 215816,
+      "name": "/data/dashboard-insights.json",
+      "status": 200,
+      "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/data/dashboard-insights.json"
+    },
+    {
+      "at": "2026-09-20T19:22:11.569686+00:00",
+      "name": "/data/filings.json",
+      "status": 503,
+      "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/data/filings.json"
+    },
+    {
+      "at": "2026-09-20T19:22:11.570422+00:00",
+      "name": "devos",
+      "status": 404,
+      "url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/35E71473FE5E4EF6852585F20027E92F/$FILE/Elisabeth%20(Betsy)-P-DeVos-09.08.2020-278T.pdf"
+    },
+    {
+      "at": "2026-09-20T19:22:11.572338+00:00",
+      "name": "macgregor",
+      "status": 404,
+      "url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/294765D0509B1112852585E10027E9D3/$FILE/Katharine-MacGregor-08.13.2020-278T.pdf"
+    }
+  ],
+  "http_rechecks": [
+    {
+      "at": "2026-09-20T19:22:51.453207+00:00",
+      "bytes": 121,
+      "path": "/readyz",
+      "ready": {
+        "dashboard": true,
+        "snapshot_sha256": "1afdbfde207a3abfbac4e5412ba7fe00da1e18a739f3ad23554f2d2008e423d4",
+        "status": "ready"
+      },
+      "sha256": "49c48baae12b1bb1854854284b667a5777ecfbba469fe19edc11b5f55e3be4ea",
+      "status": 200
+    },
+    {
+      "at": "2026-09-20T19:22:59.907577+00:00",
+      "bytes": 5075289,
+      "path": "/data/filings.json",
+      "sha256": "ac1a1167500949224ced9420d411382c9fa986b63002f4c432229a4cf8ee584c",
+      "status": 200
+    }
+  ],
+  "last_three_house_retry_outcomes": [
+    {
+      "filing_key": "house|house:2026:20034351",
+      "ocr_attempted_at": "2026-09-20T14:22:30.621943Z",
+      "ocr_completed_at": "2026-09-20T14:22:41.977125Z",
+      "ocr_completed_pages": 3,
+      "ocr_error_code": "native_ocr_disagreement",
+      "ocr_next_attempt_at": null,
+      "ocr_page_count": 3,
+      "ocr_status": "needs_review"
+    },
+    {
+      "filing_key": "house|house:2025:9115684",
+      "ocr_attempted_at": "2026-09-20T14:22:17.490719Z",
+      "ocr_completed_at": "2026-09-20T14:22:30.609724Z",
+      "ocr_completed_pages": 5,
+      "ocr_error_code": "unsupported_scanned_layout",
+      "ocr_next_attempt_at": null,
+      "ocr_page_count": 5,
+      "ocr_status": "needs_review"
+    },
+    {
+      "filing_key": "house|house:2025:9115679",
+      "ocr_attempted_at": "2026-09-20T14:37:56.775153Z",
+      "ocr_completed_at": "2026-09-20T14:38:53.857090Z",
+      "ocr_completed_pages": 20,
+      "ocr_error_code": "unsupported_scanned_layout",
+      "ocr_next_attempt_at": null,
+      "ocr_page_count": 20,
+      "ocr_status": "needs_review"
+    }
+  ],
+  "ocr_audit": {
+    "execution": "polititrack-admin-zgs5z",
+    "namespaces": {
+      "executive": {
+        "baseline_due_retries": 3,
+        "baseline_retries_attempted": 3,
+        "baseline_retries_resolved": 2,
+        "current_total_technical_retries": 2,
+        "generation": 659,
+        "new_extraction_files": 51,
+        "outcomes": [
+          {
+            "attempts_after": 5,
+            "attempts_before": 1,
+            "before_error": "MonitorError",
+            "error_code": "MonitorError",
+            "filing_key": "oge|oge:29228ca69c134b357487711903d725be",
+            "next_attempt_at": "2026-09-20T19:24:19.303364Z",
+            "retried": true,
+            "status": "retry_delayed"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "Error",
+            "error_code": "native_ocr_disagreement",
+            "filing_key": "oge|oge:3842e7015a75a14471dbc143022ffa89",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "ReadTimeout",
+            "error_code": "PaperFilingError",
+            "filing_key": "oge|oge:553bf1921a88f459decc4ef1d87dfa9a",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          }
+        ],
+        "prior_extraction_files_preserved": 126,
+        "prior_ocr_receipts_preserved": true,
+        "snapshot_id": "9c431f2d-8002-4b37-90b1-6314d1406b28",
+        "snapshot_sha256": "c09dd6ee88cec664dec15e2832f55f936035f1bd202d4372c1e2f38db037a7f9"
+      },
+      "legislative": {
+        "baseline_due_retries": 15,
+        "baseline_retries_attempted": 15,
+        "baseline_retries_resolved": 15,
+        "current_total_technical_retries": 0,
+        "generation": 1286,
+        "new_extraction_files": 112,
+        "outcomes": [
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8220747",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8220754",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8220764",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8221173",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8221176",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8221212",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8221231",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:8221302",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:9115662",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:9115664",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:9115671",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:9115676",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 3,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:9115679",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "unsupported_scanned_layout",
+            "filing_key": "house|house:2025:9115684",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          },
+          {
+            "attempts_after": 2,
+            "attempts_before": 1,
+            "before_error": "incomplete_page_ocr",
+            "error_code": "native_ocr_disagreement",
+            "filing_key": "house|house:2026:20034351",
+            "next_attempt_at": null,
+            "retried": true,
+            "status": "needs_review"
+          }
+        ],
+        "prior_extraction_files_preserved": 355,
+        "prior_ocr_receipts_preserved": true,
+        "snapshot_id": "363d7789-a6e1-42c0-8a0a-c11fa8bbe5f9",
+        "snapshot_sha256": "056ed4002b383b5cbad86e7ac67b4baceb7483bdf072c0db801e4234e2f89078"
+      }
+    },
+    "owner_upload": {
+      "pages": 2,
+      "raw_payload_is_null": true,
+      "review_rows": 5,
+      "status": "needs_review"
+    },
+    "probe": "polititrack_ocr_page_retry_acceptance_v1",
+    "read_only": true,
+    "result": "PASS",
+    "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+  },
+  "public_ledger_comparison": {
+    "all_prior_keys_retained": true,
+    "current_count": 5152,
+    "first_observations_unchanged": true,
+    "old_count": 5152,
+    "technical_retries": [
+      {
+        "filer": "DeVos, Elisabeth (Betsy) P",
+        "filing_key": "oge|oge:7b975737d78300556a1f294247adf8db",
+        "ocr_attempted_at": "2026-09-20T19:15:26.970190Z",
+        "ocr_error_code": "MonitorError",
+        "ocr_next_attempt_at": "2026-09-20T20:35:27.081293Z",
+        "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/35E71473FE5E4EF6852585F20027E92F/$FILE/Elisabeth%20(Betsy)-P-DeVos-09.08.2020-278T.pdf"
+      },
+      {
+        "filer": "MacGregor, Katharine",
+        "filing_key": "oge|oge:29228ca69c134b357487711903d725be",
+        "ocr_attempted_at": "2026-09-20T16:44:19.207203Z",
+        "ocr_error_code": "MonitorError",
+        "ocr_next_attempt_at": "2026-09-20T19:24:19.303364Z",
+        "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/294765D0509B1112852585E10027E9D3/$FILE/Katharine-MacGregor-08.13.2020-278T.pdf"
+      }
+    ]
+  },
+  "published_health": {
+    "branches": [
+      {
+        "branch": "legislative",
+        "last_attempt_utc": "2026-09-20T19:07:52.140575Z",
+        "last_success_utc": "2026-09-20T19:09:04.873037Z",
+        "latest_conclusion": "success",
+        "source_ocr": {
+          "access_remaining": 0,
+          "access_required_count": 0,
+          "acknowledgements_replayed": 0,
+          "activity": "complete",
+          "age_minutes": 8.883396466666666,
+          "cleanup_status": "not_needed",
+          "complete_count": 1,
+          "detail": "OCR maintenance completed; documents needing interpretation or access are tracked separately.",
+          "documents_attempted": 5,
+          "documents_completed": 5,
+          "duration_seconds": 43.362,
+          "eligible_count": 544,
+          "enabled": true,
+          "engine_version": "source-ocr-v2",
+          "extractions_reused": 0,
+          "finished_at": "2026-09-20T19:09:04.996212Z",
+          "heartbeat_at": "2026-09-20T19:09:04.996242Z",
+          "intake_status": "ok",
+          "inventory_count": 1011,
+          "last_document_completed_at": "2026-09-20T19:09:03.542314Z",
+          "last_success_at": "2026-09-20T19:09:04.996212Z",
+          "needs_review_count": 4,
+          "not_applicable_count": 0,
+          "oldest_ready_at": "2026-08-26T12:11:42Z",
+          "pages_completed": 9,
+          "pages_expected": 9,
+          "ready_remaining": 539,
+          "required": true,
+          "retry_delayed_count": 0,
+          "retry_remaining": 0,
+          "review_remaining": 787,
+          "run_id": "legislative:76f59715-2386-45a9-af9e-8d41c4bfb3c7",
+          "schema_version": 1,
+          "stage": "complete",
+          "stale_after_minutes": 30,
+          "started_at": "2026-09-20T19:07:52.154457Z",
+          "status": "success",
+          "transactions_appended": 0,
+          "unobserved_remaining": 177
+        },
+        "status": "success"
+      },
+      {
+        "branch": "executive",
+        "last_attempt_utc": "2026-09-20T19:14:10.295426Z",
+        "last_success_utc": "2026-09-20T19:16:33.802822Z",
+        "latest_conclusion": "success",
+        "source_ocr": {
+          "access_remaining": 39,
+          "access_required_count": 0,
+          "acknowledgements_replayed": 0,
+          "activity": "degraded",
+          "age_minutes": 1.40203565,
+          "cleanup_status": "not_needed",
+          "complete_count": 0,
+          "detail": "OCR completed only partially: intake, document processing or post-commit cleanup needs attention.",
+          "documents_attempted": 5,
+          "documents_completed": 4,
+          "duration_seconds": 66.516,
+          "eligible_count": 3965,
+          "enabled": true,
+          "engine_version": "source-ocr-v2",
+          "extractions_reused": 0,
+          "finished_at": "2026-09-20T19:16:33.877861Z",
+          "heartbeat_at": "2026-09-20T19:16:33.877876Z",
+          "intake_status": "ok",
+          "inventory_count": 4141,
+          "last_document_completed_at": "2026-09-20T19:16:33.468344Z",
+          "last_success_at": null,
+          "needs_review_count": 4,
+          "not_applicable_count": 0,
+          "oldest_ready_at": "2026-08-26T12:14:33Z",
+          "pages_completed": 17,
+          "pages_expected": 17,
+          "ready_remaining": 3960,
+          "required": true,
+          "retry_delayed_count": 1,
+          "retry_remaining": 2,
+          "review_remaining": 179,
+          "run_id": "executive:0dd051da-a82a-44fc-bae4-620906f9be12",
+          "schema_version": 1,
+          "stage": "complete",
+          "stale_after_minutes": 60,
+          "started_at": "2026-09-20T19:14:10.307369Z",
+          "status": "failure",
+          "transactions_appended": 0,
+          "unobserved_remaining": 3921
+        },
+        "status": "success"
+      },
+      {
+        "branch": "ai",
+        "last_attempt_utc": "2026-09-20T19:16:05.241376Z",
+        "last_success_utc": "2026-09-20T18:50:02.075317Z",
+        "latest_conclusion": "running",
+        "source_ocr": null,
+        "status": "unknown"
+      }
+    ],
+    "build_sha": null,
+    "generated_utc": "2026-09-20T19:17:58Z",
+    "interpretation": "Both source OCR branches are complete. The publication captured AI while running; the later read-only audit proves that AI run succeeded. Published overall failure is not rewritten as success.",
+    "overall_status": "failure"
+  },
+  "repository": "maglothinm/MyETF-Intelligence",
+  "repository_id": 1349678672,
+  "schema_version": 1,
+  "sealed_workspace_verification": {
+    "accepted_workspace_files_verified": 512,
+    "journal_sha256": "9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd",
+    "observed_at": "2026-09-20T19:25:03.702472+00:00",
+    "predecessor_files_verified": 2689,
+    "producer_or_schedule_mutation": false,
+    "release_lock_free": true
+  },
+  "verification_scope": {
+    "account_rows_and_private_baseline_payloads_exported": false,
+    "baseline_preservation_required": true,
+    "normal_audit_precedes_ocr_audit": true,
+    "read_only_admin_executions_submitted": [
+      "polititrack-admin-zgs5z"
+    ],
+    "reason": "Follow-up observes unchanged accepted deployment with original schedules running; it is not a new release acceptance gate.",
+    "redeployed_this_followup": false,
+    "release_already_complete": true,
+    "remote_receipt_directory": "/home/maglothinm/polititrack-ocr-182-v68vldej/ocr-live-continuity-20260920-1915",
+    "simultaneous_latest_release_health_required": false,
+    "source_or_dashboard_executions_manually_submitted": [],
+    "unchanged_audit_failure_exit_propagates": true
+  },
+  "web_503_request_logs": [
+    {
+      "at": "2026-09-20T19:22:20.005200Z",
+      "latency": "0.041454657s",
+      "status": 503,
+      "trace": "projects/project-38008d5f-4918-46e6-920/traces/7ac75670c31a3c0b4f474e75abac62fc",
+      "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/readyz"
+    },
+    {
+      "at": "2026-09-20T19:22:20.052085Z",
+      "latency": "0.041564495s",
+      "status": 503,
+      "trace": "projects/project-38008d5f-4918-46e6-920/traces/a29b1d3c17bbd00c182535e1fd3195c5",
+      "url": "https://polititrack-web-s6icmprjvq-uc.a.run.app/data/filings.json"
+    }
+  ]
+}
