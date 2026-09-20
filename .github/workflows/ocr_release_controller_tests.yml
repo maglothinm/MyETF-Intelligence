@@ -12,6 +12,10 @@ on:
       - 'tests/test_ocr_executive_recovery_release.py'
       - 'scripts/ocr_activation_read_recovery_release.py'
       - 'tests/test_ocr_activation_read_recovery_release.py'
+      - 'scripts/ocr_page_retry_release.py'
+      - 'tests/test_ocr_page_retry_release.py'
+      - 'scripts/verify_ocr_page_retry_release.py'
+      - 'tests/test_verify_ocr_page_retry_release.py'
       - 'scripts/ocr_health_repair_release.py'
       - 'tests/test_ocr_health_repair_release.py'
       - '.github/workflows/ocr_release_controller_tests.yml'
@@ -28,6 +32,10 @@ on:
       - 'tests/test_ocr_executive_recovery_release.py'
       - 'scripts/ocr_activation_read_recovery_release.py'
       - 'tests/test_ocr_activation_read_recovery_release.py'
+      - 'scripts/ocr_page_retry_release.py'
+      - 'tests/test_ocr_page_retry_release.py'
+      - 'scripts/verify_ocr_page_retry_release.py'
+      - 'tests/test_verify_ocr_page_retry_release.py'
       - 'scripts/ocr_health_repair_release.py'
       - 'tests/test_ocr_health_repair_release.py'
       - '.github/workflows/ocr_release_controller_tests.yml'
@@ -45,4 +53,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install pytest
-      - run: python -m pytest -q tests/test_ocr_release_controller.py tests/test_ocr_health_repair_release.py tests/test_ocr_oge_pdf_repair_release.py tests/test_ocr_senate_pdf_release.py tests/test_ocr_executive_recovery_release.py tests/test_ocr_activation_read_recovery_release.py
+      - run: python -m pytest -q tests/test_ocr_release_controller.py tests/test_ocr_health_repair_release.py tests/test_ocr_oge_pdf_repair_release.py tests/test_ocr_senate_pdf_release.py tests/test_ocr_executive_recovery_release.py tests/test_ocr_activation_read_recovery_release.py tests/test_ocr_page_retry_release.py tests/test_verify_ocr_page_retry_release.py
