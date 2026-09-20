@@ -118,6 +118,78 @@ def test_real_ocr_process_reads_synthetic_source(tmp_path):
     assert all(row["amount"] == AMOUNTS[1] for row in result["house_table"]["rows"])
 
 
+@pytest.mark.skipif(not shutil.which("tesseract"), reason="real OCR engine is not installed")
+def test_real_multipage_ocr_keeps_physical_numbers_across_no_text_page():
+    image = Image.new("L", (1000, 400), 255)
+    font_path = next(p for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"] if Path(p).is_file())
+    font = ImageFont.truetype(font_path, 40)
+    first, last = image.copy(), image.copy()
+    ImageDraw.Draw(first).text((40, 100), "FIRST SOURCE PAGE", font=font, fill=0)
+    ImageDraw.Draw(last).text((40, 100), "THIRD SOURCE PAGE", font=font, fill=0)
+    data = io.BytesIO()
+    first.save(data, format="TIFF", save_all=True, append_images=[image, last])
+    result = extract(data.getvalue(), timeout=60)
+    assert result["completed_pages"] == [1, 2, 3]
+    assert result["empty_ocr_pages"] == [2]
+    assert result["ocr_status"] == "needs_review"
+    assert {word["page_num"] for word in result["words"] if word["text"] == "THIRD"} == {3}
+    assert {word["page_num"] for word in result["words"] if word["text"] == "FIRST"} == {1}
+
+
+TSV_HEADER = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+
+
+@pytest.mark.parametrize("bad_output", ["missing", "malformed", "wrong_page", "missing_header", "duplicate_header", "failed"])
+def test_page_completion_rejects_missing_malformed_or_failed_output(tmp_path, monkeypatch, bad_output):
+    from scripts import source_ocr
+    def engine(command, **kwargs):
+        if bad_output == "failed":
+            raise source_ocr.subprocess.CalledProcessError(1, command)
+        if bad_output == "missing":
+            return
+        output = Path(command[2])
+        output.with_suffix(".txt").write_text("", encoding="utf-8")
+        header = "1\t1\t0\t0\t0\t0\t0\t0\t100\t100\t-1\t\n"
+        content = {"malformed": "wrong\theader\n", "wrong_page": TSV_HEADER + header.replace("1\t1", "1\t2", 1),
+                   "missing_header": TSV_HEADER + header.replace("1\t1", "5\t1", 1),
+                   "duplicate_header": TSV_HEADER + header + header}[bad_output]
+        output.with_suffix(".tsv").write_text(content, encoding="utf-8")
+    monkeypatch.setattr(source_ocr.subprocess, "run", engine)
+    with pytest.raises(OCRError, match="incomplete_page_ocr|ocr_engine_failed"):
+        source_ocr._ocr_pages([tmp_path / "page.png"], tmp_path, 30, {})
+
+
+def test_no_text_completion_has_one_document_deadline_and_cumulative_output_bound(tmp_path, monkeypatch):
+    from scripts import source_ocr
+    calls = []
+    clock = iter([0, 1, 6])
+    monkeypatch.setattr(source_ocr.time, "monotonic", lambda: next(clock))
+    def engine(command, **kwargs):
+        calls.append(kwargs["timeout"])
+        output = Path(command[2])
+        output.with_suffix(".txt").write_text("", encoding="utf-8")
+        output.with_suffix(".tsv").write_text(TSV_HEADER, encoding="utf-8")
+    monkeypatch.setattr(source_ocr.subprocess, "run", engine)
+    assert source_ocr._ocr_pages([tmp_path / "1.png", tmp_path / "2.png"], tmp_path, 10, {}) == ("\f", [], [1, 2])
+    assert calls == [9, 4]
+    clock = iter([0, 11])
+    with pytest.raises(OCRError, match="ocr_engine_failed"):
+        source_ocr._ocr_pages([tmp_path / "1.png"], tmp_path, 10, {})
+    assert len(calls) == 2
+
+
+def test_page_output_limits_apply_across_document_not_per_page(tmp_path, monkeypatch):
+    from scripts import source_ocr
+    def engine(command, **kwargs):
+        output = Path(command[2])
+        output.with_suffix(".txt").write_text(" " * 4_000_001, encoding="utf-8")
+        output.with_suffix(".tsv").write_text(TSV_HEADER, encoding="utf-8")
+    monkeypatch.setattr(source_ocr.subprocess, "run", engine)
+    with pytest.raises(OCRError, match="ocr_output_limit"):
+        source_ocr._ocr_pages([tmp_path / "1.png", tmp_path / "2.png"], tmp_path, 30, {})
+
+
 def test_unrecognized_continuation_cannot_silently_drop_a_page():
     image, words = synthetic_form()
     # A rotated or otherwise unsupported continuation remains non-importable,

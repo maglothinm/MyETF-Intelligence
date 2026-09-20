@@ -129,6 +129,10 @@ def _paper_trades(filing, evidence, rows):
 
 
 def _parse(filing, evidence, approved_rows=None):
+    if evidence.get("empty_ocr_pages"):
+        # A successful engine invocation does not prove a page was blank.
+        # Preserve its evidence, but never import a partial document.
+        raise OCRError("unreadable_page_needs_review")
     table = evidence["house_table"]
     if approved_rows is not None:
         if filing["source"] != "house" or not table["recognized"] or table["problems"]:
@@ -264,14 +268,17 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
             if queued is None or (queued.get("status") != "approved" and receipt.get("upload_id") == queued.get("upload_id")
                                   and receipt.get("status") in {"retry_delayed", "access_required"}):
                 continue
-        # Uploads first, then first-observed on this producer cycle, existing
-        # parser failures, then oldest untouched history. Never filter by seen IDs.
+        # Uploads/new filings first, then due technical retries, parser failures,
+        # and untouched history. Previously attempted failures must not wait for
+        # the entire historical inventory to be exhausted. Backoff above remains
+        # mandatory; oldest attempts lead within the retry tier.
         is_new = not receipt and filing.get("first_seen_utc", "") >= (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-        priority = 0 if key in incoming else 1 if is_new else 2 if filing.get("status") == "review_required" else 3
+        priority = (0 if key in incoming else 1 if is_new else 2 if receipt.get("status") == "retry_delayed"
+                    else 3 if filing.get("status") == "review_required" else 4)
         if key not in incoming and filing.get("source") == "oge" and filing.get("access_mode") != "direct":
             # Real Form 201 requests cannot consume every slot ahead of publicly
             # downloadable historical PDFs. Still record their blocked outcomes.
-            priority = 4
+            priority = 5
         candidates.append((priority, receipt.get("attempted_at", ""), filing.get("first_seen_utc", ""), key))
     candidates.sort()
     acknowledgements = []

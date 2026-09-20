@@ -1,5 +1,42 @@
 # PolitiTrack project state
 
+## September 20 OCR page/retry repair - source prepared, not deployed (#203)
+
+The published 12:04:33 UTC snapshot shows successful Legislative, Executive and
+AI producers, but 18 technical OCR retries: 15 House `incomplete_page_ocr` and
+three OGE transport/library errors. All retry times had elapsed; untouched
+history sorted before earlier attempts. The latest batches completed 5/5 and
+20/20 pages respectively, so this is degraded document processing, not a stopped
+collector or website outage.
+
+Reproduced `incomplete_page_ocr` on official four-page House filing 8220754:
+Tesseract logged all four inputs but its combined TSV had only three page
+headers. Source repair explicitly invokes each page under one OCR deadline and
+cumulative output limits, preserves physical page coordinates and treats no-text
+pages as review evidence, never automatic partial import. Due technical retries
+now precede untouched history while preserving backoff, upload/new-file priority,
+official access restrictions, successful caches and owner confirmations.
+
+Local focused checks: 83 passed, 5 integration skips. Broader OCR/runtime suite:
+346 passed, 22 environment-dependent skips; four Node health checks passed.
+Real extraction now completed 4/4 pages for 8220754 and 3/3 for 20034351; both
+remain conservatively review-required for layout/text disagreement. No document
+was imported into production. PR #204 source head
+`ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed all three canonical workflows:
+OCR `35510220534`, Runtime safety `35510220533`, and Current Opportunity offline
+`35510220529`. The PR remains unmerged; live release remains pending.
+
+Beast is now connected and its existing Google Cloud sign-in can read the live
+web service. It still uses the accepted September 19 image, revision
+`polititrack-web-00055-ktr`. Cloud Shell SSH stopped because its host key is not
+cached for the new local tunnel; batch mode refused trust confirmation. No host
+key was accepted, SSH session established, or production image, schedule,
+database, snapshot, upload or health state changed. Independently verify the
+Cloud Shell host fingerprint with the owner before continuing. Then use a fresh
+reviewed successor of the accepted September 19 release and independently verify
+preservation, retry progress and published health before claiming recovery.
+[Diagnosis and acceptance plan](releases/2026-09-20-ocr-page-retry-repair.md).
+
 ## Current Opportunity purchase threshold — production blocked (#197)
 
 The owner authorized implementation followed by production activation. PR #199
