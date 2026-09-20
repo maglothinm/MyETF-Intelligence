@@ -1,52 +1,55 @@
 # PolitiTrack active handoff
 
-## Active follow-up: remaining OCR retries after accepted repair (#203)
+## September 20 OCR follow-up — live processing and continuity verified (#203)
 
-Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`.
-Evidence branch: `codex/ocr-page-retry-acceptance-20260920`, based on main
-`0befd4a60978cb15f4b65f2170870461170df85a`. Application source
-`aba0285689d649d94e3e11444b582c748927bbc4` is deployed to all six resources,
-build `7e079133-a433-4d1d-beba-e32bfd2bce83`, image digest
-`sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84`.
+Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`. Evidence
+branch `codex/ocr-live-continuity-20260920` is based on main
+`6c9edb5b5759050764985a1f5c0d7bea355588b7`. The accepted application source
+`aba0285689d649d94e3e11444b582c748927bbc4` remains deployed to all six resources,
+image digest `sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84`.
+At 19:13 UTC, normalized configs matched the accepted release; all four original
+schedules were enabled and unchanged. No redeployment or manual producer dispatch
+was needed. Vault remains paused and Current Opportunity off.
 
-Release completed **13:55:37 UTC**, with all four original schedules restored;
-no controller remains active. Normal acceptance `polititrack-admin-65ggm` and
-independent OCR audit `polititrack-admin-n2fdz` passed. Histories, identities,
-accounts, reviews, acknowledgements and notification records are retained;
-all old OCR receipts and 481 extraction files are intact. The original upload
-remains two pages/five review rows with raw payload NULL. All 2,689 sealed
-predecessor files match. Final journal SHA-256:
-`9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd`.
+**Fresh read-only continuity and OCR audits passed** in `polititrack-admin-zgs5z`,
+completed **19:22:27 UTC**. Audited generations: Legislative **1286**, Executive
+**659**, AI **727**, Dashboard **1386**. Snapshot/ledger prefixes, stable IDs,
+accounts, reviews, acknowledgements, completed runs and notification history are
+retained. All 481 original extraction files and prior OCR receipts are intact;
+163 new extraction files exist. The original upload remains two pages/five review
+rows, `needs_review`, raw payload NULL. All 5,152 public filing IDs and first-seen
+timestamps remain. All 512 accepted-workspace and 2,689 predecessor files match.
+Closed journal hash remains
+`9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd`; release lock free.
 
-Four controlled source passes completed 18 documents and 115/115 pages.
-Original scheduled Legislative `polititrack-legislative-wl5tn` succeeded at
-14:10:39 UTC with genuine generation 1266 and 40/40 more pages. Dashboard
-`polititrack-dashboard-tdnzh` succeeded at 14:15:53 UTC, generation 1365.
-At the 14:17:32 UTC public check, all endpoints returned 200, the scheduled OCR
-metrics matched and all 5,152 prior filing IDs remained. One earlier insights
-request returned 503; its cause is unknown. Do not call this zero-error availability.
+**All 15 original House technical retries have cleared to review.** The final
+20-page House 9115679 live retry completed at 14:38:53 UTC. Published Legislative
+success at 19:09 UTC completed five documents/9 pages with zero technical retries.
+Executive collection timed out on OGE's rendered table at 18:45 UTC before OCR,
+then its next original scheduled run `polititrack-executive-h5qwl` recovered and
+completed four documents/**17/17 pages** at 19:16:33 UTC. No transaction was
+appended. Two OGE retries remain: the 2020 DeVos and MacGregor PDF URLs both
+returned **404** in fresh 19:22 UTC checks. Do not hide those source warnings.
 
-**Remaining in the verified 14:15:05 public snapshot:** three House technical
-retries and one OGE retry. House 9115684 and 20034351 still await their first
-repaired run. House 9115679 reported `pdf_render_failed` near the batch limit;
-its 20-page PDF subsequently completed locally in 36.317 seconds with a full
-120-second allowance, but the live retry remains pending under normal backoff.
-MacGregor's 2020 OGE PDF and parent record return HTTP 404. Do not hide these
-warnings or claim all retries cleared. Keep #203 open for their live outcomes.
+**Availability remains imperfect.** Root and insights returned 200, but readiness
+and filings returned brief 503s at 19:22:20 UTC. Sequential rechecks returned 200;
+readiness hash matched Dashboard 1386. Code shows web refresh takes the dashboard
+writer lock, making contention plausible; logs do not prove the exact exception.
+The 19:17:58 publication captured AI running and reports overall health failure;
+the audit proves that same AI run succeeded at 19:18:13 UTC. Preserve this timing
+difference and do not claim zero-error availability or all-green public health.
 
-Next safe action: let original bounded schedules run and compare fresh receipts;
-monitor whether the isolated 503 repeats. Keep #182 open for the separate owner
-correction/import test. Current Opportunity stays off and Vault paused. Do not
-rebaseline, reset receipts, resubmit the upload, auto-approve rows or replay a
-closed journal. Cloud Shell release root remains
-`/home/maglothinm/polititrack-ocr-182-v68vldej`; accepted workspace is
-`ocr-page-retry-aba0285689d6`. The SSH interruption resumed that same open journal
-without duplicate dispatch; it did not relax any gate. An optional source run
-stopped at its inventory prerequisite without submission. Final dashboard refresh
-used a complete 1,073-execution idle scan and the existing canonical writer.
+Next safe action: keep original source schedules and #203 open for the two 404
+documents and a focused web-refresh contention diagnosis. Keep #182 for separate
+owner correction/import acceptance. Do not replay the closed release, reset
+receipts, rebaseline, resubmit the upload or auto-approve rows. Private read-only
+audit receipts are in Cloud Shell release root
+`/home/maglothinm/polititrack-ocr-182-v68vldej/ocr-live-continuity-20260920-1915`.
+Source CI 35510840684 and controller CI 35512024741 were rechecked: success.
 
-[Release narrative, CI and diagnostics](releases/2026-09-20-ocr-page-retry-repair.md)
-· [Exact snapshots, hashes, executions and public results](releases/2026-09-20-ocr-page-retry-acceptance.json).
+[Fresh evidence and limitations](releases/2026-09-20-ocr-live-continuity.md)
+· [Exact audit, snapshot, HTTP and retry receipts](releases/2026-09-20-ocr-live-continuity.json)
+· [Original release](releases/2026-09-20-ocr-page-retry-repair.md).
 
 Earlier task checkpoints follow; they are not authorization to replay a release.
 
