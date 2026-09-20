@@ -1,53 +1,52 @@
 # PolitiTrack active handoff
 
-## Active: OCR page completion and overdue retries (#203)
+## Active follow-up: remaining OCR retries after accepted repair (#203)
 
-Owner request: check OCR services and fix. Source is based on canonical main
-`2404ca2347e703b5699b31efbbcc56027d44fb37`, repository ID 1349678672.
-PR #204 merged at `aba0285689d649d94e3e11444b582c748927bbc4`, identical to tested
-PR tree `1ed514667bbd40aed9413427c129192e4ad2590e`. Active procedure branch:
-`codex/ocr-page-retry-release-20260920`. Production remains on the accepted
-September 19 image. No production write occurred.
+Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`.
+Evidence branch: `codex/ocr-page-retry-acceptance-20260920`, based on main
+`0befd4a60978cb15f4b65f2170870461170df85a`. Application source
+`aba0285689d649d94e3e11444b582c748927bbc4` is deployed to all six resources,
+build `7e079133-a433-4d1d-beba-e32bfd2bce83`, image digest
+`sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84`.
 
-The 12:04:33 UTC published snapshot has successful collectors/AI but 18 overdue
-OCR retry receipts (15 House page-coverage failures, three Executive errors).
-The actual four-page 8220754 PDF reproduces incomplete combined Tesseract TSV
-coverage. Explicit per-page bounded calls complete 4/4; a second failing filing
-20034351 completes 3/3. Unsupported layouts/disagreement stay review-required.
-No-text pages cannot enter automatic or owner-confirmed partial import. Due
-retries now precede historical work without changing backoff or alert behavior.
-Local verification: 346 passed, 22 integration skips, four Node checks passed;
-focused subset 83 passed, 5 skips. Exact source head
-`ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed OCR `35510220534`, Runtime
-safety `35510220533`, and Current Opportunity offline `35510220529`. Final PR
-head also passed OCR `35510840684`, Runtime `35510840687`, and Current Opportunity
-`35510840685` before merge.
+Release completed **13:55:37 UTC**, with all four original schedules restored;
+no controller remains active. Normal acceptance `polititrack-admin-65ggm` and
+independent OCR audit `polititrack-admin-n2fdz` passed. Histories, identities,
+accounts, reviews, acknowledgements and notification records are retained;
+all old OCR receipts and 481 extraction files are intact. The original upload
+remains two pages/five review rows with raw payload NULL. All 2,689 sealed
+predecessor files match. Final journal SHA-256:
+`9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd`.
 
-**Access restored:** owner independently supplied ED25519 fingerprint
-`SHA256:owVHUvlU3NLcXIoKVQESUl/C3z8/kvzvuzfcMiwjuLM`; pinned Cloud Shell SSH
-works with the existing local key. All six current resources match the accepted
-September 19 configurations, four schedules remain enabled, Vault paused and
-the controller lock is free. Accepted journal hash
-`54014b843890d0f845fe72e5c85c6750b444adaa21baa781fae210a491e34613` and the
-2,096 preceding sealed files match. Build `7e079133-a433-4d1d-beba-e32bfd2bce83`
-was submitted for source `aba0285689d649d94e3e11444b582c748927bbc4`.
+Four controlled source passes completed 18 documents and 115/115 pages.
+Original scheduled Legislative `polititrack-legislative-wl5tn` succeeded at
+14:10:39 UTC with genuine generation 1266 and 40/40 more pages. Dashboard
+`polititrack-dashboard-tdnzh` succeeded at 14:15:53 UTC, generation 1365.
+At the 14:17:32 UTC public check, all endpoints returned 200, the scheduled OCR
+metrics matched and all 5,152 prior filing IDs remained. One earlier insights
+request returned 503; its cause is unknown. Do not call this zero-error availability.
 
-The fresh wrapper `scripts/ocr_page_retry_release.py` seals all eight prior
-attempts and reuses the unchanged successful-baseline, state, account, submission,
-activation and acceptance gates. The separate read-only verifier compares old
-OCR receipts/extraction bytes, real due-retry attempts and the unchanged owner
-upload. Local controller/verifier tests: 172 passed. Next: verify canonical CI,
-build completion/digest, install checksum-verified new helpers without replacing
-old procedures, then prepare and execute the fresh successor. Independently
-verify retry progress after normal acceptance and a natural scheduled run.
-Do not extract credentials,
-reactivate legacy workflows, weaken release gates, replay a closed journal,
-reset receipts or auto-approve the original House upload. Once connected, verify
-current ownership/configuration and use a fresh sealed release successor with
-the new tested source, fresh preservation baseline and independent acceptance.
-Keep #203 open until deployed and published retry outcomes are verified; #182's
-owner correction/import acceptance is separate. See
-[evidence and release checklist](releases/2026-09-20-ocr-page-retry-repair.md).
+**Remaining in the verified 14:15:05 public snapshot:** three House technical
+retries and one OGE retry. House 9115684 and 20034351 still await their first
+repaired run. House 9115679 reported `pdf_render_failed` near the batch limit;
+its 20-page PDF subsequently completed locally in 36.317 seconds with a full
+120-second allowance, but the live retry remains pending under normal backoff.
+MacGregor's 2020 OGE PDF and parent record return HTTP 404. Do not hide these
+warnings or claim all retries cleared. Keep #203 open for their live outcomes.
+
+Next safe action: let original bounded schedules run and compare fresh receipts;
+monitor whether the isolated 503 repeats. Keep #182 open for the separate owner
+correction/import test. Current Opportunity stays off and Vault paused. Do not
+rebaseline, reset receipts, resubmit the upload, auto-approve rows or replay a
+closed journal. Cloud Shell release root remains
+`/home/maglothinm/polititrack-ocr-182-v68vldej`; accepted workspace is
+`ocr-page-retry-aba0285689d6`. The SSH interruption resumed that same open journal
+without duplicate dispatch; it did not relax any gate. An optional source run
+stopped at its inventory prerequisite without submission. Final dashboard refresh
+used a complete 1,073-execution idle scan and the existing canonical writer.
+
+[Release narrative, CI and diagnostics](releases/2026-09-20-ocr-page-retry-repair.md)
+· [Exact snapshots, hashes, executions and public results](releases/2026-09-20-ocr-page-retry-acceptance.json).
 
 Earlier task checkpoints follow; they are not authorization to replay a release.
 

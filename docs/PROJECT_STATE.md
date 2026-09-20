@@ -1,45 +1,58 @@
 # PolitiTrack project state
 
-## September 20 OCR page/retry repair - merged, release preparation (#203)
+## September 20 OCR page/retry repair — deployed with remaining warnings (#203)
 
-The published 12:04:33 UTC snapshot shows successful Legislative, Executive and
-AI producers, but 18 technical OCR retries: 15 House `incomplete_page_ocr` and
-three OGE transport/library errors. All retry times had elapsed; untouched
-history sorted before earlier attempts. The latest batches completed 5/5 and
-20/20 pages respectively, so this is degraded document processing, not a stopped
-collector or website outage.
+Application PR #204 is deployed from `aba0285689d649d94e3e11444b582c748927bbc4`
+using build `7e079133-a433-4d1d-beba-e32bfd2bce83`, image digest
+`sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84`.
+All six runtime resources use the image; OCR is enabled on Legislative, Executive
+and web. Physical pages are explicitly processed under shared OCR limits, and
+due technical retries precede untouched history. Review requirements remain.
 
-Reproduced `incomplete_page_ocr` on official four-page House filing 8220754:
-Tesseract logged all four inputs but its combined TSV had only three page
-headers. Source repair explicitly invokes each page under one OCR deadline and
-cumulative output limits, preserves physical page coordinates and treats no-text
-pages as review evidence, never automatic partial import. Due technical retries
-now precede untouched history while preserving backoff, upload/new-file priority,
-official access restrictions, successful caches and owner confirmations.
+The release completed at **13:55:37 UTC**, with all four original schedules
+enabled and unchanged. Vault remains paused and Current Opportunity off.
+Controlled runs completed 18 documents and 115/115 pages. Natural scheduled
+Legislative `polititrack-legislative-wl5tn` then succeeded at **14:10:39 UTC** on
+the exact image/source, committing generation **1266**, with three documents and
+40/40 more pages. Intake succeeded, cleanup was not needed and no transaction was
+appended. The worker was created by the original scheduler, not manually.
 
-Local focused checks: 83 passed, 5 integration skips. Broader OCR/runtime suite:
-346 passed, 22 environment-dependent skips; four Node health checks passed.
-Real extraction now completed 4/4 pages for 8220754 and 3/3 for 20034351; both
-remain conservatively review-required for layout/text disagreement. No document
-was imported into production. PR #204 source head
-`ce63ba37c7bfaf4ce54c60ef0695e6fc694552b3` passed all three canonical workflows:
-OCR `35510220534`, Runtime safety `35510220533`, and Current Opportunity offline
-`35510220529`. Final PR head `a430ed1658efad0ca430a04a657b88f0d9b41ca0`
-also passed OCR `35510840684`, Runtime `35510840687`, and Current Opportunity
-`35510840685`. PR #204 merged at `aba0285689d649d94e3e11444b582c748927bbc4`
-with the identical tested tree. Live release remains pending.
+At the verified **14:15:05 UTC** public snapshot, 14 of the original 18 technical
+retries have cleared. **Three House retries and one Executive retry remain.**
+Two House entries still await their first repaired run. The third,
+`house|house:2025:9115679`, reported `pdf_render_failed` near the 180-second batch
+limit. Its actual PDF completed 20/20 pages locally in 36.317 seconds with a full
+120-second document allowance; that does not mark its pending production retry
+complete. The remaining OGE document is Katharine MacGregor's 2020 PDF: both its
+official PDF and parent record return HTTP 404. Why it is unavailable is unknown.
+Backoff and warning states remain intact; the result is not all-green OCR.
 
-Beast and Cloud Shell are connected using the existing SSH key and the ED25519
-fingerprint independently supplied by the owner. The old trust blocker is
-resolved. All six live configurations match the accepted September 19 release;
-four original schedules are enabled and Vault is paused. The completed journal
-hash and all 2,096 preceding sealed files verify; the release lock is available.
-Build `7e079133-a433-4d1d-beba-e32bfd2bce83` was submitted for the exact merged
-source. New successor procedure and independent retry/preservation audit passed
-172 local checks; their canonical CI and live release are pending. No production
-image, schedule, database, snapshot, upload or OCR receipt has changed in this
-continuation. Current Opportunity stays off, and owner review remains separate.
-[Diagnosis and acceptance plan](releases/2026-09-20-ocr-page-retry-repair.md).
+Normal acceptance `polititrack-admin-65ggm` verified snapshot history, retained
+identities/ledgers, reviews, accounts, acknowledgements and notification history.
+Independent OCR audit `polititrack-admin-n2fdz` verified all prior receipt bytes
+and 481 prior extraction files. The original owner upload retains two pages,
+five review rows, `needs_review`, and a NULL raw payload. All 2,689 predecessor
+files match. Final journal SHA-256:
+`9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd`.
+
+Dashboard follow-up `polititrack-dashboard-tdnzh` succeeded at 14:15:53 UTC,
+committing generation **1365**. At 14:17:32 UTC, live root, readiness, insights and
+filings returned HTTP 200, scheduled OCR metrics matched and all 5,152 original
+filing IDs were retained. One earlier insights request returned HTTP 503; its
+cause is unestablished and the successful recheck is not a zero-error claim.
+Normal acceptance also verified live asset hashes and the OCR sign-in boundary.
+
+Source CI passed: OCR `35510840684`, Runtime safety `35510840687`, Current
+Opportunity offline `35510840685`, merge OCR `35511460884`. Procedure PR #205
+merged at `0befd4a60978cb15f4b65f2170870461170df85a`; controller CI `35512024741`
+passed 172 checks. Local source verification: 346 Python passed/22 integration
+skips and four Node checks; focused subset 83 passed/five skips.
+
+No deployment controller is active. Next: let original schedules service the
+remaining House retries, preserve the upstream OGE warning, and retain #182 for
+separate owner correction/import acceptance. Do not reset receipts or replay any
+closed release. [Release narrative](releases/2026-09-20-ocr-page-retry-repair.md)
+and [exact execution/snapshot evidence](releases/2026-09-20-ocr-page-retry-acceptance.json).
 
 ## Current Opportunity purchase threshold — production blocked (#197)
 
