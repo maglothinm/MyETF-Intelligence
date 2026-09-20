@@ -1,0 +1,1108 @@
+{
+  "schema_version": 1,
+  "issue": 203,
+  "repository": {
+    "id": 1349678672,
+    "full_name": "maglothinm/MyETF-Intelligence",
+    "default_branch": "main"
+  },
+  "application": {
+    "source": "aba0285689d649d94e3e11444b582c748927bbc4",
+    "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+    "build_id": "7e079133-a433-4d1d-beba-e32bfd2bce83",
+    "build_result": "SUCCESS",
+    "tree": "1ed514667bbd40aed9413427c129192e4ad2590e"
+  },
+  "controller": {
+    "source_merge": "0befd4a60978cb15f4b65f2170870461170df85a",
+    "script_sha256": "db4f6d3add73ce01358150b2e679aac43ab10fb353f3ebc2e79219aa50094138",
+    "journal_sha256": "9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd",
+    "status": "complete",
+    "finished_at": "2026-09-20T13:55:37.342936+00:00",
+    "sealed_predecessor_files_verified": 2689,
+    "read_retries": [
+      {
+        "at": "2026-09-20T13:26:28.108854+00:00",
+        "execution": "polititrack-legislative-2nmjr",
+        "label": "observe-legislative-2",
+        "attempt": 1,
+        "retry_planned": true,
+        "reason": "ACCESS_TOKEN_TYPE_UNSUPPORTED",
+        "diagnostic": "cloud/observe-legislative-2-read-fb3dfc6cb11741aa9f25ae9304020a81-a1.stderr.txt",
+        "diagnostic_sha256": "429daeb41c90c82c0a4189c6c4cdcdf9c9cf483a099b1703aa7a05acdf008374"
+      }
+    ],
+    "errors": {
+      "last_error": null,
+      "recovery_error": null,
+      "last_wait": null
+    },
+    "steps": {
+      "baseline": {
+        "execution": "polititrack-admin-2pvks",
+        "completed": true,
+        "read_only": true
+      },
+      "migration": {
+        "execution": "polititrack-admin-vzpfb",
+        "completed": true,
+        "read_only": false
+      },
+      "image-smoke": {
+        "execution": "polititrack-admin-f9cs9",
+        "completed": true,
+        "read_only": true
+      },
+      "legislative-1": {
+        "execution": "polititrack-legislative-xlsgn",
+        "completed": true,
+        "read_only": false
+      },
+      "executive-1": {
+        "execution": "polititrack-executive-xr8kv",
+        "completed": true,
+        "read_only": false
+      },
+      "legislative-2": {
+        "execution": "polititrack-legislative-2nmjr",
+        "completed": true,
+        "read_only": false
+      },
+      "executive-2": {
+        "execution": "polititrack-executive-sf8h8",
+        "completed": true,
+        "read_only": false
+      },
+      "ai-1": {
+        "execution": "polititrack-ai-22zcw",
+        "completed": true,
+        "read_only": false
+      },
+      "dashboard-1": {
+        "execution": "polititrack-dashboard-ng95b",
+        "completed": true,
+        "read_only": false
+      },
+      "acceptance": {
+        "execution": "polititrack-admin-65ggm",
+        "completed": true,
+        "read_only": true
+      }
+    }
+  },
+  "baseline": {
+    "result": "PASS",
+    "read_only": true,
+    "observed_at": "2026-09-20T13:04:19.219026+00:00",
+    "execution": "polititrack-admin-2pvks",
+    "heads": {
+      "ai": {
+        "all_file_hashes_verified": true,
+        "file_count": 1445,
+        "generation": 715,
+        "manifest_sha256": "8495948fb97af50a355c34c24caf936b49938969d417c0cde5b8eac0fd071038",
+        "parent_sha256": "a3914fad6dbb941a5ef9c22e15376efdd66e8c03c21ec88cdb56bb6b70705517",
+        "payload_sha256": "8a5fbf13582e52e2b022e79f7dad1fb84d29e254fb4442d43fcc09154e047db4",
+        "producer_run_id": "8376e242-3140-445e-87f9-ec55f7ac7f39",
+        "snapshot_id": "6b20ce15-ab42-441a-9b62-f623e69116ff",
+        "source_revision": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1",
+        "uncompressed_bytes": 83898197
+      },
+      "dashboard": {
+        "all_file_hashes_verified": true,
+        "file_count": 256,
+        "generation": 1362,
+        "manifest_sha256": "08a8c95d864a53b62b2848d2729f42cc8f930d03551f5662279959a5d81bc475",
+        "parent_sha256": "08daf5a6754b18c4b10093b700b5056094a5af464e098815f351d57af5c3812a",
+        "payload_sha256": "2ba82a4a5da86972837d67ed765ced3756218e1edec28845886c6b8029cd5828",
+        "producer_run_id": "f63b6678-b502-46da-93b0-0fad30aab1ca",
+        "snapshot_id": "d13b7843-9b98-4996-ae95-46c2b7a9f26c",
+        "source_revision": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1",
+        "uncompressed_bytes": 193835950
+      },
+      "executive": {
+        "all_file_hashes_verified": true,
+        "file_count": 134,
+        "generation": 647,
+        "manifest_sha256": "dd02f26f19edbbcf3758f6407f7284804e06b593f49c77f42ffcb53f83da25e8",
+        "parent_sha256": "8ff2f5c39372730d3f1823ad55b4dc0c2310db1c79c1950b68a2b0641a8fbd02",
+        "payload_sha256": "e4ca1bddef137cca95a2586cd90272bf488594018dc345890f9917c2d67cad33",
+        "producer_run_id": "773d4251-0afc-417d-85cf-fa5073206b52",
+        "snapshot_id": "d8085b92-34cd-49b1-b759-547de1bbab46",
+        "source_revision": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1",
+        "uncompressed_bytes": 8886058
+      },
+      "legislative": {
+        "all_file_hashes_verified": true,
+        "file_count": 364,
+        "generation": 1263,
+        "manifest_sha256": "06df26d7d161a9b22b89bb596a2b70f4d928b50178cefd8233f2c0f1e21b3d0c",
+        "parent_sha256": "774ac19ee2826c42a6163d8a436f87bad8f52bacf3b50c62d6884b19268fdf33",
+        "payload_sha256": "2248c650f4f2f2dc3d812e52221445551d85440ad42665be8198f6d799cc656f",
+        "producer_run_id": "dbc537a8-33de-494b-ae8a-e9a0d1cbe737",
+        "snapshot_id": "fac0fd0b-da8b-41cc-923f-357ba57e1b3f",
+        "source_revision": "77aadf541b034072f58dba5e7107c2c8e8ba4bd1",
+        "uncompressed_bytes": 23553368
+      }
+    }
+  },
+  "acceptance": {
+    "result": "PASS",
+    "read_only": true,
+    "observed_at": "2026-09-20T13:54:16.195932+00:00",
+    "execution": "polititrack-admin-65ggm",
+    "baseline_preservation_verified": true,
+    "retained_state_verified": {
+      "ai": {
+        "append_only_ledgers_verified": 2,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      },
+      "executive": {
+        "append_only_ledgers_verified": 5,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      },
+      "legislative": {
+        "append_only_ledgers_verified": 5,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      }
+    },
+    "published_ocr_health_verified": true,
+    "ocr_health": {
+      "executive": {
+        "access_remaining": 39,
+        "access_required_count": 0,
+        "acknowledgements_replayed": 0,
+        "activity": "degraded",
+        "age_minutes": 20.829327483333334,
+        "cleanup_status": "not_needed",
+        "complete_count": 0,
+        "detail": "OCR completed only partially: intake, document processing or post-commit cleanup needs attention.",
+        "documents_attempted": 5,
+        "documents_completed": 5,
+        "duration_seconds": 70.53,
+        "eligible_count": 4009,
+        "enabled": true,
+        "engine_version": "source-ocr-v2",
+        "extractions_reused": 0,
+        "finished_at": "2026-09-20T13:33:30.008854Z",
+        "heartbeat_at": "2026-09-20T13:33:30.008875Z",
+        "intake_status": "ok",
+        "inventory_count": 4141,
+        "last_document_completed_at": "2026-09-20T13:33:29.533932Z",
+        "needs_review_count": 5,
+        "not_applicable_count": 0,
+        "oldest_ready_at": "2026-08-26T12:14:33Z",
+        "pages_completed": 15,
+        "pages_expected": 15,
+        "ready_remaining": 4004,
+        "retry_delayed_count": 0,
+        "retry_remaining": 1,
+        "review_remaining": 136,
+        "run_id": "b077803c-53a6-4260-9336-51ea3d5486b7",
+        "schema_version": 1,
+        "stage": "complete",
+        "stale_after_minutes": 90,
+        "started_at": "2026-09-20T13:30:59.732037Z",
+        "status": "failure",
+        "transactions_appended": 0,
+        "unobserved_remaining": 3965
+      },
+      "legislative": {
+        "access_remaining": 0,
+        "access_required_count": 0,
+        "acknowledgements_replayed": 0,
+        "activity": "degraded",
+        "age_minutes": 26.427516966666666,
+        "cleanup_status": "not_needed",
+        "complete_count": 0,
+        "detail": "OCR completed only partially: intake, document processing or post-commit cleanup needs attention.",
+        "documents_attempted": 4,
+        "documents_completed": 4,
+        "duration_seconds": 186.977,
+        "eligible_count": 646,
+        "enabled": true,
+        "engine_version": "source-ocr-v2",
+        "extractions_reused": 0,
+        "finished_at": "2026-09-20T13:27:54.065330Z",
+        "heartbeat_at": "2026-09-20T13:27:54.065342Z",
+        "intake_status": "ok",
+        "inventory_count": 1011,
+        "last_document_completed_at": "2026-09-20T13:27:53.314536Z",
+        "needs_review_count": 4,
+        "not_applicable_count": 0,
+        "oldest_ready_at": "2026-08-26T12:11:42Z",
+        "pages_completed": 46,
+        "pages_expected": 46,
+        "ready_remaining": 642,
+        "retry_delayed_count": 0,
+        "retry_remaining": 6,
+        "review_remaining": 698,
+        "run_id": "ad6bc299-8f32-4699-a5a0-0a565028870d",
+        "schema_version": 1,
+        "stage": "complete",
+        "stale_after_minutes": 90,
+        "started_at": "2026-09-20T13:24:24.758263Z",
+        "status": "failure",
+        "transactions_appended": 0,
+        "unobserved_remaining": 274
+      }
+    },
+    "ocr_document_coverage": {
+      "executive": {
+        "filings_with_durable_attempt_receipts": 176,
+        "retained_extraction_evidence_files": 135
+      },
+      "legislative": {
+        "filings_with_durable_attempt_receipts": 737,
+        "retained_extraction_evidence_files": 364
+      }
+    },
+    "published_asset_sha256": {
+      "app.js": "fe5a0cce959fd60dccf4d7cf64f57f970d14a24d1544a07b62c9e30cdd56a315",
+      "data/dashboard-insights.json": "93f752c9e33b090bce3c4914c17a09746d63e27c99f2ae530eba202a09b061dc",
+      "wallboard.js": "34f118f2dd17753a989f4335cb9c69a811b286291215c56c9bd71571e5b10759"
+    },
+    "heads": {
+      "ai": {
+        "all_file_hashes_verified": true,
+        "file_count": 1445,
+        "generation": 716,
+        "manifest_sha256": "be183c2c4d115fd8e165383e51f7de4493b98ffe59c6f791d907eb350060caaf",
+        "parent_sha256": "8a5fbf13582e52e2b022e79f7dad1fb84d29e254fb4442d43fcc09154e047db4",
+        "payload_sha256": "6fd7045edf19012d45ad185221ac4a9bfda33904a3ea7ab8ebcc5cd7f6b5ae6a",
+        "producer_run_id": "5fb71637-ea36-4e2f-a6b4-1f414f746827",
+        "snapshot_id": "c569a56b-779f-4874-a910-f0f872da3a0e",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 83898990
+      },
+      "dashboard": {
+        "all_file_hashes_verified": true,
+        "file_count": 257,
+        "generation": 1363,
+        "manifest_sha256": "b2ff60ecb1ec90f7a421ec2de27c3a79a508d701c36fc196425b1f1121474329",
+        "parent_sha256": "2ba82a4a5da86972837d67ed765ced3756218e1edec28845886c6b8029cd5828",
+        "payload_sha256": "71d6adc2f55f53d87893d9f69c81cf63f9fe4230fbd8fa43a3031cbad17f12e5",
+        "producer_run_id": "ce59e036-258c-4e22-9490-262206f3b4f4",
+        "snapshot_id": "bacd9d3b-9e79-444c-be6b-873fca11076e",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 193852241
+      },
+      "executive": {
+        "all_file_hashes_verified": true,
+        "file_count": 143,
+        "generation": 649,
+        "manifest_sha256": "0bd2b882d92dc9c09322575f5568b3bba6b36ab8b0dae74ecb8e9351c28d5111",
+        "parent_sha256": "f0fef6dd918ef84de30dc9ba43b2457f9e8a5fb700e80a77a2d7eda6e3615635",
+        "payload_sha256": "ee9f311e1318ffd747320188072b0e206fa78a54350426f368e0fcb393abaa7d",
+        "producer_run_id": "b077803c-53a6-4260-9336-51ea3d5486b7",
+        "snapshot_id": "ceeb2346-c7a8-4bc0-83ac-be38ba2a06df",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 9089702
+      },
+      "legislative": {
+        "all_file_hashes_verified": true,
+        "file_count": 373,
+        "generation": 1265,
+        "manifest_sha256": "35a387ce077d4c035f0c3769e58307b6aee4429c47a1e275a70495418fabdcf4",
+        "parent_sha256": "b71b0c99405e742a10ca9ea7c81c2885a5a0fb62e3c2dda06f96d34cf55aff26",
+        "payload_sha256": "a368894f57bbcdcfbfb1cf4bd8f03532a1c4842b46ec0dad507468dbe015cfa5",
+        "producer_run_id": "ad6bc299-8f32-4699-a5a0-0a565028870d",
+        "snapshot_id": "6bbb3d31-2787-4c15-a70e-aedc497b640f",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 23671163
+      }
+    },
+    "history": {
+      "ai": {
+        "metadata_sha256": "671d90c15a21084080827dd1b4070756cee5074839bbea5842c8177ea20a3d07",
+        "parent_chain_verified": true,
+        "row_count": 716,
+        "through_generation": 716
+      },
+      "dashboard": {
+        "metadata_sha256": "9137c23a07120594ee6bf3fa5be26caca2cc003619e07e9f8c3d00db433e5906",
+        "parent_chain_verified": true,
+        "row_count": 1363,
+        "through_generation": 1363
+      },
+      "executive": {
+        "metadata_sha256": "33d21977b4ac626021110e196c04d8871566df7962f77b58ced74f9407c294aa",
+        "parent_chain_verified": true,
+        "row_count": 649,
+        "through_generation": 649
+      },
+      "legislative": {
+        "metadata_sha256": "1e5088b0c563440f4a8b34fef7863b15bb7d826137f61b4f052b1a19b38ca9bb",
+        "parent_chain_verified": true,
+        "row_count": 1265,
+        "through_generation": 1265
+      }
+    },
+    "completed_run_history": {
+      "row_count": 4059,
+      "rows_sha256": "95e3d292537e45cf4f2ea7c77afdd351528c794c56495f28fe6ab6b9d18dd9a8"
+    },
+    "immutable_notifications": {
+      "row_count": 0,
+      "rows_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "notification_events": {
+      "row_count": 0,
+      "rows_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "configuration": {
+    "original_schedules_restored": true,
+    "last_schedule_observation": {
+      "at": "2026-09-20T13:55:30.379935+00:00",
+      "states": {
+        "polititrack-executive": "ENABLED",
+        "polititrack-ai": "ENABLED",
+        "polititrack-dashboard": "ENABLED",
+        "polititrack-legislative": "ENABLED",
+        "polititrack-vault-lifecycle": "PAUSED"
+      }
+    },
+    "live_assets_verified": true,
+    "live_ocr_api_sign_in_boundary_verified": true,
+    "current_opportunity": "OFF",
+    "filing_vault": "PAUSED"
+  },
+  "producer_passes": [
+    {
+      "step": "legislative-1",
+      "execution": "polititrack-legislative-xlsgn",
+      "events": [
+        {
+          "generation": 1264,
+          "namespace": "legislative",
+          "result": "success",
+          "snapshot_sha256": "b71b0c99405e742a10ca9ea7c81c2885a5a0fb62e3c2dda06f96d34cf55aff26"
+        },
+        {
+          "branch": "legislative",
+          "cleanup_status": "not_needed",
+          "documents_attempted": 5,
+          "documents_completed": 5,
+          "event": "source_ocr_health",
+          "finished_at": "2026-09-20T13:18:06.074150Z",
+          "intake_status": "ok",
+          "needs_review_count": 5,
+          "pages_completed": 36,
+          "pages_expected": 36,
+          "retry_delayed_count": 0,
+          "retry_remaining": 10,
+          "run_id": "9f6701dc-d083-4942-9823-1c9ee849aec6",
+          "stage": "complete",
+          "transactions_appended": 0
+        }
+      ]
+    },
+    {
+      "step": "executive-1",
+      "execution": "polititrack-executive-xr8kv",
+      "events": [
+        {
+          "generation": 648,
+          "namespace": "executive",
+          "result": "success",
+          "snapshot_sha256": "f0fef6dd918ef84de30dc9ba43b2457f9e8a5fb700e80a77a2d7eda6e3615635"
+        },
+        {
+          "branch": "executive",
+          "cleanup_status": "not_needed",
+          "documents_attempted": 5,
+          "documents_completed": 4,
+          "event": "source_ocr_health",
+          "finished_at": "2026-09-20T13:22:38.874878Z",
+          "intake_status": "ok",
+          "needs_review_count": 4,
+          "pages_completed": 18,
+          "pages_expected": 18,
+          "retry_delayed_count": 1,
+          "retry_remaining": 1,
+          "run_id": "b9da68fe-aa75-401b-86bd-743504fe3455",
+          "stage": "complete",
+          "transactions_appended": 0
+        }
+      ]
+    },
+    {
+      "step": "legislative-2",
+      "execution": "polititrack-legislative-2nmjr",
+      "events": [
+        {
+          "generation": 1265,
+          "namespace": "legislative",
+          "result": "success",
+          "snapshot_sha256": "a368894f57bbcdcfbfb1cf4bd8f03532a1c4842b46ec0dad507468dbe015cfa5"
+        },
+        {
+          "branch": "legislative",
+          "cleanup_status": "not_needed",
+          "documents_attempted": 4,
+          "documents_completed": 4,
+          "event": "source_ocr_health",
+          "finished_at": "2026-09-20T13:27:54.065330Z",
+          "intake_status": "ok",
+          "needs_review_count": 4,
+          "pages_completed": 46,
+          "pages_expected": 46,
+          "retry_delayed_count": 0,
+          "retry_remaining": 6,
+          "run_id": "ad6bc299-8f32-4699-a5a0-0a565028870d",
+          "stage": "complete",
+          "transactions_appended": 0
+        }
+      ]
+    },
+    {
+      "step": "executive-2",
+      "execution": "polititrack-executive-sf8h8",
+      "events": [
+        {
+          "generation": 649,
+          "namespace": "executive",
+          "result": "success",
+          "snapshot_sha256": "ee9f311e1318ffd747320188072b0e206fa78a54350426f368e0fcb393abaa7d"
+        },
+        {
+          "branch": "executive",
+          "cleanup_status": "not_needed",
+          "documents_attempted": 5,
+          "documents_completed": 5,
+          "event": "source_ocr_health",
+          "finished_at": "2026-09-20T13:33:30.008854Z",
+          "intake_status": "ok",
+          "needs_review_count": 5,
+          "pages_completed": 15,
+          "pages_expected": 15,
+          "retry_delayed_count": 0,
+          "retry_remaining": 1,
+          "run_id": "b077803c-53a6-4260-9336-51ea3d5486b7",
+          "stage": "complete",
+          "transactions_appended": 0
+        }
+      ]
+    }
+  ],
+  "transport": {
+    "interruption": "SSH transport dropped after AI submission; same journal resumed with no duplicate producer submission",
+    "resumed_detached": true
+  },
+  "result": "DEPLOYED_WITH_OCR_WARNINGS",
+  "ci": {
+    "source_ocr": {
+      "run_id": 35510840684,
+      "conclusion": "success",
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510840684"
+    },
+    "runtime_safety": {
+      "run_id": 35510840687,
+      "conclusion": "success",
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510840687"
+    },
+    "current_opportunity_offline": {
+      "run_id": 35510840685,
+      "conclusion": "success",
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35510840685"
+    },
+    "merge_ocr": {
+      "run_id": 35511460884,
+      "conclusion": "success",
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35511460884"
+    },
+    "release_controller": {
+      "run_id": 35512024741,
+      "conclusion": "success",
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35512024741",
+      "tests_passed": 172
+    }
+  },
+  "controlled_batch_totals": {
+    "attempts": 19,
+    "documents_completed": 18,
+    "pages_expected": 115,
+    "pages_completed": 115,
+    "transactions_appended": 0,
+    "technical_retries_remaining": {
+      "legislative": 6,
+      "executive": 1
+    }
+  },
+  "independent_ocr_verification": {
+    "execution": "polititrack-admin-n2fdz",
+    "read_only": true,
+    "verifier_sha256": "59ef5180f937d641cce7e3ace32438f9faefcfd33e11f35f582380c2d8d23db8",
+    "injected_query_sha256": "107386ed1e0e9d9c581064d8b07b0f326436feb27981cd0099fc598ccfa1432e",
+    "receipt": {
+      "execution": "polititrack-admin-n2fdz",
+      "namespaces": {
+        "executive": {
+          "baseline_due_retries": 3,
+          "baseline_retries_attempted": 3,
+          "baseline_retries_resolved": 2,
+          "current_total_technical_retries": 1,
+          "generation": 649,
+          "new_extraction_files": 9,
+          "outcomes": [
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "MonitorError",
+              "error_code": "MonitorError",
+              "filing_key": "oge|oge:29228ca69c134b357487711903d725be",
+              "next_attempt_at": "2026-09-20T13:40:54.129085Z",
+              "retried": true,
+              "status": "retry_delayed"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "Error",
+              "error_code": "native_ocr_disagreement",
+              "filing_key": "oge|oge:3842e7015a75a14471dbc143022ffa89",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "ReadTimeout",
+              "error_code": "PaperFilingError",
+              "filing_key": "oge|oge:553bf1921a88f459decc4ef1d87dfa9a",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            }
+          ],
+          "prior_extraction_files_preserved": 126,
+          "prior_ocr_receipts_preserved": true,
+          "snapshot_id": "ceeb2346-c7a8-4bc0-83ac-be38ba2a06df",
+          "snapshot_sha256": "ee9f311e1318ffd747320188072b0e206fa78a54350426f368e0fcb393abaa7d"
+        },
+        "legislative": {
+          "baseline_due_retries": 15,
+          "baseline_retries_attempted": 9,
+          "baseline_retries_resolved": 9,
+          "current_total_technical_retries": 6,
+          "generation": 1265,
+          "new_extraction_files": 9,
+          "outcomes": [
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8220747",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8220754",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8220764",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8221173",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8221176",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8221212",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8221231",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:8221302",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 2,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "unsupported_scanned_layout",
+              "filing_key": "house|house:2025:9115662",
+              "next_attempt_at": null,
+              "retried": true,
+              "status": "needs_review"
+            },
+            {
+              "attempts_after": 1,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "incomplete_page_ocr",
+              "filing_key": "house|house:2025:9115664",
+              "next_attempt_at": "2026-09-20T01:34:26.618671Z",
+              "retried": false,
+              "status": "retry_delayed"
+            },
+            {
+              "attempts_after": 1,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "incomplete_page_ocr",
+              "filing_key": "house|house:2025:9115671",
+              "next_attempt_at": "2026-09-20T01:48:18.166046Z",
+              "retried": false,
+              "status": "retry_delayed"
+            },
+            {
+              "attempts_after": 1,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "incomplete_page_ocr",
+              "filing_key": "house|house:2025:9115676",
+              "next_attempt_at": "2026-09-20T01:49:05.562920Z",
+              "retried": false,
+              "status": "retry_delayed"
+            },
+            {
+              "attempts_after": 1,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "incomplete_page_ocr",
+              "filing_key": "house|house:2025:9115679",
+              "next_attempt_at": "2026-09-20T01:50:22.209141Z",
+              "retried": false,
+              "status": "retry_delayed"
+            },
+            {
+              "attempts_after": 1,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "incomplete_page_ocr",
+              "filing_key": "house|house:2025:9115684",
+              "next_attempt_at": "2026-09-20T02:02:54.455331Z",
+              "retried": false,
+              "status": "retry_delayed"
+            },
+            {
+              "attempts_after": 1,
+              "attempts_before": 1,
+              "before_error": "incomplete_page_ocr",
+              "error_code": "incomplete_page_ocr",
+              "filing_key": "house|house:2026:20034351",
+              "next_attempt_at": "2026-09-20T10:04:00.445283Z",
+              "retried": false,
+              "status": "retry_delayed"
+            }
+          ],
+          "prior_extraction_files_preserved": 355,
+          "prior_ocr_receipts_preserved": true,
+          "snapshot_id": "6bbb3d31-2787-4c15-a70e-aedc497b640f",
+          "snapshot_sha256": "a368894f57bbcdcfbfb1cf4bd8f03532a1c4842b46ec0dad507468dbe015cfa5"
+        }
+      },
+      "owner_upload": {
+        "pages": 2,
+        "raw_payload_is_null": true,
+        "review_rows": 5,
+        "status": "needs_review"
+      },
+      "probe": "polititrack_ocr_page_retry_acceptance_v1",
+      "read_only": true,
+      "result": "PASS",
+      "source": "aba0285689d649d94e3e11444b582c748927bbc4"
+    },
+    "completed_at": "2026-09-20T13:58:54.522947Z",
+    "receipt_sha256": "4c3336c595fb09633da85858baaa3e2b58ecdbc86171c6a10d8b0bb49413cebc"
+  },
+  "post_restoration_scheduled_run": {
+    "observation": {
+      "execution": "polititrack-legislative-wl5tn",
+      "created_at": "2026-09-20T14:05:00.881741Z",
+      "creator": "polititrack-scheduler-v2@project-38008d5f-4918-46e6-920.iam.gserviceaccount.com",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+      "args": [
+        "-m",
+        "runtime_v2",
+        "run",
+        "legislative"
+      ],
+      "flags": {
+        "POLITITRACK_TRIGGER_SOURCE": "external_scheduler",
+        "SOURCE_REVISION": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "RUNTIME_SOURCE_OCR_ENABLED": "true"
+      },
+      "status": {
+        "completionTime": "2026-09-20T14:10:39.633139Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-09-20T14:10:39.633139Z",
+            "message": "Execution completed successfully in 5m13.13s.",
+            "status": "True",
+            "type": "Completed"
+          },
+          {
+            "lastTransitionTime": "2026-09-20T14:05:02.229295Z",
+            "message": "Provisioned imported containers.",
+            "status": "True",
+            "type": "ResourcesAvailable"
+          },
+          {
+            "lastTransitionTime": "2026-09-20T14:07:01.601855Z",
+            "message": "Started deployed execution in 1m59.37s.",
+            "status": "True",
+            "type": "Started"
+          },
+          {
+            "lastTransitionTime": "2026-09-20T14:05:01.854408Z",
+            "message": "Imported container image.",
+            "status": "True",
+            "type": "ContainerReady"
+          }
+        ],
+        "startTime": "2026-09-20T14:05:26.497858Z",
+        "succeededCount": 1,
+        "failedCount": null
+      }
+    },
+    "manual_dispatch": false,
+    "schedule": "5,20,35,50 * * * *",
+    "time_zone": "Etc/UTC",
+    "result": "PASS",
+    "latest_ocr": {
+      "access_remaining": 0,
+      "access_required_count": 0,
+      "acknowledgements_replayed": 0,
+      "branch": "legislative",
+      "cleanup_status": "not_needed",
+      "complete_count": 0,
+      "documents_attempted": 4,
+      "documents_completed": 3,
+      "duration_seconds": 180.229,
+      "eligible_count": 642,
+      "enabled": true,
+      "engine_version": "source-ocr-v2",
+      "event": "source_ocr_health",
+      "extractions_reused": 0,
+      "finished_at": "2026-09-20T14:10:35.824421Z",
+      "heartbeat_at": "2026-09-20T14:10:35.824444Z",
+      "intake_status": "ok",
+      "inventory_count": 1011,
+      "last_document_completed_at": "2026-09-20T14:10:07.763555Z",
+      "needs_review_count": 3,
+      "not_applicable_count": 0,
+      "oldest_ready_at": "2026-08-26T12:11:42Z",
+      "pages_completed": 40,
+      "pages_expected": 40,
+      "ready_remaining": 638,
+      "retry_delayed_count": 1,
+      "retry_remaining": 3,
+      "review_remaining": 701,
+      "run_id": "5d97cbb1-631e-454e-9c15-53a2edc99e48",
+      "schema_version": 1,
+      "stage": "complete",
+      "started_at": "2026-09-20T14:07:06.271376Z",
+      "transactions_appended": 0,
+      "unobserved_remaining": 274
+    },
+    "committed": {
+      "generation": 1266,
+      "mode": "production",
+      "namespace": "legislative",
+      "result": "success",
+      "snapshot_sha256": "ddb95149b6ce8cbcba22ba7e0e353a43c0a895fb5304b3db767033de71eb6f42"
+    }
+  },
+  "upstream_document_blocker": {
+    "filing_key": "oge|oge:29228ca69c134b357487711903d725be",
+    "filer": "Katharine MacGregor",
+    "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/294765D0509B1112852585E10027E9D3/$FILE/Katharine-MacGregor-08.13.2020-278T.pdf",
+    "observed_http_status": 404,
+    "cause_of_source_unavailability": "Not established",
+    "retry_history_preserved": true,
+    "backoff_unchanged": true
+  },
+  "local_source_verification": {
+    "python_passed": 346,
+    "environment_dependent_skips": 22,
+    "node_passed": 4,
+    "focused_passed": 83,
+    "focused_skips": 5,
+    "actual_house_sample_pages": {
+      "8220754": "4/4",
+      "20034351": "3/3"
+    }
+  },
+  "optional_followup": {
+    "producer_submitted": false,
+    "reason": "Full Legislative execution inventory exceeded 90-second read timeout; prerequisite failed before intent creation or dispatch.",
+    "followup_intent_absent_verified": true,
+    "accepted_journal_unchanged_verified": true,
+    "next_action": "Original 14:05 UTC Legislative schedule"
+  },
+  "post_scheduled_technical_retries": {
+    "legislative": 3,
+    "executive": 1
+  },
+  "followup_publication": {
+    "execution": "polititrack-dashboard-tdnzh",
+    "completed_condition": {
+      "lastTransitionTime": "2026-09-20T14:15:53.360958Z",
+      "message": "Execution completed successfully in 3m48.82s.",
+      "status": "True",
+      "type": "Completed"
+    },
+    "completed_at": "2026-09-20T14:15:53.360958Z",
+    "intent": {
+      "at": "2026-09-20T14:11:50.539916+00:00",
+      "job": "polititrack-dashboard",
+      "source": "aba0285689d649d94e3e11444b582c748927bbc4",
+      "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:f0fc0a54029094043448da348f5e2c04889b1f4863d11fd35ee68ee9999c4c84",
+      "release_journal_sha256": "9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd",
+      "existing_executions_confirmed_terminal": 1073,
+      "purpose": "Publish genuine post-restoration scheduled OCR retry results",
+      "canonical_args": [
+        "-m",
+        "runtime_v2",
+        "run",
+        "dashboard"
+      ]
+    },
+    "committed": {
+      "generation": 1365,
+      "mode": "production",
+      "namespace": "dashboard",
+      "result": "success",
+      "snapshot_sha256": "92be19653163dacc8a29a004b426a844e6c0efc38b15dcdf6874b3f3acd5ce0e"
+    },
+    "result": "PASS"
+  },
+  "live_public_verification": {
+    "observed_at": "2026-09-20T14:17:32.378388+00:00",
+    "generated_utc": "2026-09-20T14:15:05Z",
+    "http": {
+      "/": {
+        "http_status": 200,
+        "sha256": "d88269887ab0908ca4be6bca1d2c74daeb5c1a64a3afe7f6d1d5920b9be75d1c"
+      },
+      "/readyz": {
+        "http_status": 200,
+        "sha256": "d14fbcfee3a25304722ff1bd11aa17c3634d80dff2feb76c36548ef653b453e4"
+      },
+      "/data/dashboard-insights.json": {
+        "http_status": 200,
+        "sha256": "d5bad6a3e0a3d383fb0fc8b3dff4087d89c18dd354a01b8808a9355f9b59b3ba"
+      },
+      "/data/filings.json": {
+        "http_status": 200,
+        "sha256": "ab042c3d873eba99d966577e170742ecbd24ae00be35ead38e0b0f3b35ceec2f"
+      }
+    },
+    "prior_public_filing_ids_preserved": true,
+    "filing_count": 5152,
+    "ocr_health": {
+      "legislative": {
+        "status": "failure",
+        "activity": "degraded",
+        "enabled": true,
+        "detail": "OCR completed only partially: intake, document processing or post-commit cleanup needs attention.",
+        "run_id": "legislative:5d97cbb1-631e-454e-9c15-53a2edc99e48",
+        "stale_after_minutes": 30,
+        "schema_version": 1,
+        "stage": "complete",
+        "inventory_count": 1011,
+        "eligible_count": 642,
+        "documents_attempted": 4,
+        "documents_completed": 3,
+        "extractions_reused": 0,
+        "acknowledgements_replayed": 0,
+        "pages_completed": 40,
+        "pages_expected": 40,
+        "transactions_appended": 0,
+        "complete_count": 0,
+        "needs_review_count": 3,
+        "access_required_count": 0,
+        "retry_delayed_count": 1,
+        "not_applicable_count": 0,
+        "ready_remaining": 638,
+        "review_remaining": 701,
+        "access_remaining": 0,
+        "retry_remaining": 3,
+        "unobserved_remaining": 274,
+        "started_at": "2026-09-20T14:07:06.271376Z",
+        "heartbeat_at": "2026-09-20T14:10:35.824444Z",
+        "finished_at": "2026-09-20T14:10:35.824421Z",
+        "last_document_completed_at": "2026-09-20T14:10:07.763555Z",
+        "oldest_ready_at": "2026-08-26T12:11:42Z",
+        "intake_status": "ok",
+        "cleanup_status": "not_needed",
+        "engine_version": "source-ocr-v2",
+        "duration_seconds": 180.229,
+        "age_minutes": 4.48625965,
+        "required": true,
+        "last_success_at": null
+      },
+      "executive": {
+        "status": "failure",
+        "activity": "degraded",
+        "enabled": true,
+        "detail": "OCR completed only partially: intake, document processing or post-commit cleanup needs attention.",
+        "run_id": "executive:b974111b-8f03-4da0-8b55-2ff1409bfd58",
+        "stale_after_minutes": 60,
+        "schema_version": 1,
+        "stage": "complete",
+        "inventory_count": 4141,
+        "eligible_count": 4005,
+        "documents_attempted": 5,
+        "documents_completed": 4,
+        "extractions_reused": 0,
+        "acknowledgements_replayed": 0,
+        "pages_completed": 15,
+        "pages_expected": 15,
+        "transactions_appended": 0,
+        "complete_count": 0,
+        "needs_review_count": 4,
+        "access_required_count": 0,
+        "retry_delayed_count": 1,
+        "not_applicable_count": 0,
+        "ready_remaining": 4000,
+        "review_remaining": 140,
+        "access_remaining": 39,
+        "retry_remaining": 1,
+        "unobserved_remaining": 3961,
+        "started_at": "2026-09-20T14:12:31.239887Z",
+        "heartbeat_at": "2026-09-20T14:14:45.145908Z",
+        "finished_at": "2026-09-20T14:14:45.145884Z",
+        "last_document_completed_at": "2026-09-20T14:14:44.743208Z",
+        "oldest_ready_at": "2026-08-26T12:14:33Z",
+        "intake_status": "ok",
+        "cleanup_status": "not_needed",
+        "engine_version": "source-ocr-v2",
+        "duration_seconds": 58.294,
+        "age_minutes": 0.33090193333333334,
+        "required": true,
+        "last_success_at": null
+      }
+    },
+    "technical_retries": [
+      {
+        "filing_key": "house|house:2026:20034351",
+        "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2026/20034351.pdf",
+        "ocr_status": "retry_delayed",
+        "ocr_error_code": "incomplete_page_ocr",
+        "ocr_attempted_at": "2026-09-20T09:53:51.189954Z",
+        "ocr_next_attempt_at": "2026-09-20T10:04:00.445283Z"
+      },
+      {
+        "filing_key": "house|house:2025:9115684",
+        "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/9115684.pdf",
+        "ocr_status": "retry_delayed",
+        "ocr_error_code": "incomplete_page_ocr",
+        "ocr_attempted_at": "2026-09-20T01:52:40.079703Z",
+        "ocr_next_attempt_at": "2026-09-20T02:02:54.455331Z"
+      },
+      {
+        "filing_key": "house|house:2025:9115679",
+        "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/9115679.pdf",
+        "ocr_status": "retry_delayed",
+        "ocr_error_code": "pdf_render_failed",
+        "ocr_attempted_at": "2026-09-20T14:10:07.784279Z",
+        "ocr_next_attempt_at": "2026-09-20T14:30:34.714405Z"
+      },
+      {
+        "filing_key": "oge|oge:29228ca69c134b357487711903d725be",
+        "source_url": "https://extapps2.oge.gov/201/Presiden.nsf/PAS+Index/294765D0509B1112852585E10027E9D3/$FILE/Katharine-MacGregor-08.13.2020-278T.pdf",
+        "ocr_status": "retry_delayed",
+        "ocr_error_code": "MonitorError",
+        "ocr_attempted_at": "2026-09-20T14:13:46.469652Z",
+        "ocr_next_attempt_at": "2026-09-20T14:53:46.580624Z"
+      }
+    ],
+    "scheduled_ocr_metrics_match": true,
+    "earlier_check": {
+      "result": "One dashboard-insights request returned 503; the subsequent root, readiness, insights and filings checks all returned 200.",
+      "cloud_request_timestamp": "2026-09-20T14:16:42.378909Z",
+      "endpoint": "/data/dashboard-insights.json",
+      "latency_seconds": 0.596406529,
+      "cause": "Not established; no configuration or gate change was made to conceal it."
+    }
+  },
+  "remaining_house_diagnostic": {
+    "filing_key": "house|house:2025:9115679",
+    "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2025/9115679.pdf",
+    "sha256": "cacef2564e9c121c8cc9916060b6dffd592bea668c4e308fb066769c598d0bb2",
+    "pages": 20,
+    "completed_pages": 20,
+    "empty_ocr_pages": [],
+    "local_elapsed_seconds": 36.317,
+    "document_timeout_seconds": 120,
+    "observed_at": "2026-09-20T14:19:08.822512+00:00",
+    "production_write": false,
+    "production_retry_still_pending": true
+  },
+  "remaining": {
+    "legislative": {
+      "technical_retries": 3,
+      "unattempted_prior_page_coverage_retries": 2,
+      "pdf_render_failed": 1,
+      "full_allowance_local_recheck_pages": "20/20",
+      "live_retry_pending": true
+    },
+    "executive": {
+      "technical_retries": 1,
+      "official_source_http_status": 404
+    },
+    "owner_upload": "Two pages and five rows remain needs_review; raw payload null; no resubmission or approval.",
+    "original_technical_retries_resolved_as_of_public_snapshot": 14,
+    "next_safe_action": "Let original bounded schedules service remaining House retries with unchanged backoff. Retain the OGE source warning. Do not reopen the accepted release or reset state."
+  }
+}
