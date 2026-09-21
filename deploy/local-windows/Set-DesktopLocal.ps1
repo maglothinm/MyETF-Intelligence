@@ -26,7 +26,7 @@ foreach ($type in (Get-AllTypes $assembly.MainModule.Types)) {
         }
     }
 }
-if ($changes -ne 4) { $assembly.Dispose(); throw "Unexpected launcher layout: $changes URL references. No file changed." }
+if ($changes -ne 5) { $assembly.Dispose(); throw "Unexpected launcher layout: $changes URL references. No file changed." }
 Write-Output "Prepared $changes URL substitutions, preserving existing tray, icon, startup and notification code."
 if (-not $Apply) { $assembly.Dispose(); exit 0 }
 if ((Invoke-WebRequest -UseBasicParsing "$new/readyz").StatusCode -ne 200) { throw 'Local dashboard is not ready.' }
