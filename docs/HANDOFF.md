@@ -17,7 +17,8 @@ receipts must supersede this preparation checkpoint before completion is claimed
 
 Focused validation: 86 tests passed and 30 PostgreSQL variants skipped locally.
 Existing states, identifiers, account data, OCR evidence and delivery history
-must migrate in full. Vault and Current Opportunity retain their disabled states.
+must migrate in full. Current Opportunity remains off and Vault lifecycle stays paused; the enabled
+Vault API is preserved with private local file storage.
 
 Next safe action: finish the frozen SQL export; restore and compare all-table
 fingerprints; validate native Windows services; activate local authority only

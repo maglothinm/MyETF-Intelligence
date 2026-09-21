@@ -27,6 +27,7 @@ def test_schedule_coalesces_missed_intervals_without_replay():
 
 def test_local_runtime_refuses_cloud_database_and_inherited_secrets(tmp_path, monkeypatch):
     value = config(tmp_path)
+    value['environments']['web']['VAULT_ENABLED'] = 'true'
     path = tmp_path / "runtime.json"
     path.write_text(json.dumps(value))
     assert load_config(path) == value
@@ -38,6 +39,10 @@ def test_local_runtime_refuses_cloud_database_and_inherited_secrets(tmp_path, mo
     assert "OPENAI_API_KEY" not in env
     assert env["SYSTEMROOT"] == "windows-required"
     assert env["ALLOW_STATE_INITIALIZATION"] == "false"
+    assert env["POLITITRACK_TRIGGER_SOURCE"] == "external_scheduler"
+    assert env['VAULT_ENABLED'] == 'true'
+    assert env['VAULT_STORAGE_BACKEND'] == 'windows_local'
+    assert env['VAULT_DATABASE_URL'] == value['database_url']
     value["database_url"] = value["database_url"].replace("127.0.0.1", "cloud.example")
     path.write_text(json.dumps(value))
     with pytest.raises(ValueError):
@@ -56,6 +61,24 @@ def test_no_writer_without_verified_cutover_receipt(tmp_path):
     data["database_verified"] = True
     receipt.write_text(json.dumps(data))
     assert active(value)
+
+
+def test_private_vault_storage_requires_windows_and_local_database(tmp_path, monkeypatch):
+    import backend.filing_vault as vault
+    from backend.filing_vault.storage import FileObjectStore
+    settings = {'VAULT_ENV': 'production', 'VAULT_STORAGE_BACKEND': 'windows_local', 'VAULT_ENGINE': object(),
+                'VAULT_DATABASE_URL': 'postgresql://runtime:secret@127.0.0.1:54329/polititrack',
+                'VAULT_FILE_ROOT': str(tmp_path / 'evidence'), 'RUNTIME_LOCAL_ONLY': 'true'}
+    monkeypatch.setattr(vault, 'operating_platform', 'linux')
+    with pytest.raises(ValueError, match='dedicated loopback'):
+        vault.configured_service(settings)
+    monkeypatch.setattr(vault, 'operating_platform', 'win32')
+    service = vault.configured_service(settings)
+    assert isinstance(service.store, FileObjectStore)
+    for key, value in [('RUNTIME_LOCAL_ONLY', 'false'),
+                       ('VAULT_DATABASE_URL', 'postgresql://runtime:secret@remote.test:54329/polititrack')]:
+        with pytest.raises(ValueError, match='dedicated loopback'):
+            vault.configured_service({**settings, key: value})
 
 
 @pytest.mark.parametrize("origin,host,remote,allowed", [

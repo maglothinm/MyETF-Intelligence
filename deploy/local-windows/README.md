@@ -40,8 +40,10 @@ per active day and retains the latest two separately from migration evidence.
 
 Local HTTP is restricted to the exact loopback host and port. Owner sessions
 retain HttpOnly/SameSite=Strict and origin checks with a dedicated local cookie;
-remote deployment HTTPS behavior is unchanged. Vault, Current Opportunity and
-manual cloud job controls retain their disabled state. Existing accounts,
+remote deployment HTTPS behavior is unchanged. The enabled Vault API uses a
+Windows-only private filesystem backend with the same local PostgreSQL database;
+Vault lifecycle stays paused. Current Opportunity and manual cloud job controls
+retain their disabled state. Existing accounts,
 acknowledgements, OCR evidence, ledgers and notification delivery state migrate.
 
 Stop the scheduler before maintenance, then the web and database services. Start

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from sys import platform as operating_platform
+from urllib.parse import urlsplit
 
 from flask import Flask, jsonify
 from sqlalchemy import create_engine
@@ -53,6 +55,15 @@ def configured_service(config):
     if backend == "filesystem":
         if mode not in {"development", "test"} or not config.get("VAULT_FILE_ROOT"):
             raise ValueError("Filesystem storage requires explicit development/test mode and VAULT_FILE_ROOT")
+        store = FileObjectStore(config["VAULT_FILE_ROOT"],
+                                repository_root=Path(__file__).resolve().parents[2], max_bytes=maximum)
+    elif backend == "windows_local":
+        database = urlsplit(str(config.get("VAULT_DATABASE_URL", "")))
+        if (operating_platform != "win32" or config.get("RUNTIME_LOCAL_ONLY") != "true"
+                or database.scheme != "postgresql" or database.hostname != "127.0.0.1"
+                or database.port != 54329 or database.path != "/polititrack"
+                or not config.get("VAULT_FILE_ROOT")):
+            raise ValueError("Windows local storage requires the dedicated loopback runtime and private file root")
         store = FileObjectStore(config["VAULT_FILE_ROOT"],
                                 repository_root=Path(__file__).resolve().parents[2], max_bytes=maximum)
     elif backend == "supabase":

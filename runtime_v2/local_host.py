@@ -58,9 +58,12 @@ def environment(config, job):
     result.update(DATABASE_URL=config["database_url"], POLITITRACK_MODE="production",
                   RUNTIME_LOCAL_ONLY="true", RUNTIME_REVIEW_ORIGIN=ORIGIN,
                   DASHBOARD_URL=ORIGIN + "/#overview", RUNTIME_OPERATIONS_ENABLED="false",
-                  VAULT_ENABLED="false", PYTHONUTF8="1", PYTHONUNBUFFERED="1",
+                  VAULT_STORAGE_BACKEND="windows_local", VAULT_FILE_ROOT=str(root / "vault"),
+                  VAULT_DATABASE_URL=config["database_url"], VAULT_ALLOWED_ORIGINS=ORIGIN,
+                  PYTHONUTF8="1", PYTHONUNBUFFERED="1",
                   PLAYWRIGHT_BROWSERS_PATH=str(root / "tools" / "playwright"),
                   SOURCE_REVISION=config["source_revision"],
+                  POLITITRACK_TRIGGER_SOURCE="external_scheduler",
                   ALLOW_STATE_INITIALIZATION="false", BOOTSTRAP_ALERTS="false")
     result["PATH"] = os.pathsep.join(config["tool_paths"] + [result.get("PATH", "")])
     result["TEMP"] = result["TMP"] = str(root / "temp")

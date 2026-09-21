@@ -56,6 +56,13 @@ try {
         $existing = Get-Service $id -ErrorAction SilentlyContinue
         if ($existing -and $existing.Status -ne 'Stopped') { Stop-Service $id -Force }
     }
+    # A dashboard may be running under the owner during migration acceptance.
+    # Stop only that dedicated loopback web process before binding its service.
+    $rootPattern = [regex]::Escape($Root)
+    Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+        Where-Object { $_.CommandLine -match $rootPattern -and
+                       $_.CommandLine -match 'runtime_v2\.local_host.*\sweb\s*$' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
     # The migration temporarily runs PostgreSQL under the owner. Transfer it
     # cleanly to LocalService, retaining the exact existing data directory.
     if (Test-Path "$Root\postgres-data\postmaster.pid") {

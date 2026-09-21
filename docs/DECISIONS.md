@@ -1618,3 +1618,10 @@ local acceptance. Services start before sign-in under LocalService; the existing
 desktop launcher keeps its tray behavior and uses the loopback dashboard. Local
 HTTP has a distinct cookie and exact loopback/host/origin checks. Sleeping or
 powered-off machines do not run jobs; missed intervals coalesce on return.
+
+The live configuration distinguishes an enabled Vault API from its paused
+lifecycle scheduler. Preserve that API using a guarded `windows_local` object
+backend outside the checkout, retaining production PostgreSQL and the existing
+signing key. Do not misrepresent a paused crawler as a disabled API or enable
+development storage in production. Source Vault catalog and GCS objects were
+empty at the migration baseline.
