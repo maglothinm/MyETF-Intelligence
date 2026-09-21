@@ -85,6 +85,17 @@ try {
         Start-Service $entry.Id
         (Get-Service $entry.Id).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
     }
+    $ready = $false
+    for ($attempt=0; $attempt -lt 60; $attempt++) {
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8765/readyz' -TimeoutSec 5
+            if ($response.StatusCode -eq 200) { $ready = $true; break }
+        } catch { Start-Sleep -Seconds 1 }
+    }
+    if (-not $ready) { throw 'Services were registered, but dashboard readiness did not pass. Inspect the service logs.' }
+    foreach ($entry in $entries) {
+        if ((Get-Service $entry.Id).Status -ne 'Running') { throw "Service exited during verification: $($entry.Id)" }
+    }
     Get-CimInstance Win32_Service -Filter "Name LIKE 'PolitiTrack%'" |
         Select-Object Name, State, StartMode, StartName, PathName |
         ConvertTo-Json | Set-Content "$Root\backups\installed-services.json"
