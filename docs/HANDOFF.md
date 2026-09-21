@@ -1,31 +1,44 @@
 # PolitiTrack active handoff
 
-## September 21 dashboard success history and OCR status repair (#208)
+## September 21 dashboard history repair — deployed and verified (#208)
 
-Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`; implementation
-branch `codex/dashboard-health-history-20260921`, based on main
-`096d21e8c817c0b1e97250400e2d135d63c03b6c`.
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`, main
+application source **50e3e0d6d0a09475cae694a74bfaf501416892f2** (PR #209).
+The existing dashboard producer alone now uses image digest
+`sha256:7003b8e37fdd2e949de6fb49f47e8544cc69bc4fb49a3ff11372240e9d71cd9b`.
+The other five resources retain `aba0285689d649d94e3e11444b582c748927bbc4`
+and their prior normalized configuration. All four original schedules are enabled;
+Vault lifecycle remains paused and Current Opportunity off.
 
-The dashboard's seven-row Runtime attempt query omitted the Executive success
-from September 21 04:18 UTC after later failures, exposing a retained September 1
-legacy date. The collector's unlabeled success footer also appeared below OCR.
-Independent snapshot-verified production history now supplies collection, healthy
-OCR, completed OCR and completed-document anchors. The recent attempt timeline
-and current failure remain independent. Both compact and Operations cards put
-collector dates within a collector section and OCR dates within Source OCR.
+The seven-attempt cutoff no longer controls last-success dates. Snapshot-verified
+production success history now supplies independent collection, completed OCR,
+healthy OCR and document-completion dates. Overview, Operations and monitor cards
+separate collector and Source OCR sections; blocked OCR is labeled explicitly.
+The live Executive collection and completed OCR dates are **September 21 04:18
+UTC**, replacing the misleading September 1 collection date. The last healthy OCR
+pass is separately **September 20 00:45 UTC**. Current OGE collection failure stays
+visible and OCR is **Blocked by collection**; no upstream recovery is claimed.
 
-Local focused tests: 122 Python passed (two PostgreSQL integration tests require
-CI's service); five Node health tests passed. New integration coverage exercises
-real PostgreSQL selection after 20 failures and rejects shadow, unverified,
-future and mismatched snapshot evidence. CI, merge and deployment are pending.
+Publication `polititrack-dashboard-rm6cd` succeeded at **11:29:11 UTC**; Dashboard
+**1451** is the direct immutable successor of **1450**. Baseline
+`polititrack-admin-vmb4c` and acceptance `polititrack-admin-qcwpb` passed. Prior
+snapshots, ledgers, identities, accounts, acknowledgements, completed runs and
+notification history were preserved. Acceptance source generations: Legislative
+**1350**, Executive **671**, AI **759**. Live readiness matches the accepted
+snapshot; root/data/assets returned 200 and all changed asset hashes matched.
+Overview and Operations were inspected in the browser.
 
-Release scope is the existing dashboard producer and its generated snapshot.
-Source producers and the web service need no code/config changes. Preserve all
-immutable heads and histories, original schedules, OCR receipts and account state.
-A fresh read-only baseline, original dashboard writer lock/commit path, exact
-image/source verification and post-release continuity/live asset checks are
-required. Do not replay the closed OCR release journal. Current Executive OGE
-collection failures remain an upstream incident and must remain visible.
+Local focused validation: 218 Python and five Node health tests passed. Final
+Runtime safety CI **35592427023** passed (including real PostgreSQL); PR source CI
+**35592426780**, Investor Edge **35592426651**, Current Opportunity **35592426885**,
+and merged-main source **35592689411** / Investor Edge **35592689390** all passed.
+
+No #208 release blocker remains. Next safe action: normal scheduled publication
+and separate diagnosis of the OGE incident / existing availability concerns.
+Reload the page to load new labels. Do not replay the closed OCR release journal.
+
+[Release and limitations](releases/2026-09-21-dashboard-health.md) ·
+[Exact snapshot, CI, HTTP and integrity receipts](releases/2026-09-21-dashboard-health.json).
 
 ## September 20 OCR follow-up — live processing and continuity verified (#203)
 
