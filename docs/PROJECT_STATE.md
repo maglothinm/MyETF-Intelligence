@@ -1,24 +1,59 @@
 # PolitiTrack project state
 
-## September 21 Windows migration — preparation in progress (#211)
+## September 21 Beast cutover — local authority live; Windows service approval pending (#211)
 
-The owner explicitly requested all production processing on Beast, with Windows
-startup services and no Google Cloud hosting. Canonical repository ID 1349678672
-remains unchanged. Branch `codex/beast-local-runtime-20260921` adds a native
-Windows host for the existing Runtime v2 jobs and a loopback-only dashboard.
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
+Implementation PR **#212** is merged. Beast runs main application source
+**42c6f27df5d9266decad3abc7aa6f794edda0f3a**. The follow-up evidence branch is
+`codex/beast-local-cutover-evidence-20260921`.
 
-All four cloud schedules were paused and public web ingress restricted to
-internal before the final full SQL export. Cloud resources have not yet been
-retired. Export operation `f9a96409-4593-449e-b8af-95f900000032` and source audits
-are being checked. No local authority receipt has been activated. PostgreSQL 16,
-Python, Chromium and OCR tools are installed on Beast; local services have not
-yet been registered. Final continuity, Windows service and cloud retirement
-receipts must supersede this preparation checkpoint before completion is claimed.
+The full Cloud SQL export restored successfully to native Windows PostgreSQL.
+All **18 tables**, all **4,256 immutable snapshot payloads**, and all four
+manifest-verified heads matched the frozen source. Authority moved to Beast at
+**15:44:47 UTC** after five cloud schedules were paused and no cloud job remained
+active. This is a host migration, not a rebaseline.
 
-Focused validation: 86 tests passed and 30 PostgreSQL variants skipped locally.
-Existing states, identifiers, account data, OCR evidence and delivery history
-must migrate in full. Current Opportunity remains off and Vault lifecycle stays paused; the enabled
-Vault API is preserved with private local file storage.
+The first local Legislative, Executive, AI and Dashboard production cycle passed
+at **15:47:43 UTC**. Heads advanced exactly once: Legislative **1360 → 1361**,
+Executive **672 → 673**, AI **764 → 765**, Dashboard **1460 → 1461**. A subsequent
+audit proved every frozen row fingerprint in the other 17 tables was preserved
+and each new snapshot's parent matched its source head. Dashboard 1461 contains
+5,152 filings, 12,737 transactions, 1,538 review items and 308 AI analyses.
+Loopback readiness, 18 HTTP asset/data hashes, account-session API and the
+existing desktop launcher's `--check-live` passed. PostgreSQL and the dashboard
+listen only on `127.0.0.1`, ports 54329 and 8765.
+
+Google Cloud hosting has been retired. The **15:53:35 UTC** inventory found zero
+SQL instances/backups, Cloud Run services/jobs, schedules, active buckets,
+artifact repositories, secrets, Compute instances/disks/routers. Two internal
+reserved network ranges remain. Four deleted bucket records are retained by
+Google until **September 28** despite their disabled soft-delete policy; retained
+object bytes/final charges are not established. Do not claim all retained cloud
+storage has already been permanently purged. All three legacy GitHub state
+writers remain `disabled_manually`. Never resume cloud or legacy writers.
+
+**Remaining blocker:** the Windows administrator prompt was canceled. The three
+service configurations are prepared, but **no services are registered and no
+recurring local scheduler is running yet**. The database, web server and desktop
+tray currently run under the signed-in owner. The tray's existing startup entry
+is enabled for sign-in; it does not replace the core service installer. The
+owner must double-click **Finish PolitiTrack Setup** on Beast's Desktop and
+approve Windows elevation. The installer transfers the existing database/web
+processes to LocalService, registers automatic startup and verifies readiness.
+Do not claim startup/reboot acceptance until `backups/installed-services.json`
+and the three live Running service states have been checked.
+
+Recovery: the 26,331,632,841-byte frozen SQL export and its SHA-256 are preserved
+locally, plus a 25,760,825,499-byte post-cycle physical backup independently
+verified by `pg_verifybackup`. Private data/configuration/backups are under
+`C:\ProgramData\PolitiTrack`. Native OCR, Chromium, process cleanup and the enabled
+Vault API's private file backend passed. Vault lifecycle remains paused; Current
+Opportunity and manual cloud controls remain off. Existing OCR access/retry
+backlogs are preserved. Closing the UI will not stop installed services; sleep
+or power-off pauses processing, and missed intervals coalesce on return.
+
+[Cutover, validation and next action](releases/2026-09-21-beast-local-cutover.md) ·
+[Exact hashes, runs, counts and receipts](releases/2026-09-21-beast-local-cutover.json).
 
 ## September 21 dashboard history repair — deployed and verified (#208)
 

@@ -43,6 +43,15 @@ Before answering a repository-state question or changing code:
 
 ## Production-state invariants
 
+**Hosting direction (2026-09-21, owner request / #211):** PolitiTrack is moving
+entirely to Windows Beast, using native startup services and local PostgreSQL.
+Google Cloud hosting is no longer authorized as the ongoing runtime. Read the
+current migration stage and exact receipts in `docs/PROJECT_STATE.md` before
+acting. Do not resume retired cloud schedules or recreate cloud hosting. Keep
+the existing Runtime v2 restore, writer-lock and immutable snapshot contracts;
+the host change is not a state reset. Windows service registration requires the
+owner's Windows administrator approval when the current session is unelevated.
+
 **Runtime authority clarification (2026-09-07):** The certified Runtime v2
 controller and PostgreSQL immutable snapshot heads are the current production
 authority. See `docs/PROJECT_STATE.md`, `docs/HANDOFF.md`, and recovery run
