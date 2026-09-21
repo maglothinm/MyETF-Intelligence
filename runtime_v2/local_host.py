@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import json
 import logging
 import os
@@ -121,31 +120,13 @@ def windows_job():
 
 
 def backup(config):
-    root = Path(config["root"])
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    destination = root / "backups" / ("local-" + stamp + ".dump")
-    temporary = destination.with_suffix(".partial")
-    db = urlsplit(config["database_url"])
-    env = environment(config, "web")
-    from urllib.parse import unquote
-    env["PGPASSWORD"] = unquote(db.password)
-    command = [str(root / "tools/postgresql16/pgsql/bin/pg_dump.exe"),
-               "-h", "127.0.0.1", "-p", "54329", "-U", db.username,
-               "-d", "polititrack", "--format=custom", "--no-owner", "--no-acl", "-f", str(temporary)]
-    subprocess.run(command, env=env, check=True, timeout=1800, stdout=subprocess.DEVNULL)
-    os.replace(temporary, destination)
-    with destination.open("rb") as stream:
-        digest = hashlib.file_digest(stream, "sha256").hexdigest()
-    destination.with_suffix(".sha256").write_text(digest + "  " + destination.name + "\n", encoding="ascii")
-    # Only rotate this module's completed daily backups; never migration evidence.
-    for old in sorted((root / "backups").glob("local-*.dump"), reverse=True)[2:]:
-        old.unlink()
-        old.with_suffix(".sha256").unlink(missing_ok=True)
-    return {"file": destination.name, "sha256": digest, "bytes": destination.stat().st_size}
+    from .local_backup import run_backup
+    return run_backup(config)
 
 
 def schedule(config):
     import psycopg2
+    from .local_backup import BackupSupervisor
     root = Path(config["root"])
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -156,6 +137,7 @@ def schedule(config):
     state_path = root / "config" / "schedule-state.json"
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     children = {}
+    backup_worker = BackupSupervisor(config)
     lock = psycopg2.connect(config["database_url"], connect_timeout=15)
     lock.autocommit = True
     with lock.cursor() as cursor:
@@ -188,14 +170,14 @@ def schedule(config):
                         cwd=root / "app", env=environment(config, name), stdout=output, stderr=subprocess.STDOUT)
                     children[name] = (child, output, time.monotonic())
                     LOG.info("Started %s PID %s", name, child.pid)
-                # One consistent DB backup daily while on; missed days coalesce.
-                day = now.strftime("%Y-%m-%d")
-                if state.get("backup_day") != day and not children:
-                    LOG.info("Backup completed: %s", backup(config))
-                    state["backup_day"] = day
-                    atomic_json(state_path, state)
+                # Backup child is polled, never awaited by the production loop.
+                backup_worker.tick()
             stop.wait(5)
     finally:
+        try:
+            backup_worker.stop()
+        except Exception:
+            LOG.exception("Backup shutdown cleanup failed")
         for process, output, _ in children.values():
             kill_tree(process)
             output.close()
@@ -216,6 +198,9 @@ def main(argv=None):
     (root / "temp").mkdir(exist_ok=True)
     if args.action == "schedule":
         return schedule(config)
+    if args.action == "backup":
+        print(json.dumps(backup(config)))
+        return
     selected_environment = environment(config, "web")
     os.environ.clear()
     os.environ.update(selected_environment)
@@ -224,8 +209,6 @@ def main(argv=None):
         from .web import create_app
         serve(create_app(), host="127.0.0.1", port=8765, threads=8,
               max_request_body_size=21 * 1024 * 1024, clear_untrusted_proxy_headers=True)
-    elif args.action == "backup":
-        print(json.dumps(backup(config)))
     else:
         from .store import PostgresSnapshotStore
         status = PostgresSnapshotStore().status()
