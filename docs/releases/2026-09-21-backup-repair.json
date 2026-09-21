@@ -1,0 +1,137 @@
+{
+  "repository_id": 1349678672,
+  "repair_pr": 215,
+  "repair_main_commit": "f85a40f6b7b609ad8eec5c899c368d106fedd7c1",
+  "observed_at": "2026-09-21T19:20:20.109994+00:00",
+  "deployed_commit": "42c6f27df5d9266decad3abc7aa6f794edda0f3a",
+  "activation": "pending_owner_windows_administrator_approval",
+  "elevation_result": "Windows reported the operation canceled; no second automatic prompt was triggered",
+  "verified_manual_backup": {
+    "bytes": 25956737137,
+    "completed_at": "2026-09-21T19:17:07.695144+00:00",
+    "directory": "routine-20260921T191455Z-6db61a99.base",
+    "kind": "postgresql16_physical",
+    "manifest_sha256": "8b37a8f5f3fad0fc5157a7b0192f12e4fc88b98809439736afa997a29b383b3f",
+    "pg_verifybackup": "passed",
+    "repository_id": 1349678672,
+    "source_revision": "42c6f27df5d9266decad3abc7aa6f794edda0f3a",
+    "started_at": "2026-09-21T19:14:55.410182+00:00"
+  },
+  "failed_partial_cleanup": {
+    "removed_count": 10,
+    "removed_bytes": 220958188263,
+    "removed_filenames": [
+      "local-20260921T160812Z.partial",
+      "local-20260921T160816Z.partial",
+      "local-20260921T160847Z.partial",
+      "local-20260921T163149Z.partial",
+      "local-20260921T165531Z.partial",
+      "local-20260921T171919Z.partial",
+      "local-20260921T174259Z.partial",
+      "local-20260921T180555Z.partial",
+      "local-20260921T182941Z.partial",
+      "local-20260921T185404Z.partial"
+    ],
+    "migration_export_preserved": true,
+    "migration_basebackup_preserved": true
+  },
+  "continuity": {
+    "checked_at": "2026-09-21T19:20:20.109994+00:00",
+    "repository_id": 1349678672,
+    "source_revision": "42c6f27df5d9266decad3abc7aa6f794edda0f3a",
+    "baseline_snapshot_headers": 4287,
+    "current_snapshot_headers": 4292,
+    "all_baseline_headers_unchanged": true,
+    "successor_lineage": {
+      "ai": true,
+      "dashboard": true,
+      "executive": true,
+      "legislative": true
+    },
+    "heads": {
+      "ai": 772,
+      "dashboard": 1470,
+      "executive": 679,
+      "legislative": 1371
+    },
+    "runtime_config_unchanged_except_revision": true,
+    "authority_receipt_unchanged": true,
+    "role_capabilities": [
+      [
+        "polititrack_backup",
+        false,
+        true,
+        false
+      ],
+      [
+        "polititrack_runtime",
+        false,
+        false,
+        false
+      ]
+    ],
+    "table_counts": {
+      "runtime_job_runs": 4385,
+      "runtime_notification_deliveries": 0,
+      "runtime_notification_events": 0,
+      "runtime_notification_legacy_fences": 1,
+      "runtime_review_accounts": 3,
+      "runtime_review_acknowledgements": 9,
+      "runtime_review_auth_limits": 7,
+      "runtime_review_events": 10,
+      "runtime_review_sessions": 32,
+      "runtime_source_uploads": 1,
+      "runtime_state_heads": 4,
+      "runtime_state_snapshots": 4292,
+      "vault_catalog_checkpoints": 0,
+      "vault_filing_acknowledgements": 0,
+      "vault_filing_documents": 0,
+      "vault_filing_source_metadata": 0,
+      "vault_filing_versions": 0,
+      "vault_filings": 0
+    },
+    "independent_payload_rehash_performed": false
+  },
+  "windows_tests": {
+    "passed": 66,
+    "skipped": 1
+  },
+  "pull_request_ci": {
+    "head": "dbdd72a5ada959881adeaf12c9130558938bd431",
+    "runtime_safety": {
+      "run_id": 35643239002,
+      "conclusion": "success"
+    },
+    "source_upload_ocr": {
+      "run_id": 35643238940,
+      "conclusion": "success"
+    },
+    "current_opportunity": {
+      "run_id": 35643238956,
+      "conclusion": "success"
+    }
+  },
+  "services": {
+    "database": {
+      "state": "Running",
+      "automatic": true,
+      "pid": 25732
+    },
+    "web": {
+      "state": "Running",
+      "automatic": true,
+      "pid": 23084
+    },
+    "scheduler": {
+      "state": "Running",
+      "automatic": true,
+      "pid": 30916,
+      "old_backup_fault_still_active": true
+    }
+  },
+  "dashboard_http_status": 200,
+  "shortcut": "Activate PolitiTrack Backup Repair",
+  "reviewed_installer_sha256": "1b3d6275028b37882b305b77310cb4db56eff004160868e38914d9e4cc7c0fbf",
+  "reboot_tested": false,
+  "restore_drill_performed": false
+}

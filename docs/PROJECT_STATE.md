@@ -1,5 +1,26 @@
 # PolitiTrack project state
 
+## September 21 backup repair: verified engine, owner activation pending (#214)
+
+PR #215 merged at f85a40f6b7b609ad8eec5c899c368d106fedd7c1; the deployed application
+is still 42c6f27df5d9266decad3abc7aa6f794edda0f3a because the Windows elevation
+prompt was canceled. All three services are Running/Automatic, but the old
+scheduler's backup/restart fault remains until the owner uses **Activate
+PolitiTrack Backup Repair** and approves normal Windows elevation.
+
+The new engine passed a full physical-backup integrity check at 19:17:07 UTC:
+25,956,737,137 bytes. Removed 10 confirmed failed legacy partials totaling
+220,958,188,263 bytes; migration backups and the active old attempt were preserved.
+The dedicated backup login does not change application RLS or privileges.
+Read-only audit: all 4,287 baseline snapshot headers preserved, successor lineage
+valid, local config/authority unchanged. CI: Runtime safety 35643239002, OCR
+35643238940, Opportunity 35643238956 all succeeded. Windows tests 66 passed,
+1 skipped. Do not equate manual backup success with service activation.
+See the [repair release](releases/2026-09-21-backup-repair.md) and JSON receipt.
+
+## Earlier checkpoints (historical; current status above supersedes them)
+
+
 ## September 21 backup repair source (#214) - live acceptance pending
 
 Windows service setup was completed by the owner: all three services were
