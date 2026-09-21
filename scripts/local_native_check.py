@@ -34,8 +34,14 @@ def checks():
         tab.set_content('<title>PolitiTrack local check</title>')
         assert tab.title() == 'PolitiTrack local check'
         browser.close()
+    from runtime_v2.web import create_app
+    from backend.filing_vault.storage import FileObjectStore
+    app = create_app()
+    assert isinstance(app.extensions['filing_vault'].store, FileObjectStore)
+    assert app.test_client().get('/healthz', base_url='http://127.0.0.1:8765').status_code == 200
     print(json.dumps({'ocr_pages': result['completed_pages'], 'ocr_status': result['ocr_status'],
-                      'chromium': 'passed', 'windows_process_cleanup': 'configured'}))
+                      'chromium': 'passed', 'windows_process_cleanup': 'configured',
+                      'vault_backend': 'private_local_files', 'web_factory': 'passed'}))
 
 
 if __name__ == '__main__':
