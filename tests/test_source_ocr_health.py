@@ -244,3 +244,64 @@ def test_missing_ocr_dependency_is_not_reported_as_healthy_idle(tmp_path, monkey
     monkeypatch.setattr(shutil, "which", lambda name: None)
     with pytest.raises(OCRError, match="ocr_dependency_unavailable"):
         run_pass(source_state(tmp_path), "legislative", ENV)
+
+
+def test_success_history_survives_more_than_ten_failures_without_hiding_current_failure():
+    from datetime import timedelta
+    from test_dashboard_insights import payload, run
+
+    def attempt(key, start, report, success=True):
+        return run("executive", key=key, started_utc=start, finished_utc=report["heartbeat_at"],
+                   success=success, conclusion="success" if success else "failure",
+                   evidence_source="runtime_v2", runtime_mode="production", runtime_mode_verified=True,
+                   runtime_mode_evidence={"source_ocr": report})
+
+    healthy = attempt("healthy", "2026-09-17T15:00:00Z", metrics(
+        started_at="2026-09-17T15:00:01Z", heartbeat_at="2026-09-17T15:05:00Z", finished_at="2026-09-17T15:05:00Z"))
+    completed = attempt("degraded", "2026-09-17T16:00:00Z", metrics(
+        started_at="2026-09-17T16:00:01Z", heartbeat_at="2026-09-17T16:05:00Z", finished_at="2026-09-17T16:05:00Z",
+        last_document_completed_at="2026-09-17T16:04:59Z", documents_completed=5, retry_remaining=4))
+    failures = []
+    for i in range(15):
+        start = NOW - timedelta(minutes=80 - i * 5)
+        finish = start + timedelta(minutes=1)
+        failures.append(attempt(str(i), start.isoformat(), metrics(stage="skipped", started_at=start.isoformat(),
+            heartbeat_at=finish.isoformat(), finished_at=None), False))
+    observed = {"available": True, "history_available": True, "attempts": failures,
+                "successful_attempts": [healthy, completed]}
+    source = payload(summary={"generated_utc": NOW.isoformat()},
+        runs=[run("executive", key="legacy", finished_utc="2026-09-01T16:57:48Z")],
+        workflow_evidence={"branches": {"executive": observed}})
+    health = dashboard_insights.build_insights(source)["health"]
+    executive = health["branches"][1]
+    assert executive["status"] == "failure"
+    assert executive["last_success_utc"] == "2026-09-17T16:05:00Z"
+    assert len(executive["timeline"]) == 10
+    assert all(row["status"] == "failure" for row in executive["timeline"])
+    assert health["oge"]["checks_included"] is True
+    ocr = executive["source_ocr"]
+    assert (ocr["status"], ocr["activity"]) == ("unknown", "blocked_by_collection")
+    assert ocr["last_completed_pass_at"] == "2026-09-17T16:05:00Z"
+    assert ocr["last_success_at"] == "2026-09-17T15:05:00Z"
+    assert ocr["last_document_completed_at"] == "2026-09-17T16:04:59Z"
+    # A successful history read with no qualifying receipt must not substitute
+    # the legacy September 1 date or manufacture an OCR success.
+    observed["successful_attempts"] = []
+    executive = dashboard_insights.build_insights(source)["health"]["branches"][1]
+    assert executive["last_success_utc"] is None
+    assert executive["source_ocr"]["last_success_at"] is None
+
+
+@pytest.mark.parametrize("changes,run_changes", [
+    ({"stage": "processing"}, {}),
+    ({"heartbeat_at": "2026-09-18T20:00:00Z"}, {}),
+    ({"last_document_completed_at": "2026-09-18T20:00:00Z"}, {}),
+    ({}, {"status": "failure"}),
+    ({}, {"state_evidence": False}),
+])
+def test_uncommitted_or_invalid_document_does_not_advance_history(changes, run_changes):
+    row = {**RUN, **run_changes, "source_ocr_metrics": metrics(**{"last_document_completed_at": "2026-09-17T19:58:00Z", **changes})}
+    health = branch_health([row], NOW)
+    assert health["last_completed_pass_at"] is None
+    assert health["last_success_at"] is None
+    assert health["last_document_completed_at"] is None

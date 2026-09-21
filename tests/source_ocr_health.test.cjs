@@ -38,3 +38,21 @@ test('untrusted health text is escaped and never inserted as HTML',()=>{
   assert.ok(!html.includes('<script>bad()'));
   assert.ok(!html.includes('<img src=x>'));
 });
+test('compact and detailed cards keep collection and OCR history in separate sections',()=>{
+  const m=model({activity:'blocked_by_collection',status:'unknown',
+    last_completed_pass_at:'2026-09-17T18:00:00Z',last_success_at:'2026-09-17T17:00:00Z'});
+  for(const detailed of [false,true]) {
+    const html=PT.healthCards(m,detailed);
+    const collector=html.match(/<section class="collector-run-health"[^>]*>(.*?)<\/section>/s)[1];
+    const ocr=html.match(/<section class="ocr-run-health"[^>]*>(.*?)<\/section>/s)[1];
+    assert.match(collector,/Legislative collector/);
+    assert.match(collector,/Last successful collection/);
+    assert.doesNotMatch(collector,/Last healthy OCR pass/);
+    assert.match(ocr,/Legislative Source OCR/);
+    assert.match(ocr,/Blocked by collection/);
+    assert.match(ocr,/Last completed OCR pass/);
+    assert.match(ocr,/Last healthy OCR pass/);
+    assert.doesNotMatch(ocr,/Last successful collection|Last success /);
+    assert.match(html,/Last successful analysis/);
+  }
+});

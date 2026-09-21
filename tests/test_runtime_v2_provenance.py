@@ -120,6 +120,8 @@ class _ReadCursor:
             self.rows = [self.connection.head_row]
         elif "DISTINCT ON (r.job_name)" in sql:
             self.rows = [self.connection.run_row]
+        elif "AND r.status = 'success'" in sql:
+            self.rows = []  # Real SQL selection is covered by the integration test.
         elif "WHERE r.namespace = %s" in sql:
             self.rows = list(self.connection.audit_rows.get(params[0], []))
         else:  # pragma: no cover - makes an unexpected read query fail loudly
@@ -325,3 +327,99 @@ def test_workflow_audit_excludes_legacy_runtime_mode_from_available_evidence() -
     assert attempt["runtime_mode_verified"] is False
     assert attempt["observed_runtime_mode"] == "production"
     assert attempt["runtime_mode_evidence"] == LEGACY_MODE_EVIDENCE
+
+
+def test_postgres_success_history_is_independent_of_attempt_window_and_rejects_bad_receipts():
+    """Exercise the production SQL against failures, quarantine and bad lineage."""
+    import json
+    import uuid
+    from datetime import timedelta
+    from types import SimpleNamespace
+    from test_runtime_v2_mode_quarantine import _postgres_connection, _create_predecessor_schema
+    from scripts.dashboard_insights import build_insights
+
+    connection = _postgres_connection()
+    cursor = connection.cursor()
+    schema = 'dashboard_history_' + uuid.uuid4().hex
+    as_of = datetime.now(timezone.utc)
+    generation = 0
+    ids = {}
+
+    def seed(name, minutes, *, mode='production', kind='snapshot_provenance', status='success',
+             retries=0, ocr=True, document=False, mismatch=None):
+        nonlocal generation
+        generation += 1
+        run_id, snapshot_id = str(uuid.uuid4()), str(uuid.uuid4())
+        started = as_of - timedelta(minutes=minutes)
+        finished = started + timedelta(minutes=1)
+        digest = f'{generation:064x}'
+        stage = {'enabled': True, 'stage': 'complete', 'started_at': started.isoformat(),
+                 'heartbeat_at': finished.isoformat(), 'finished_at': finished.isoformat(),
+                 'intake_status': 'ok', 'cleanup_status': 'complete', 'retry_remaining': retries}
+        if document:
+            stage['last_document_completed_at'] = (finished - timedelta(seconds=1)).isoformat()
+        if mismatch == 'ocr_time':
+            stage['heartbeat_at'] = (as_of + timedelta(days=1)).isoformat()
+        evidence = {'kind': kind, 'mode': mode, 'snapshot_id': snapshot_id, 'snapshot_sha256': digest}
+        if ocr:
+            evidence['source_ocr'] = stage
+        provenance = {'authority': 'runtime_v2', 'mode': mode, 'job': 'executive', 'trigger_source': 'external_scheduler'}
+        cursor.execute(
+            'INSERT INTO runtime_state_snapshots (snapshot_id,namespace,generation,snapshot_sha256,source_revision,'
+            'source_provenance,manifest,payload,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+            (snapshot_id, 'ai' if mismatch == 'namespace' else 'executive', generation, digest,
+             'bad' if mismatch == 'revision' else REVISION, json.dumps(provenance), '{}', b'test',
+             started - timedelta(seconds=1) if mismatch == 'chronology' else finished))
+        cursor.execute(
+            'INSERT INTO runtime_job_runs (run_id,job_name,namespace,trigger_source,source_revision,runtime_mode,'
+            'runtime_mode_evidence,status,started_at,finished_at,snapshot_id,snapshot_sha256) '
+            'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+            (run_id, 'executive', 'executive', 'external_scheduler', REVISION, mode,
+             json.dumps(evidence), status, started, finished, snapshot_id,
+             '0' * 64 if mismatch == 'hash' else digest))
+        ids[name] = run_id
+        return finished.isoformat().replace('+00:00', 'Z')
+
+    try:
+        cursor.execute('CREATE SCHEMA "' + schema + '"')
+        cursor.execute('SET search_path TO "' + schema + '"')
+        _create_predecessor_schema(cursor)
+        cursor.execute('ALTER TABLE runtime_job_runs ADD COLUMN runtime_mode_evidence jsonb')
+        healthy = seed('healthy', 360, document=True)
+        completed = seed('completed', 300, retries=4, document=True)
+        collected = seed('collector', 240, ocr=False)
+        # Malformed OCR may accompany a valid collection, but cannot advance OCR.
+        collected = seed('bad_ocr', 230, mismatch='ocr_time', document=True)
+        for i, mismatch in enumerate(['namespace', 'revision', 'chronology', 'hash']):
+            seed(mismatch, 220 - i, mismatch=mismatch)
+        seed('shadow', 210, mode='shadow')
+        seed('legacy', 209, kind='legacy_unverified')
+        seed('future', -1440)
+        for i in range(20):
+            seed(f'failed{i}', 120 - i * 5, status='failure')
+        store = PostgresSnapshotStore('postgresql://test')
+        store._connect = lambda: SimpleNamespace(cursor=connection.cursor, close=lambda: None)
+        cursor.execute('BEGIN READ ONLY')
+        evidence = store.workflow_evidence()
+        cursor.execute('COMMIT')
+        branch = evidence['branches']['executive']
+        assert branch['available'] is True
+        assert len(branch['attempts']) == 7
+        assert {row['run_id'] for row in branch['successful_attempts']} == {
+            ids['healthy'], ids['completed'], ids['bad_ocr']}
+        model = build_insights({'summary': {'generated_utc': as_of.isoformat()}, 'workflow_evidence': evidence})
+        executive = model['health']['branches'][1]
+        assert executive['last_success_utc'] == collected
+        assert executive['source_ocr']['last_success_at'] == healthy
+        assert executive['source_ocr']['last_completed_pass_at'] == completed
+        expected_document = (datetime.fromisoformat(completed.replace('Z', '+00:00')) - timedelta(seconds=1)).isoformat().replace('+00:00', 'Z')
+        assert executive['source_ocr']['last_document_completed_at'] == expected_document
+        # The SQL read and dashboard derivation cannot mutate any receipts.
+        cursor.execute('SELECT count(*) FROM runtime_job_runs')
+        assert cursor.fetchone()[0] == generation
+    finally:
+        cursor.execute('ROLLBACK')
+        cursor.execute('SET search_path TO public')
+        cursor.execute('DROP SCHEMA IF EXISTS "' + schema + '" CASCADE')
+        cursor.close()
+        connection.close()

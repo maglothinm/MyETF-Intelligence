@@ -69,6 +69,41 @@ def _runtime_mode_fields(runtime_mode: Any, raw_evidence: Any) -> dict[str, Any]
     }
 
 
+def _workflow_attempt(row: tuple[Any, ...], branch: str) -> dict[str, Any]:
+    conclusion = row[1]
+    return {
+        "run_key": row[0],
+        "run_id": row[0],
+        "branch": branch,
+        "run_attempt": 1,
+        "evidence_source": "runtime_v2",
+        **_runtime_mode_fields(row[5], row[6]),
+        "workflow_created_utc": row[2].isoformat().replace("+00:00", "Z"),
+        "workflow_started_utc": row[2].isoformat().replace("+00:00", "Z"),
+        "started_utc": row[2].isoformat().replace("+00:00", "Z"),
+        "finished_utc": row[3].isoformat().replace("+00:00", "Z") if row[3] else None,
+        "producer_job_started_utc": row[2].isoformat().replace("+00:00", "Z"),
+        "producer_job_conclusion": conclusion,
+        "conclusion": conclusion,
+        "success": True if conclusion == "success" else (False if conclusion == "failure" else None),
+        "error_count": 1 if conclusion == "failure" else 0,
+        "event_name": row[4] or "external_scheduler",
+        "trigger_source": row[4] or "external_scheduler",
+        "run_url": "",
+        "error_code": row[7] or "",
+        "source_revision": row[8],
+        "snapshot_id": row[9],
+        "snapshot_sha256": row[10],
+        "parent_sha256": row[11],
+        "snapshot_generation": int(row[12]) if row[12] is not None else None,
+        "snapshot_created_utc": (
+            row[13].isoformat().replace("+00:00", "Z")
+            if row[13]
+            else None
+        ),
+    }
+
+
 class LockedNamespace:
     def __init__(self, connection: Any, namespace: str):
         self.connection = connection
@@ -516,6 +551,64 @@ class PostgresSnapshotStore:
         finally:
             connection.close()
 
+    @staticmethod
+    def _successful_history(cursor: Any, branch: str) -> list[dict[str, Any]]:
+        """Find independent success anchors beyond the bounded attempt timeline.
+
+        Read only lightweight receipts, never snapshot payloads. A failure streak
+        of any length must not erase a committed success. OCR anchors use the same
+        timestamp/commit validation as dashboard health, not parent success alone.
+        """
+        from scripts.source_ocr_health import instant, run_health
+
+        cursor.execute(
+            "SELECT r.run_id::text, r.status, r.started_at, r.finished_at, "
+            "r.trigger_source, r.runtime_mode, r.runtime_mode_evidence, "
+            "r.error_code, r.source_revision, r.snapshot_id::text, "
+            "r.snapshot_sha256, s.parent_sha256, s.generation, s.created_at "
+            "FROM runtime_job_runs r JOIN runtime_state_snapshots s "
+            "ON s.snapshot_id = r.snapshot_id "
+            "WHERE r.namespace = %s AND r.status = 'success' "
+            "AND r.runtime_mode = 'production' AND r.error_code = '' "
+            "AND r.runtime_mode_evidence->>'kind' = 'snapshot_provenance' "
+            "AND r.runtime_mode_evidence->>'mode' = 'production' "
+            "AND r.runtime_mode_evidence->>'snapshot_id' = r.snapshot_id::text "
+            "AND r.runtime_mode_evidence->>'snapshot_sha256' = r.snapshot_sha256 "
+            "AND s.namespace = r.namespace AND s.snapshot_sha256 = r.snapshot_sha256 "
+            "AND s.source_revision = r.source_revision "
+            "AND s.created_at BETWEEN r.started_at AND r.finished_at "
+            "AND r.finished_at <= CURRENT_TIMESTAMP "
+            "AND s.source_provenance->>'authority' = 'runtime_v2' "
+            "AND s.source_provenance->>'mode' = 'production' "
+            "AND s.source_provenance->>'job' = r.job_name "
+            "AND s.source_provenance->>'trigger_source' = r.trigger_source "
+            "ORDER BY r.finished_at DESC, r.run_id DESC",
+            (branch,),
+        )
+        anchors: dict[str, dict[str, Any]] = {}
+        as_of = datetime.now(timezone.utc)
+        # No history cutoff: missing or malformed OCR telemetry cannot hide an
+        # earlier valid pass. Only four unique anchors leave this read boundary.
+        for row in cursor.fetchall():
+            attempt = _workflow_attempt(row, branch)
+            anchors.setdefault("collector", attempt)
+            if branch == "ai":
+                break
+            health = run_health(attempt["runtime_mode_evidence"].get("source_ocr"),
+                                {**attempt, "status": "success", "state_evidence": True}, as_of)
+            if not health.get("committed_pass"):
+                continue
+            for key, field, eligible in (
+                ("completed", "finished_at", True),
+                ("healthy", "finished_at", health["status"] in {"success", "stale"}),
+                ("document", "last_document_completed_at", bool(health.get("last_document_completed_at"))),
+            ):
+                if eligible:
+                    previous = anchors.get(key)
+                    if previous is None or instant(health[field]) > instant(previous["runtime_mode_evidence"]["source_ocr"][field]):
+                        anchors[key] = attempt
+        return list({attempt["run_id"]: attempt for attempt in anchors.values()}.values())
+
     def workflow_evidence(self) -> dict[str, Any]:
         connection = self._connect()
         try:
@@ -533,42 +626,8 @@ class PostgresSnapshotStore:
                         "WHERE r.namespace = %s ORDER BY r.started_at DESC, r.run_id DESC LIMIT 7",
                         (branch,),
                     )
-                    attempts = []
-                    for row in cursor.fetchall():
-                        conclusion = row[1]
-                        attempts.append(
-                            {
-                                "run_key": row[0],
-                                "run_id": row[0],
-                                "branch": branch,
-                                "run_attempt": 1,
-                                "evidence_source": "runtime_v2",
-                                **_runtime_mode_fields(row[5], row[6]),
-                                "workflow_created_utc": row[2].isoformat().replace("+00:00", "Z"),
-                                "workflow_started_utc": row[2].isoformat().replace("+00:00", "Z"),
-                                "started_utc": row[2].isoformat().replace("+00:00", "Z"),
-                                "finished_utc": row[3].isoformat().replace("+00:00", "Z") if row[3] else None,
-                                "producer_job_started_utc": row[2].isoformat().replace("+00:00", "Z"),
-                                "producer_job_conclusion": conclusion,
-                                "conclusion": conclusion,
-                                "success": True if conclusion == "success" else (False if conclusion == "failure" else None),
-                                "error_count": 1 if conclusion == "failure" else 0,
-                                "event_name": row[4] or "external_scheduler",
-                                "trigger_source": row[4] or "external_scheduler",
-                                "run_url": "",
-                                "error_code": row[7] or "",
-                                "source_revision": row[8],
-                                "snapshot_id": row[9],
-                                "snapshot_sha256": row[10],
-                                "parent_sha256": row[11],
-                                "snapshot_generation": int(row[12]) if row[12] is not None else None,
-                                "snapshot_created_utc": (
-                                    row[13].isoformat().replace("+00:00", "Z")
-                                    if row[13]
-                                    else None
-                                ),
-                            }
-                        )
+                    attempts = [_workflow_attempt(row, branch) for row in cursor.fetchall()]
+                    history = self._successful_history(cursor, branch)
                     branches[branch] = {
                         "available": any(
                             attempt["conclusion"] == "success"
@@ -579,9 +638,11 @@ class PostgresSnapshotStore:
                             == attempt["runtime_mode_evidence"].get("snapshot_id")
                             and attempt["snapshot_sha256"]
                             == attempt["runtime_mode_evidence"].get("snapshot_sha256")
-                            for attempt in attempts
+                            for attempt in attempts + history
                         ),
                         "attempts": attempts,
+                        "history_available": True,
+                        "successful_attempts": history,
                     }
             return {
                 "schema_version": 1,
