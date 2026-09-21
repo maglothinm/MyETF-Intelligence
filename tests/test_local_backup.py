@@ -203,3 +203,68 @@ def test_backup_children_do_not_inherit_application_or_cloud_secrets(cfg, monkey
         monkeypatch.setenv(key, 'never-inherit')
     environment = backup.clean_environment(cfg['root'])
     assert 'never-inherit' not in environment.values()
+
+
+def test_busy_worker_does_not_overwrite_other_backup_health(cfg, monkeypatch):
+    root = Path(cfg['root'])
+    supervisor = backup.BackupSupervisor(cfg)
+    child = Mock(pid=1234)
+    child.poll.return_value = 75
+    monkeypatch.setattr(backup.subprocess, 'Popen', Mock(return_value=child))
+    supervisor.tick()
+    before = backup.status(root, 'verifying', worker_pid=5678)
+    supervisor.tick()
+    assert backup.read_status(root) == before
+
+
+def test_low_disk_space_fails_before_copying(cfg, monkeypatch):
+    fake_database(monkeypatch)
+    monkeypatch.setattr(backup.shutil, 'disk_usage', lambda _: SimpleNamespace(free=1))
+    runner = Mock()
+    monkeypatch.setattr(backup.subprocess, 'run', runner)
+    with pytest.raises(RuntimeError, match='Insufficient free space'):
+        backup.run_backup(cfg)
+    runner.assert_not_called()
+
+
+def test_timeout_removes_only_own_partial_and_preserves_migration(cfg, monkeypatch):
+    fake_database(monkeypatch)
+    root = Path(cfg['root'])
+    protected = root/'backups'/'local-cutover-basebackup'
+    protected.mkdir()
+    def run(command, **kwargs):
+        target = Path(next(x.split('=', 1)[1] for x in command if x.startswith('--pgdata=')))
+        target.mkdir()
+        (target/'incomplete').write_bytes(b'temporary')
+        raise backup.subprocess.TimeoutExpired(command, 7200)
+    monkeypatch.setattr(backup.subprocess, 'run', run)
+    with pytest.raises(backup.subprocess.TimeoutExpired):
+        backup.run_backup(cfg)
+    assert protected.is_dir()
+    assert not list((root/'backups').glob('routine-*.partial'))
+
+
+def test_missing_backup_credentials_cannot_fall_back_to_runtime(cfg, monkeypatch):
+    fake_database(monkeypatch)
+    (Path(cfg['root'])/'config'/'backup-private.json').unlink()
+    runner = Mock()
+    monkeypatch.setattr(backup.subprocess, 'run', runner)
+    with pytest.raises(FileNotFoundError):
+        backup.run_backup(cfg)
+    runner.assert_not_called()
+
+
+def test_stale_running_worker_is_reported_and_backed_off(cfg):
+    backup.status(cfg['root'], 'running')
+    backup.BackupSupervisor(cfg).tick()
+    assert backup.read_status(cfg['root'])['error'] == 'backup_worker_interrupted'
+
+
+def test_live_manual_backup_is_not_duplicated(cfg, monkeypatch):
+    import os, psutil
+    backup.status(cfg['root'], 'running', worker_pid=os.getpid(),
+                  worker_created_at=psutil.Process().create_time())
+    spawn = Mock()
+    monkeypatch.setattr(backup.subprocess, 'Popen', spawn)
+    backup.BackupSupervisor(cfg).tick()
+    spawn.assert_not_called()

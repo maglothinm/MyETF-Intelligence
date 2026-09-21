@@ -120,8 +120,11 @@ def windows_job():
 
 
 def backup(config):
-    from .local_backup import run_backup
-    return run_backup(config)
+    from .local_backup import BackupBusy, run_backup
+    try:
+        return run_backup(config)
+    except BackupBusy:
+        raise SystemExit(75)
 
 
 def schedule(config):

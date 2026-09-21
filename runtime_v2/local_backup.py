@@ -25,6 +25,10 @@ MAX_SECONDS = 10800
 ROUTINE = re.compile(r"routine-\d{8}T\d{6}Z-[0-9a-f]{8}\.(base|partial)\Z")
 
 
+class BackupBusy(RuntimeError):
+    """A different backup already owns the database lock."""
+
+
 def now_utc():
     return datetime.now(timezone.utc)
 
@@ -109,7 +113,7 @@ def run_backup(config):
             cursor.execute("SELECT pg_try_advisory_lock(hashtext('polititrack-local-backup'))")
             acquired = cursor.fetchone()[0]
             if not acquired:
-                raise RuntimeError("Another local backup owns the backup lock")
+                raise BackupBusy("Another local backup owns the backup lock")
             cursor.execute("SELECT spcname FROM pg_tablespace WHERE spcname NOT IN ('pg_default','pg_global')")
             if cursor.fetchall():
                 raise RuntimeError("External tablespaces require an explicit backup mapping")
@@ -130,7 +134,9 @@ def run_backup(config):
         staging = parent / ("routine-" + stamp + ".partial")
         destination = staging.with_suffix(".base")
         started = now_utc().isoformat()
+        import psutil
         status(root, "running", started_at=started, error=None, next_retry_at=None,
+               worker_pid=os.getpid(), worker_created_at=psutil.Process().create_time(),
                partial_directory=staging.name)
         env = clean_environment(root)
         env["PGPASSWORD"] = credentials["password"]
@@ -193,6 +199,10 @@ class BackupSupervisor:
         self.output.close()
         self.output = None
         self.process = None
+        if code == 75:
+            self.retry_after = time.monotonic() + 60
+            LOG.info("Another backup holds the lock; its health record is unchanged")
+            return
         value = read_status(self.root)
         if code != 0 or value.get("status") != "success":
             failure(self.root, "backup_worker_exit_" + str(code))
@@ -227,8 +237,23 @@ class BackupSupervisor:
         not_before = value.get("next_retry_at")
         if not_before and datetime.fromisoformat(not_before) > now:
             return
-        # Persist backoff before spawn, covering interruption before worker startup.
-        status(self.root, "queued", next_retry_at=(now + timedelta(seconds=RETRY_SECONDS)).isoformat())
+        if value.get("status") in {"running", "verifying"}:
+            import psutil
+            try:
+                live = psutil.Process(value["worker_pid"])
+                if live.create_time() == value["worker_created_at"]:
+                    return
+            except (psutil.NoSuchProcess, KeyError):
+                pass
+            failure(self.root, "backup_worker_interrupted")
+            return
+        launch_path = self.root / "config" / "backup-launch.json"
+        launch = json.loads(launch_path.read_text()) if launch_path.exists() else {}
+        if launch.get("next_attempt_at") and datetime.fromisoformat(launch["next_attempt_at"]) > now:
+            return
+        # Separate launch bookkeeping avoids changing another worker's health.
+        atomic_json(launch_path, {"next_attempt_at":
+                    (now + timedelta(seconds=RETRY_SECONDS)).isoformat()})
         self.output = (self.root / "logs" / "routine-backup.log").open("ab")
         try:
             self.process = subprocess.Popen(

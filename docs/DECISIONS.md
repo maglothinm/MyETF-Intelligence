@@ -1644,3 +1644,19 @@ UAC, reactivate cloud jobs, or initialize replacement state to address this bloc
 Provider-retained deleted bucket records have September 28 hard-delete dates.
 Record this separately from the absence of active cloud hosting; do not promise
 immediate permanent storage erasure or a zero final Google bill.
+
+
+## 2026-09-21 - Isolate verified physical backups from producer scheduling (#214)
+
+Use PostgreSQL 16 pg_basebackup with streamed WAL and SHA-256 manifests, followed
+by full pg_verifybackup, under a dedicated LOGIN REPLICATION role. Do not grant
+superuser or BYPASSRLS to the application or backup login. Credentials remain in
+the existing private local configuration, never Git or command-line arguments.
+Only an exclusive backup worker may create/verify/publish routine directories;
+its process is separate from the unchanged producer loop. Failures receive a
+persisted one-hour retry delay and must not crash or block producer scheduling.
+A verified receipt and atomic directory rename precede success publication.
+Retain two verified routine backups; no deletion of migration export/basebackup.
+Unknown/unverifiable backup evidence fails closed. No production-state reset,
+cloud reactivation, startup-configuration claim or reboot claim follows from
+source tests alone.

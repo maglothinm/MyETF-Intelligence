@@ -1,5 +1,17 @@
 # PolitiTrack project state
 
+## September 21 backup repair source (#214) - live acceptance pending
+
+Windows service setup was completed by the owner: all three services were
+verified Running/Automatic and real scheduled jobs succeeded. The first inline
+pg_dump design is defective: the runtime role cannot bypass Vault RLS, causing
+backup failures, scheduler restarts and accumulation of incomplete dumps.
+Branch `codex/beast-backup-repair-214` isolates verified physical backups in a
+separate child using a dedicated replication-only login. It preserves existing
+application role restrictions, all production state and migration evidence.
+Deployment, a full verified backup, natural scheduling and partial cleanup need
+explicit live evidence before #214 can be closed. Reboot remains untested.
+
 ## September 21 Beast cutover — local authority live; Windows service approval pending (#211)
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
