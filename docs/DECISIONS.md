@@ -1605,3 +1605,23 @@ OCR's completed pass, healthy pass and document completion are independent facts
 only validated committed stage evidence advances them. A recent failure or blocked
 OCR attempt remains the current status. Collector and Source OCR get distinct UI
 sections, status badges and explicitly named timestamps in every card size.
+
+## 2026-09-21 — Move Runtime v2 authority to Beast (#211)
+
+The owner's explicit local-only instruction replaces the earlier Google Cloud
+hosting decision. Use native Windows PostgreSQL, Waitress and a service-managed
+scheduler. Preserve the exact PostgreSQL history and existing producer/immutable
+snapshot contracts. Pause and drain cloud producers, freeze owner writes, export
+all tables, compare source/destination fingerprints and verify recovery before
+activating the sole local scheduler. Retire dedicated cloud resources only after
+local acceptance. Services start before sign-in under LocalService; the existing
+desktop launcher keeps its tray behavior and uses the loopback dashboard. Local
+HTTP has a distinct cookie and exact loopback/host/origin checks. Sleeping or
+powered-off machines do not run jobs; missed intervals coalesce on return.
+
+The live configuration distinguishes an enabled Vault API from its paused
+lifecycle scheduler. Preserve that API using a guarded `windows_local` object
+backend outside the checkout, retaining production PostgreSQL and the existing
+signing key. Do not misrepresent a paused crawler as a disabled API or enable
+development storage in production. Source Vault catalog and GCS objects were
+empty at the migration baseline.

@@ -1,0 +1,6 @@
+-r requirements-tracker.txt
+-r requirements-ai.txt
+-r requirements-vault.txt
+waitress==3.0.2
+psutil>=7,<8
+pywin32>=311; sys_platform == 'win32'

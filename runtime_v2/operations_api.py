@@ -8,6 +8,7 @@ from werkzeug.exceptions import HTTPException
 from .operations import CloudRunJobs, JOBS, OperationStore, request_uuid, unavailable
 from .review_accounts import ReviewError
 from .review_api import COOKIE
+from .local_origin import session_cookie, valid_origin
 
 
 def create_blueprint(reviews, operations=None, cloud=None):
@@ -19,7 +20,7 @@ def create_blueprint(reviews, operations=None, cloud=None):
         if (str(current_app.config.get("RUNTIME_OPERATIONS_ENABLED", "")).lower() != "true"
             or str(current_app.config.get("RUNTIME_PERSONAL_REVIEWS_ENABLED", "")).lower() != "true"):
             raise unavailable()
-        account = reviews.account_for_session(request.cookies.get(COOKIE))
+        account = reviews.account_for_session(request.cookies.get(session_cookie()))
         if not account:
             raise ReviewError("SIGN_IN_REQUIRED", "Sign in to use run controls.", 401)
         allowed = set(str(current_app.config.get("RUNTIME_OPERATIONS_ACCOUNT_IDS", "")).split(","))
@@ -28,9 +29,7 @@ def create_blueprint(reviews, operations=None, cloud=None):
         g.operation_account = account["account_id"]
         if request.method != "GET":
             origin = str(current_app.config.get("RUNTIME_REVIEW_ORIGIN", ""))
-            parsed = urlsplit(origin)
-            if (parsed.scheme != "https" or not parsed.netloc or parsed.path not in {"", "/"}
-                or parsed.query or parsed.fragment or parsed.username):
+            if not valid_origin(origin):
                 raise unavailable()
             if request.headers.get("Origin") != origin.rstrip("/") or request.headers.get("X-PolitiTrack-Operation-Request") != "1":
                 raise ReviewError("ORIGIN_DENIED", "Open PolitiTrack to start this run.", 403)
