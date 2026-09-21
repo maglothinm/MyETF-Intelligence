@@ -104,7 +104,9 @@ def run_health(metrics: Any, run: Mapping[str, Any], as_of: datetime | None,
     elif clean["stage"] == "complete":
         if not finish or run.get("status") != "success" or not run.get("state_evidence", False):
             result.update(activity="unconfirmed_commit", detail="OCR has no matching successful canonical commit.")
-        elif clean.get("intake_status") == "failed" or clean.get("cleanup_status") == "deferred" or clean["retry_delayed_count"] or clean["retry_remaining"]:
+            return result
+        result["committed_pass"] = True
+        if clean.get("intake_status") == "failed" or clean.get("cleanup_status") == "deferred" or clean["retry_delayed_count"] or clean["retry_remaining"]:
             result.update(status="failure", activity="degraded", detail="OCR completed only partially: intake, document processing or post-commit cleanup needs attention.")
         elif clean.get("cleanup_status") not in {"complete", "not_needed"}:
             result.update(activity="cleanup_unconfirmed", detail="OCR cleanup is not confirmed; files may still be awaiting acknowledgement.")
@@ -117,16 +119,20 @@ def run_health(metrics: Any, run: Mapping[str, Any], as_of: datetime | None,
 
 
 def branch_health(timeline: list[Mapping[str, Any]], as_of: datetime | None,
-                  stale_after_minutes: float = 90) -> dict[str, Any]:
+                  stale_after_minutes: float = 90, *,
+                  history: list[Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """Latest attempt wins. Do not let an older success hide a newer OCR fault."""
     if not timeline:
         return run_health(None, {}, as_of, stale_after_minutes)
     result = run_health(timeline[0].get("source_ocr_metrics"), timeline[0], as_of, stale_after_minutes)
-    result["required"] = any((row.get("source_ocr_metrics") or {}).get("enabled") is True for row in timeline)
+    historical = timeline if history is None else history
+    result["required"] = any((row.get("source_ocr_metrics") or {}).get("enabled") is True for row in timeline + historical)
     successes = [run_health(row.get("source_ocr_metrics"), row, as_of, stale_after_minutes) for row in timeline]
-    result["last_success_at"] = next((row.get("finished_at") for row in successes
-        if row["status"] in {"success", "stale"} and row.get("stage") == "complete" and row.get("cleanup_status") in {"complete", "not_needed"}), None)
-    result["last_document_completed_at"] = next((row.get("last_document_completed_at") for row in successes if row.get("last_document_completed_at")), None)
+    completed = [health for row in historical
+                 if (health := run_health(row.get("source_ocr_metrics"), row, as_of, stale_after_minutes)).get("committed_pass")]
+    result["last_completed_pass_at"] = max((row["finished_at"] for row in completed), key=instant, default=None)
+    result["last_success_at"] = max((row["finished_at"] for row in completed if row["status"] in {"success", "stale"}), key=instant, default=None)
+    result["last_document_completed_at"] = max((row["last_document_completed_at"] for row in completed if row.get("last_document_completed_at")), key=instant, default=None)
     # A due backlog with no movement over three independent completed attempts is
     # a stall. Waiting for access/review/backoff alone is not a stall.
     recent = successes[:3]

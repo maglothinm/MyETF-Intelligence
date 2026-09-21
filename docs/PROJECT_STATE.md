@@ -1,5 +1,33 @@
 # PolitiTrack project state
 
+## September 21 dashboard success history and OCR status repair (#208)
+
+Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`; implementation
+branch `codex/dashboard-health-history-20260921`, based on main
+`096d21e8c817c0b1e97250400e2d135d63c03b6c`.
+
+The dashboard's seven-row Runtime attempt query omitted the Executive success
+from September 21 04:18 UTC after later failures, exposing a retained September 1
+legacy date. The collector's unlabeled success footer also appeared below OCR.
+Independent snapshot-verified production history now supplies collection, healthy
+OCR, completed OCR and completed-document anchors. The recent attempt timeline
+and current failure remain independent. Both compact and Operations cards put
+collector dates within a collector section and OCR dates within Source OCR.
+
+Local focused tests: 122 Python passed (two PostgreSQL integration tests require
+CI's service); five Node health tests passed. New integration coverage exercises
+real PostgreSQL selection after 20 failures and rejects shadow, unverified,
+future and mismatched snapshot evidence. CI, merge and deployment are pending.
+
+Release scope is the existing dashboard producer and its generated snapshot.
+Source producers and the web service need no code/config changes. Preserve all
+immutable heads and histories, original schedules, OCR receipts and account state.
+A fresh read-only baseline, original dashboard writer lock/commit path, exact
+image/source verification and post-release continuity/live asset checks are
+required. Do not replay the closed OCR release journal. Current Executive OGE
+collection failures remain an upstream incident and must remain visible.
+
+
 ## September 20 OCR follow-up — live processing and continuity verified (#203)
 
 Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`. Evidence

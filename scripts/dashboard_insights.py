@@ -517,6 +517,9 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
         by_id = {row["id"]: row for raw in retained if production_run(raw, branch) for row in [_run(raw, branch)]}
         observed_branch = _mapping(_mapping(observation.get("branches")).get(branch))
         available = observed_branch.get("available", observation.get("available")) if observation else None
+        history = [_run(raw, branch) for raw in _rows(observed_branch.get("successful_attempts"))
+                   if production_run(raw, branch) and raw.get("evidence_source") == "runtime_v2"
+                   and raw.get("runtime_mode") == "production" and raw.get("runtime_mode_verified") is True]
         for raw in _rows(observed_branch.get("attempts")):
             if not production_run(raw, branch) or raw.get("evidence_source") not in {"github_actions", "runtime_v2"}:
                 continue
@@ -546,8 +549,12 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
         newest = ordered[0] if ordered else {}
         attempted = next((row for row in ordered if _known_attempt(row, as_of)), {})
         last = next((row for row in ordered if row.get("conclusion") not in pending), {})
-        success = next((row for row in ordered if row["state_evidence"] and row["status"] == "success"
-                        and as_of and _completion_time(row, as_of)), {})
+        # Runtime history is authoritative even when it has no eligible success;
+        # do not silently replace missing runtime evidence with a legacy date.
+        success_history = history if observed_branch.get("history_available") is True else ordered
+        success = max((row for row in success_history if row["state_evidence"] and row["status"] == "success"
+                       and as_of and _completion_time(row, as_of)),
+                      key=lambda row: _completion_time(row, as_of), default={})
         incomplete = available is False or any(_run_time(row) == float("-inf") for row in ordered)
         latest_time = _completion_time(last, as_of)
         incomplete = incomplete or bool(last and (latest_time is None or as_of is None or latest_time > as_of))
@@ -567,12 +574,14 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
                          "attempt_conclusion": newest.get("conclusion", "unknown"),
                          "trigger_source": newest.get("trigger_source"),
                          "workflow_evidence_available": available,
+                         "last_success_evidence_source": success.get("evidence_source"),
                          "errors": last.get("errors", []), "error_count": last.get("error_count", 0),
                          "new_record_count": last.get("new_record_count"),
                          "run_url": newest.get("run_url"), "timeline": ordered[:10]})
-    for item in branches:
-        if item["branch"] in {"legislative", "executive"}:
-            item["source_ocr"] = branch_health(item["timeline"], as_of, item.get("stale_after_minutes") or 90)
+        if branch in {"legislative", "executive"}:
+            branches[-1]["source_ocr"] = branch_health(
+                ordered, as_of, branches[-1].get("stale_after_minutes") or 90,
+                history=success_history)
     required_ocr = [item["source_ocr"] for item in branches if item.get("source_ocr", {}).get("required")]
     combined = [{"status": overall_status(branches), "branch": "collectors"}] + [{"status": item["status"], "branch": "ocr"} for item in required_ocr]
     combined_status = next((status for status in ("failure", "stale", "unknown") if any(item["status"] == status for item in combined)), "success")
@@ -707,9 +716,7 @@ def build_insights(payload: Mapping[str, Any], *, as_of: datetime | str | None =
     # browser discovery step. Older workflow-only evidence is not a source probe.
     health["oge"] = {
         "monitoring_branch": "executive",
-        "checks_included": any(row.get("evidence_source") == "runtime_v2" and row.get("status") == "success"
-                               and row.get("finished_utc") == executive_health.get("last_success_utc")
-                               for row in executive_health.get("timeline", [])),
+        "checks_included": executive_health.get("last_success_evidence_source") == "runtime_v2",
         "filing_count": len(oge_filings),
         "processed_count": sum(row.get("status") == "processed" for row in oge_filings),
         "transaction_count": sum(str(row.get("source") or "").casefold() == "oge" for row in transactions),

@@ -1593,3 +1593,15 @@ attempt advancement and report remaining failures honestly. A document moving
 from technical failure to human review is successful extraction, not an approved
 trade import. Preserve the original two-page/five-row owner upload and its cleared
 raw payload. Natural scheduled operation must be verified separately.
+
+## 2026-09-21 — Keep successful-run history independent of status timelines (#208)
+
+A bounded recent-attempt list is presentation, not the authority for last-success
+timestamps. Runtime v2 reads immutable snapshot-linked production receipts across
+history and exports at most four unique success anchors. Match namespace, digest,
+revision, chronology and snapshot provenance; exclude quarantined/shadow/future
+receipts. Never silently substitute a legacy date for missing Runtime success.
+OCR's completed pass, healthy pass and document completion are independent facts;
+only validated committed stage evidence advances them. A recent failure or blocked
+OCR attempt remains the current status. Collector and Source OCR get distinct UI
+sections, status badges and explicitly named timestamps in every card size.
