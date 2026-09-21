@@ -29,6 +29,11 @@ def main():
             cursor.execute("SELECT count(*) FROM pg_tables WHERE schemaname='public'")
             if cursor.fetchone()[0]:
                 raise ValueError('Restore target already has tables; existing state was not modified')
+            # Cloud SQL exports can retain a schema ACL for this historical
+            # role. Preserve that ACL without creating any login or superuser.
+            cursor.execute("SELECT 1 FROM pg_roles WHERE rolname='cloudsqlsuperuser'")
+            if not cursor.fetchone():
+                cursor.execute('CREATE ROLE cloudsqlsuperuser NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE')
     env = os.environ.copy()
     env['PGPASSWORD'] = passwords['admin']
     command = [str(root / 'tools/postgresql16/pgsql/bin/psql.exe'),

@@ -29,7 +29,7 @@ on:
       - "requirements-local.txt"
       - "tests/test_local_host.py"
       - "deploy/local-windows/**"
-      - "scripts/local_database_audit.py"
+      - "scripts/local_*.py"
       - "requirements-runtime-v2.txt"
       - "tests/test_runtime_v2.py"
       - "tests/test_personal_reviews.py"

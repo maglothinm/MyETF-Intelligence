@@ -1,27 +1,49 @@
 # PolitiTrack active handoff
 
-## September 21 Windows migration — preparation in progress (#211)
+## September 21 Beast cutover — finish Windows administrator approval (#211)
 
-The owner explicitly requested all production processing on Beast, with Windows
-startup services and no Google Cloud hosting. Canonical repository ID 1349678672
-remains unchanged. Branch `codex/beast-local-runtime-20260921` adds a native
-Windows host for the existing Runtime v2 jobs and a loopback-only dashboard.
+Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`. Application
+PR #212 is merged; Beast runs main source
+`42c6f27df5d9266decad3abc7aa6f794edda0f3a`. Follow-up evidence branch:
+`codex/beast-local-cutover-evidence-20260921`.
 
-All four cloud schedules were paused and public web ingress restricted to
-internal before the final full SQL export. Cloud resources have not yet been
-retired. Export operation `f9a96409-4593-449e-b8af-95f900000032` and source audits
-are being checked. No local authority receipt has been activated. PostgreSQL 16,
-Python, Chromium and OCR tools are installed on Beast; local services have not
-yet been registered. Final continuity, Windows service and cloud retirement
-receipts must supersede this preparation checkpoint before completion is claimed.
+Production authority is now **Beast local PostgreSQL**, not Google Cloud. All 18
+source tables and 4,256 snapshot payloads matched before activation. All four
+local production jobs succeeded. Current heads are Legislative 1361, Executive
+673, AI 765 and Dashboard 1461, each the direct immutable successor of the frozen
+cloud head. Post-cycle baseline fingerprints and new payload hashes passed.
+Local HTTP/data/assets, review session API, desktop parser, OCR, Chromium and
+private Vault storage were verified. Full export and a verified post-cycle
+physical recovery backup are retained under `C:\ProgramData\PolitiTrack\backups`.
 
-Focused validation: 86 tests passed and 30 PostgreSQL variants skipped locally.
-Existing states, identifiers, account data, OCR evidence and delivery history
-must migrate in full. Current Opportunity remains off and Vault lifecycle stays paused; the enabled
-Vault API is preserved with private local file storage.
+Cloud database, jobs, service, schedules, artifact repository, secrets and active
+buckets are deleted; SQL backup list is empty. Two internal network reservations
+and provider-retained deleted bucket records remain. Bucket hard-delete dates
+are September 28; do not promise a zero final bill or immediate permanent purge.
+All three retired GitHub state workflows remain disabled. Never resume them or
+restore the old cloud database as authority after these new local writes.
 
-Next safe action: finish the frozen SQL export; restore and compare all-table
-fingerprints; validate native Windows services; activate local authority only
-after continuity passes; preserve recoverable backups before retiring cloud.
+**Only startup activation remains blocked:** the owner canceled the administrator
+prompt. No core Windows services exist yet, and no recurring local scheduler is
+running. PostgreSQL/web are temporarily running under the owner; the existing
+tray runs and its sign-in startup entry is enabled. Do not conflate tray startup
+with automatic background services.
 
-Earlier release evidence remains in PROJECT_STATE and docs/releases.
+Next safe action: the owner double-clicks **Finish PolitiTrack Setup** on Beast's
+Desktop and approves the Windows UAC prompt. Do not trigger another prompt
+without the owner proceeding. The reviewed installer is
+`C:\ProgramData\PolitiTrack\app\deploy\local-windows\Install-Services.ps1`.
+It stops the dedicated manual web/database cleanly, installs
+PolitiTrackDatabase/PolitiTrackWeb/PolitiTrackScheduler under LocalService with
+automatic startup/recovery, and saves `backups/installed-services.json` after
+readiness passes. Verify those live services and a natural scheduled cycle;
+verify reboot behavior when the owner is ready. Keep #211 open until then.
+
+If installation fails, inspect `logs/service-install.log`. Repair the existing
+installation; do not initialize a new database, replay the migration export,
+rebaseline state, or recreate Google Cloud. Vault API remains enabled with local
+storage; lifecycle stays paused. Current Opportunity/manual cloud controls stay
+off. Preserve the existing OCR access/retry backlog and upload/review records.
+
+[Release record](releases/2026-09-21-beast-local-cutover.md) ·
+[Exact receipts](releases/2026-09-21-beast-local-cutover.json).

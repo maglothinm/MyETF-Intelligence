@@ -1,0 +1,392 @@
+{
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "application_revision": "42c6f27df5d9266decad3abc7aa6f794edda0f3a",
+  "implementation_pr": 212,
+  "baseline_verification": {
+    "authority_activated": false,
+    "database_verified": true,
+    "export_sha256": "7d5128c2f9cb4ea96e41b02f274c519178f8924e63929d204f6c29aca38d39c6",
+    "heads": [
+      {
+        "files": 1454,
+        "generation": 764,
+        "namespace": "ai",
+        "sha256": "664620caae5a35909c718f5fdabe6f175e3f7a874a4e8dbd14f70670a995fb83"
+      },
+      {
+        "files": 257,
+        "generation": 1460,
+        "namespace": "dashboard",
+        "sha256": "a21dcff49cb0f8635428083ee8a9da803dfc626c7953e2bce6b16476ab3a703c"
+      },
+      {
+        "files": 232,
+        "generation": 672,
+        "namespace": "executive",
+        "sha256": "9ea3e83607b44e57b6e9a3516efbc8fb70b3615799a4266fcab16dff99697723"
+      },
+      {
+        "files": 741,
+        "generation": 1360,
+        "namespace": "legislative",
+        "sha256": "e2b8ef28de0fddd5ad5a4e7625b7c78ed0f8389472b876bbbb3177933e833364"
+      }
+    ],
+    "repository_id": 1349678672,
+    "snapshot_payloads_verified": 4256,
+    "source_catalog_sha256": "ca83404f082fdfaf85ad36416c9d6c42f5c664aa2d1cf88be123e1f280de668e",
+    "tables_verified": 18,
+    "verified_at": "2026-09-21T15:43:41.941411+00:00"
+  },
+  "local_cycle": {
+    "exit_codes": {
+      "ai": 0,
+      "dashboard": 0,
+      "executive": 0,
+      "legislative": 0
+    },
+    "finished_at": "2026-09-21T15:47:43.991626+00:00",
+    "source_revision": "42c6f27df5d9266decad3abc7aa6f794edda0f3a",
+    "started_at": "2026-09-21T15:44:48.030956+00:00"
+  },
+  "continuity": {
+    "frozen_tables_preserved": {
+      "runtime_job_runs": {
+        "digest": "f822b0c327f34485bbc1e8c9cbb8dda8",
+        "rows": 4348
+      },
+      "runtime_notification_deliveries": {
+        "digest": null,
+        "rows": 0
+      },
+      "runtime_notification_events": {
+        "digest": null,
+        "rows": 0
+      },
+      "runtime_notification_legacy_fences": {
+        "digest": "5747609102c37c86210fc987bb387079",
+        "rows": 1
+      },
+      "runtime_review_accounts": {
+        "digest": "2ed39f50d3657be614ee63206919f317",
+        "rows": 3
+      },
+      "runtime_review_acknowledgements": {
+        "digest": "bcd16b540626f0408e332a57b1ef4ca5",
+        "rows": 9
+      },
+      "runtime_review_auth_limits": {
+        "digest": "dc2f45f2c016f63cd20e713ff5d953d0",
+        "rows": 6
+      },
+      "runtime_review_events": {
+        "digest": "4b1975dcf5b3f7e2c752b952abe9e94a",
+        "rows": 10
+      },
+      "runtime_review_sessions": {
+        "digest": "1d1777231ccef11e929636e241fb9580",
+        "rows": 30
+      },
+      "runtime_source_uploads": {
+        "digest": "4de21d841584ea4118a5ef2ab345cf9c",
+        "rows": 1
+      },
+      "runtime_state_snapshots": {
+        "digest": "86c51a440dd484dc6873cfd40b2b567b",
+        "rows": 4256
+      },
+      "vault_catalog_checkpoints": {
+        "digest": null,
+        "rows": 0
+      },
+      "vault_filing_acknowledgements": {
+        "digest": null,
+        "rows": 0
+      },
+      "vault_filing_documents": {
+        "digest": null,
+        "rows": 0
+      },
+      "vault_filing_source_metadata": {
+        "digest": null,
+        "rows": 0
+      },
+      "vault_filing_versions": {
+        "digest": null,
+        "rows": 0
+      },
+      "vault_filings": {
+        "digest": null,
+        "rows": 0
+      }
+    },
+    "heads": [
+      {
+        "generation": 765,
+        "namespace": "ai",
+        "parent_sha256": "664620caae5a35909c718f5fdabe6f175e3f7a874a4e8dbd14f70670a995fb83",
+        "sha256": "14f7b92b1bf42c9c79480438a1783a85bc8dabe04c83026f2c4f13226d57e723"
+      },
+      {
+        "generation": 1461,
+        "namespace": "dashboard",
+        "parent_sha256": "a21dcff49cb0f8635428083ee8a9da803dfc626c7953e2bce6b16476ab3a703c",
+        "sha256": "3e86cf5b64d65231d7e79eb8bfd604261cee88b48dca727faab28a48d25a2e62"
+      },
+      {
+        "generation": 673,
+        "namespace": "executive",
+        "parent_sha256": "9ea3e83607b44e57b6e9a3516efbc8fb70b3615799a4266fcab16dff99697723",
+        "sha256": "4d4d72653eb5ee9b739ccccd8ac25fc1548b98243eb2b5009dff57e17e325b64"
+      },
+      {
+        "generation": 1361,
+        "namespace": "legislative",
+        "parent_sha256": "e2b8ef28de0fddd5ad5a4e7625b7c78ed0f8389472b876bbbb3177933e833364",
+        "sha256": "ef4189fddb2a254dd63ff4d10e7362f22b73adc345c809779a8837dd3839fe1c"
+      }
+    ],
+    "local_runs": [
+      {
+        "namespace": "ai",
+        "run_id": "bd9b0c19-e58c-44f5-a6d4-2856a57678de",
+        "status": "success"
+      },
+      {
+        "namespace": "dashboard",
+        "run_id": "903dc2a0-4f0f-4e73-b09b-5bd1539756d6",
+        "status": "success"
+      },
+      {
+        "namespace": "executive",
+        "run_id": "6da08828-d580-406a-9150-903feb3bca76",
+        "status": "success"
+      },
+      {
+        "namespace": "legislative",
+        "run_id": "d79134f2-00cf-4008-bb29-33c5817b57c2",
+        "status": "success"
+      }
+    ],
+    "verified_at": "2026-09-21T15:52:41.102403+00:00"
+  },
+  "http": {
+    "base_url": "http://127.0.0.1:8765",
+    "dashboard_generation": 1461,
+    "dashboard_sha256": "3e86cf5b64d65231d7e79eb8bfd604261cee88b48dca727faab28a48d25a2e62",
+    "files": {
+      "app.js": {
+        "sha256": "b8450e7cfe6eecd1cded6f7c7f63157e555c6ed8eec4b0ba1dc39c9108a0fd5b",
+        "status": 200
+      },
+      "current-opportunities.css": {
+        "sha256": "8aa8446cc938727e6c45a23a93c267d526c2b1924a7981ddc1dffcb7908b3e41",
+        "status": 200
+      },
+      "current-opportunities.js": {
+        "sha256": "bc63d71393daf171b0f6d74d7fcf9270fb9883bd38d25e7f9db4149c090b0c84",
+        "status": 200
+      },
+      "data/dashboard-insights.json": {
+        "sha256": "6a0d5d163079796a951317c281fc369a4c603d71b28871345b17345ccf556207",
+        "status": 200
+      },
+      "data/filings.json": {
+        "sha256": "61bf7c2bc99588197f75a5c8b7aa47f79a474c45b547e19f435e48064394fe63",
+        "status": 200
+      },
+      "data/transactions.json": {
+        "sha256": "324f561e65a5619f9940a77a333edfb1d7f1da9ce91260c35dcd212dcebe2a9a",
+        "status": 200
+      },
+      "filing-pdf.css": {
+        "sha256": "1dce45e6c65d2d006af0d5a8f6fa26ef8e6d967f74dc05dc10593f60b5a45606",
+        "status": 200
+      },
+      "filing-pdf.js": {
+        "sha256": "0862876b04d436c1fa96839527f22b4fdc52bd23318d0b7d6863fc1fd11899c7",
+        "status": 200
+      },
+      "filing-vault.css": {
+        "sha256": "6c072ba5a0e6879e624419214b56a4d7c65d2fec596026f8863b98e92c1d188c",
+        "status": 200
+      },
+      "filing-vault.js": {
+        "sha256": "c7d30aac959afb08b79af4333198ec1f61e0454dc55bf362d4328822cc9a711c",
+        "status": 200
+      },
+      "index.html": {
+        "sha256": "7760b199a1cc28558b16cfc8395d048c04ca9d97e952afa01f8fa14a8f1bcbb0",
+        "status": 200
+      },
+      "investor-edge.css": {
+        "sha256": "33d21f9dd4e6d90fbb8a1c4852602126edcf43363c02cf9bcc6f16a71e4f33b4",
+        "status": 200
+      },
+      "investor-edge.js": {
+        "sha256": "d3835161118b16f629f22844092962017374c37b693d34dd67883bc54da17317",
+        "status": 200
+      },
+      "styles.css": {
+        "sha256": "db883033b5d028686e5ed2530c30f95664be19db1ce6cf8aeca37ce45d6724cc",
+        "status": 200
+      },
+      "vendor/pdfjs/wasm/jbig2_nowasm_fallback.js": {
+        "sha256": "04c795a6657a4553a64b781ea3e85256203d913c3b71b72b85fa3ce00622f458",
+        "status": 200
+      },
+      "vendor/pdfjs/wasm/openjpeg_nowasm_fallback.js": {
+        "sha256": "0f998419819da4491d8302222aa9e2ff2494685641aa2a6c21c3760c29f3e319",
+        "status": 200
+      },
+      "wallboard.css": {
+        "sha256": "fe8cd1aa992f250464ef7e313ad04560913206ea8d617e82b97c93a3c5b4f311",
+        "status": 200
+      },
+      "wallboard.js": {
+        "sha256": "7c07951ddb4b6fe9d3370a3ebfffc2351e836cdd033962c0d770a9d11f0c24f7",
+        "status": 200
+      }
+    },
+    "invalid_host_status": 403,
+    "verified_at": "2026-09-21T15:50:06.081291+00:00"
+  },
+  "backup": {
+    "backup_type": "PostgreSQL 16 physical base backup",
+    "bytes": 25760825499,
+    "manifest_sha256": "1a80643c24f35ea8471ef24bc1f69091b61bcd170d3989780794dfd2a7ffc4fc",
+    "migration_export_sha256": "7d5128c2f9cb4ea96e41b02f274c519178f8924e63929d204f6c29aca38d39c6",
+    "path": "C:\\ProgramData\\PolitiTrack\\backups\\local-cutover-basebackup",
+    "pg_verifybackup": "passed",
+    "started_at": "2026-09-21T15:48:27.809021+00:00",
+    "verified_at": "2026-09-21T15:50:44.611812+00:00"
+  },
+  "desktop_sha256": "465d57d32bba33b0b321805392b4d1041d575ddee1d26df296bf54176539b714",
+  "cloud_retirement": {
+    "commands_completed_at": "2026-09-21T15:52:28.224713+00:00",
+    "completed": [
+      "disable-soft-delete:project-38008d5f-4918-46e6-920-polititrack-migration",
+      "disable-soft-delete:project-38008d5f-4918-46e6-920-polititrack-tfstate",
+      "disable-soft-delete:project-38008d5f-4918-46e6-920-polititrack-vault",
+      "disable-soft-delete:project-38008d5f-4918-46e6-920_cloudbuild",
+      "sql:polititrack-runtime-v2",
+      "scheduler:executive",
+      "scheduler:ai",
+      "scheduler:dashboard",
+      "scheduler:legislative",
+      "scheduler:vault-lifecycle",
+      "service:polititrack-web",
+      "job:admin",
+      "job:ai",
+      "job:dashboard",
+      "job:executive",
+      "job:import-ai",
+      "job:import-executive",
+      "job:import-legislative",
+      "job:legislative",
+      "job:vault-lifecycle",
+      "artifact-repository:polititrack",
+      "secret:alphavantage-api-key",
+      "secret:database-password",
+      "secret:finnhub-api-key",
+      "secret:openai-api-key",
+      "secret:vault-signing-key",
+      "bucket:project-38008d5f-4918-46e6-920-polititrack-migration",
+      "bucket:project-38008d5f-4918-46e6-920-polititrack-tfstate",
+      "bucket:project-38008d5f-4918-46e6-920-polititrack-vault",
+      "bucket:project-38008d5f-4918-46e6-920_cloudbuild"
+    ],
+    "project": "project-38008d5f-4918-46e6-920",
+    "started_at": "2026-09-21T15:51:14.098849+00:00"
+  },
+  "soft_deleted_buckets": {
+    "items": [
+      {
+        "name": "project-38008d5f-4918-46e6-920-polititrack-migration",
+        "generation": "1788288000237157618",
+        "softDeleteTime": "2026-09-21T15:52:13.476Z",
+        "hardDeleteTime": "2026-09-28T15:52:15.889Z",
+        "softDeletePolicy": {
+          "retentionDurationSeconds": "0"
+        }
+      },
+      {
+        "name": "project-38008d5f-4918-46e6-920-polititrack-tfstate",
+        "generation": "1788287509785819253",
+        "softDeleteTime": "2026-09-21T15:52:18.779Z",
+        "hardDeleteTime": "2026-09-28T15:52:17.913Z",
+        "softDeletePolicy": {
+          "retentionDurationSeconds": "0"
+        }
+      },
+      {
+        "name": "project-38008d5f-4918-46e6-920-polititrack-vault",
+        "generation": "1788288000281730226",
+        "softDeleteTime": "2026-09-21T15:52:22.989Z",
+        "hardDeleteTime": "2026-09-28T15:52:19.995Z",
+        "softDeletePolicy": {
+          "retentionDurationSeconds": "0"
+        }
+      },
+      {
+        "name": "project-38008d5f-4918-46e6-920_cloudbuild",
+        "generation": "1788287530250148086",
+        "softDeleteTime": "2026-09-21T15:52:27.978Z",
+        "hardDeleteTime": "2026-09-28T15:52:22.056Z",
+        "softDeletePolicy": {
+          "retentionDurationSeconds": "0"
+        }
+      }
+    ]
+  },
+  "sql_backups_remaining": [],
+  "cloud_inventory": {
+    "verified_at": "2026-09-21T15:53:35.927880+00:00",
+    "counts": {
+      "artifact_repositories": 0,
+      "buckets": 0,
+      "compute_addresses": 2,
+      "compute_disks": 0,
+      "compute_instances": 0,
+      "compute_routers": 0,
+      "run_jobs": 0,
+      "run_services": 0,
+      "schedules": 0,
+      "secrets": 0,
+      "sql_instances": 0
+    }
+  },
+  "startup": {
+    "services_registered": false,
+    "administrator_prompt_result": "canceled_by_user",
+    "desktop_shortcut": "Finish PolitiTrack Setup",
+    "manual_database_and_web_running": true,
+    "scheduler_running": false,
+    "desktop_tray_startup": "enabled_at_user_sign_in"
+  },
+  "legacy_github_writers": {
+    "legislative_trade_tracker_v2.yml": "disabled_manually",
+    "executive_trade_tracker.yml": "disabled_manually",
+    "ai_filing_analyst.yml": "disabled_manually"
+  },
+  "ci": {
+    "tested_pr_head": "5ef2daceb74fd9b75d24fa33f9d193376315d8bf",
+    "successful_run_ids": [
+      35615691404,
+      35615691405,
+      35615691416,
+      35615691395
+    ]
+  },
+  "native_checks": {
+    "ocr_pages": 2,
+    "ocr_status": "complete",
+    "chromium": "passed",
+    "windows_process_cleanup": "configured",
+    "vault_backend": "private_local_files",
+    "web_factory": "passed"
+  },
+  "cloud_retention_note": "Four deleted bucket records report retentionDurationSeconds=0 but hardDeleteTime on 2026-09-28. No active bucket or SQL backup remains. Retained object bytes and final charges are not established; provider retention cannot be force-purged.",
+  "soft_delete_documentation": "https://docs.cloud.google.com/storage/docs/soft-delete"
+}

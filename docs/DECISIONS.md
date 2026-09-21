@@ -1625,3 +1625,22 @@ backend outside the checkout, retaining production PostgreSQL and the existing
 signing key. Do not misrepresent a paused crawler as a disabled API or enable
 development storage in production. Source Vault catalog and GCS objects were
 empty at the migration baseline.
+
+## 2026-09-21 — Local cutover is distinct from Windows service activation (#211)
+
+The verified full database and first successful local production cycle establish
+Beast as the sole authority. The original source heads remain immutable history;
+new local heads may never be replaced by the frozen cloud baseline. Retain both
+the complete export and a verified post-cycle local recovery backup before
+retiring cloud resources. This gate passed and cloud hosting was retired.
+
+Windows canceled the administrator prompt. Prepare the exact reviewed installer
+and a Desktop shortcut, but do not label configurations or a per-user tray
+startup entry as registered services. The owner must approve Windows elevation
+before the core scheduler can start automatically. Keep the migration issue open
+until live service and subsequent scheduling evidence is recorded. Do not bypass
+UAC, reactivate cloud jobs, or initialize replacement state to address this block.
+
+Provider-retained deleted bucket records have September 28 hard-delete dates.
+Record this separately from the absence of active cloud hosting; do not promise
+immediate permanent storage erasure or a zero final Google bill.
