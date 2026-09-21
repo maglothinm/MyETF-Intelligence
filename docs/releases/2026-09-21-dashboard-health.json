@@ -1,0 +1,478 @@
+{
+  "source": "50e3e0d6d0a09475cae694a74bfaf501416892f2",
+  "image": "us-central1-docker.pkg.dev/project-38008d5f-4918-46e6-920/polititrack/runtime-v2@sha256:7003b8e37fdd2e949de6fb49f47e8544cc69bc4fb49a3ff11372240e9d71cd9b",
+  "build_id": "f84de217-c765-4733-a051-f93aef8afb05",
+  "status": "deployed",
+  "publication": {
+    "args": [
+      "-m",
+      "runtime_v2",
+      "run",
+      "dashboard"
+    ],
+    "execution": "polititrack-dashboard-rm6cd",
+    "completed": true
+  },
+  "schedules_restored": true,
+  "baseline": {
+    "observed_at": "2026-09-21T11:23:26.494507+00:00",
+    "execution": "polititrack-admin-vmb4c",
+    "result": "PASS",
+    "read_only": true,
+    "heads": {
+      "ai": {
+        "all_file_hashes_verified": true,
+        "file_count": 1454,
+        "generation": 759,
+        "manifest_sha256": "d5117c582aba71d211697c2465d03bc6b839043c7bb65428446b8d87c376cc36",
+        "parent_sha256": "fd53ba37a2378af305a16ab872c86e0afdb912ab824a73b7e0d0fe03f8c7546d",
+        "payload_sha256": "08a0284000f0cc65957585f51d4e8c421b99fb079dc1cb557aded458fb85b19b",
+        "producer_run_id": "5745e286-be1f-4984-a59e-7bc8ed125d01",
+        "snapshot_id": "288cbe91-9ea6-4cbf-943a-d0fd28a7bd5d",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 84220509
+      },
+      "dashboard": {
+        "all_file_hashes_verified": true,
+        "file_count": 257,
+        "generation": 1450,
+        "manifest_sha256": "9780abd24a0a62186a66e44a6dd8afaf2ec7835f157d1ebf2afebad6b1cd8892",
+        "parent_sha256": "ce789ac491dc7a8aed571c7c135f3f6a59fdb5014bc1788f8fff4e89ad3aa1b4",
+        "payload_sha256": "920cbd3193b73c7c8af5723fab6a5c290e95b1f6952c113f471cc0b0624e7a10",
+        "producer_run_id": "c7943337-ad65-4f12-a5e4-88ef990f78d7",
+        "snapshot_id": "71177588-0641-4270-b815-bccc7e2902b4",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 194250024
+      },
+      "executive": {
+        "all_file_hashes_verified": true,
+        "file_count": 231,
+        "generation": 671,
+        "manifest_sha256": "8d9852dba2498e0006b9ee15a0d4da6b05346a742f29a9bd528c01e3c3640d9b",
+        "parent_sha256": "a8c4f1564594ebd7ed217a0126ad6e912217afc0fbe09e73ba23d6bf3b3243d6",
+        "payload_sha256": "14e5f8aee9aaa392f9c5493e0dae915fa468bb762c613b40d803a7deccd324b8",
+        "producer_run_id": "1e4349d4-305a-47bf-8870-04360ff26335",
+        "snapshot_id": "5154c94c-7157-42c8-907a-07f6fd0f3c52",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 10718888
+      },
+      "legislative": {
+        "all_file_hashes_verified": true,
+        "file_count": 687,
+        "generation": 1349,
+        "manifest_sha256": "7d589f71884fb98ddb8d237d0ad7fe1adc167df709de73f6f56d439bea49ce06",
+        "parent_sha256": "c387b378c1e4aef9af27cc7adc0d254530c2e77894f5ff6fc31eabf1de7f3fce",
+        "payload_sha256": "7d596bb0074ec5eabd9f953282f4cccbf6b24794eee92ece46620db858776c50",
+        "producer_run_id": "348653cb-d6a3-4ddd-bbdb-1c407e125803",
+        "snapshot_id": "d38d52f2-0ef9-4b65-9df4-e771ef87082b",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 26790838
+      }
+    },
+    "history": {
+      "ai": {
+        "metadata_sha256": "2859df776d3f091bd29ac965100c11d6c1a4a05e3021ca698ef185c7982a3aed",
+        "parent_chain_verified": true,
+        "row_count": 759,
+        "through_generation": 759
+      },
+      "dashboard": {
+        "metadata_sha256": "04a71a0e3ce137e05858c95420cfcce2efd08bafa285edc64bbde06c82f01937",
+        "parent_chain_verified": true,
+        "row_count": 1450,
+        "through_generation": 1450
+      },
+      "executive": {
+        "metadata_sha256": "031bd278b709dc67ead41289f014ef55c773ff0ba3396f3ece21fe2d3f959213",
+        "parent_chain_verified": true,
+        "row_count": 671,
+        "through_generation": 671
+      },
+      "legislative": {
+        "metadata_sha256": "bc8e2d69ea7a76f013b8c5e08bb02669178358ca70bd2e140dae3707a2b12a2c",
+        "parent_chain_verified": true,
+        "row_count": 1349,
+        "through_generation": 1349
+      }
+    },
+    "completed_run_history": {
+      "row_count": 4317,
+      "rows_sha256": "f5140d132f9fe31f34a19b4a3d119c4ad2aac469fc4df2c4f156fc706f0f9870"
+    }
+  },
+  "acceptance": {
+    "observed_at": "2026-09-21T11:32:44.227428+00:00",
+    "execution": "polititrack-admin-qcwpb",
+    "result": "PASS",
+    "read_only": true,
+    "heads": {
+      "ai": {
+        "all_file_hashes_verified": true,
+        "file_count": 1454,
+        "generation": 759,
+        "manifest_sha256": "d5117c582aba71d211697c2465d03bc6b839043c7bb65428446b8d87c376cc36",
+        "parent_sha256": "fd53ba37a2378af305a16ab872c86e0afdb912ab824a73b7e0d0fe03f8c7546d",
+        "payload_sha256": "08a0284000f0cc65957585f51d4e8c421b99fb079dc1cb557aded458fb85b19b",
+        "producer_run_id": "5745e286-be1f-4984-a59e-7bc8ed125d01",
+        "snapshot_id": "288cbe91-9ea6-4cbf-943a-d0fd28a7bd5d",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 84220509
+      },
+      "dashboard": {
+        "all_file_hashes_verified": true,
+        "file_count": 257,
+        "generation": 1451,
+        "manifest_sha256": "1bf9f3c09d03a131b6d61d04b7b1fc909fe85ffcac3e7e46893366b3fd615774",
+        "parent_sha256": "920cbd3193b73c7c8af5723fab6a5c290e95b1f6952c113f471cc0b0624e7a10",
+        "payload_sha256": "a5c609653b7f356bbe5e62a2240cece3bae9eb8ac721264102513c364e2cf5e6",
+        "producer_run_id": "879f6414-a7dd-4f45-ad20-bb60ba6bdd21",
+        "snapshot_id": "28affef1-a1c9-494f-9993-878022801192",
+        "source_revision": "50e3e0d6d0a09475cae694a74bfaf501416892f2",
+        "uncompressed_bytes": 194257729
+      },
+      "executive": {
+        "all_file_hashes_verified": true,
+        "file_count": 231,
+        "generation": 671,
+        "manifest_sha256": "8d9852dba2498e0006b9ee15a0d4da6b05346a742f29a9bd528c01e3c3640d9b",
+        "parent_sha256": "a8c4f1564594ebd7ed217a0126ad6e912217afc0fbe09e73ba23d6bf3b3243d6",
+        "payload_sha256": "14e5f8aee9aaa392f9c5493e0dae915fa468bb762c613b40d803a7deccd324b8",
+        "producer_run_id": "1e4349d4-305a-47bf-8870-04360ff26335",
+        "snapshot_id": "5154c94c-7157-42c8-907a-07f6fd0f3c52",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 10718888
+      },
+      "legislative": {
+        "all_file_hashes_verified": true,
+        "file_count": 692,
+        "generation": 1350,
+        "manifest_sha256": "61f54adf025bb525c9e3f5fe12463862d0e0e6c2746e419061e718f1250e98ea",
+        "parent_sha256": "7d596bb0074ec5eabd9f953282f4cccbf6b24794eee92ece46620db858776c50",
+        "payload_sha256": "0ff62c89433942090030d4d8305e72b049f17e67542cf28d44fb44a8a3ba0616",
+        "producer_run_id": "df777608-57ea-41ad-9a15-eff48ede1439",
+        "snapshot_id": "45cb81b4-f369-4613-92c1-343946e10fe7",
+        "source_revision": "aba0285689d649d94e3e11444b582c748927bbc4",
+        "uncompressed_bytes": 26819536
+      }
+    },
+    "history": {
+      "ai": {
+        "metadata_sha256": "2859df776d3f091bd29ac965100c11d6c1a4a05e3021ca698ef185c7982a3aed",
+        "parent_chain_verified": true,
+        "row_count": 759,
+        "through_generation": 759
+      },
+      "dashboard": {
+        "metadata_sha256": "51d96f94156226d7fbda4ff5bfa7edc02176da20015312555b3c142d01c087c3",
+        "parent_chain_verified": true,
+        "row_count": 1451,
+        "through_generation": 1451
+      },
+      "executive": {
+        "metadata_sha256": "031bd278b709dc67ead41289f014ef55c773ff0ba3396f3ece21fe2d3f959213",
+        "parent_chain_verified": true,
+        "row_count": 671,
+        "through_generation": 671
+      },
+      "legislative": {
+        "metadata_sha256": "f4d5fa05c95f824811eefcaeb06a781dcd3fc47c8402c337edcbdb4e08a5afc4",
+        "parent_chain_verified": true,
+        "row_count": 1350,
+        "through_generation": 1350
+      }
+    },
+    "completed_run_history": {
+      "row_count": 4319,
+      "rows_sha256": "f1f02cf765fa47e11769a72b073ef91de867df85fc03937dbf63c7ec79c077f1"
+    },
+    "baseline_preservation_verified": true,
+    "retained_state_verified": {
+      "ai": {
+        "append_only_ledgers_verified": 2,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      },
+      "executive": {
+        "append_only_ledgers_verified": 5,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      },
+      "legislative": {
+        "append_only_ledgers_verified": 5,
+        "durable_keys_retained": true,
+        "prior_files_retained": true
+      }
+    }
+  },
+  "schedules": {
+    "polititrack-executive": {
+      "state": "ENABLED",
+      "schedule": "11,41 * * * *",
+      "timeZone": "Etc/UTC"
+    },
+    "polititrack-ai": {
+      "state": "ENABLED",
+      "schedule": "14,44 * * * *",
+      "timeZone": "America/New_York"
+    },
+    "polititrack-dashboard": {
+      "state": "ENABLED",
+      "schedule": "2,17,32,47 * * * *",
+      "timeZone": "Etc/UTC"
+    },
+    "polititrack-legislative": {
+      "state": "ENABLED",
+      "schedule": "5,20,35,50 * * * *",
+      "timeZone": "Etc/UTC"
+    },
+    "polititrack-vault-lifecycle": {
+      "state": "PAUSED",
+      "schedule": "17 3 * * *",
+      "timeZone": "Etc/UTC"
+    }
+  },
+  "closed_ocr_journal_sha256": "9980523ad75ce1f4993967cbc4dce8c296e486b0d21ffc0e7db745a02e94ddcd",
+  "release_task_sha256": "8848a5f9fac82cb9e69184db6a9e5451359dc3c5525dfce89666376c72bb9deb",
+  "resource_scope": "dashboard image and SOURCE_REVISION only; other five normalized resource configurations verified unchanged",
+  "repository": {
+    "id": 1349678672,
+    "name": "maglothinm/MyETF-Intelligence",
+    "branch": "main",
+    "application_source": "50e3e0d6d0a09475cae694a74bfaf501416892f2",
+    "issue": 208,
+    "pull_request": 209
+  },
+  "live": {
+    "origin": "https://polititrack-web-s6icmprjvq-uc.a.run.app/",
+    "assets": {
+      "app.js": {
+        "sha256": "f343123c8a4eaf76152638d8eb8d486d802f7372647c2bab8366cdc83a184a11",
+        "matches_release": true
+      },
+      "wallboard.js": {
+        "sha256": "187345a84641eb03bef47f187110fa20acc24fe2e6fe1c8f0c430604044e9d83",
+        "matches_release": true
+      },
+      "styles.css": {
+        "sha256": "756ff325c14adf01ae26ec947d79e7788245fb265b049f1807fae07692eadf7f",
+        "matches_release": true
+      }
+    },
+    "http": {
+      "app.js": 200,
+      "wallboard.js": 200,
+      "styles.css": 200,
+      "readyz": 200,
+      "data/dashboard-insights.json": 200,
+      "/": 200
+    },
+    "readiness": {
+      "dashboard": true,
+      "snapshot_sha256": "a5c609653b7f356bbe5e62a2240cece3bae9eb8ac721264102513c364e2cf5e6",
+      "status": "ready"
+    },
+    "generated_utc": "2026-09-21T11:28:13Z",
+    "overall_status": "failure",
+    "oge": {
+      "monitoring_branch": "executive",
+      "checks_included": true,
+      "filing_count": 4141,
+      "processed_count": 9,
+      "transaction_count": 519,
+      "access_required_count": 1533,
+      "manual_exception_count": 0
+    },
+    "verified_at_utc": "2026-09-21T11:30:48Z",
+    "branches": [
+      {
+        "branch": "legislative",
+        "status": "success",
+        "last_success_utc": "2026-09-21T11:24:19.353422Z",
+        "latest_run_success": true,
+        "fresh": true,
+        "age_minutes": 3.894,
+        "age_seconds": 233,
+        "expected_interval_minutes": 15,
+        "expected_cadence_seconds": 900,
+        "stale_after_minutes": 30,
+        "next_expected_utc": "2026-09-21T11:39:19.353422Z",
+        "overdue_minutes": 0,
+        "estimated_missed_intervals": 0,
+        "cadence_label": "Every 15 minutes",
+        "trigger_relationship": "Canonical collector schedule or authenticated dispatch",
+        "evidence_incomplete": false,
+        "last_run_utc": "2026-09-21T11:24:19.353422Z",
+        "last_attempt_utc": "2026-09-21T11:23:27.065916Z",
+        "last_attempt_timestamp_kind": "collector_start",
+        "latest_conclusion": "success",
+        "attempt_conclusion": "success",
+        "trigger_source": "external_scheduler",
+        "workflow_evidence_available": true,
+        "last_success_evidence_source": "runtime_v2",
+        "errors": [],
+        "error_count": 0,
+        "new_record_count": null,
+        "run_url": null,
+        "source_ocr": {
+          "status": "success",
+          "activity": "complete",
+          "enabled": true,
+          "detail": "OCR maintenance completed; documents needing interpretation or access are tracked separately.",
+          "run_id": "legislative:df777608-57ea-41ad-9a15-eff48ede1439",
+          "stale_after_minutes": 30,
+          "schema_version": 1,
+          "stage": "complete",
+          "inventory_count": 1011,
+          "eligible_count": 224,
+          "documents_attempted": 5,
+          "documents_completed": 5,
+          "extractions_reused": 0,
+          "acknowledgements_replayed": 0,
+          "pages_completed": 8,
+          "pages_expected": 8,
+          "transactions_appended": 0,
+          "complete_count": 0,
+          "needs_review_count": 5,
+          "access_required_count": 0,
+          "retry_delayed_count": 0,
+          "not_applicable_count": 0,
+          "ready_remaining": 219,
+          "review_remaining": 941,
+          "access_remaining": 0,
+          "retry_remaining": 0,
+          "unobserved_remaining": 0,
+          "started_at": "2026-09-21T11:23:27.085173Z",
+          "heartbeat_at": "2026-09-21T11:24:19.470969Z",
+          "finished_at": "2026-09-21T11:24:19.470952Z",
+          "last_document_completed_at": "2026-09-21T11:24:18.549299Z",
+          "oldest_ready_at": "2026-08-26T12:11:42Z",
+          "intake_status": "ok",
+          "cleanup_status": "not_needed",
+          "engine_version": "source-ocr-v2",
+          "duration_seconds": 28.12,
+          "age_minutes": 3.8921508,
+          "committed_pass": true,
+          "required": true,
+          "last_completed_pass_at": "2026-09-21T11:24:19.470952Z",
+          "last_success_at": "2026-09-21T11:24:19.470952Z"
+        }
+      },
+      {
+        "branch": "executive",
+        "status": "failure",
+        "last_success_utc": "2026-09-21T04:18:35.366019Z",
+        "latest_run_success": false,
+        "fresh": false,
+        "age_minutes": 429.627,
+        "age_seconds": 25777,
+        "expected_interval_minutes": 30,
+        "expected_cadence_seconds": 1800,
+        "stale_after_minutes": 60,
+        "next_expected_utc": "2026-09-21T04:48:35.366019Z",
+        "overdue_minutes": 399.627,
+        "estimated_missed_intervals": 13,
+        "cadence_label": "Every 30 minutes",
+        "trigger_relationship": "Canonical collector schedule or authenticated dispatch",
+        "evidence_incomplete": false,
+        "last_run_utc": "2026-09-21T11:17:51.608277Z",
+        "last_attempt_utc": "2026-09-21T11:13:37.841542Z",
+        "last_attempt_timestamp_kind": "collector_start",
+        "latest_conclusion": "failure",
+        "attempt_conclusion": "failure",
+        "trigger_source": "external_scheduler",
+        "workflow_evidence_available": true,
+        "last_success_evidence_source": "runtime_v2",
+        "errors": [],
+        "error_count": 1,
+        "new_record_count": null,
+        "run_url": null,
+        "source_ocr": {
+          "status": "unknown",
+          "activity": "blocked_by_collection",
+          "enabled": true,
+          "detail": "Source collection failed before OCR completed; this is not an OCR success.",
+          "run_id": "executive:ca486c08-5594-4d32-8216-00eac59cfe10",
+          "stale_after_minutes": 60,
+          "schema_version": 1,
+          "stage": "skipped",
+          "inventory_count": 0,
+          "eligible_count": 0,
+          "documents_attempted": 0,
+          "documents_completed": 0,
+          "extractions_reused": 0,
+          "acknowledgements_replayed": 0,
+          "pages_completed": 0,
+          "pages_expected": 0,
+          "transactions_appended": 0,
+          "complete_count": 0,
+          "needs_review_count": 0,
+          "access_required_count": 0,
+          "retry_delayed_count": 0,
+          "not_applicable_count": 0,
+          "ready_remaining": 0,
+          "review_remaining": 0,
+          "access_remaining": 0,
+          "retry_remaining": 0,
+          "unobserved_remaining": 0,
+          "started_at": "2026-09-21T11:13:37.858918Z",
+          "heartbeat_at": "2026-09-21T11:17:51.587271Z",
+          "finished_at": "2026-09-21T11:17:51.587242Z",
+          "error_code": "CalledProcessError",
+          "intake_status": "pending",
+          "cleanup_status": "pending",
+          "age_minutes": 10.356879300000001,
+          "required": true,
+          "last_completed_pass_at": "2026-09-21T04:18:35.456369Z",
+          "last_success_at": "2026-09-20T00:45:59.993867Z",
+          "last_document_completed_at": "2026-09-21T04:18:34.900261Z"
+        }
+      },
+      {
+        "branch": "ai",
+        "status": "success",
+        "last_success_utc": "2026-09-21T11:19:47.953986Z",
+        "latest_run_success": true,
+        "fresh": true,
+        "age_minutes": 8.417,
+        "age_seconds": 505,
+        "expected_interval_minutes": 30,
+        "expected_cadence_seconds": 1800,
+        "stale_after_minutes": 75,
+        "next_expected_utc": "2026-09-21T11:49:47.953986Z",
+        "overdue_minutes": 0,
+        "estimated_missed_intervals": 0,
+        "cadence_label": "Every 30 minutes",
+        "trigger_relationship": "The existing AI schedule runs at minutes 14 and 44 of each hour, using the latest verified collector snapshots. Manual runs use the same producer.",
+        "evidence_incomplete": false,
+        "last_run_utc": "2026-09-21T11:19:47.953986Z",
+        "last_attempt_utc": "2026-09-21T11:16:25.215966Z",
+        "last_attempt_timestamp_kind": "collector_start",
+        "latest_conclusion": "success",
+        "attempt_conclusion": "success",
+        "trigger_source": "external_scheduler",
+        "workflow_evidence_available": true,
+        "last_success_evidence_source": "runtime_v2",
+        "errors": [],
+        "error_count": 0,
+        "new_record_count": null,
+        "run_url": null
+      }
+    ]
+  },
+  "browser_verification": {
+    "overview_separate_collector_and_ocr_sections": true,
+    "operations_separate_collector_and_ocr_sections": true,
+    "executive_blocked_label_visible": true,
+    "display_timezone": "browser-local; receipt timestamps UTC",
+    "no_application_javascript_errors_observed": true
+  },
+  "ci": {
+    "runtime_safety": 35592427023,
+    "source_ocr_pr": 35592426780,
+    "investor_edge_pr": 35592426651,
+    "current_opportunity": 35592426885,
+    "source_ocr_main": 35592689411,
+    "investor_edge_main": 35592689390,
+    "all_conclusions": "success"
+  }
+}
