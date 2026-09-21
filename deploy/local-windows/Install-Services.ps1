@@ -18,13 +18,14 @@ $entries = @(
 foreach ($entry in $entries) {
     $path = Join-Path $services $entry.Id
     Copy-Item $wrapper "$path.exe" -Force
+    $argumentElement = if ($entry.Id -eq 'PolitiTrackDatabase') { 'startarguments' } else { 'arguments' }
     $xml = @"
 <service>
   <id>$($entry.Id)</id>
   <name>$($entry.Name)</name>
   <description>PolitiTrack local Runtime v2. Starts with Windows; no Google Cloud runtime.</description>
   <executable>$(Escape-Xml $entry.Exe)</executable>
-  <arguments>$(Escape-Xml $entry.Args)</arguments>
+  <$argumentElement>$(Escape-Xml $entry.Args)</$argumentElement>
   <workingdirectory>$(Escape-Xml "$Root\app")</workingdirectory>
   <startmode>Automatic</startmode>
   $($entry.Extra)
