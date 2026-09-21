@@ -29,9 +29,12 @@ can start. Service registration alone cannot activate unverified production.
 
 The migration exports all PostgreSQL data after cloud schedules are paused and
 public owner writes are blocked. `scripts/local_database_audit.py` fingerprints
-every table with binary fields represented by SHA-256; it independently checks
-every runtime snapshot's payload hash. Compare the full source and restored
-audits before activating local authority. Preserve the source export and its
+every table with binary fields represented by SHA-256. Frozen source snapshot
+metadata includes the stored immutable payload digest; the destination audit
+recomputes every snapshot payload and requires an exact match to those source
+digests. Compare every table fingerprint and head, and require the destination
+verified-payload count to equal the source snapshot count, before activating local
+authority. This avoids rereading all 25 GB on the small cloud instance. Preserve the source export and its
 checksum permanently. The scheduler creates one consistent custom-format backup
 per active day and retains the latest two separately from migration evidence.
 
