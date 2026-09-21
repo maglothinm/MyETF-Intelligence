@@ -17,7 +17,11 @@ $entries = @(
 )
 foreach ($entry in $entries) {
     $path = Join-Path $services $entry.Id
-    Copy-Item $wrapper "$path.exe" -Force
+    if (Test-Path "$path.exe") {
+        if ((Get-FileHash "$path.exe").Hash -ne (Get-FileHash $wrapper).Hash) {
+            throw "Unexpected existing service binary: $($entry.Id)"
+        }
+    } else { Copy-Item $wrapper "$path.exe" }
     $argumentElement = if ($entry.Id -eq 'PolitiTrackDatabase') { 'startarguments' } else { 'arguments' }
     $xml = @"
 <service>
@@ -71,7 +75,12 @@ try {
     }
     foreach ($entry in $entries) {
         $exe = Join-Path $services ($entry.Id + '.exe')
-        if (Get-Service $entry.Id -ErrorAction SilentlyContinue) { & $exe refresh } else { & $exe install }
+        if (Get-Service $entry.Id -ErrorAction SilentlyContinue) {
+            $current = Get-CimInstance Win32_Service -Filter "Name='$($entry.Id)'"
+            if ($current.PathName.Trim('"') -ne $exe) { throw 'An existing service uses a different installation path.' }
+            $mode = if ($entry.Id -eq 'PolitiTrackDatabase') { 'auto' } else { 'delayed-auto' }
+            & sc.exe config $entry.Id start= $mode obj= 'NT AUTHORITY\LocalService'
+        } else { & $exe install }
         if ($LASTEXITCODE -ne 0) { throw "Service registration failed: $($entry.Id)" }
         Start-Service $entry.Id
         (Get-Service $entry.Id).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
