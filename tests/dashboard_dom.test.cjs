@@ -279,9 +279,9 @@ test('overdue collectors cannot show a green header; Operations exposes scheduli
   assert.equal(env.byId('overall-state').classList.contains('stale'), true);
   assert.equal(env.byId('attention-health').textContent, 'Overdue');
   const card = env.byId('operations-health').querySelector('[data-branch="legislative"]');
-  const facts = Object.fromEntries([...card.querySelectorAll('.health-facts > div')].map(node => [node.querySelector('dt').textContent, node.querySelector('dd').textContent]));
+  const facts = Object.fromEntries([...card.querySelectorAll('[data-collector-health] .health-facts > div')].map(node => [node.querySelector('dt').textContent, node.querySelector('dd').textContent]));
   assert.equal(facts['Last attempted run'], env.window.PT.date('2026-08-30T10:50:00Z'));
-  assert.equal(facts['Last successful run'], env.window.PT.date('2026-08-30T10:50:00Z'));
+  assert.equal(facts['Last successful collection'], env.window.PT.date('2026-08-30T10:50:00Z'));
   assert.equal(facts['Expected cadence'], 'Every 15m');
   assert.equal(facts['Freshness window'], '30m');
   assert.equal(facts['Next expected run'], env.window.PT.date('2026-08-30T11:05:00Z'));

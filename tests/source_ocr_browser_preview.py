@@ -70,7 +70,9 @@ def main():
         page.evaluate("document.body.innerHTML='<main style=\"max-width:900px;margin:auto;padding:16px\"><h1>TEST Operations health</h1><div id=\"health-fixture\"></div></main>'")
         page.evaluate("model => document.getElementById('health-fixture').innerHTML=PT.healthCards(model,true)", health)
         assert page.locator('[data-ocr-health="legislative"] .status.failure').count() == 1
-        assert page.locator('[data-branch="legislative"] > header .status.success').count() == 1
+        assert page.locator('[data-collector-health="legislative"] > header .status.success').count() == 1
+        assert page.locator('[data-ocr-health="legislative"]').get_by_text('Last healthy OCR pass', exact=True).count() == 1
+        assert page.locator('[data-collector-health="legislative"]').get_by_text('Last successful collection', exact=True).count() == 1
         for width, height in ((1280, 900), (390, 844)):
             page.set_viewport_size({"width": width, "height": height})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), "Operations health clips horizontally"
