@@ -27,7 +27,7 @@ on:
       - "deploy/runtime-v2/**"
       - "docs/runtime-v2/phase3/**"
       - "requirements-local.txt"
-      - "tests/test_local_host.py"
+      - "tests/test_local_*.py"
       - "deploy/local-windows/**"
       - "scripts/local_*.py"
       - "requirements-runtime-v2.txt"
@@ -177,6 +177,7 @@ jobs:
             tests/test_opportunity_*.py \
             tests/test_runtime_v2.py \
             tests/test_local_host.py \
+            tests/test_local_backup.py \
             tests/test_personal_reviews.py \
             tests/test_operations.py \
             tests/test_runtime_v2_atomic_commit.py \

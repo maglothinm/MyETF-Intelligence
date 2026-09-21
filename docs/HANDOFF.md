@@ -1,5 +1,28 @@
 # PolitiTrack active handoff
 
+## September 21 backup repair (#214) - source acceptance; live verification pending
+
+Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`.
+Branch `codex/beast-backup-repair-214`. The owner completed the Windows installer;
+all three services are installed, Running and Automatic. The earlier pending-UAC
+note is historical. Natural production jobs advanced the local immutable heads.
+
+The inline runtime-role pg_dump failed on protected Vault tables, blocked the
+producer loop and crashed the scheduler. Windows repeatedly restarted it.
+Replace it with a separate physical-backup child using a dedicated non-superuser
+REPLICATION login; verify the full manifest before atomic publication; retain two
+verified routine backups and preserve all migration recovery evidence. Failure
+backoff and backup health are separate from producer scheduling. Application RLS,
+producer schedules, snapshot contracts and local authority remain unchanged.
+
+Source tests are not live acceptance. Activate only merged/tested source using
+`deploy/local-windows/Apply-Backup-Repair.ps1`, with normal Windows administrator
+approval. Restart only PolitiTrackScheduler. Do not restart the database/web,
+reinitialize data, restore the migration export, reactivate cloud writers or
+remove backups until actual verification and safe cleanup evidence are recorded.
+Check `config/backup-status.json`, `logs/routine-backup.log`, natural production
+runs and services. Actual reboot behavior remains untested. Keep #211 open.
+
 ## September 21 Beast cutover — finish Windows administrator approval (#211)
 
 Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`. Application
