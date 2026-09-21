@@ -112,6 +112,13 @@ def create_app(
     app.config.update({key: value for key, value in os.environ.items() if key.startswith(("VAULT_", "RUNTIME_"))})
     if config:
         app.config.update(config)
+    from .local_origin import is_local
+    if is_local(app.config):
+        @app.before_request
+        def require_loopback():
+            # Do not trust forwarded headers or DNS names in local mode.
+            if request.remote_addr != "127.0.0.1" or request.host != "127.0.0.1:8765":
+                return jsonify(code="LOCAL_ONLY", message="Open PolitiTrack on this computer."), 403
     runtime_store = store or PostgresSnapshotStore()
     cache = DashboardCache(runtime_store, int(app.config.get("RUNTIME_DASHBOARD_REFRESH_SECONDS", 30)))
     app.extensions["runtime_v2_store"] = runtime_store

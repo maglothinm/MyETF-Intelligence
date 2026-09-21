@@ -26,6 +26,10 @@ on:
       - "migrations/20260904_runtime_v2_mode_quarantine.sql"
       - "deploy/runtime-v2/**"
       - "docs/runtime-v2/phase3/**"
+      - "requirements-local.txt"
+      - "tests/test_local_host.py"
+      - "deploy/local-windows/**"
+      - "scripts/local_database_audit.py"
       - "requirements-runtime-v2.txt"
       - "tests/test_runtime_v2.py"
       - "tests/test_personal_reviews.py"
@@ -138,6 +142,7 @@ jobs:
         shell: pwsh
         run: |
           foreach ($path in @(
+            'deploy/local-windows/Install-Services.ps1',
             'deploy/runtime-v2/bootstrap.ps1',
             'deploy/runtime-v2/initialize-github-wif.ps1',
             'deploy/runtime-v2/initialize-phase3-execution-identities.ps1'
@@ -171,6 +176,7 @@ jobs:
           python -m pytest -q \
             tests/test_opportunity_*.py \
             tests/test_runtime_v2.py \
+            tests/test_local_host.py \
             tests/test_personal_reviews.py \
             tests/test_operations.py \
             tests/test_runtime_v2_atomic_commit.py \

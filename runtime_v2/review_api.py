@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from .review_accounts import LOGICAL_ID, PersonalReviewStore, ReviewError, SESSION_SECONDS
+from .local_origin import is_local, session_cookie, valid_origin
 
 COOKIE = "__Host-polititrack-review-session"
 
@@ -35,8 +36,7 @@ def create_blueprint(store: PersonalReviewStore, cache):
             raise ReviewError("REVIEWS_UNAVAILABLE", "Personal review sign-in is temporarily unavailable.", 503)
         if request.method != "GET":
             origin = current_app.config.get("RUNTIME_REVIEW_ORIGIN") or request.host_url.rstrip("/")
-            parsed = urlsplit(origin)
-            if parsed.scheme != "https" or parsed.path not in ("", "/") or parsed.query or parsed.fragment or parsed.username:
+            if not valid_origin(origin):
                 raise ReviewError("REVIEWS_UNAVAILABLE", "Personal review sign-in is temporarily unavailable.", 503)
             if request.headers.get("Origin") != origin.rstrip("/") or request.headers.get("X-PolitiTrack-Review-Request") != "1":
                 raise ReviewError("ORIGIN_DENIED", "Open PolitiTrack to make this change.", 403)
@@ -76,7 +76,7 @@ def create_blueprint(store: PersonalReviewStore, cache):
         return jsonify(code="REVIEWS_UNAVAILABLE", message="Your saved reviews are temporarily unavailable. Try again shortly."), 503
 
     def account(required=True):
-        value = store.account_for_session(request.cookies.get(COOKIE))
+        value = store.account_for_session(request.cookies.get(session_cookie()))
         if required and not value:
             raise ReviewError("SIGN_IN_REQUIRED", "Sign in to load your saved reviews.", 401)
         return value
@@ -90,7 +90,7 @@ def create_blueprint(store: PersonalReviewStore, cache):
     def signed_in(token):
         owner = store.account_for_session(token)
         response = jsonify(authenticated=True, **store.read(owner["account_id"]))
-        response.set_cookie(COOKIE, token, secure=True, httponly=True, samesite="Strict", path="/", max_age=SESSION_SECONDS)
+        response.set_cookie(session_cookie(), token, secure=not is_local(), httponly=True, samesite="Strict", path="/", max_age=SESSION_SECONDS)
         return response
 
     @blueprint.get("/session")
@@ -116,9 +116,9 @@ def create_blueprint(store: PersonalReviewStore, cache):
 
     @blueprint.post("/logout")
     def logout():
-        store.logout(request.cookies.get(COOKIE))
+        store.logout(request.cookies.get(session_cookie()))
         response = jsonify(authenticated=False)
-        response.delete_cookie(COOKIE, path="/", secure=True, httponly=True, samesite="Strict")
+        response.delete_cookie(session_cookie(), path="/", secure=not is_local(), httponly=True, samesite="Strict")
         return response
 
     @blueprint.post("/acknowledgements")

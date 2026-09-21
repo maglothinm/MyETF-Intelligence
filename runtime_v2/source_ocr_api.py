@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from .review_api import COOKIE
+from .local_origin import session_cookie, valid_origin
 from .review_accounts import ReviewError
 from .source_uploads import SourceUploadStore
 from scripts.source_ocr import MAX_BYTES, OCRError
@@ -21,7 +22,7 @@ def create_blueprint(accounts, cache, intake=None):
     def boundary():
         if str(current_app.config.get("RUNTIME_SOURCE_OCR_ENABLED", "")).lower() not in {"true", "1", "yes"}:
             raise ReviewError("OCR_UNAVAILABLE", "Source upload and OCR are not enabled in this deployment.", 503)
-        g.ocr_account = accounts.account_for_session(request.cookies.get(COOKIE))
+        g.ocr_account = accounts.account_for_session(request.cookies.get(session_cookie()))
         if not g.ocr_account:
             raise ReviewError("SIGN_IN_REQUIRED", "Sign in to upload source files.", 401)
         owners = str(current_app.config.get("RUNTIME_SOURCE_OCR_ACCOUNT_IDS", "")).split(",")
@@ -29,8 +30,7 @@ def create_blueprint(accounts, cache, intake=None):
             raise ReviewError("OWNER_REQUIRED", "Source uploads require an authorized account.", 403)
         if request.method != "GET":
             origin = str(current_app.config.get("RUNTIME_REVIEW_ORIGIN", "")).rstrip("/")
-            parsed = urlsplit(origin)
-            if (parsed.scheme != "https" or not parsed.hostname or parsed.path or parsed.query or parsed.fragment or parsed.username
+            if (not valid_origin(origin)
                 or request.headers.get("Origin") != origin or request.headers.get("X-PolitiTrack-Source-Request") != "1"):
                 raise ReviewError("ORIGIN_DENIED", "Upload from the PolitiTrack source form.", 403)
             if request.headers.get("X-PolitiTrack-Account") != g.ocr_account["account_id"]:
