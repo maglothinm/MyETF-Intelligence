@@ -52,7 +52,13 @@ def capture(output: Path, evidence: Path) -> None:
                     page.route('**/*',lambda request: request.continue_() if request.request.url.startswith(origin+'/') else request.abort())
                     page.on('pageerror',lambda error:errors.append(str(error)))
                     page.goto(origin+route)
-                    page.locator('#edge-backfill-detail .edge-progress-panel').wait_for()
+                    page.locator('#edge-backfill-detail .edge-progress-panel').wait_for(state='attached')
+                    assert not page.locator('#edge-processing-details').evaluate('(element) => element.open')
+                    assert not page.locator('#edge-building').evaluate('(element) => element.open')
+                    assert 'No assessable profiles yet' in page.locator('#edge-assessment-summary').inner_text()
+                    page.locator('#edge-processing-details > summary').focus()
+                    page.keyboard.press('Enter')
+                    assert page.locator('#edge-processing-details').evaluate('(element) => element.open')
                     page.locator('.edge-progress-details summary').click()
                     page.locator('#backfill-state-filter').select_option('missing_data')
                     assert page.locator('tr[data-backfill-category]:visible').count()==1
@@ -64,7 +70,7 @@ def capture(output: Path, evidence: Path) -> None:
                     assert metrics['height'] <= metrics['limit'] + 2, metrics
                     name=('root' if route.startswith('/#') else 'standalone')+f'-{width}'
                     page.locator('#edge-backfill-detail').screenshot(path=str(evidence/f'{name}.png'))
-                    checks.append({'view':name,'responsive':True,'filters':True})
+                    checks.append({'view':name,'responsive':True,'filters':True,'collapsed_defaults':True,'keyboard_expansion':True})
                     page.close()
             browser.close()
     finally:
