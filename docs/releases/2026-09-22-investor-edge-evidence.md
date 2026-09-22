@@ -1,4 +1,4 @@
-# PolitiTrack active handoff
+# Investor Edge evidence-first release
 
 ## September 22 Investor Edge evidence-first update (#219) — merged, Windows activation pending
 
