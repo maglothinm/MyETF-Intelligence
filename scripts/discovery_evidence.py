@@ -39,7 +39,7 @@ def derive(row, reference=None, discovery=None, *, previous=None, basis=None):
     """Pure evidence calculation. Retain the first usable quote for THIS trade."""
     first = row.get('first_observed_at_utc') or row.get('observed_at_utc')
     observed, tx = timestamp(first), day(row.get('transaction_date'))
-    identity = {k: row.get(k) for k in ('trade_id', 'ticker', 'transaction_date')}
+    identity = {k: row.get(k) for k in ('trade_id', 'ticker', 'transaction_date', 'security_id', 'share_class', 'currency')}
     identity['first_observation_at'] = utc(observed) if observed else None
     previous = previous or {}
     same = previous.get('identity') == identity
@@ -57,6 +57,8 @@ def derive(row, reference=None, discovery=None, *, previous=None, basis=None):
         reasons.append('transaction_after_first_observation')
     if row.get('equity_like') is not True and not row.get('security_evidence'):
         reasons.append('exchange_traded_security_not_verified')
+    if basis and any(row.get(k) and row[k] != basis.get(k) for k in ('security_id','share_class','currency')):
+        reasons.append('transaction_security_or_currency_mismatch')
     rp = positive((reference or {}).get('price'))
     dp = positive((discovery or {}).get('price'))
     if not rp:
@@ -79,10 +81,11 @@ def derive(row, reference=None, discovery=None, *, previous=None, basis=None):
             try:
                 rp, atr = effective(reference, basis)
                 dp, _ = effective(discovery, basis)
+                atr = positive(atr)
                 comparison = {k: basis.get(k) for k in ('security_id','share_class','currency','basis','basis_date')}
             except Exception:
                 reasons.append('incompatible_reference_and_quote_basis')
-        elif same and previous.get('status') == 'measured':
+        elif same and previous.get('status') == 'measured' and not reasons:
             # The historical comparison is already attested. Current conditions
             # cannot replace it or invalidate an earlier supported observation.
             return deepcopy(previous)
@@ -173,7 +176,7 @@ def persist(directory, transactions, analyses, *, opportunities=None):
     rows = {}
     for row in transactions:
         tid = row.get('trade_id')
-        if tid and (row.get('equity_like') is True or row.get('security_evidence')):
+        if tid and (row.get('equity_like') is True or row.get('security_evidence') or tid in prior):
             old = rows.get(tid)
             if old is None or (timestamp(row.get('observed_at_utc')) and
                     (not timestamp(old.get('observed_at_utc')) or timestamp(row['observed_at_utc']) < timestamp(old['observed_at_utc']))):
@@ -190,7 +193,9 @@ def persist(directory, transactions, analyses, *, opportunities=None):
         candidate = from_opportunity.get(tid)
         if candidate and (not value or value.get('status') != 'measured'):
             value = candidate
-        if value is None or value.get('status') != 'measured' or value.get('identity', {}).get('transaction_date') != row.get('transaction_date'):
+        identity_changed = bool(value and any(value.get('identity',{}).get(k) != row.get(k)
+                                for k in ('ticker','transaction_date','security_id','share_class','currency')))
+        if value is None or value.get('status') != 'measured' or identity_changed or not (row.get('equity_like') is True or row.get('security_evidence')):
             value = derive(row, previous=value)
             # Retain original evidence, including incomplete provenance. Legacy
             # provider aggregates do not prove quote quality or split basis.
@@ -200,6 +205,7 @@ def persist(directory, transactions, analyses, *, opportunities=None):
                 m = first_market['market']
                 value['retained_market_evidence'] = {
                     'analysis_id': first_market.get('analysis_id'), 'analyzed_at_utc': first_market.get('analyzed_at_utc'),
+                    'ticker': first_market.get('ticker') or m.get('ticker'),
                     **{k:finite_json(m.get(k)) for k in ('transaction_date_close','current_price','quote_timestamp_utc','providers','data_status','atr_14')}}
                 value['reason_codes'] = sorted(set(value['reason_codes'] + ['legacy_market_quote_quality_and_basis_unverified']))
         if value != prior.get(tid):

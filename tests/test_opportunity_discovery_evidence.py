@@ -105,3 +105,31 @@ def test_sales_supported_but_non_exchange_assets_excluded(tmp_path):
     assert de.derive(sale,value['transaction_reference'],value['discovery_quote'],basis=snapshot)['transaction_to_discovery_percent']==pytest.approx(-2)
     bond={**row,'trade_id':'TEST-bond','ticker':'','equity_like':False,'security_evidence':None}
     assert 'TEST-bond' not in de.persist(tmp_path,[bond],[])
+
+
+def test_corrected_security_and_non_equity_cannot_keep_old_measurement(tmp_path):
+    row,snapshot,market,value=evidence()
+    de.persist(tmp_path,[row],[],opportunities={'TEST':{de.FIELD:{row['trade_id']:value}}})
+    corrected={**row,'equity_like':False,'security_evidence':None}
+    assert de.persist(tmp_path,[corrected],[])[row['trade_id']]['status']=='unknown'
+    mismatch=de.derive({**row,'currency':'EUR'},value['transaction_reference'],value['discovery_quote'],basis=snapshot)
+    assert mismatch['status']=='unknown'
+    assert 'transaction_security_or_currency_mismatch' in mismatch['reason_codes']
+
+
+def test_legacy_opportunity_anchor_is_preserved_at_upgrade():
+    row,snapshot,market,value=evidence()
+    current=deepcopy(snapshot);current['quote']['price']=140
+    got=de.opportunity_values([row],{},market,current,Clock()(),rules(),ExchangeCalendar())[row['trade_id']]
+    assert got['discovery_quote']['price']==102
+    assert got['transaction_to_discovery_percent']==pytest.approx(2)
+
+
+def test_ledger_tampering_blocks_publication(tmp_path):
+    row,snapshot,market,value=evidence()
+    de.persist(tmp_path,[row],[],opportunities={'TEST':{de.FIELD:{row['trade_id']:value}}})
+    path=tmp_path/de.LEDGER
+    saved=json.loads(path.read_text());saved[de.FIELD]['transaction_to_discovery_percent']=99
+    path.write_text(json.dumps(saved)+'\n')
+    with pytest.raises(ValueError,match='integrity'):
+        de.load(tmp_path)
