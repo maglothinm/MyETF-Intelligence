@@ -243,25 +243,8 @@
     }
     else if(!initial||navigationHash)el(section).scrollIntoView?.({block:"start"});
   }
-  const edgeCount=value=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0?value:null;
-  const edgeStats=[["published_profile_count","Profiles"],["completed_profile_count","Complete"],["building_profile_count","Building"],["historical_transaction_count","Historical trades"],["backfill_processed_this_run","Processed this run"],["backfill_pending_observation_count","Pending observations"]];
-  function renderEdge(edge){
-    const profiles=edge?.investors||[],metadata=edge||{};
-    el("edge-bootstrap-status").textContent="Historical backfill status unavailable";
-    el("edge-bootstrap-status").className="status unknown";
-    el("edge-bootstrap-counts").innerHTML=edgeStats.map(([key,label])=>fact(label,number(key==="published_profile_count"&&edgeCount(metadata[key])===null&&edge?profiles.length:edgeCount(metadata[key])))).join("");
-    el("edge-bootstrap-coverage").textContent=`Eligible purchases: ${number(edgeCount(metadata.eligible_purchase_count))} · Eligible filer / owner identities: ${number(edgeCount(metadata.unique_investor_identity_count))} · Legislative trades: ${number(edgeCount(metadata.branch_transaction_counts?.legislative))} · Executive trades: ${number(edgeCount(metadata.branch_transaction_counts?.executive))}`;
-    el("edge-bootstrap-budget").textContent=`Observation budget per run: ${number(edgeCount(metadata.backfill_limit_per_run))} · Market requests this run: ${number(edgeCount(metadata.network_requests_this_run))}. Complete profiles meet the sample minimum and have no pending observations. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns.`;
-    if(window.PTBackfill)PTBackfill.render(el("edge-backfill-detail"),metadata.backfill_progress);
-    el("edge-history-label").textContent=edge?`${number(profiles.length)} published investor profiles`:"Investor Edge data unavailable";
-    el("edge-history-note").textContent=edge?"Full retained profile inventory, independent of qualifying signals. Building-history profiles remain visible; missing outcomes remain unavailable.":"Profile inventory and history counts could not refresh. No completeness or zero-count assumption is made.";
-    el("edge-profile-body").innerHTML=profiles.length?profiles.map(p=>{
-      const n=edgeCount(p.sample_count),ready=n!==null&&n>0&&(p.minimum_sample_met===true||p.minimum_sample_met!==false&&n>=3)&&!["insufficient_data","unavailable","error","disabled","neutral"].includes(p.status);
-      const pending=edgeCount(p.backfill_pending_trade_count);
-      return `<tr><td><strong>${esc(p.filer||"Unknown filer")}</strong><small>${esc(p.owner||"Unknown owner")}</small></td><td>${esc(number(n))}</td><td>${ready?pending>0?"Building history — historical work pending":"Sufficient completed observations":`Building history — insufficient completed observations (n = ${esc(number(n))})`}</td><td>${esc(number(pending))}</td><td>${esc(ready?number(p.edge_score):"Unavailable")}</td><td>${esc(p.confidence_label||"Unavailable")}</td></tr>`;
-    }).join(""):`<tr><td colspan="6" class="empty">${edge?"No investor profiles are currently published. Check eligibility and historical coverage counts above.":"Profile inventory unavailable."}</td></tr>`;
-  }
-  async function loadEdge(){try{const edge=await checkedJson("data/investor-edge.json");if(!Array.isArray(edge.investors)||edge.investors.some(p=>!p||typeof p!=="object"||Array.isArray(p)))throw new Error("Profile inventory unavailable");state.edge=edge;renderEdge(edge);}catch{state.edge=null;renderEdge(null);}}
+  function renderEdge(edge){PTEdgeEvidence.renderRoot(edge);}
+  async function loadEdge(){try{const edge=await checkedJson("data/investor-edge.json");if(edge.profile_inventory_available===false||!Array.isArray(edge.investors)||edge.investors.some(p=>!p||typeof p!=="object"||Array.isArray(p)))throw new Error("Profile inventory unavailable");state.edge=edge;renderEdge(edge);}catch{state.edge=null;renderEdge(null);}}
   function renderCharts(m){const c=m.coverage,max=Math.max(1,c.cataloged_only,c.processed,c.review_required,c.transactions,c.analyses,c.qualifying_signals);
     el("coverage-chart").innerHTML=[["Cataloged only",c.cataloged_only],["Processed filings",c.processed],["Review-required filings",c.review_required],["Parsed transactions",c.transactions],["AI analyses",c.analyses],["Qualifying signals",c.qualifying_signals]].map(([label,count])=>`<div class="coverage-row"><span>${label}</span><strong>${number(count)}</strong><svg class="coverage-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect width="${100*count/max}" height="3" rx="1"/></svg></div>`).join("");
     const p=m.composition,total=p.population,den=Math.max(1,total),purchase=p.purchases/den*300,sales=p.sales/den*300;

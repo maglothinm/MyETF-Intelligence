@@ -292,3 +292,17 @@ Analyses created or market-refreshed while the runtime is available retain base 
 - Results can be sensitive to a small number of filings despite clipping, weighting, and shrinkage. Inspect the drilldown rather than ranking investors by Edge alone.
 - The system is for paper research and review. It is not investment advice and never submits an order.
 - The redesign's actual Chrome desktop, current iPhone Safari, and physical CHG90 acceptance remain unverified. Local tests or emulated viewport checks do not establish those device results; deployment and device evidence belong in `docs/HANDOFF.md`.
+
+## Evidence-first profile display
+
+The main Investor Edge destination and detailed page separate assessable results
+from profiles still building history. Assessable means the existing sample minimum
+is met, status permits assessment, and a finite calculated Edge is present. This
+is not a favorable-return filter: real zero and negative results remain visible.
+Expand **Building history** for retained unready profiles and recorded pending
+reasons; expand **Processing details** for counts, budgets and backfill diagnostics.
+A profile can be assessable while additional outcome horizons remain pending.
+Zero fully complete profiles and zero assessable profiles have distinct warnings.
+Last actual advancement is population-wide; per-profile progress times are not
+recorded. Full JSON records, deep links and historical trade drilldowns remain
+available. Searching the detailed page also searches building-history records.

@@ -134,3 +134,10 @@ body {max-width:100%}
 .ocr-run-health .status{white-space:normal}
 .ocr-history{grid-template-columns:1fr}
 .ocr-history>div{min-width:0}
+
+/* Secondary evidence stays available without dominating the decision view. */
+.edge-secondary{display:block;margin-block:1rem;padding:.5rem 1rem;}
+.edge-secondary>summary{min-height:44px;cursor:pointer;padding:.75rem 0;font-weight:600;}
+.edge-secondary>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+#edge-building-body td:nth-child(3){white-space:normal;min-width:16rem;max-width:42rem;overflow-wrap:anywhere;}
+.edge-secondary .table-wrap{margin-block:.75rem;}

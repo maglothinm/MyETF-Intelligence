@@ -1660,3 +1660,18 @@ Retain two verified routine backups; no deletion of migration export/basebackup.
 Unknown/unverifiable backup evidence fails closed. No production-state reset,
 cloud reactivation, startup-configuration claim or reboot claim follows from
 source tests alone.
+
+## 2026-09-22 — Evidence-first Investor Edge presentation (#219)
+
+Separate assessment eligibility from performance desirability. Default root and
+standalone results require a valid completed-observation sample, the existing
+minimum-sample/status gate and a finite calculated Edge. Genuine zero, neutral
+and adverse results remain assessable; missing outcomes are never filled with zero.
+Profiles failing that gate remain retained, searchable and linked under collapsed
+Building history. The full public profile export remains unfiltered. Diagnostics
+and processing budgets belong in collapsed Processing details, with backfill
+health, pending summary and no-assessable/no-complete warnings still visible.
+Use only recorded pending reasons associated with the exact published profile
+index. Display existing population-level last advancement, explicitly not a
+per-profile timestamp. Do not infer advancement from successful maintenance.
+This is a read-only presentation change, not a score/model/state/schedule change.

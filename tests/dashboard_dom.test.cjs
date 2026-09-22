@@ -443,20 +443,27 @@ test('Investor Edge renders the full building population and producer history co
     };
   }}); t.after(env.close);
   assert.deepEqual(env.requests, ['dashboard-insights']);
-  await env.navigate('#investor-edge', () => env.byId('edge-profile-body').children.length === 12);
+  await env.navigate('#investor-edge', () => env.byId('edge-building-body').children.length === 12);
   assert.equal(env.byId('attention-signals').textContent, '0');
   assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
-  assert.equal(env.byId('edge-history-label').textContent, '12 published investor profiles');
-  assert.match(env.byId('edge-profile-body').textContent, /TEST Filer 11/);
-  assert.match(env.byId('edge-profile-body').textContent, /Building history — insufficient completed observations \(n = 0\)/);
-  assert.ok([...env.byId('edge-profile-body').rows].every(row => row.cells[4].textContent === 'Unavailable'));
+  assert.equal(env.byId('edge-history-label').textContent, '0 assessable profiles');
+  assert.match(env.byId('edge-building-body').textContent, /TEST Filer 11/);
+  assert.match(env.byId('edge-building-body').textContent, /Building history — insufficient completed observations \(n = 0\)/);
+  assert.match(env.byId('edge-profile-body').textContent, /No assessable profiles yet/);
+  assert.equal(env.byId('edge-building').open, false);
+  assert.equal(env.byId('edge-processing-details').open, false);
+  env.byId('edge-building').open = true;
+  env.byId('edge-processing-details').open = true;
   assert.deepEqual([...env.byId('edge-bootstrap-counts').querySelectorAll('dd')].map(node => node.textContent), ['12', '0', '12', '60', '5', '19']);
   assert.match(env.byId('edge-bootstrap-coverage').textContent, /Legislative trades: 40 · Executive trades: 20/);
   assert.match(env.byId('edge-bootstrap-budget').textContent, /Observation budget per run: 30 · Market requests this run: 7/);
   env.data['investor-edge'].backfill_pending_observation_count = 0;
   await env.refresh();
   assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
-  assert.equal(env.byId('edge-profile-body').children.length, 12);
+  assert.equal(env.byId('edge-building-body').children.length, 12);
+  assert.equal(env.byId('edge-building').open, true);
+  assert.equal(env.byId('edge-processing-details').open, true);
+  assert.match(env.byId('edge-pending-summary').textContent, /No pending observations in retained history/);
   assert.equal(env.byId('notification-count').textContent, '0');
   assert.deepEqual(env.errors, []);
 });
@@ -465,10 +472,10 @@ test('Investor Edge legacy, invalid and failed telemetry never imply zero pendin
   const env = await dashboard({change(data) {
     data['investor-edge'] = {investors: [{filer: '<img onerror="bad()">', owner: 'Joint', sample_count: 0}]};
   }}); t.after(env.close);
-  await env.navigate('#investor-edge', () => env.byId('edge-profile-body').textContent.includes('Joint'));
+  await env.navigate('#investor-edge', () => env.byId('edge-building-body').textContent.includes('Joint'));
   assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
   assert.deepEqual([...env.byId('edge-bootstrap-counts').querySelectorAll('dd')].map(node => node.textContent), ['1', 'Unavailable', 'Unavailable', 'Unavailable', 'Unavailable', 'Unavailable']);
-  assert.equal(env.byId('edge-profile-body').querySelector('img'), null);
+  assert.equal(env.byId('edge-building-body').querySelector('img'), null);
   env.data['investor-edge'].backfill_pending_observation_count = false;
   await env.refresh();
   assert.equal(env.byId('edge-bootstrap-status').textContent, 'Historical backfill status unavailable');
@@ -1773,4 +1780,26 @@ test('Operations shows OGE inventory and ages the same mandatory Executive check
   assert.equal(card.querySelector('[data-run-now]'),null);
   env.advanceTime(61*60000);
   assert.match(card.textContent,/overdue/i);
+});
+
+
+test('Investor Edge evidence eligibility retains measured zero and adverse results', async t => {
+  const base = {filer: 'TEST Evidence', owner: 'Self', sample_count: 3, minimum_sample_met: true, status: 'scored', edge_score: 50, backfill_pending_trade_count: 0};
+  const profiles = [{...base, edge_score: 0}, {...base, edge_score: 40}, base,
+    {...base, sample_count: 0, minimum_sample_met: false}, {...base, status: 'error'},
+    {...base, edge_score: null}, {...base, sample_count: false}, {...base, sample_count: 2, minimum_sample_met: false}];
+  const before = JSON.stringify(profiles);
+  const env = await dashboard({change(data) {data['investor-edge'] = {investors: profiles, completed_profile_count: 0, backfill_pending_observation_count: 0};}});
+  t.after(env.close);
+  await env.navigate('#investor-edge', () => env.byId('edge-profile-body').rows.length === 3);
+  assert.deepEqual([...env.byId('edge-profile-body').rows].map(r => r.cells[4].textContent), ['0', '40', '50']);
+  assert.equal(env.byId('edge-building-body').rows.length, 5);
+  assert.match(env.byId('edge-assessment-summary').textContent, /No fully complete profiles yet/);
+  assert.equal(JSON.stringify(profiles), before);
+  assert.equal(env.byId('edge-building').open, false);
+  env.data['investor-edge'].profile_inventory_available = false;
+  await env.refresh();
+  assert.equal(env.byId('edge-history-label').textContent, 'Investor Edge data unavailable');
+  assert.match(env.byId('edge-pending-summary').textContent, /unavailable/i);
+  assert.deepEqual(env.errors, []);
 });
