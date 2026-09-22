@@ -850,7 +850,9 @@ def _finish_analyst_run(
         opportunity_path = config.ai_dir / "opportunity-state.json"
         opportunities = json.loads(opportunity_path.read_text(encoding="utf-8")).get("opportunities", {}) if opportunity_path.exists() else {}
         values = discovery_evidence.persist(config.ai_dir, history, all_analyses, opportunities=opportunities)
-        discovery_evidence.write_exports(values, config.ai_dir)
+        # Keep the ledger as the sole durable representation; generated exports
+        # belong beside the run's other outputs and in the dashboard snapshot.
+        discovery_evidence.write_exports(values, config.result_path.parent)
         # Add to the existing CSV without modifying the preserved legacy analyst.
         import csv
         path = config.analyses_csv_path

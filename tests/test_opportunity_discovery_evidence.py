@@ -133,3 +133,24 @@ def test_ledger_tampering_blocks_publication(tmp_path):
     path.write_text(json.dumps(saved)+'\n')
     with pytest.raises(ValueError,match='integrity'):
         de.load(tmp_path)
+
+
+def test_ai_dashboard_json_and_csv_report_the_persisted_object(tmp_path):
+    from scripts.build_trade_dashboard import load_ai,build_payload,build_site
+    row,snapshot,market,value=evidence()
+    ai=tmp_path/'ai';ai.mkdir()
+    (ai/'analyses.jsonl').write_text(json.dumps({**row,'analysis_id':'TEST-analysis','analyzed_at_utc':utc(Clock()())})+'\n')
+    de.persist(ai,[row],[],opportunities={'TEST':{de.FIELD:{row['trade_id']:value}}})
+    loaded=load_ai(ai)
+    assert loaded['analyses'][0][de.FIELD]==value
+    source={'filings':[],'transactions':[],'reviews':[],'runs':[],'state':{}}
+    payload=build_payload(source,source,ai=loaded,repository_url='https://example.test/TEST')
+    site=tmp_path/'site';build_site(payload,site)
+    from scripts.dashboard_insights import public_payload
+    expected=public_payload(value)  # Public exports retain the TEST marker.
+    actual=json.loads((site/'data/ai-analyses.json').read_text())
+    assert actual[0][de.FIELD]==expected
+    with (site/'data/ai-analyses.csv').open(newline='') as f:
+        assert json.loads(next(csv.DictReader(f))[de.FIELD])==expected
+    with (site/'data/information-value-at-discovery.csv').open(newline='') as f:
+        assert json.loads(next(csv.DictReader(f))[de.FIELD])==expected
