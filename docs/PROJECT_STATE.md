@@ -1,5 +1,23 @@
 # PolitiTrack project state
 
+## September 22 backup repair activated and verified (#214)
+
+Beast is running merged main source f85a40f6b7b609ad8eec5c899c368d106fedd7c1.
+Activation passed at 11:16:42 UTC. All three services are Running/Automatic;
+no unexpected service terminations through 11:27:15 UTC. The scheduler-created
+27,197,505,861-byte physical backup passed at 11:19:46 UTC, with an independent
+full integrity recheck at 11:25:54 UTC. Scheduled dashboard/Legislative/AI work
+continued during backup; database and dashboard were not restarted.
+
+Do not rerun setup or activation. Separate remaining work: 38 pre-activation
+legacy partials consume 1,061,305,390,205 bytes (not deleted this verification);
+Executive collection failed on OGE connection/page-load timeouts. Actual reboot
+and restore-drill acceptance remain untested. No broad all-healthy claim.
+[Current verification](releases/2026-09-22-backup-verification.md) and
+[exact receipts](releases/2026-09-22-backup-verification.json).
+
+## Prior checkpoints (historical; superseded above)
+
 ## September 21 backup repair: verified engine, owner activation pending (#214)
 
 PR #215 merged at f85a40f6b7b609ad8eec5c899c368d106fedd7c1; the deployed application
