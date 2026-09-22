@@ -1,0 +1,98 @@
+{
+  "activation": {
+    "activated_at": "2026-09-22T11:16:42.4455787Z",
+    "database": "Running",
+    "database_or_web_restarted": false,
+    "previous_revision": "42c6f27df5d9266decad3abc7aa6f794edda0f3a",
+    "production_state_reset": false,
+    "repository_id": 1349678672,
+    "scheduler": "Running",
+    "source_revision": "f85a40f6b7b609ad8eec5c899c368d106fedd7c1",
+    "web": "Running"
+  },
+  "backup_status": {
+    "error": null,
+    "last_success": {
+      "bytes": 27197505861,
+      "completed_at": "2026-09-22T11:19:46.421507+00:00",
+      "directory": "routine-20260922T111643Z-e19aaa22.base",
+      "kind": "postgresql16_physical",
+      "manifest_sha256": "de6f1ef5b813368a2222c739dd454ce03a0d3cadc5d08983ba1b307e030cdffe",
+      "pg_verifybackup": "passed",
+      "repository_id": 1349678672,
+      "source_revision": "f85a40f6b7b609ad8eec5c899c368d106fedd7c1",
+      "started_at": "2026-09-22T11:16:43.602194+00:00"
+    },
+    "next_retry_at": null,
+    "partial_directory": null,
+    "schema_version": 1,
+    "started_at": "2026-09-22T11:16:43.602194+00:00",
+    "status": "success",
+    "updated_at": "2026-09-22T11:19:46.442270+00:00",
+    "worker_created_at": 1790075802.4117131,
+    "worker_pid": 18496
+  },
+  "checked_at": "2026-09-22T11:27:15.5853668Z",
+  "database_continuity_audit_rerun": false,
+  "disk_free_bytes": 182076276736,
+  "http": {
+    "readyz": 200,
+    "root": 200
+  },
+  "independent_pg_verifybackup": {
+    "exit_code": 0,
+    "ignored_only": "verified.json",
+    "verified_at": "2026-09-22T11:25:54.3699219Z"
+  },
+  "last_boot": "2026-09-20T18:46:07.4823090Z",
+  "legacy_partials": {
+    "bytes": 1061305390205,
+    "count": 38,
+    "deleted_during_verification": false,
+    "newest_write_utc": "2026-09-22T11:16:41.3997579Z"
+  },
+  "main_source_ocr_ci": {
+    "conclusion": "success",
+    "run_id": 35643473255
+  },
+  "manifest_hash_matches": true,
+  "observed_jobs": {
+    "ai": "exit 0 at 11:17:57 UTC",
+    "dashboard": "started at 11:17:02 during backup; exit 0 at 11:17:22 UTC",
+    "executive": "OGE connection/readiness timeouts; exit 1 at 11:20:47 UTC; scheduler stayed running",
+    "legislative": "exit 0 at 11:16:57 and 11:20:17 UTC"
+  },
+  "production_code_changed_during_verification": false,
+  "reboot_tested": false,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "repository_id": 1349678672,
+  "restore_drill_performed": false,
+  "routine_backup_directories": [
+    "routine-20260921T191455Z-6db61a99.base",
+    "routine-20260922T111643Z-e19aaa22.base"
+  ],
+  "services": [
+    {
+      "Name": "PolitiTrackDatabase",
+      "ProcessId": 25732,
+      "StartMode": "Auto",
+      "StartName": "NT AUTHORITY\\LocalService",
+      "State": "Running"
+    },
+    {
+      "Name": "PolitiTrackWeb",
+      "ProcessId": 23084,
+      "StartMode": "Auto",
+      "StartName": "NT AUTHORITY\\LocalService",
+      "State": "Running"
+    },
+    {
+      "Name": "PolitiTrackScheduler",
+      "ProcessId": 13600,
+      "StartMode": "Auto",
+      "StartName": "NT AUTHORITY\\LocalService",
+      "State": "Running"
+    }
+  ],
+  "unexpected_service_terminations_since_activation": 0
+}
