@@ -173,6 +173,7 @@ ANALYSIS_FIELDS = (
     "transaction_age_days",
     "repeated_purchase_count_90d",
     "market",
+    "information_value_at_discovery",
     "sec",
     "ai",
     "entry_plan",
@@ -388,10 +389,13 @@ def load_branch(directory: Path | None, branch: str) -> dict[str, Any]:
 
 def load_ai(directory: Path | None) -> dict[str, Any]:
     from scripts.opportunity_dashboard import load_projection
+    from scripts import discovery_evidence
     if directory is None or not directory.exists():
         return {"analyses": [], "portfolio": [], "runs": [], "state": {}}
 
     analyses = latest_by(read_jsonl(directory / "analyses.jsonl"), "trade_id")
+    discovery = discovery_evidence.load(directory)
+    analyses = discovery_evidence.attach(analyses, discovery)
     portfolio_records = latest_by(read_jsonl(directory / "paper-portfolio.jsonl"), "position_id")
     portfolio = {str(item.get("position_id") or ""): dict(item) for item in portfolio_records if item.get("position_id")}
     runs = latest_by(read_jsonl(directory / "runs.jsonl"), "run_key")
@@ -407,6 +411,7 @@ def load_ai(directory: Path | None) -> dict[str, Any]:
         "runs": runs,
         "state": state,
         "opportunities": load_projection(directory),
+        "discovery_evidence": discovery,
     }
 
 
@@ -768,6 +773,7 @@ def build_payload(
         "simulation": simulation,
         "workflow_evidence": dict(workflow_evidence or {}),
         "opportunities": ai.get("opportunities", {"schema_version": 1, "mode": "off", "records": [], "telemetry": {}}),
+        "discovery_evidence": ai.get("discovery_evidence", {}),
     }
 
 
@@ -815,6 +821,8 @@ def build_site(payload: Mapping[str, Any], output_dir: Path) -> None:
         write_csv(data_dir / "pending-reviews.csv", payload["reviews"], REVIEW_FIELDS)
         write_csv(data_dir / "runs.csv", payload["runs"], RUN_FIELDS)
         write_csv(data_dir / "ai-analyses.csv", payload["analyses"], ANALYSIS_FIELDS)
+        from scripts.discovery_evidence import write_exports as write_discovery_exports
+        write_discovery_exports(payload.get("discovery_evidence", {}), data_dir)
         write_csv(data_dir / "paper-portfolio.csv", payload["portfolio"], PORTFOLIO_FIELDS)
         write_csv(data_dir / "ai-runs.csv", payload["ai_runs"], AI_RUN_FIELDS)
         opportunity_projection = payload.get("opportunities", {"mode": "off", "records": []})

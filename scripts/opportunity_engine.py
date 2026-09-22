@@ -11,6 +11,7 @@ from .opportunity_market import assess
 from .opportunity_threshold import assess_thresholds, mark_unavailable
 from .opportunity_significance import normalize, significance
 from .opportunity_state import event
+from .discovery_evidence import FIELD, opportunity_values
 
 
 def evidence_status(evidence: Mapping, now: datetime, rules: Mapping, membership_hash: str) -> tuple[str, list[str]]:
@@ -202,6 +203,7 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
     if interval:
         valid_times.append(interval[1])
     record['display_valid_until'] = utc(min(valid_times)) if valid_times else utc(now)
+    record[FIELD] = opportunity_values(rows, previous.get(FIELD), market, snapshot, now, rules, calendar)
     record['evaluation_id'] = event(state, 'evaluation', record, now)
     state['opportunities'][oid] = record
     if transition:

@@ -211,7 +211,7 @@ def _cached_evidence(directory, digest):
 
 
 def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, loader=download, extractor=extract,
-             health=None, on_progress=None):
+             health=None, on_progress=None, manual_only=False):
     """Return upload acknowledgements to apply ONLY after canonical commit."""
     if str(environment.get("POLITITRACK_MODE", "production")).lower() != "production":
         raise OCRError("live_ocr_forbidden_in_shadow")
@@ -226,7 +226,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
     if missing_state or not state.last_success_utc:
         raise OCRError("restored_source_state_required")
     index = tracker.latest_records(directory / "filings.jsonl", "filing_key")
-    if branch == "executive":
+    if branch == "executive" and not manual_only:
         tracker.refresh_oge_document_access(directory / "filings.jsonl", index)
     ledger = directory / "source-ocr.jsonl"
     receipts = tracker.latest_records(ledger, "filing_key")
@@ -236,6 +236,11 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
     candidates = []
     for key, filing in index.items():
         if filing.get("branch") != branch or filing.get("source") not in {"house", "senate", "oge"}:
+            continue
+        # The recovery pass consumes only durable authenticated inbox items for
+        # identities in the restored snapshot. It never downloads new sources or
+        # changes automatic retry/admission policy during a collection outage.
+        if manual_only and key not in incoming:
             continue
         receipt = receipts.get(key, {})
         # Repair the known classification from its retained diagnostic, without

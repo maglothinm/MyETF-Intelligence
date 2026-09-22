@@ -582,6 +582,11 @@ def _health(runs: list[Mapping[str, Any]], ai_runs: list[Mapping[str, Any]], as_
             branches[-1]["source_ocr"] = branch_health(
                 ordered, as_of, branches[-1].get("stale_after_minutes") or 90,
                 history=success_history)
+            manual = [_run(raw, branch) for raw in _rows(observed_branch.get("manual_upload_attempts"))
+                      if production_run(raw, branch) and raw.get("evidence_source") == "runtime_v2"
+                      and raw.get("runtime_mode_verified") is True]
+            if manual:
+                branches[-1]["source_ocr"]["manual_uploads"] = branch_health(manual, as_of)
     required_ocr = [item["source_ocr"] for item in branches if item.get("source_ocr", {}).get("required")]
     combined = [{"status": overall_status(branches), "branch": "collectors"}] + [{"status": item["status"], "branch": "ocr"} for item in required_ocr]
     combined_status = next((status for status in ("failure", "stale", "unknown") if any(item["status"] == status for item in combined)), "success")
