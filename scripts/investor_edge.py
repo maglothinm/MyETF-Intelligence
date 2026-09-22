@@ -2946,6 +2946,9 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         if isinstance(leaderboard_payload, dict)
         else []
     )
+    inventory_available = isinstance(leaderboard_payload, dict) and isinstance(leaderboard_payload.get("investors"), list) and all(isinstance(item, Mapping) for item in leaderboard_payload["investors"])
+    if not isinstance(investors, list):
+        investors = []
     investors = public_payload({"investors": [dict(item) for item in investors if isinstance(item, Mapping)]})["investors"]
     # The durable producer owns population accounting. Never infer zero pending
     # work (or completed coverage) from a legacy publication without telemetry.
@@ -2962,6 +2965,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
     history = {key: history_count(source_metadata.get(key)) for key in history_fields}
+    history["profile_inventory_available"] = inventory_available
     branches = source_metadata.get("branch_transaction_counts")
     history["branch_transaction_counts"] = {
         branch: history_count(branches.get(branch)) if isinstance(branches, Mapping) else None
@@ -2999,6 +3003,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
     )
 
     rows: list[str] = []
+    building_rows: list[str] = []
     valid_edges: list[float] = []
     for investor_index, item in enumerate(investors):
         group_id = f"investor-{investor_index}"
@@ -3017,10 +3022,15 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             if owner_raw and str(owner_raw).strip() != str(owner or "").strip()
             else ""
         )
-        sample_number = _safe_float(
-            first_value(item, "sample_count", "observation_count")
+        sample_number = history_count(item.get("sample_count") if item.get("sample_count") is not None else item.get("observation_count"))
+        edge_number = item.get("edge_score")
+        has_observations = bool(
+            inventory_available and sample_number is not None and sample_number > 0
+            and (item.get("minimum_sample_met") is True or item.get("minimum_sample_met") is not False and sample_number >= 3)
+            and item.get("status") not in {"insufficient_data", "unavailable", "error", "disabled", "neutral"}
+            and isinstance(edge_number, (int, float)) and not isinstance(edge_number, bool)
+            and float("-inf") < edge_number < float("inf")
         )
-        has_observations = bool(sample_number is not None and sample_number > 0 and item.get("status") not in {"insufficient_data", "unavailable", "error", "disabled"} and item.get("minimum_sample_met") is not False)
         confidence = _safe_float(
             first_value(item, "confidence", "identity_confidence")
         )
@@ -3106,7 +3116,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
                 "<p class='empty-detail'>No retained historical trade results are "
                 "available for this investor.</p>"
             )
-        rows.append(
+        (rows if has_observations else building_rows).append(
             f"<tr id='{group_id}' class='investor-row {group_class}' data-edge-group='{group_id}'>"
             f"<td class='key-cell'><code>{text_cell(investor_key_value)}</code></td>"
             f"<td class='filer-cell'><strong>{text_cell(item.get('filer'), fallback='Unknown filer')}</strong></td>"
@@ -3114,7 +3124,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             f"<td class='{_edge_class(edge_value)}'><strong>{'—' if edge_value is None else f'{edge_value:.1f}'}</strong>{modifier_html}</td>"
             f"<td>{confidence_cell(item)}</td>"
             f"<td>{integer_cell(sample_number)}"
-            + (f"<small class='history-building'>Building history — insufficient completed observations (n = {integer_cell(sample_number)})</small>" if not has_observations or (sample_number is not None and sample_number < 3) else "")
+            + (f"<small class='history-building' data-edge-reason='{investor_index}'>Building history — insufficient completed observations (n = {integer_cell(sample_number)})</small>" if not has_observations or (sample_number is not None and sample_number < 3) else "")
             + (f"<small class='history-building'>Historical observations pending: {integer_cell(item.get('backfill_pending_trade_count'))}</small>" if (history_count(item.get('backfill_pending_trade_count')) or 0) > 0 else "")
             + "</td>"
             f"{horizon_cells}"
@@ -3131,6 +3141,13 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             f"<div class='trade-grid'>{trade_cards}</div></details>"
             "</td></tr>"
         )
+
+    evidence_fields = ("filer", "owner", "sample_count", "observation_count", "minimum_sample_met", "status", "edge_score", "backfill_pending_trade_count")
+    evidence = {**history, "investors": [{k: item[k] for k in evidence_fields if k in item} for item in investors]}
+    evidence_json = json.dumps(evidence, ensure_ascii=True).replace("<", "\\u003c")
+    assessment_summary = ("Investor Edge data unavailable. No zero-count or completeness assumption is made." if not inventory_available else f"{len(rows)} assessable profiles. Zero and negative measured results remain visible." if rows else "No assessable profiles yet. Expand Building history for retained profiles and reasons.")
+    if inventory_available and history["completed_profile_count"] == 0:
+        assessment_summary += " No fully complete profiles yet."
 
     # Keep escaping outside the f-string for the production Python 3.11 parser.
     backfill_json = json.dumps(history["backfill_progress"], ensure_ascii=True).replace("<", "\\u003c")
@@ -3157,25 +3174,28 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
 </header>
 <main>
 <details class='notice edge-reading'><summary>How to read the heat map</summary><p>Edge 50 is neutral. Green means prior purchases beat their sector benchmark after disclosure; red means they lagged. Low-sample rows are deliberately faded. The PolitiTrack modifier is capped at ±12 points and never overrides an existing hard cap. Insufficient history is unavailable, not neutral performance.</p></details>
-<section class='summary-grid'>
-  <article class='metric-card'><span>Investors profiled</span><strong>{len(investors)}</strong></article>
-  <article class='metric-card'><span>High-confidence profiles {help_control('edgeConfidence', 'Investor Edge confidence')}</span><strong>{sum(str(i.get('confidence_label') or '').casefold() == 'high' and (_safe_float(i.get('sample_count')) or 0) > 0 for i in investors)}</strong></article>
-  <article class='metric-card'><span>Positive edge</span><strong>{sum(value > 55 for value in valid_edges)}</strong></article>
-  <article class='metric-card'><span>Generated</span><strong class='date'>{text_cell(generated)}</strong></article>
-</section>
 <section class='panel edge-bootstrap' aria-labelledby='edge-bootstrap-title'>
   <div class='panel-header'><h2 id='edge-bootstrap-title'>Investor Edge History</h2><span id='edge-bootstrap-status' class='status' role='status'>{history_status}</span></div>
-  <dl class='facts edge-history-counts'>{history_facts}</dl>
+  <p id='edge-assessment-summary' role='status'>{assessment_summary}</p><p id='edge-pending-summary'>Pending observations unavailable.</p>
+  <details id='edge-processing-details' class='edge-secondary'><summary>Processing details</summary>
+  <p>Publication generated: {text_cell(generated)}</p><dl class='facts edge-history-counts'>{history_facts}</dl>
   <p>Eligible purchases: {history_value('eligible_purchase_count')} · Eligible filer / owner identities: {history_value('unique_investor_identity_count')} · Legislative trades: {integer_cell(history['branch_transaction_counts']['legislative'])} · Executive trades: {integer_cell(history['branch_transaction_counts']['executive'])}</p>
   <p>Observation budget per run: {history_value('backfill_limit_per_run')} · Market requests this run: {history_value('network_requests_this_run')}. Current refers to retained eligible purchases, not complete government filing coverage or guaranteed completed returns. Complete profiles meet the sample minimum and have no pending historical observations.</p>
   <div id='edge-backfill-detail'></div>
+  </details>
   <script type='application/json' id='edge-backfill-data'>{backfill_json}</script>
+  <script type='application/json' id='edge-evidence-data'>{evidence_json}</script>
 </section>
 <section class='panel'>
   <div class='panel-header'><div><h2>Investor performance heat map</h2><p>5/20/60/120-session values are average benchmark-relative returns from the first trading session after public observation. Open a drilldown to inspect transaction- and post-disclosure evidence.</p></div></div>
   <label class='search-label' for='edge-search'>Filter investors and historical trades<input id='edge-search' type='search' placeholder='Identity, filer, owner, ticker, sector…' autocomplete='off'></label>
-  <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Investor Edge leaderboard with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>No investor profiles are currently published. Check eligibility and retained historical coverage above; missing population telemetry is unavailable.</td></tr>"}</tbody></table></div>
+  <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Assessable Investor Edge profiles with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>No assessable profiles yet. Expand Building history for retained profiles and reasons; unavailable inventory is not zero performance.</td></tr>"}</tbody></table></div>
 </section>
+<details id='edge-building' class='panel edge-secondary'>
+<summary id='edge-building-summary'>Building history — {len(building_rows)} profiles not yet assessable</summary>
+<p id='edge-building-progress'>Last actual advancement unavailable. Individual profile progress times are not recorded.</p>
+<div class='table-wrap' tabindex='0' role='region' aria-label='Profiles building history'><table id='edge-building-table'><caption>Retained profiles not yet assessable</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(building_rows) if building_rows else "<tr><td colspan='13'>No profiles awaiting assessment in this publication.</td></tr>"}</tbody></table></div>
+</details>
 <section class='panel methodology'><h2>Methodology</h2><p>Each filer + disclosed owner is scored separately. Returns are benchmarked to a sector ETF when the industry mapping is sufficiently confident, otherwise SPY. Historical outcomes are measured from the transaction date and from the first session after public observation. The score weights followable alpha 45%, picker alpha 20%, hit rate 15%, consistency 10%, and sector skill 10%, then shrinks small samples toward 50.</p></section>
 </main>
 <script src='investor-edge.js'></script>
@@ -3277,7 +3297,7 @@ summary { padding: 13px 15px; color: var(--accent); font-weight: 800; cursor: po
 """
     js = """const input = document.getElementById("edge-search");
 const groupedRows = new Map();
-for (const row of document.querySelectorAll("#edge-table tbody [data-edge-group]")) {
+for (const row of document.querySelectorAll("#edge-table tbody [data-edge-group], #edge-building-table tbody [data-edge-group]")) {
   const key = row.dataset.edgeGroup;
   if (!groupedRows.has(key)) groupedRows.set(key, []);
   groupedRows.get(key).push(row);
@@ -3288,12 +3308,23 @@ function filterInvestorGroups() {
     const searchable = rows.map(row => row.textContent || "").join(" ").toLowerCase();
     const visible = !query || searchable.includes(query);
     for (const row of rows) row.hidden = !visible;
+    if (query && visible && rows.some(row => row.closest("#edge-building"))) document.getElementById("edge-building").open = true;
     if (!visible) {
       const detail = rows.map(row => row.querySelector("details")).find(Boolean);
       if (detail) detail.open = false;
     }
   }
 }
+function revealInvestorHistory() {
+  if (!/^#investor-\\d+-details$/.test(location.hash)) return;
+  const target = document.getElementById(location.hash.slice(1));
+  if (!target) return;
+  if (input) input.value = "";
+  filterInvestorGroups();
+  for (let node = target; node; node = node.parentElement) if (node.tagName === "DETAILS") node.open = true;
+}
+window.addEventListener("hashchange", revealInvestorHistory);
+revealInvestorHistory();
 let filterTimer;
 if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); filterTimer = setTimeout(filterInvestorGroups, 180);});
 """
@@ -3303,8 +3334,9 @@ if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); fil
     risk_start = shell.index('<dialog id="risk-dialog"')
     risk = shell[risk_start:shell.index("</dialog>", risk_start) + len("</dialog>")]
     page = page.replace("</main>", '</main>' + risk + '<div id="tooltip" role="tooltip" hidden></div>')
-    js = (assets / "common.js").read_text(encoding="utf-8") + "\n" + (assets / "backfill-progress.js").read_text(encoding="utf-8") + "\n" + js + "\nPT.setupDialogsAndTooltips();\nPTBackfill.attachStandalone();\n"
+    js = (assets / "common.js").read_text(encoding="utf-8") + "\n" + (assets / "backfill-progress.js").read_text(encoding="utf-8") + "\n" + (assets / "investor-evidence.js").read_text(encoding="utf-8") + "\n" + js + "\nPT.setupDialogsAndTooltips();\nPTBackfill.attachStandalone();\nPTEdgeEvidence.attachStandalone();\n"
     css = (assets / "styles.css").read_text(encoding="utf-8") + "\n" + css + "\n" + (assets / "investor-edge-overrides.css").read_text(encoding="utf-8")
+    css = css.replace("#edge-table", ":is(#edge-table, #edge-building-table)")
     (output_dir / "investor-edge.html").write_text(page, encoding="utf-8")
     (output_dir / "investor-edge.css").write_text(css, encoding="utf-8")
     (output_dir / "investor-edge.js").write_text(js, encoding="utf-8")

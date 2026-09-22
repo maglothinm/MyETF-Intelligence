@@ -791,3 +791,31 @@ def test_run_simulation_reuses_production_path_without_network_or_alerts(
         == persisted_profile["as_of_date"]
         == leaderboard_profile["as_of_date"]
     )
+
+
+def test_evidence_first_preserves_real_zeros_and_all_retained_profiles(tmp_path: Path) -> None:
+    base = {"filer": "TEST Evidence", "owner": "Self", "sample_count": 3,
+            "minimum_sample_met": True, "status": "scored", "edge_score": 50,
+            "modifier": 0, "followable_alpha_by_horizon": {"5": 0, "20": -2}}
+    profiles = [{**base, "sample_count": 0, "minimum_sample_met": False},
+                {**base, "edge_score": 0}, {**base, "edge_score": 40, "modifier": -2}, base,
+                {**base, "sample_count": 2, "minimum_sample_met": False},
+                {**base, "status": "error"}, {**base, "edge_score": None},
+                {**base, "edge_score": False}, {**base, "status": "neutral"}]
+    ai = tmp_path / "ai"; ai.mkdir()
+    source = ai / "investor-edge-leaderboard.json"
+    source.write_text(json.dumps({"investors": profiles, "completed_profile_count": 0}), encoding="utf-8")
+    before = source.read_bytes()
+    output = tmp_path / "site"; build_dashboard_addon(ai, output)
+    soup = BeautifulSoup((output / "investor-edge.html").read_text(encoding="utf-8"), "html.parser")
+    assert [r["id"] for r in soup.select("#edge-table tr.investor-row")] == ["investor-1", "investor-2", "investor-3"]
+    assert len(soup.select("#edge-building-table tr.investor-row")) == 6
+    assert not soup.select_one("#edge-building").has_attr("open")
+    assert not soup.select_one("#edge-processing-details").has_attr("open")
+    assert "No fully complete profiles yet" in soup.select_one("#edge-assessment-summary").get_text()
+    assert "0.0" in soup.select_one("#investor-1").get_text()
+    assert "+0 modifier" in soup.select_one("#investor-3").get_text()
+    assert source.read_bytes() == before
+    exported = json.loads((output / "data/investor-edge.json").read_text(encoding="utf-8"))
+    assert exported["investors"] == profiles
+    assert exported["profile_inventory_available"] is True

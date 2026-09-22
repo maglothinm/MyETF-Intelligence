@@ -262,9 +262,9 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
         "owner_raw": "Brokerage <One>",
         "edge_score": 71.5,
         "modifier": 5,
-        "confidence": 0.6,
+        "confidence": 0.3,
         "confidence_label": "Medium",
-        "sample_count": 2,
+        "sample_count": 3,
         "followable_alpha_by_horizon": {
             "5": 2.25,
             "20": -1.5,
@@ -393,8 +393,8 @@ def test_dashboard_addon_renders_grouped_accessible_drilldown_and_safe_links(
     assert "Brokerage <One>" in cells[2].get_text(" ", strip=True)
     assert cells[3].get_text(" ", strip=True) == "71.5 +5 modifier"
     assert "heat-pos-3" in (cells[3].get("class") or [])
-    assert cells[4].get_text(" ", strip=True) == "60.0% Medium"
-    assert cells[5].get_text(" ", strip=True).startswith("2 Building history")
+    assert cells[4].get_text(" ", strip=True) == "30.0% Medium"
+    assert cells[5].get_text(" ", strip=True)== "3"
     assert [cells[index].get_text(" ", strip=True) for index in range(6, 10)] == [
         "+2.25%",
         "-1.50%",
