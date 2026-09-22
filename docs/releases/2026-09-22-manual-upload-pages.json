@@ -12,5 +12,20 @@
   "real_synthetic_pdf_ocr_pages": 37,
   "automatic_max_pages": 30,
   "file_size_limit_bytes": 20971520,
-  "live_activation_verified": false
+  "live_activation_verified": false,
+  "merged_revision": "dfb5c66ffc51b30b8afbdc283dbe10def4723f89",
+  "tested_revision": "6fb612765cb5ff95b2712f9c8dd1d5b40a21c506",
+  "ci": {
+    "source_ocr": 35765600794,
+    "runtime_safety": 35765600821,
+    "investor_edge": 35765600761,
+    "current_opportunity": 35765600832
+  },
+  "ci_all_passed": true,
+  "activation": "windows_approval_canceled",
+  "activation_recorded_at": "2026-09-22T18:19:40.4043961Z",
+  "live_revision": "7e33fc39aed897a2ae22b78f3ff73bece475a258",
+  "snapshot_headers_preserved": 4502,
+  "snapshot_header_digest": "b2e86cdd8d19d794e1f8dd1a7173eed3",
+  "desktop_shortcut": "Activate Manual Upload Update"
 }
