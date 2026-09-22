@@ -37,4 +37,3 @@ snapshot-continuity receipts prove activation. `manual222-activation-blocked.jso
 records the canceled attempt. Do not confuse source merge or synthetic tests with
 a live upload, or claim this fixes separate OGE collection failures/automatic retries.
 Do not rerun general setup, backups, cloud hosting or change schedules.
-
