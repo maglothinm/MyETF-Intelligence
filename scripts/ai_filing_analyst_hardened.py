@@ -27,11 +27,11 @@ except ImportError:  # pragma: no cover - direct execution path
 
 LOGGER = logging.getLogger("polititrack-ai-analyst")
 if __package__:
-    from . import opportunity_runtime
+    from . import opportunity_runtime, discovery_evidence
 else:  # Runtime v2 executes this through the compatibility script.
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from scripts import opportunity_runtime
+    from scripts import opportunity_runtime, discovery_evidence
 REPOSITORY_ID = 1349678672
 DEFAULT_OUTPUT_TOKENS = 4_000
 ESCALATED_OUTPUT_TOKENS = 8_000
@@ -842,6 +842,29 @@ def _finish_analyst_run(
     legacy.save_state(state_path, state)
     all_analyses = legacy.read_jsonl(config.ai_dir / "analyses.jsonl")
     legacy.write_latest_outputs(config, all_analyses, state)
+    if result.state_publishable:
+        history = legacy.read_jsonl(config.legislative_dir / "transactions.jsonl") if config.legislative_dir else []
+        history += legacy.read_jsonl(config.executive_dir / "transactions.jsonl") if config.executive_dir else []
+        history += legacy.read_jsonl(config.legislative_dir / "purchases.jsonl") if config.legislative_dir else []
+        history += legacy.read_jsonl(config.executive_dir / "purchases.jsonl") if config.executive_dir else []
+        opportunity_path = config.ai_dir / "opportunity-state.json"
+        opportunities = json.loads(opportunity_path.read_text(encoding="utf-8")).get("opportunities", {}) if opportunity_path.exists() else {}
+        values = discovery_evidence.persist(config.ai_dir, history, all_analyses, opportunities=opportunities)
+        discovery_evidence.write_exports(values, config.ai_dir)
+        # Add to the existing CSV without modifying the preserved legacy analyst.
+        import csv
+        path = config.analyses_csv_path
+        with path.open(encoding="utf-8", newline="") as stream:
+            reader = csv.DictReader(stream)
+            fields, rows = list(reader.fieldnames or []), list(reader)
+        if discovery_evidence.FIELD not in fields:
+            fields.append(discovery_evidence.FIELD)
+        with path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            for row in rows:
+                row[discovery_evidence.FIELD] = json.dumps(values.get(row.get("trade_id")) or discovery_evidence.derive(row), allow_nan=False)
+                writer.writerow(row)
     legacy.write_json(config.result_path, asdict(result))
     _append_run_history(config, result)
     _write_step_summary(result)
@@ -1117,6 +1140,7 @@ def run_analyst(
                 record["openai_diagnostics"] = [
                     dict(item) for item in ai_result.diagnostics
                 ]
+                record[discovery_evidence.FIELD] = discovery_evidence.derive(trade)
                 result.analyses.append(record)
                 result.completed_count += 1
                 classification = str(

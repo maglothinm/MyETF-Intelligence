@@ -109,6 +109,8 @@ def save(directory: Path, state: dict) -> None:
 
 
 def validate_directory(directory: Path) -> None:
+    from .discovery_evidence import load as load_discovery
+    load_discovery(directory)
     if (directory / STATE_NAME).exists():
         validate_existing_ai(directory)
         validate(read_json(directory / STATE_NAME))

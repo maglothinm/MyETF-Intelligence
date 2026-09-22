@@ -27,12 +27,13 @@ def load_projection(directory: Path | None) -> dict:
 def write_exports(projection: dict, output: Path, assets: Path) -> None:
     (output/'data/current-opportunities.json').write_text(json.dumps(projection,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     with (output/'data/current-opportunities.csv').open('w',encoding='utf-8',newline='') as stream:
-        fields=['opportunity_id','ticker','lifecycle','evaluation_cutoff','next_review','rule_hash','evaluation_id','decision_provenance_json']
+        fields=['opportunity_id','ticker','lifecycle','evaluation_cutoff','next_review','rule_hash','evaluation_id','information_value_at_discovery','decision_provenance_json']
         writer=csv.DictWriter(stream,fieldnames=fields)
         writer.writeheader()
         for record in projection.get('records',[]):
             row={key:record.get(key) for key in fields[:-1]}
             row['decision_provenance_json']=json.dumps(record,ensure_ascii=False,allow_nan=False)
+            row['information_value_at_discovery']=json.dumps(record.get('information_value_at_discovery',{}),ensure_ascii=False,allow_nan=False)
             # Neutralize spreadsheet formula interpretation without discarding JSON provenance.
             row={k:("'"+v if isinstance(v,str) and v[:1] in ('=','+','-','@') else v) for k,v in row.items()}
             writer.writerow(row)

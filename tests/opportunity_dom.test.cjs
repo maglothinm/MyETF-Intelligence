@@ -17,7 +17,9 @@ test('same persisted gates, semantic details, shadow label and exports',()=>{
   assert.match(doc.getElementById('mode').textContent,/SHADOW/);
   assert.equal(doc.querySelectorAll('article').length,model.records.length);
   assert.equal(doc.querySelectorAll('.available').length,model.records.filter(r=>r.lifecycle==='opportunity_available').length);
-  assert.ok(doc.querySelector('summary')); assert.equal(doc.querySelectorAll('a[download]').length,3);
+  assert.ok(doc.querySelector('summary')); assert.equal(doc.querySelectorAll('a[download]').length,5);
+  assert.ok(doc.querySelector('a[href="data/information-value-at-discovery.json"]'));
+  assert.match(doc.body.textContent,/Information value at discovery/);
   const count=model.records.filter(r=>effectiveStatus(r,now)==='watching').length;
   render(doc,model,now,'watching'); assert.equal(doc.querySelectorAll('article').length,count);
 });

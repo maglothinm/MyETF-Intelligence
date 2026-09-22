@@ -297,6 +297,75 @@ class JobRunner:
             command.append("--suppress-alerts")
         return command
 
+    def _manual_upload_pass(self, locked, branch, state_dir, parent, trigger):
+        """Commit known manual uploads before collection, under the SAME lease.
+
+        The distinct run name is maintenance evidence, never collector freshness.
+        A later collector failure cannot roll back an already committed extraction.
+        """
+        from .source_uploads import SourceUploadStore
+        from .source_ocr_worker import run_pass
+        from scripts.source_ocr import now
+        uploads = SourceUploadStore()
+        job = branch + "_manual_ocr"
+        run_id = locked.start_run(job, trigger, self.source_revision, self.mode.value)
+        health = {"enabled": True, "stage": "processing", "started_at": now(),
+                  "intake_status": "pending", "cleanup_status": "pending"}
+
+        def record():
+            health["heartbeat_at"] = now()
+            locked.record_ocr_health(run_id, health)
+
+        try:
+            record()
+            queued = uploads.pending(branch)
+            health["intake_status"] = "ok"
+            if not queued:
+                # No snapshot for an empty inbox; collector remains the sole
+                # scheduled entry point and no new schedule is introduced.
+                locked.finish_run(run_id, status="skipped", error_code="", side_effects_possible=False)
+                return parent
+            outcomes = run_pass(state_dir, branch, self.environment, queued,
+                                manual_only=True, health=health, on_progress=lambda _: record())
+            if not outcomes:
+                locked.finish_run(run_id, status="skipped", error_code="", side_effects_possible=False)
+                return parent
+            # A replay after an acknowledgement failure may reuse every cached
+            # extraction. Journal the maintenance pass so its successor is unique
+            # without rewriting an extraction, import, or collector timestamp.
+            with (state_dir / "source-upload-passes.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"run_id": run_id, "completed_at": now(),
+                    "parent_sha256": parent.snapshot_sha256, "outcome_count": len(outcomes),
+                    "collection_performed": False}, sort_keys=True) + "\n")
+            health["stage"] = "awaiting_commit"
+            record()
+            state = _require_success_state(state_dir)
+            snapshot = locked.commit(state_dir, expected_parent_sha256=parent.snapshot_sha256,
+                source_revision=self.source_revision, successful_run_id=run_id,
+                provenance={"authority": "runtime_v2", "job": job, "mode": self.mode.value,
+                            "trigger_source": trigger, "last_success_utc": state["last_success_utc"],
+                            "collection_performed": False})
+        except Exception as exc:
+            health.update(stage="failed", finished_at=now(), error_code=type(exc).__name__)
+            try:
+                record()
+            finally:
+                locked.finish_run(run_id, status="failure", error_code=type(exc).__name__, side_effects_possible=False)
+            raise
+        health["cleanup_status"] = "not_needed"
+        if outcomes:
+            try:
+                uploads.acknowledge(outcomes, snapshot.snapshot_sha256)
+                health["cleanup_status"] = "complete"
+            except Exception as exc:
+                health.update(cleanup_status="deferred", cleanup_error_code=type(exc).__name__)
+        health.update(stage="complete", finished_at=now())
+        try:
+            record()
+        except Exception as exc:
+            print(json.dumps({"result": "ocr_health_unavailable", "error_code": type(exc).__name__}), flush=True)
+        return snapshot
+
     def _run_tracker(self, branch: str) -> SnapshotHead:
         trigger = self._env()["POLITITRACK_TRIGGER_SOURCE"]
         with self.store.locked(branch) as locked, tempfile.TemporaryDirectory(
@@ -307,6 +376,9 @@ class JobRunner:
             output_dir.mkdir()
             parent = locked.restore(state_dir)
             _require_success_state(state_dir)
+            if (branch == "executive" and not self.mode.is_shadow
+                    and _truthy(self.environment.get("RUNTIME_SOURCE_OCR_ENABLED"))):
+                parent = self._manual_upload_pass(locked, branch, state_dir, parent, trigger)
             outbox = self._prepare_notifications(locked, branch, output_dir)
             run_id = locked.start_run(branch, trigger, self.source_revision, self.mode.value)
             ocr_health = None

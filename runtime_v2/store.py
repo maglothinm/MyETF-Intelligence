@@ -568,7 +568,7 @@ class PostgresSnapshotStore:
             "r.snapshot_sha256, s.parent_sha256, s.generation, s.created_at "
             "FROM runtime_job_runs r JOIN runtime_state_snapshots s "
             "ON s.snapshot_id = r.snapshot_id "
-            "WHERE r.namespace = %s AND r.status = 'success' "
+            "WHERE r.namespace = %s AND r.job_name = r.namespace AND r.status = 'success' "
             "AND r.runtime_mode = 'production' AND r.error_code = '' "
             "AND r.runtime_mode_evidence->>'kind' = 'snapshot_provenance' "
             "AND r.runtime_mode_evidence->>'mode' = 'production' "
@@ -623,7 +623,8 @@ class PostgresSnapshotStore:
                         "s.created_at "
                         "FROM runtime_job_runs r LEFT JOIN runtime_state_snapshots s "
                         "ON s.snapshot_id = r.snapshot_id "
-                        "WHERE r.namespace = %s ORDER BY r.started_at DESC, r.run_id DESC LIMIT 7",
+                        "WHERE r.namespace = %s AND r.job_name = r.namespace "
+                        "ORDER BY r.started_at DESC, r.run_id DESC LIMIT 7",
                         (branch,),
                     )
                     attempts = [_workflow_attempt(row, branch) for row in cursor.fetchall()]
@@ -644,6 +645,20 @@ class PostgresSnapshotStore:
                         "history_available": True,
                         "successful_attempts": history,
                     }
+                    if branch == "executive":
+                        # Maintenance has its own success receipt. Never count
+                        # it as a successful OGE collection or refresh its clock.
+                        cursor.execute(
+                            "SELECT r.run_id::text, r.status, r.started_at, r.finished_at, "
+                            "r.trigger_source, r.runtime_mode, r.runtime_mode_evidence, "
+                            "r.error_code, r.source_revision, r.snapshot_id::text, "
+                            "r.snapshot_sha256, s.parent_sha256, s.generation, s.created_at "
+                            "FROM runtime_job_runs r LEFT JOIN runtime_state_snapshots s "
+                            "ON s.snapshot_id = r.snapshot_id WHERE r.namespace = %s "
+                            "AND r.job_name = 'executive_manual_ocr' AND r.status <> 'skipped' "
+                            "ORDER BY r.started_at DESC, r.run_id DESC LIMIT 7", (branch,))
+                        branches[branch]["manual_upload_attempts"] = [
+                            _workflow_attempt(row, branch) for row in cursor.fetchall()]
             return {
                 "schema_version": 1,
                 "observed_at_utc": utc_now(),

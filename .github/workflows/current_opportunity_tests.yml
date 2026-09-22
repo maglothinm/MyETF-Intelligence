@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/opportunity_*.py"
+      - "scripts/discovery_evidence.py"
       - "scripts/ai_filing_analyst*.py"
       - "scripts/build_trade_dashboard.py"
       - "scripts/dashboard_assets/**"

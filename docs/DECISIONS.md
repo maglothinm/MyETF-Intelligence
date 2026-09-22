@@ -1691,3 +1691,19 @@ This is a page-count exemption, not unlimited storage/memory or removal of the
 retries keep their genuine status/backoff. Preserve extraction version/cache and
 sole snapshot-writer/commit/acknowledgement contracts. Source tests and merged code
 remain distinct from owner-approved Windows activation and live acceptance.
+
+
+## 2026-09-22 — Isolate manual OCR success from source collection; persist factual discovery evidence (#225)
+
+Process known authenticated manual source uploads before OGE collection under the
+existing Executive lease, using a distinct atomic maintenance receipt. Such a
+receipt cannot advance collector freshness. A later collection failure cannot
+erase committed extraction evidence; acknowledgement remains post-commit and
+owner review remains mandatory before import. No second writer is introduced.
+
+Persist per-transaction discovery evidence in the AI snapshot and immutable
+Current Opportunity evaluation. Preserve the first usable quote with timestamps,
+provider, quality and comparable price basis. Quantify only supported security
+price movement; missing evidence remains unknown and legacy values keep their
+limitations. This field does not modify qualification or notification decisions
+and does not evaluate or score public officials. See DISCOVERY_EVIDENCE.md.
