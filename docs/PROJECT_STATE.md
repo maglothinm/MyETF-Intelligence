@@ -1,29 +1,33 @@
 # PolitiTrack project state
 
-## September 22 Investor Edge evidence-first presentation (#219) — source tested, activation pending
+## September 22 Investor Edge evidence-first update (#219) — merged, Windows activation pending
 
-Canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`.
-Branch `codex/investor-edge-evidence-219`, based on main `81390ff735ecf7d8c4415864715e2a96afbfb9e5`.
-The root and detailed Investor Edge pages now default to assessable profiles,
-retaining actual zero/negative results. Insufficient-history records remain in
-collapsed Building history with existing evidence links and supported reasons.
-Processing details are collapsed, but overall backfill status and empty-result
-warnings remain visible. No profile, score, trade, export history or schedule is
-removed or changed. Missing inventory is explicitly unavailable, not an empty success.
+PR #220 merged as 7e33fc39aed897a2ae22b78f3ff73bece475a258. Its complete tree
+matches tested head 6582171922f0def04ca9dcfd3bd650b13fc0611f. All four CI workflows
+passed: Investor Edge 35726290251, Runtime v2 35726290276, Source OCR 35726290244,
+and Current Opportunity 35726290341. Focused local tests: 194 passed. Root and
+standalone responsive fixtures passed at 1280/700/390 pixels; keyboard, filters,
+closed defaults, deep links and actual zero/adverse result preservation verified.
 
-Last advancement is population-wide, using existing backfill evidence; per-profile
-progress timestamps are unavailable and maintenance dates are not substituted.
-Original-index drilldown links and grouped search remain intact. Both expanded
-sections survive root refresh. The old standalone one-observation shortcut now
-uses the same existing minimum-sample eligibility as the root view; no engine
-scoring rule changed. A finite calculated score is required before presentation.
+Windows returned user-canceled elevation (exit 1). Production remains at
+f85a40f6b7b609ad8eec5c899c368d106fedd7c1; all three services remain Running/Automatic.
+No activation receipt or live deployment claim. Do not retry elevation without
+owner action and do not rerun Finish PolitiTrack Setup or backup provisioning.
 
-Focused Windows validation: 194 tests passed, including the generated dashboard
-DOM suite, core Investor Edge, surfaces, backfill progress and dashboard generation.
-CI, source merge and Beast activation require separate evidence. Production still
-uses f85a40f6b7b609ad8eec5c899c368d106fedd7c1; no release claim yet.
-Backup repair and cleanup remain complete. OGE failures are unrelated. No cloud
-reactivation, state reset, service setup, backup provisioning or feature activation.
+A Desktop shortcut named **Activate Investor Edge Update** now opens the reviewed
+package at C:\ProgramData\PolitiTrack\releases\edge219\Activate.ps1. It requests
+normal Windows approval, activates only merged source with a scheduler-only restart,
+uses the existing locked dashboard producer, then verifies live HTTP and snapshot
+continuity. The updater refuses source downgrades. Completion is established only
+by backups/edge219-complete.json plus its HTTP and continuity receipts.
+
+Pre-release baseline: 4,436 snapshot headers; cutoff 2026-09-22T12:18:30.870429+00:00;
+header digest b6065022e955b62f73c5a2b17b94aeae. Evidence is in
+backups/edge219-snapshot-baseline.json. Keep #219 open until live verification.
+Canonical repo ID 1349678672. Beast-local PostgreSQL remains sole authority.
+Preserve all histories, untracked legislative-source-status.json and backup repair.
+No cloud reactivation, scoring changes, state rebaseline or extra schedules.
+OGE failures remain separate. Progress timestamps are population-wide, not per-profile.
 
 ## September 22 failed-backup cleanup completed (#214)
 
