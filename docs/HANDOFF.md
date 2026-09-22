@@ -1,24 +1,15 @@
 # PolitiTrack active handoff
 
-## September 22 backup repair activated and verified (#214)
+## September 22 failed-backup cleanup completed (#214)
 
-Beast is running merged main source f85a40f6b7b609ad8eec5c899c368d106fedd7c1.
-Activation passed at 11:16:42 UTC. All three services are Running/Automatic;
-no unexpected service terminations through 11:27:15 UTC. The scheduler-created
-27,197,505,861-byte physical backup passed at 11:19:46 UTC, with an independent
-full integrity recheck at 11:25:54 UTC. Scheduled dashboard/Legislative/AI work
-continued during backup; database and dashboard were not restarted.
+Owner-authorized cleanup removed all 38 confirmed pre-activation local-*.partial files at 11:34:27 UTC, totaling 1,061,305,390,205 bytes. No legacy partial files remain. C: now has 1,243,171,434,496 bytes free (about 1.24 TB). Both verified routine backups and all migration/other backup evidence remain; both routine manifest hashes are unchanged.
 
-Do not rerun setup or activation. Separate remaining work: 38 pre-activation
-legacy partials consume 1,061,305,390,205 bytes (not deleted this verification);
-Executive collection failed on OGE connection/page-load timeouts. Actual reboot
-and restore-drill acceptance remain untested. No broad all-healthy claim.
-[Current verification](releases/2026-09-22-backup-verification.md) and
-[exact receipts](releases/2026-09-22-backup-verification.json).
+Post-cleanup at 11:35:07 UTC: all three services Running/Automatic with unchanged PIDs; dashboard readiness HTTP 200. Application revision stays f85a40f6b7b609ad8eec5c899c368d106fedd7c1. No production data, configuration, application code, or untracked user file was deleted or modified; no services restarted.
 
-Canonical repository ID remains 1349678672. Local PostgreSQL on Beast is still
-the sole production authority. No cloud reactivation, state reset, migration
-replay, or application access-control relaxation. Preserve the untracked
-legislative-source-status.json in the deployment checkout.
+Do not rerun setup or activation. The backup repair and legacy cleanup are complete. OGE collection failures remain a separate issue; actual reboot and restore-drill acceptance are still untested.
 
-Earlier evidence: [September 21 repair](releases/2026-09-21-backup-repair.md).
+[Cleanup evidence](releases/2026-09-22-legacy-backup-cleanup.md) and [exact receipts](releases/2026-09-22-legacy-backup-cleanup.json).
+
+Canonical repository ID 1349678672, maglothinm/MyETF-Intelligence. Local PostgreSQL on Beast remains the sole production authority. Preserve the existing writer locks, state/history, verified routine backups, migration evidence and untracked legislative-source-status.json. No cloud reactivation or rebaseline.
+
+[Backup repair verification](releases/2026-09-22-backup-verification.md).
