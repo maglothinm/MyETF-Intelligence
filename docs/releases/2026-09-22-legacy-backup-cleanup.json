@@ -1,0 +1,95 @@
+{
+  "repository_id": 1349678672,
+  "completed_at": "2026-09-22T11:34:27.8176715Z",
+  "verified_after_cleanup_at": "2026-09-22T11:35:07.2815953Z",
+  "removed_count": 38,
+  "removed_bytes": 1061305390205,
+  "remaining_legacy_partial_count": 0,
+  "preserved_other_backup_entries": true,
+  "free_bytes_before": 181866287104,
+  "free_bytes_after": 1243171434496,
+  "production_data_deleted": false,
+  "services_restarted": false,
+  "protected_backup_checks": [
+    {
+      "directory": "routine-20260921T191455Z-6db61a99.base",
+      "manifest_unchanged": true,
+      "verified_receipt_present": true
+    },
+    {
+      "directory": "routine-20260922T111643Z-e19aaa22.base",
+      "manifest_unchanged": true,
+      "verified_receipt_present": true
+    }
+  ],
+  "services_after": [
+    {
+      "Name": "PolitiTrackDatabase",
+      "State": "Running",
+      "StartMode": "Auto",
+      "ProcessId": 25732
+    },
+    {
+      "Name": "PolitiTrackWeb",
+      "State": "Running",
+      "StartMode": "Auto",
+      "ProcessId": 23084
+    },
+    {
+      "Name": "PolitiTrackScheduler",
+      "State": "Running",
+      "StartMode": "Auto",
+      "ProcessId": 13600
+    }
+  ],
+  "dashboard_readiness_http": 200,
+  "deployed_revision": "f85a40f6b7b609ad8eec5c899c368d106fedd7c1",
+  "repository": "maglothinm/MyETF-Intelligence",
+  "related_issue": 214,
+  "scope": "Only confirmed failed pre-activation local-*.partial backups",
+  "removed_filenames": [
+    "local-20260921T191741Z.partial",
+    "local-20260921T194005Z.partial",
+    "local-20260921T200551Z.partial",
+    "local-20260921T202928Z.partial",
+    "local-20260921T205407Z.partial",
+    "local-20260921T211909Z.partial",
+    "local-20260921T214242Z.partial",
+    "local-20260921T220603Z.partial",
+    "local-20260921T222944Z.partial",
+    "local-20260921T225334Z.partial",
+    "local-20260921T231721Z.partial",
+    "local-20260921T234003Z.partial",
+    "local-20260922T000332Z.partial",
+    "local-20260922T002713Z.partial",
+    "local-20260922T005352Z.partial",
+    "local-20260922T012039Z.partial",
+    "local-20260922T014724Z.partial",
+    "local-20260922T021044Z.partial",
+    "local-20260922T023728Z.partial",
+    "local-20260922T030419Z.partial",
+    "local-20260922T033115Z.partial",
+    "local-20260922T035808Z.partial",
+    "local-20260922T042504Z.partial",
+    "local-20260922T045153Z.partial",
+    "local-20260922T051849Z.partial",
+    "local-20260922T054546Z.partial",
+    "local-20260922T060849Z.partial",
+    "local-20260922T063545Z.partial",
+    "local-20260922T070249Z.partial",
+    "local-20260922T072958Z.partial",
+    "local-20260922T075711Z.partial",
+    "local-20260922T082425Z.partial",
+    "local-20260922T085136Z.partial",
+    "local-20260922T091852Z.partial",
+    "local-20260922T094608Z.partial",
+    "local-20260922T100940Z.partial",
+    "local-20260922T103704Z.partial",
+    "local-20260922T110446Z.partial"
+  ],
+  "verified_backup_count_retained": 2,
+  "migration_evidence_preserved": true,
+  "application_files_changed": false,
+  "reboot_tested": false,
+  "restore_drill_performed": false
+}
