@@ -394,9 +394,13 @@ def test_upload_api_requires_owner_origin_account_and_existing_filing(intake,tmp
     assert client.post(url,data=image_bytes()).status_code==403
     assert client.post(url,data=image_bytes(),headers={**headers,"X-PolitiTrack-Account":"other"}).status_code==409
     assert client.post("/api/source-ocr/upload?filing_key=missing",data=image_bytes(),headers=headers).status_code==400
-    response=client.post(url,data=image_bytes(),headers=headers)
+    from test_source_ocr import multipage_source
+    response=client.post(url,data=multipage_source(37),headers=headers)
     assert response.status_code==202
     assert response.headers["Cache-Control"]=="private, no-store"
+    assert intake.pending("legislative")[0]["page_count"] == 37
+    app.config["RUNTIME_SOURCE_OCR_ACCOUNT_IDS"] = "different-owner"
+    assert client.post(url, data=multipage_source(37), headers=headers).status_code == 403
 
 
 def test_evidence_disk_failure_aborts_instead_of_acknowledging(tmp_path,monkeypatch):
@@ -456,3 +460,42 @@ def test_runner_acknowledges_only_after_successful_canonical_commit(monkeypatch,
     else:
         runner.run("legislative")
         assert order==["commit","ack"]
+
+
+@pytest.mark.parametrize("branch", ["legislative", "executive"])
+@pytest.mark.parametrize("manual", [False, True])
+def test_only_durable_manual_uploads_bypass_automatic_page_cap(tmp_path, branch, manual):
+    directory = source_state(tmp_path)
+    filing = {**FILING, "branch": branch, "manual_upload": True, "max_pages": None}
+    if branch == "executive":
+        filing.update(source="oge", source_url="https://extapps2.oge.gov/201/$FILE/TEST.pdf", access_mode="direct")
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    data = b"test"
+    upload = {"upload_id": str(uuid.uuid4()), "source_url": filing["source_url"], "filing_key": filing["filing_key"],
+              "payload": data, "sha256": hashlib.sha256(data).hexdigest(), "status": "pending"}
+    calls = []
+    def engine(blob, **kwargs):
+        calls.append(kwargs)
+        return evidence(blob)
+    run_pass(directory, branch, ENV, [upload] if manual else (), loader=lambda *_: data, extractor=engine)
+    assert len(calls) == 1
+    assert (calls[0]["max_pages"] is None) if manual else calls[0]["max_pages"] == 30
+    if manual:
+        assert calls[0]["timeout"] == 120
+        assert not (directory / "transactions.jsonl").exists()
+        assert tracker.read_jsonl(directory / "source-ocr.jsonl")[-1]["error_code"] == "upload_confirmation_required"
+
+
+def test_long_manual_upload_reaches_private_inbox_and_keeps_coverage(intake):
+    from test_source_ocr import multipage_source
+    data = multipage_source(75)
+    first = intake.submit("owner", FILING, data)
+    pending = intake.pending("legislative")
+    assert len(pending) == 1 and pending[0]["page_count"] == 75
+    assert pending[0]["payload"] == data
+    assert intake.submit("owner", FILING, data)["duplicate"]
+    assert intake.read("other") == []
+    intake.acknowledge([{**first, "status": "needs_review", "has_evidence": True}], "a" * 64)
+    with intake.engine.begin() as conn:
+        row = conn.execute(select(uploads)).mappings().one()
+    assert row["page_count"] == 75 and row["payload"] is None

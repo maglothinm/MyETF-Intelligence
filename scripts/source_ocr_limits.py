@@ -21,10 +21,10 @@ def decoder_environment():
     return environment
 
 
-def inspect_bounded(data: bytes, max_pages: int = MAX_PAGES, *, timeout: float = 15):
+def inspect_bounded(data: bytes, max_pages: int | None = MAX_PAGES, *, timeout: float = 15):
     if not data or len(data) > MAX_BYTES:
         raise OCRError("document_byte_limit")
-    if not isinstance(max_pages, int) or not 0 < max_pages <= MAX_PAGES:
+    if max_pages is not None and (isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 0 < max_pages <= MAX_PAGES):
         raise OCRError("document_page_limit")
     # Do not pass application credentials, proxy settings or PYTHONPATH to a
     # document decoder. No user filename or URL becomes a shell argument.
@@ -33,7 +33,7 @@ def inspect_bounded(data: bytes, max_pages: int = MAX_PAGES, *, timeout: float =
         source = Path(temporary) / "document"
         source.write_bytes(data)
         try:
-            result = subprocess.run([sys.executable, str(Path(__file__).resolve()), str(source), str(max_pages)],
+            result = subprocess.run([sys.executable, str(Path(__file__).resolve()), str(source), "manual-upload" if max_pages is None else str(max_pages)],
                 capture_output=True, timeout=timeout, env=environment, cwd=temporary, check=False)
         except (subprocess.SubprocessError, OSError):
             raise OCRError("document_inspection_limit") from None
@@ -60,7 +60,10 @@ def _child():
     try:
         from source_ocr import inspect_document
         data = Path(sys.argv[1]).read_bytes()
-        info = inspect_document(data, int(sys.argv[2]))
+        # The caller chooses this mode only for the allowlisted upload inbox.
+        # It changes page admission, never byte/pixel/decoder safety controls.
+        pages = None if sys.argv[2] == "manual-upload" else int(sys.argv[2])
+        info = inspect_document(data, pages)
         print(json.dumps({"info": info}))
     except Exception as error:
         code = str(error) if isinstance(error, OCRError) else "document_inspection_failed"

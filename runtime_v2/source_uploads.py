@@ -84,7 +84,9 @@ class SourceUploadStore:
             if pending >= 20 or recent >= 10:
                 raise ReviewError("UPLOAD_LIMIT", "The source upload queue is full or its hourly limit has been reached. Try again later.", 429)
             from scripts.source_ocr_limits import inspect_bounded
-            info = inspect_bounded(data)
+            # The API authenticates and allowlists the owner before this inbox.
+            # Manual source files are not subject to the automatic page cap.
+            info = inspect_bounded(data, max_pages=None)
             if existing:
                 connection.execute(update(uploads).where(uploads.c.upload_id == existing["upload_id"])
                                    .values(payload=data, status="pending", submitted_at=created, expires_at=created + timedelta(days=7)))

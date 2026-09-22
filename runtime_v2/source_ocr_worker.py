@@ -345,7 +345,10 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                     evidence = previous_evidence
                     metrics["extractions_reused"] += 1
                 else:
-                    evidence = extractor(data, max_pages=MAX_PAGES, timeout=max(10, min(120, int(budget - (time.monotonic() - started)))))
+                    # Exemption follows durable, authenticated inbox provenance,
+                    # never a filing field, filename or automatic download.
+                    evidence = extractor(data, max_pages=None if upload else MAX_PAGES,
+                                         timeout=120 if upload else max(10, min(120, int(budget - (time.monotonic() - started)))))
                     metrics["documents_completed"] += 1
                     metrics["pages_expected"] += evidence["page_count"]
                     metrics["pages_completed"] += len(evidence["completed_pages"])
