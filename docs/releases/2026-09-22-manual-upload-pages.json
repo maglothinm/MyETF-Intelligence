@@ -1,0 +1,16 @@
+{
+  "issue": 222,
+  "checked_at": "2026-09-22T18:11:03.148214+00:00",
+  "base_revision": "d1f9c976030f86fe4fcc350ae01cc1a782acca2a",
+  "tests": "111 passed, 6 skipped",
+  "manual_admission_pages": [
+    31,
+    37,
+    51,
+    75
+  ],
+  "real_synthetic_pdf_ocr_pages": 37,
+  "automatic_max_pages": 30,
+  "file_size_limit_bytes": 20971520,
+  "live_activation_verified": false
+}

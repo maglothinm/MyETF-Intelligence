@@ -47,7 +47,7 @@ def create_blueprint(accounts, cache, intake=None):
 
     @blueprint.errorhandler(OCRError)
     def invalid(error):
-        return jsonify(code=str(error), message="The file is invalid, encrypted, oversized or unsupported. Upload a PDF, PNG, JPEG or TIFF of up to 20 MiB and 30 pages."), 400
+        return jsonify(code=str(error), message="The file is invalid, encrypted, oversized or unsupported. Upload a PDF, PNG, JPEG or TIFF of up to 20 MiB. Manual uploads have no page-count cap; file validation and resource safeguards still apply."), 400
 
     @blueprint.errorhandler(Exception)
     def unavailable(error):

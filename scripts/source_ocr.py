@@ -40,8 +40,10 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def inspect_document(data: bytes, max_pages: int = MAX_PAGES) -> dict[str, Any]:
-    """Validate signature, encryption and decoded page/pixel bounds before OCR."""
+def inspect_document(data: bytes, max_pages: int | None = MAX_PAGES) -> dict[str, Any]:
+    """Validate a whole document; None exempts authorized uploads from page count only."""
+    if max_pages is not None and (isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 1):
+        raise OCRError("document_page_limit")
     if not data or len(data) > MAX_BYTES:
         raise OCRError("document_byte_limit")
     if data.startswith(b"%PDF"):
@@ -53,7 +55,7 @@ def inspect_document(data: bytes, max_pages: int = MAX_PAGES) -> dict[str, Any]:
             # Password-protected/malformed files still fail closed below.
             with pdfplumber.open(io.BytesIO(data), password="") as pdf:
                 count = len(pdf.pages)
-                if not 0 < count <= max_pages:
+                if count < 1 or (max_pages is not None and count > max_pages):
                     raise OCRError("document_page_limit")
                 import math
                 if any(not math.isfinite(p.width * p.height) or min(p.width, p.height) <= 0 or p.width * p.height * (300 / 72) ** 2 > MAX_PIXELS for p in pdf.pages):
@@ -72,7 +74,7 @@ def inspect_document(data: bytes, max_pages: int = MAX_PAGES) -> dict[str, Any]:
             if image.format not in {"PNG", "JPEG", "TIFF"}:
                 raise OCRError("unsupported_image_format")
             count = getattr(image, "n_frames", 1)
-            if not 0 < count <= max_pages:
+            if count < 1 or (max_pages is not None and count > max_pages):
                 raise OCRError("document_page_limit")
             for page in range(count):
                 image.seek(page)
@@ -245,7 +247,7 @@ def house_rows(images, words: list[dict[str, Any]]) -> dict[str, Any]:
     return {"recognized": bool(form_groups), "rows": rows, "problems": sorted(set(problems))}
 
 
-def _ocr_pages(paths, root, timeout, environment):
+def _ocr_pages(paths, root, timeout, environment, *, per_page_deadline=False):
     """Bind each successful engine call to one physical page, including no-text pages.
 
     Tesseract's multi-image TSV omits pages with no recognized text and may
@@ -258,6 +260,10 @@ def _ocr_pages(paths, root, timeout, environment):
     text_bytes = tsv_bytes = 0
     required = {"level", "page_num", "left", "top", "width", "height", "conf", "text"}
     for number, path in enumerate(paths, 1):
+        # Owner uploads have no page-count cap. Keep a watchdog per physical
+        # page rather than making the automatic document deadline a hidden cap.
+        if per_page_deadline:
+            deadline = time.monotonic() + timeout
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise OCRError("ocr_engine_failed")
@@ -298,7 +304,7 @@ def _ocr_pages(paths, root, timeout, environment):
     return text, words, empty_pages
 
 
-def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> dict[str, Any]:
+def extract(data: bytes, *, max_pages: int | None = MAX_PAGES, timeout: int = 120) -> dict[str, Any]:
     """Bounded complete-document OCR; every rendered page is explicitly attempted."""
     try:
         from .source_ocr_limits import inspect_bounded, decoder_environment
@@ -328,7 +334,8 @@ def extract(data: bytes, *, max_pages: int = MAX_PAGES, timeout: int = 120) -> d
         if len(paths) != info["pages"]:
             raise OCRError("incomplete_page_render")
         # No generated file or model result can inject a command; shell=False.
-        text, words, empty_pages = _ocr_pages(paths, root, timeout, decoder_environment())
+        text, words, empty_pages = _ocr_pages(
+            paths, root, timeout, decoder_environment(), per_page_deadline=max_pages is None)
         images = [Image.open(path) for path in paths]
         try:
             table = house_rows(images, words)

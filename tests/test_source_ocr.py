@@ -121,9 +121,9 @@ def test_real_ocr_process_reads_synthetic_source(tmp_path):
 @pytest.mark.skipif(not shutil.which("tesseract"), reason="real OCR engine is not installed")
 def test_real_multipage_ocr_keeps_physical_numbers_across_no_text_page():
     image = Image.new("L", (1000, 400), 255)
-    font_path = next(p for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"] if Path(p).is_file())
-    font = ImageFont.truetype(font_path, 40)
+    font_path = next((p for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"] if Path(p).is_file()), None)
+    font = ImageFont.truetype(font_path, 40) if font_path else ImageFont.load_default(size=40)
     first, last = image.copy(), image.copy()
     ImageDraw.Draw(first).text((40, 100), "FIRST SOURCE PAGE", font=font, fill=0)
     ImageDraw.Draw(last).text((40, 100), "THIRD SOURCE PAGE", font=font, fill=0)
@@ -267,3 +267,66 @@ def test_decoder_environment_drops_application_credentials(monkeypatch):
     env = decoder_environment()
     assert env["TESSDATA_PREFIX"] == "/usr/share/tesseract-ocr"
     assert not set(env) & {"GOOGLE_APPLICATION_CREDENTIALS", "DATABASE_URL", "OPENAI_API_KEY", "HTTPS_PROXY"}
+
+
+# Manual page-count exemption: keep every automatic resource policy intact.
+def multipage_source(count, format="PDF"):
+    image = Image.new("RGB", (240, 96), "white")
+    ImageDraw.Draw(image).text((15, 25), "MANUAL SOURCE TEST", fill="black", font=ImageFont.load_default(size=20))
+    stream = io.BytesIO()
+    image.save(stream, format=format, save_all=True, append_images=[image] * (count - 1))
+    image.close()
+    return stream.getvalue()
+
+
+@pytest.mark.parametrize("count", [31, 37, 51, 75])
+@pytest.mark.parametrize("format", ["PDF", "TIFF"])
+def test_manual_admission_has_no_page_count_cap_but_automatic_stays_30(count, format):
+    from scripts.source_ocr import MAX_PAGES
+    from scripts.source_ocr_limits import inspect_bounded
+    data = multipage_source(count, format)
+    assert MAX_PAGES == 30
+    with pytest.raises(OCRError, match="document_page_limit"):
+        inspect_bounded(data)
+    info = inspect_bounded(data, max_pages=None)
+    assert info["pages"] == count and len(info["native_pages"]) == count
+
+
+@pytest.mark.parametrize("limit", [0, -1, False, True, "manual-upload", 31])
+def test_probe_does_not_treat_invalid_limits_as_owner_exemption(limit):
+    from scripts.source_ocr_limits import inspect_bounded
+    with pytest.raises(OCRError, match="document_page_limit"):
+        inspect_bounded(b"%PDF-invalid", max_pages=limit)
+
+
+def test_manual_mode_retains_invalid_file_and_byte_limits():
+    from scripts.source_ocr_limits import inspect_bounded
+    with pytest.raises(OCRError, match="document_byte_limit"):
+        inspect_bounded(b"%PDF" + b"x" * MAX_BYTES, max_pages=None)
+    with pytest.raises(OCRError, match="invalid_or_encrypted_pdf"):
+        inspect_bounded(b"%PDF-not-valid", max_pages=None)
+
+
+def test_manual_ocr_watchdog_is_per_page_without_changing_automatic_deadline(tmp_path, monkeypatch):
+    from scripts import source_ocr
+    calls = []
+    # The second page starts after the automatic 10-second total deadline.
+    clock = iter([0, 0, 1, 15, 16])
+    monkeypatch.setattr(source_ocr.time, "monotonic", lambda: next(clock))
+    def engine(command, **kwargs):
+        calls.append(kwargs["timeout"])
+        output = Path(command[2])
+        output.with_suffix(".txt").write_text("", encoding="utf-8")
+        output.with_suffix(".tsv").write_text(TSV_HEADER, encoding="utf-8")
+    monkeypatch.setattr(source_ocr.subprocess, "run", engine)
+    assert source_ocr._ocr_pages([tmp_path / "1.png", tmp_path / "2.png"], tmp_path, 10, {}, per_page_deadline=True) == ("\f", [], [1, 2])
+    assert calls == [9, 9]
+
+
+@pytest.mark.skipif(not all(shutil.which(name) for name in ("tesseract", "pdftoppm")), reason="real OCR tools unavailable")
+def test_real_manual_pdf_processes_all_37_pages_without_truncation():
+    result = extract(multipage_source(37), max_pages=None, timeout=30)
+    assert result["page_count"] == 37
+    assert result["completed_pages"] == list(range(1, 38))
+    assert len(result["native_pages"]) == 37
+    assert {word["page_num"] for word in result["words"]} == set(range(1, 38))

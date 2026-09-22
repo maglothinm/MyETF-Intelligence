@@ -1675,3 +1675,19 @@ Use only recorded pending reasons associated with the exact published profile
 index. Display existing population-level last advancement, explicitly not a
 per-profile timestamp. Do not infer advancement from successful maintenance.
 This is a read-only presentation change, not a score/model/state/schedule change.
+
+## 2026-09-22 â€” Separate manual page admission from automatic collection (#222)
+
+The owner withdrew a global 30-to-50-page increase and requested an exemption for
+manual uploads. Keep automatic MAX_PAGES at 30; only the existing authenticated,
+allowlisted upload inbox passes an explicit no-page-cap policy through isolated
+inspection and the canonical OCR worker. Filing fields, names and browser-supplied
+flags cannot select it for automatic downloads. Preserve byte/pixel/process/output
+safeguards and all access/source-authenticity checks. Manual OCR uses a watchdog
+per physical page; it does not truncate a source or import partial evidence.
+
+This is a page-count exemption, not unlimited storage/memory or removal of the
+20-MiB file-size limit, queue/rate controls, expiry or owner confirmation. Automatic
+retries keep their genuine status/backoff. Preserve extraction version/cache and
+sole snapshot-writer/commit/acknowledgement contracts. Source tests and merged code
+remain distinct from owner-approved Windows activation and live acceptance.
