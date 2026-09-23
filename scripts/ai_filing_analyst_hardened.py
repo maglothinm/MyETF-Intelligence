@@ -856,9 +856,17 @@ def _finish_analyst_run(
         # Add to the existing CSV without modifying the preserved legacy analyst.
         import csv
         path = config.analyses_csv_path
-        with path.open(encoding="utf-8", newline="") as stream:
-            reader = csv.DictReader(stream)
-            fields, rows = list(reader.fieldnames or []), list(reader)
+        # This is our own generated export, whose retained JSON cells can exceed
+        # the CSV reader's default 128-KiB limit. Bound the reader by this file's
+        # size and restore its process-wide setting even when parsing fails.
+        previous_limit = csv.field_size_limit()
+        try:
+            csv.field_size_limit(max(previous_limit, path.stat().st_size))
+            with path.open(encoding="utf-8", newline="") as stream:
+                reader = csv.DictReader(stream)
+                fields, rows = list(reader.fieldnames or []), list(reader)
+        finally:
+            csv.field_size_limit(previous_limit)
         if discovery_evidence.FIELD not in fields:
             fields.append(discovery_evidence.FIELD)
         with path.open("w", encoding="utf-8", newline="") as stream:
