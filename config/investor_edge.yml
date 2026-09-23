@@ -4,6 +4,7 @@ max_modifier: 12
 minimum_completed_trades: 3
 confidence_prior_trades: 8
 max_history_trades: 40
+# Legacy retention-sizing input only; never caps profile visibility or the work queue.
 leaderboard_max_investors: 40
 backfill_analysis_limit_per_run: 30
 observation_retention_limit: 2000

@@ -487,6 +487,40 @@ test('Investor Edge legacy, invalid and failed telemetry never imply zero pendin
   assert.deepEqual(env.errors, []);
 });
 
+test('filer search finds reversed names beyond forty profiles and survives refresh', async t => {
+  const env = await dashboard({change(data) {
+    data['investor-edge'] = {investors: [
+      ...Array.from({length: 65}, (_, i) => ({filer:`TEST Filer ${i}`, owner:'Self', sample_count:0, minimum_sample_met:false})),
+      {filer:'Trump, Donald J', owner:'Self', sample_count:0, minimum_sample_met:false,
+        evidence_status:'unknown', evidence_reason:'filing_review_required', source_review_count:1}
+    ]};
+  }}); t.after(env.close);
+  await env.navigate('#investor-edge', () => env.byId('edge-building-body').children.length === 66);
+  const search = env.byId('edge-profile-search');
+  search.focus(); search.value = 'donald TRUMP'; search.dispatchEvent(new env.window.Event('input'));
+  assert.equal(env.byId('edge-building-body').children.length, 1);
+  assert.match(env.byId('edge-building-body').textContent, /Trump, Donald J/);
+  assert.match(env.byId('edge-building-body').textContent, /source filing requires review/);
+  assert.equal(env.byId('edge-building').open, true);
+  assert.match(env.byId('edge-profile-results').textContent, /1 of 66/);
+  await env.refresh();
+  assert.equal(search.value, 'donald TRUMP');
+  assert.equal(env.byId('edge-building-body').children.length, 1);
+  assert.equal(env.window.document.activeElement, search);
+  const filter = env.byId('edge-profile-state');
+  filter.value = 'assessable'; filter.dispatchEvent(new env.window.Event('change'));
+  assert.match(env.byId('edge-profile-results').textContent, /0 of 66/);
+  filter.value = 'review'; filter.dispatchEvent(new env.window.Event('change'));
+  assert.match(env.byId('edge-profile-results').textContent, /1 of 66/);
+  search.value = '<img onerror=bad()>'; search.dispatchEvent(new env.window.Event('input'));
+  assert.match(env.byId('edge-profile-results').textContent, /0 of 66/);
+  assert.equal(env.byId('edge-building-body').querySelector('img'), null);
+  env.byId('edge-profile-clear').click();
+  assert.equal(search.value, ''); assert.equal(filter.value, 'all');
+  assert.equal(env.byId('edge-building-body').children.length, 66);
+  assert.deepEqual(env.errors, []);
+});
+
 function healthRun(id, finished_utc, extra = {}) {
   return {id, run_key: id, branch: 'legislative', finished_utc,
     status: 'success', success: true, error_count: 0, errors: [], new_record_count: 0,

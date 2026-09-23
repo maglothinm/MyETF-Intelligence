@@ -962,16 +962,17 @@ def test_zero_budget_publishes_all_building_profiles_and_actual_population_count
     leaderboard = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
     payload = json.loads((tmp_path / LEADERBOARD_FILE).read_text(encoding="utf-8"))
 
-    assert len(leaderboard) == 4
+    assert len(leaderboard) == 5
     assert all(profile["sample_count"] == 0 and profile["edge_score"] == 50 for profile in leaderboard)
     assert all(profile["followable_alpha"] is None for profile in leaderboard)
-    assert all(profile["backfill_pending_trade_count"] == 1 for profile in leaderboard)
+    assert sum(profile["backfill_pending_trade_count"] for profile in leaderboard) == 4
+    assert sum(profile["evidence_status"] == "unknown" for profile in leaderboard) == 1
     assert payload["historical_transaction_count"] == 5
     assert payload["eligible_purchase_count"] == 4
     assert payload["unique_investor_identity_count"] == 4
-    assert payload["published_profile_count"] == 4
+    assert payload["published_profile_count"] == 5
     assert payload["completed_profile_count"] == 0
-    assert payload["building_profile_count"] == 4
+    assert payload["building_profile_count"] == 5
     assert payload["backfill_pending_observation_count"] == 4
     assert payload["network_requests_this_run"] == 0
     assert payload["branch_transaction_counts"] == {"legislative": 3, "executive": 2}
@@ -1071,11 +1072,74 @@ def test_population_limits_and_order_are_deterministic(tmp_path: Path) -> None:
     first = forward.refresh_leaderboard(history, as_of=date(2025, 6, 1))
     second = reverse.refresh_leaderboard(list(reversed(history)), as_of=date(2025, 6, 1))
 
-    assert len(first) == len(second) == 3
+    assert len(first) == len(second) == 4
     assert forward.population_metadata["unique_investor_identity_count"] == 4
-    assert forward.population_metadata["published_profile_count"] == 3
+    assert forward.population_metadata["published_profile_count"] == 4
     assert set(forward.observations) == set(reverse.observations)
     assert [profile["investor_key"] for profile in first] == [profile["investor_key"] for profile in second]
+
+
+def test_complete_directory_and_restart_cursor_cross_old_population_cap(tmp_path: Path) -> None:
+    config = core_config(backfill_analysis_limit_per_run=30, leaderboard_max_investors=40)
+    history = [purchase(date(2024, 1, 1), trade_id=f"t-{i}", filer=f"TEST Filer {i:03}") for i in range(65)]
+    runtime = InvestorEdgeRuntime(config, tmp_path, population_provider(), {})
+    runtime.set_known_filings({"pending": {"filer": "TEST Filing Only", "status": "review_required"}})
+    first = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    assert len(first) == 66
+    assert runtime.backfill_processed_this_run == 30
+    stored = json.loads((tmp_path / OBSERVATION_FILE).read_text(encoding="utf-8"))
+    previous_keys = set(stored["observations"])
+    resumed = InvestorEdgeRuntime(config, tmp_path, population_provider(), runtime.profiles, stored["observations"],
+                                  last_backfill_investor_key=stored["backfill"]["last_investor_key"])
+    resumed.set_known_filings({"pending": {"filer": "TEST Filing Only", "status": "review_required"}})
+    second = resumed.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    assert len(second) == 66
+    assert resumed.backfill_processed_this_run == 30
+    assert len(resumed.observations) == 60
+    assert any(o["investor_key"] == "test-filer-059|self" for o in resumed.observations.values())
+    assert previous_keys < set(resumed.observations)
+
+
+def test_filing_only_and_ineligible_directory_entries_are_unknown_without_market_calls(tmp_path: Path) -> None:
+    provider = population_provider()
+    provider.daily = provider.sector = lambda *a, **k: pytest.fail("directory discovery cannot call providers")
+    runtime = InvestorEdgeRuntime(core_config(), tmp_path, provider, {})
+    runtime.set_known_filings({
+        "pending": {"filer": "TEST Pending", "status": "review_required"},
+        "known": {"filer": "TEST Bond Holder", "status": "processed"},
+        "other": {"filer": "TEST Other", "status": "processed"},
+    })
+    history = [purchase(date(2024, 1, 1), trade_id="bond", filer="TEST Bond Holder", ticker="", equity_like=False)]
+    profiles = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    by_name = {p["filer"]: p for p in profiles}
+    assert len(profiles) == 3
+    assert all(p["evidence_status"] == "unknown" and p["sample_count"] == 0 for p in profiles)
+    assert by_name["TEST Pending"]["evidence_reason"] == "filing_review_required"
+    assert by_name["TEST Pending"]["edge_score"] is None
+    assert by_name["TEST Bond Holder"]["evidence_reason"] == "no_eligible_equity_purchases"
+    assert by_name["TEST Bond Holder"]["known_filing_count"] == 1
+    assert by_name["TEST Other"]["evidence_reason"] == "no_imported_transactions"
+    assert runtime.observations == {}
+    assert runtime.population_metadata["completed_profile_count"] == 0
+    assert runtime.population_metadata["known_filer_count"] == 3
+
+
+def test_directory_keeps_owners_and_conflicting_ids_separate_and_preserves_last_good(tmp_path: Path) -> None:
+    runtime = InvestorEdgeRuntime(core_config(backfill_analysis_limit_per_run=0), tmp_path, population_provider(), {})
+    history = [purchase(date(2024, 1, 1), trade_id=str(i), filer="TEST Same", filer_id=pid, owner=owner)
+               for i, (pid, owner) in enumerate((("a", "Self"), ("a", "Spouse"), ("b", "Self")))]
+    runtime.set_known_filings({"filing": {"filer": "TEST Same", "filer_id": "a", "status": "review_required"}})
+    profiles = runtime.refresh_leaderboard(history, as_of=date(2025, 6, 1))
+    assert len(profiles) == 3
+    assert {p["investor_key"] for p in profiles if p["source_review_count"]} == {"id-a|self", "id-a|spouse"}
+    previous = dict(profiles[0], sample_count=4, minimum_sample_met=True, edge_score=63.2)
+    runtime.profiles[previous["investor_key"]] = previous
+    retained = runtime.refresh_leaderboard([], as_of=date(2025, 6, 1), allow_backfill=False)
+    kept = next(p for p in retained if p["investor_key"] == previous["investor_key"])
+    assert kept["edge_score"] == previous["edge_score"]
+    assert kept["sample_count"] == 4
+    assert kept["evidence_status"] == "unknown"
+    assert kept["profile_status"] == "stale_last_good"
 
 
 def test_population_stops_market_work_at_request_budget_but_keeps_inventory(tmp_path: Path) -> None:

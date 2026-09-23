@@ -982,6 +982,7 @@ def run_analyst(
                     or config.rules_path.with_name("investor_edge.yml")
                 ),
             )
+            investor_edge.set_known_filings(filings)
         except Exception as exc:
             result.warnings.append(
                 f"Investor Edge disabled: {type(exc).__name__}: "

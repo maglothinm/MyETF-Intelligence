@@ -141,3 +141,11 @@ body {max-width:100%}
 .edge-secondary>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
 #edge-building-body td:nth-child(3){white-space:normal;min-width:16rem;max-width:42rem;overflow-wrap:anywhere;}
 .edge-secondary .table-wrap{margin-block:.75rem;}
+
+/* Inclusive filer directory: search controls remain usable on narrow screens. */
+.edge-directory-filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
+.edge-directory-filters label { display:grid; gap:6px; flex:1 1 220px; min-width:0; color:var(--muted); }
+.edge-directory-filters input, .edge-directory-filters select { width:100%; min-width:0; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); color:var(--text); }
+.edge-directory-filters .search-label { margin:0; }
+.edge-directory-filters button, .edge-directory-filters a { flex:0 0 auto; }
+.edge-directory-filters :focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
