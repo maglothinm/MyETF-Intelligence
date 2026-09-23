@@ -17,6 +17,37 @@ def test_compatibility_entrypoint_routes_shared_module_namespace() -> None:
     assert legacy.openai_analyze is hardened.openai_analyze
     assert legacy.notify_candidate.__globals__ is legacy.__dict__
 
+
+def test_finish_exports_discovery_with_large_retained_csv_field(tmp_path: Path) -> None:
+    import csv
+
+    cfg = _config(tmp_path)
+    _prepare(cfg)
+    large = 'TEST evidence, "quoted"\n' + "\u00e9" * 131_073
+    analysis = {**_trade(1), "analysis_id": "TEST-retained", "asset": large,
+                "analyzed_at_utc": "2026-09-08T15:00:00Z"}
+    path = cfg.ai_dir / "analyses.jsonl"
+    _write_jsonl(path, [analysis])
+    retained = path.read_bytes()
+    previous_limit = csv.field_size_limit(131_072)
+    try:
+        result = hardened._finish_analyst_run(
+            cfg, hardened.AnalystRunResult(started_utc=legacy.iso_utc()),
+            legacy.AIState(), cfg.ai_dir / "state.json",
+        )
+        assert result.success and result.state_publishable
+        assert csv.field_size_limit() == 131_072
+        assert path.read_bytes() == retained
+        csv.field_size_limit(cfg.analyses_csv_path.stat().st_size)
+        with cfg.analyses_csv_path.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        assert len(rows) == 1 and rows[0]["asset"] == large
+        evidence = json.loads(rows[0]["information_value_at_discovery"])
+        assert evidence["identity"]["trade_id"] == analysis["trade_id"]
+        assert evidence["status"] == "unknown"
+    finally:
+        csv.field_size_limit(previous_limit)
+
 def _payload() -> dict:
     return {
         "analysis_summary": "Public evidence supports only a conservative review.",

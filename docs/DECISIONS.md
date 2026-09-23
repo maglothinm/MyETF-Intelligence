@@ -1707,3 +1707,12 @@ provider, quality and comparable price basis. Quantify only supported security
 price movement; missing evidence remains unknown and legacy values keep their
 limitations. This field does not modify qualification or notification decisions
 and does not evaluate or score public officials. See DISCOVERY_EVIDENCE.md.
+
+
+## 2026-09-23 — Preserve large retained cells during discovery export (#225)
+
+The hardened analyst may temporarily raise its CSV reader limit to the size of
+its own generated export, restoring the prior process-wide setting afterward.
+Retained JSON/text fields are not truncated to satisfy a parser default. Keep
+analysis history, snapshot publication gates and the preserved legacy analyst
+unchanged; verify the export path with an oversized retained-field regression.
