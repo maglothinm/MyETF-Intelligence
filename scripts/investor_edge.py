@@ -10,6 +10,7 @@ into the generated dashboard site.
 
 from __future__ import annotations
 
+import csv
 import html
 import hashlib
 import json
@@ -1078,6 +1079,117 @@ class InvestorEdgeRuntime:
     progress_recorded: bool = False
     progress_unavailable: bool = False
     progress_market_rows: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    known_filings: list[Mapping[str, Any]] = field(default_factory=list)
+
+    def set_known_filings(self, filings: Mapping[str, Mapping[str, Any]]) -> None:
+        """Use the restored filing catalog without importing its unreviewed rows."""
+        self.known_filings = list(filings.values())
+
+    def _directory(
+        self, assessed: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]], *, as_of: date,
+    ) -> tuple[dict[str, list[Mapping[str, Any]]], dict[str, list[Mapping[str, Any]]], dict[str, Mapping[str, Any]]]:
+        # Index once so a complete catalog does not rescan every trade for each filer.
+        described = [
+            (row, assessment["identity"]) for row, assessment in assessed
+            if assessment["identity"].get("investor_key")
+            and "synthetic_or_temporary" not in assessment.get("excluded_reasons", [])
+            and (_public_date(row) or as_of) <= as_of
+        ]
+        stable: dict[tuple[str, str], set[str]] = {}
+        for _, identity in described:
+            group = (identity["filer_name_key"], identity["owner_key"])
+            if identity.get("filer_stable_id"):
+                stable.setdefault(group, set()).add(identity["filer_stable_id"])
+        records: dict[str, list[Mapping[str, Any]]] = {}
+        seeds: dict[str, Mapping[str, Any]] = {}
+        for row, identity in described:
+            key = identity["investor_key"]
+            ids = stable.get((identity["filer_name_key"], identity["owner_key"]), set())
+            if not identity.get("filer_stable_id") and len(ids) == 1:
+                key = f"id-{next(iter(ids))}|{identity['owner_key']}"
+            records.setdefault(key, []).append(row)
+            if key not in seeds or identity["investor_key"] == key:
+                seeds[key] = row
+        # Retained identities remain discoverable if a later catalog has no rows
+        # for them. Do not replace their last-good assessment with a blank profile.
+        for key, profile in self.profiles.items():
+            if key not in records and profile.get("filer"):
+                identity = self._persisted_profile_identity(profile)
+                group = (identity.get("filer_name_key"), identity.get("owner_key"))
+                aliases = stable.get(group, set())
+                if not identity.get("filer_stable_id") and len(aliases) == 1:
+                    continue
+                records[key] = []
+                seeds[key] = {"filer": profile["filer"], "owner": profile.get("owner_raw") or profile.get("owner"),
+                              "filer_id": identity.get("filer_stable_id") or ""}
+
+        # A filing has no disclosed account owner. Attach it to known accounts;
+        # create an unknown-owner entry only when this filer has no transaction profile.
+        by_name: dict[str, set[str]] = {}
+        by_id: dict[str, set[str]] = {}
+        for key, seed in seeds.items():
+            identity = investor_identity(seed)
+            by_name.setdefault(identity["filer_name_key"], set()).add(key)
+            if identity.get("filer_stable_id"):
+                by_id.setdefault(identity["filer_stable_id"], set()).add(key)
+        filing_groups: dict[str, list[Mapping[str, Any]]] = {}
+        for filing in self.known_filings:
+            identity = investor_identity(filing)
+            if not identity.get("investor_key") or (_public_date(filing) or as_of) > as_of:
+                continue
+            if "synthetic_or_temporary" in history_trade_eligibility(filing)["excluded_reasons"]:
+                continue
+            stable_id = identity.get("filer_stable_id")
+            keys = by_id.get(stable_id, set()) if stable_id else set()
+            if not keys:
+                candidates = by_name.get(identity["filer_name_key"], set())
+                candidate_ids = {investor_identity(seeds[k]).get("filer_stable_id") for k in candidates} - {"", None}
+                if not stable_id or not candidate_ids or candidate_ids == {stable_id}:
+                    keys = candidates
+            if not keys:
+                key = identity["investor_key"]
+                seeds.setdefault(key, filing)
+                records.setdefault(key, [])
+                keys = {key}
+            for key in keys:
+                filing_groups.setdefault(key, []).append(filing)
+        return records, filing_groups, seeds
+
+    def _directory_profile(
+        self, key: str, records: Sequence[Mapping[str, Any]],
+        filings: Sequence[Mapping[str, Any]], seed: Mapping[str, Any], *, as_of: date,
+    ) -> dict[str, Any]:
+        if records:
+            profile = self.profile_for_investor(key, records, as_of=as_of, allow_backfill=False)
+        elif key in self.profiles and int(self.profiles[key].get("sample_count") or 0):
+            profile = dict(self.profiles[key])
+            profile["profile_status"] = "stale_last_good"
+        else:
+            # A catalog entry is not a trade, a measured zero, or an invented observation.
+            profile = neutral_profile(seed, reason="no_imported_transactions")
+            profile.update(investor_key=key, edge_score=None, raw_edge_score=None,
+                           profile_status="unknown", minimum_sample_met=False,
+                           eligible_trade_count=0, backfill_pending_trade_count=0)
+        review_count = sum(str(row.get("status") or "").lower() in {
+            "review_required", "needs_review", "pending_review", "pending", "access_required",
+        } for row in filings)
+        eligible_count = int(profile.get("eligible_trade_count") or 0)
+        if not eligible_count and not int(profile.get("sample_count") or 0):
+            profile["profile_status"] = "unknown"
+        ready = bool(records) and bool(profile.get("minimum_sample_met")) and int(profile.get("sample_count") or 0) > 0
+        reason = (
+            "filing_review_required" if not records and review_count else
+            "no_imported_transactions" if not records else
+            "no_eligible_equity_purchases" if not eligible_count else
+            "insufficient_completed_observations" if not ready else "assessment_available"
+        )
+        profile.update(
+            evidence_status="assessable" if ready else "building" if records and eligible_count else "unknown",
+            evidence_reason=reason, known_transaction_count=len(records),
+            known_filing_count=len(filings), source_review_count=review_count,
+        )
+        self.profiles[key] = profile
+        return profile
 
     def __post_init__(self) -> None:
         # Old methodology versions and long-lived unavailable attempts must not
@@ -2311,49 +2423,27 @@ class InvestorEdgeRuntime:
             and (_parse_date(item.get("transaction_date")) or as_of) <= as_of
             and (_public_date(item) or as_of) <= as_of
         ]
-        identified = [(item, investor_identity(item)) for item in eligible]
-        stable_by_name_owner: dict[tuple[str, str], set[str]] = {}
-        for _, identity in identified:
-            group = (
-                str(identity.get("filer_name_key") or ""),
-                str(identity.get("owner_key") or ""),
-            )
-            stable = str(identity.get("filer_stable_id") or "")
-            if group[0] and stable:
-                stable_by_name_owner.setdefault(group, set()).add(stable)
-
-        canonical_keys: list[str] = []
-        for _, identity in identified:
-            key = str(identity.get("investor_key") or "")
-            if not identity.get("filer_stable_id"):
-                group = (
-                    str(identity.get("filer_name_key") or ""),
-                    str(identity.get("owner_key") or ""),
-                )
-                stable_ids = stable_by_name_owner.get(group, set())
-                if len(stable_ids) == 1:
-                    key = f"id-{next(iter(stable_ids))}|{group[1]}"
-            canonical_keys.append(key)
-        counts = Counter(canonical_keys)
-        population_limit = max(0, min(1_000, int(self.config.get("leaderboard_max_investors", 40))))
-        keys = sorted((key for key in counts if key), key=lambda key: (-counts[key], key))[
-            :population_limit
-        ]
+        records, filings, seeds = self._directory(assessed, as_of=as_of)
+        eligible_ids = {id(item) for item in eligible}
+        counts = {key: sum(id(item) in eligible_ids for item in rows) for key, rows in records.items()}
+        counts = {key: count for key, count in counts.items() if count}
+        keys = sorted(records)
+        work_keys = sorted(counts, key=lambda key: (-counts[key], key))
         # No provider calls occur during discovery, even for sector mappings.
         # Every selected identity has a real, neutral/building profile on disk
         # before one investor's market history is attempted.
         leaderboard = [
-            self.profile_for_investor(key, transactions, as_of=as_of, allow_backfill=False)
+            self._directory_profile(key, records[key], filings.get(key, []), seeds[key], as_of=as_of)
             for key in keys
         ]
         self._update_population_metadata(transactions, assessed, eligible, counts, leaderboard, as_of=as_of)
         self.save(leaderboard)
         if allow_backfill and self.enabled:
             progress_before = self._progress_inventory(leaderboard, as_of=as_of)
-            self._backfill_population(keys, transactions, as_of=as_of)
+            self._backfill_population(work_keys, transactions, as_of=as_of, records_by_key=records)
             self.population_maintenance_complete = True
             leaderboard = [
-                self.profile_for_investor(key, transactions, as_of=as_of, allow_backfill=False)
+                self._directory_profile(key, records[key], filings.get(key, []), seeds[key], as_of=as_of)
                 for key in keys
             ]
         if allow_backfill and self.enabled and not self.progress_recorded:
@@ -2384,6 +2474,7 @@ class InvestorEdgeRuntime:
         transactions: Sequence[Mapping[str, Any]],
         *,
         as_of: date,
+        records_by_key: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     ) -> None:
         max_history = max(0, min(250, int(self.config.get("max_history_trades", 40))))
         horizons = list(dict.fromkeys(
@@ -2392,8 +2483,11 @@ class InvestorEdgeRuntime:
         ))
         queues: dict[str, list[Mapping[str, Any]]] = {}
         for key in keys:
-            seeds = [item for item in transactions if investor_key(item) == key]
-            compatible = _matching_investor_records(seeds[-1], transactions) if seeds else []
+            if records_by_key is not None:
+                compatible = records_by_key.get(key, [])
+            else:
+                seeds = [item for item in transactions if investor_key(item) == key]
+                compatible = _matching_investor_records(seeds[-1], transactions) if seeds else []
             history = sorted(
                 (
                     item for item in compatible
@@ -2501,6 +2595,7 @@ class InvestorEdgeRuntime:
         completed = sum(
             int(profile.get("backfill_pending_trade_count") or 0) == 0
             and int(profile.get("sample_count") or 0) >= minimum
+            and profile.get("evidence_status") != "unknown"
             for profile in leaderboard
         )
         branches = Counter(_normal(item.get("branch")).casefold() for item in transactions)
@@ -2521,6 +2616,11 @@ class InvestorEdgeRuntime:
             "eligible_purchase_count": len(eligible),
             "unique_investor_identity_count": sum(bool(key) for key in counts),
             "published_profile_count": len(leaderboard),
+            "known_filer_count": len({
+                str((profile.get("identity") or {}).get("filer_key") or profile.get("filer"))
+                for profile in leaderboard
+            }),
+            "profile_population_scope": "all_known_filers",
             "completed_profile_count": completed,
             "building_profile_count": len(leaderboard) - completed,
             "backfill_processed_this_run": self.backfill_processed_this_run,
@@ -2954,7 +3054,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
     # work (or completed coverage) from a legacy publication without telemetry.
     history_fields = (
         "historical_transaction_count", "eligible_purchase_count",
-        "unique_investor_identity_count", "published_profile_count",
+        "unique_investor_identity_count", "published_profile_count", "known_filer_count",
         "completed_profile_count", "building_profile_count",
         "backfill_processed_this_run", "backfill_pending_observation_count",
         "backfill_limit_per_run", "network_requests_this_run",
@@ -2965,6 +3065,9 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
     history = {key: history_count(source_metadata.get(key)) for key in history_fields}
+    history["profile_population_scope"] = (
+        "all_known_filers" if source_metadata.get("profile_population_scope") == "all_known_filers" else "unknown"
+    )
     history["profile_inventory_available"] = inventory_available
     branches = source_metadata.get("branch_transaction_counts")
     history["branch_transaction_counts"] = {
@@ -3026,6 +3129,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
         edge_number = item.get("edge_score")
         has_observations = bool(
             inventory_available and sample_number is not None and sample_number > 0
+            and item.get("evidence_status") != "unknown"
             and (item.get("minimum_sample_met") is True or item.get("minimum_sample_met") is not False and sample_number >= 3)
             and item.get("status") not in {"insufficient_data", "unavailable", "error", "disabled", "neutral"}
             and isinstance(edge_number, (int, float)) and not isinstance(edge_number, bool)
@@ -3142,7 +3246,7 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
             "</td></tr>"
         )
 
-    evidence_fields = ("filer", "owner", "sample_count", "observation_count", "minimum_sample_met", "status", "edge_score", "backfill_pending_trade_count")
+    evidence_fields = ("filer", "owner", "sample_count", "observation_count", "minimum_sample_met", "status", "edge_score", "backfill_pending_trade_count", "evidence_status", "evidence_reason", "source_review_count")
     evidence = {**history, "investors": [{k: item[k] for k in evidence_fields if k in item} for item in investors]}
     evidence_json = json.dumps(evidence, ensure_ascii=True).replace("<", "\\u003c")
     assessment_summary = ("Investor Edge data unavailable. No zero-count or completeness assumption is made." if not inventory_available else f"{len(rows)} assessable profiles. Zero and negative measured results remain visible." if rows else "No assessable profiles yet. Expand Building history for retained profiles and reasons.")
@@ -3188,7 +3292,12 @@ def build_dashboard_addon(ai_dir: Path | None, output_dir: Path) -> None:
 </section>
 <section class='panel'>
   <div class='panel-header'><div><h2>Investor performance heat map</h2><p>5/20/60/120-session values are average benchmark-relative returns from the first trading session after public observation. Open a drilldown to inspect transaction- and post-disclosure evidence.</p></div></div>
-  <label class='search-label' for='edge-search'>Filter investors and historical trades<input id='edge-search' type='search' placeholder='Identity, filer, owner, ticker, sector…' autocomplete='off'></label>
+  <div class='edge-directory-filters'>
+  <label class='search-label' for='edge-search'>Find a filer or historical trade<input id='edge-search' type='search' placeholder='Filer name, owner, ticker…' autocomplete='off'></label>
+  <label class='search-label' for='edge-profile-state'>History status<select id='edge-profile-state'><option value='all'>All profiles</option><option value='assessable'>Assessable</option><option value='building'>Building / unknown</option><option value='review'>Source review pending</option></select></label>
+  <button type='button' id='edge-profile-clear'>Clear filters</button>
+  <a href='data/investor-edge.csv' download>Download all profiles (CSV)</a>
+  </div><p id='edge-profile-results' role='status' aria-live='polite'></p>
   <div class='table-wrap'><table id='edge-table'><caption class='visually-hidden'>Assessable Investor Edge profiles with grouped historical-trade drilldowns</caption><thead><tr><th scope='col'>Investor identity / key</th><th scope='col'>Filer</th><th scope='col'>Owner / account</th><th scope='col'>Edge {help_control('investorEdge', 'Investor Edge')}</th><th scope='col'>Confidence {help_control('edgeConfidence', 'Investor Edge confidence')}</th><th scope='col'>Observations</th><th scope='col'>5D followable α {help_control('followableAlpha', '5-session followable alpha')}</th><th scope='col'>20D followable α {help_control('followableAlpha', '20-session followable alpha')}</th><th scope='col'>60D followable α {help_control('followableAlpha', '60-session followable alpha')}</th><th scope='col'>120D followable α {help_control('followableAlpha', '120-session followable alpha')}</th><th scope='col'>Hit rate {help_control('followableHitRate', 'followable hit rate')}</th><th scope='col'>Avg disclosure lag</th><th scope='col'>Strongest sector {help_control('sectorEdge', 'sector edge')}</th></tr></thead><tbody>{''.join(rows) if rows else "<tr><td colspan='13' class='empty-row'>No assessable profiles yet. Expand Building history for retained profiles and reasons; unavailable inventory is not zero performance.</td></tr>"}</tbody></table></div>
 </section>
 <details id='edge-building' class='panel edge-secondary'>
@@ -3296,6 +3405,9 @@ summary { padding: 13px 15px; color: var(--accent); font-weight: 800; cursor: po
 }
 """
     js = """const input = document.getElementById("edge-search");
+const stateFilter = document.getElementById("edge-profile-state");
+let directoryData;
+try { directoryData = JSON.parse(document.getElementById("edge-evidence-data").textContent); } catch { directoryData = null; }
 const groupedRows = new Map();
 for (const row of document.querySelectorAll("#edge-table tbody [data-edge-group], #edge-building-table tbody [data-edge-group]")) {
   const key = row.dataset.edgeGroup;
@@ -3304,29 +3416,40 @@ for (const row of document.querySelectorAll("#edge-table tbody [data-edge-group]
 }
 function filterInvestorGroups() {
   const query = input ? input.value.trim().toLowerCase() : "";
-  for (const rows of groupedRows.values()) {
+  let matched = 0;
+  for (const [key, rows] of groupedRows.entries()) {
     const searchable = rows.map(row => row.textContent || "").join(" ").toLowerCase();
-    const visible = !query || searchable.includes(query);
+    const profile = directoryData?.investors?.[Number(key.replace("investor-", ""))] || {};
+    const visible = PTEdgeEvidence.matchesText(searchable, query) && PTEdgeEvidence.matchesState(profile, stateFilter?.value);
+    if (visible) matched++;
     for (const row of rows) row.hidden = !visible;
-    if (query && visible && rows.some(row => row.closest("#edge-building"))) document.getElementById("edge-building").open = true;
+    if ((query || stateFilter?.value !== "all") && visible && rows.some(row => row.closest("#edge-building"))) document.getElementById("edge-building").open = true;
     if (!visible) {
       const detail = rows.map(row => row.querySelector("details")).find(Boolean);
       if (detail) detail.open = false;
     }
   }
+  document.getElementById("edge-profile-results").textContent = PTEdgeEvidence.valid(directoryData) ?
+    `${matched} of ${groupedRows.size} profiles match. Profiles include disclosed owner accounts.` : "Profile inventory unavailable.";
 }
 function revealInvestorHistory() {
   if (!/^#investor-\\d+-details$/.test(location.hash)) return;
   const target = document.getElementById(location.hash.slice(1));
   if (!target) return;
   if (input) input.value = "";
+  if (stateFilter) stateFilter.value = "all";
   filterInvestorGroups();
   for (let node = target; node; node = node.parentElement) if (node.tagName === "DETAILS") node.open = true;
 }
 window.addEventListener("hashchange", revealInvestorHistory);
+filterInvestorGroups();
 revealInvestorHistory();
 let filterTimer;
 if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); filterTimer = setTimeout(filterInvestorGroups, 180);});
+if (stateFilter) stateFilter.addEventListener("change", filterInvestorGroups);
+document.getElementById("edge-profile-clear").addEventListener("click", () => {
+  input.value = ""; stateFilter.value = "all"; filterInvestorGroups(); input.focus();
+});
 """
     # Reuse the complete generator-owned risk dialog and accessible tooltip behavior.
     assets = Path(__file__).with_name("dashboard_assets")
@@ -3344,6 +3467,16 @@ if (input) input.addEventListener("input", () => {clearTimeout(filterTimer); fil
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     _atomic_json(data_dir / "investor-edge.json", {"generated_utc": generated, "investors": investors, **history})
+    csv_fields = ("investor_key", "filer", "owner", "evidence_status", "evidence_reason",
+                  "known_filing_count", "source_review_count", "known_transaction_count",
+                  "eligible_trade_count", "sample_count", "minimum_sample_met", "backfill_pending_trade_count")
+    with (data_dir / "investor-edge.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=csv_fields, extrasaction="ignore")
+        writer.writeheader()
+        for profile in investors:
+            # Match other public exports: treat untrusted text as data in spreadsheets.
+            writer.writerow({key: "'" + value if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")) else value
+                             for key, value in profile.items() if key in csv_fields})
 
     index_path = output_dir / "index.html"
     if index_path.exists():

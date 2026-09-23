@@ -1716,3 +1716,19 @@ its own generated export, restoring the prior process-wide setting afterward.
 Retained JSON/text fields are not truncated to satisfy a parser default. Keep
 analysis history, snapshot publication gates and the preserved legacy analyst
 unchanged; verify the export path with an oversized retained-field regression.
+
+## 2026-09-23 - Separate filer visibility from historical-work budgets (#232)
+
+All known retained filers must be discoverable, including filing-only and
+ineligible-history identities, without inventing measurable evidence. Owner
+accounts and stable identity boundaries remain distinct. Complete catalog
+publication is independent of eligibility for equity analysis. Show unknown or
+building status and supported source-review reasons; provide filer search and
+history-status filtering on both profile surfaces plus complete JSON/CSV exports.
+
+Remove the 40-identity admission cap from the durable fair queue. Keep existing
+per-run observation/provider limits, per-investor history and retention limits,
+and the persisted round-robin cursor. The legacy leaderboard_max_investors setting
+remains only a fallback retention-sizing input; it never restricts directory
+visibility. This does not change scoring, market evidence, notifications, review
+decisions, snapshot authority or writer/scheduler ownership.

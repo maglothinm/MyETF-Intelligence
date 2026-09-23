@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import shutil
+import subprocess
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -32,6 +35,67 @@ from scripts.run_investor_edge_simulation import simulate_analysis_record
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_complete_directory_exports_and_standalone_filer_filters(tmp_path: Path) -> None:
+    ai_dir = tmp_path / "ai"
+    ai_dir.mkdir()
+    profiles = [{"investor_key": f"test-{i}|self", "filer": f"TEST Filer {i}", "owner": "Self",
+                 "sample_count": 0, "minimum_sample_met": False, "evidence_status": "unknown"}
+                for i in range(65)]
+    profiles += [{"investor_key": "test-target|self", "filer": "Trump, Donald J", "owner": "Self",
+                  "sample_count": 0, "minimum_sample_met": False, "source_review_count": 1,
+                  "evidence_status": "unknown", "evidence_reason": "filing_review_required"},
+                 {"investor_key": "test-hostile", "filer": "=TEST<img src=x onerror=bad()>", "owner": "Other",
+                  "sample_count": 0, "minimum_sample_met": False, "evidence_status": "unknown"}]
+    (ai_dir / "investor-edge-leaderboard.json").write_text(json.dumps({"investors": profiles,
+        "known_filer_count": 67, "profile_population_scope": "all_known_filers"}), encoding="utf-8")
+    output = tmp_path / "site"
+    build_dashboard_addon(ai_dir, output)
+    exported = json.loads((output / "data/investor-edge.json").read_text(encoding="utf-8"))
+    assert exported["investors"] == profiles
+    assert exported["known_filer_count"] == 67
+    with (output / "data/investor-edge.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 67
+    assert rows[-2]["evidence_reason"] == "filing_review_required"
+    assert rows[-1]["filer"].startswith("'=TEST")
+    soup = BeautifulSoup((output / "investor-edge.html").read_text(encoding="utf-8"), "html.parser")
+    assert len(soup.select("tr.investor-row")) == 67
+    assert not soup.select("img[onerror]")
+    assert soup.select_one("label[for=edge-search]")
+    node = os.environ.get("POLITITRACK_TEST_NODE") or shutil.which("node")
+    modules = Path(os.environ.get("POLITITRACK_TEST_NODE_MODULES", ROOT / ".remediation/ui-test-tools/node_modules"))
+    if not node or not (modules / "jsdom/package.json").exists():
+        pytest.skip("Export assertions passed; optional standalone DOM check requires jsdom")
+    script = r'''
+const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
+const {JSDOM} = require(path.join(process.argv[2], 'jsdom'));
+const dir = process.argv[1];
+const dom = new JSDOM(fs.readFileSync(path.join(dir, 'investor-edge.html'), 'utf8'), {url:'https://example.test/investor-edge.html',runScripts:'outside-only'});
+const w = dom.window, d = w.document;
+w.matchMedia = () => ({matches:false, addEventListener(){}, removeEventListener(){}});
+w.eval(fs.readFileSync(path.join(dir, 'investor-edge.js'), 'utf8'));
+const input = d.getElementById('edge-search'), filter = d.getElementById('edge-profile-state');
+const visible = () => [...d.querySelectorAll('tr.investor-row:not([hidden])')];
+assert.equal(visible().length, 67);
+input.value = 'donald TRUMP';
+filter.dispatchEvent(new w.Event('change'));
+assert.equal(visible().length, 1);
+assert.match(visible()[0].textContent, /source filing requires review/);
+assert.equal(d.getElementById('edge-building').open, true);
+filter.value = 'assessable'; filter.dispatchEvent(new w.Event('change'));
+assert.equal(visible().length, 0);
+assert.match(d.getElementById('edge-profile-results').textContent, /0 of 67/);
+filter.value = 'review'; filter.dispatchEvent(new w.Event('change'));
+assert.equal(visible().length, 1);
+d.getElementById('edge-profile-clear').click();
+assert.equal(visible().length, 67); assert.equal(d.activeElement, input);
+assert.equal(d.querySelector('img[onerror]'), null);
+dom.window.close();
+'''
+    result = subprocess.run([node, "-e", script, str(output), str(modules)], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("pending, expected", [(7, "Historical backfill status unavailable"), (0, "Historical backfill status unavailable")])
