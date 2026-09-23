@@ -43,4 +43,3 @@ search, per-run budgets, prior snapshot fingerprints, untracked files and the
 unchanged original manual-upload review receipt. Keep #232 open until live checks.
 Issue #225 retains its separate pending-upload outage acceptance boundary; do not
 re-upload, requeue, approve, rebaseline or revive cloud/legacy writers for this work.
-
