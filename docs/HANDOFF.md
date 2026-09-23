@@ -1,61 +1,80 @@
 # PolitiTrack active handoff
 
-## September 23 #232 - complete filer directory merged; Windows activation canceled
+## September 23 #232 - activated on Beast; complete directory and search verified live
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
-[PR #233](https://github.com/maglothinm/MyETF-Intelligence/pull/233) merged as
-**83501363c719aa14a46e141ef4c94cfb0532d23b**, matching tested head
-**a37133f08d4e77b164e89d27bb4625ec31b89c40**. It removes the 40-profile admission
-cap, publishes all retained known filers with explicit evidence/review status,
-keeps background observation/provider limits, and adds filer-name/status filters
-and complete CSV export on root and standalone profile views.
+Session branch `codex/profiles232-live-receipt`, based on main
+`a5904b0af624c3f2b40daf10912e24c7b01e26d8`; this receipt changes documentation only.
+[PR #233](https://github.com/maglothinm/MyETF-Intelligence/pull/233) release
+**83501363c719aa14a46e141ef4c94cfb0532d23b** is installed and configured on Beast, matching tested source
+**a37133f08d4e77b164e89d27bb4625ec31b89c40**. The earlier canceled approval attempt is superseded by the
+owner-authorized retry and successful normal Windows approval.
 
-All exact-head workflows passed on attempt **1**:
-- [Investor Edge 35857964119](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964119).
-- [Runtime v2 safety 35857964150](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964150).
-- [Source upload/OCR 35857964122](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964122).
-- [Current Opportunity 35857964184](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964184).
+### Activation and autonomous publication
 
-Local regression: **412 passed**, using UTF-8 as the Beast launcher does. Root
-and standalone real-browser search/status/clear/responsive checks passed at 1280
-and 390 pixels, with zero JavaScript errors. Offline snapshot replay published
-**1,028 owner profiles covering all 975 known filer names**, including Donald Trump,
-while preserving 62 prior profiles, 1,519 observations and all history-ledger bytes,
-with zero provider requests. Source classification and the original filing review
-were not changed. These are source/offline checks, not live directory acceptance.
+The existing release helper completed at **2026-09-23T12:13:56.9228612Z**, using
+the existing scheduler/web stop-start boundaries. Database PID **25732** remained
+running; web PID **37084** and scheduler PID **39472** are running with automatic
+startup. The readiness endpoint returned HTTP 200. No manual AI/dashboard producer
+run was invoked: the existing native scheduler published both new heads successfully
+with `trigger_source=external_scheduler`, through the existing writer locks:
 
-### Activation boundary
+| Namespace | Generation | Committed UTC | Snapshot SHA-256 |
+|---|---:|---|---|
+| AI | 855 | 2026-09-23 12:14:35.889504 | `2f5a4a08f6efaadfaac5a2f715c1af22b4bd870e060d42a5978507dc9b0c2448` |
+| Dashboard | 1622 | 2026-09-23 12:17:22.266089 | `ac85360a1b473201b913b3c963c17bdcd3437c25cd58345625be88c0efd20cb1` |
 
-The normal administrator prompt was opened at approximately **12:04:36 UTC**.
-Windows subsequently returned **The operation was canceled by the user** before
-the elevated activation script started. No activation receipt or transcript was
-created; no automatic retry was made. As verified at the end of this attempt,
-Beast application/config remain **0c2ab975a837a1d2a28ca4e041019d0103413b54**.
-Database PID **25732**, web PID **36060**, and scheduler PID **38268** remain running
-with automatic startup. The directory change is **merged, not activated**.
+Both heads record source revision `83501363c719aa14a46e141ef4c94cfb0532d23b`. Read-only verification at
+**2026-09-23T12:17:52.587355+00:00** found **1,028 distinct owner profiles covering all
+975 known filer names**, including Donald Trump. All published filing names are
+represented. Persisted AI, served JSON and CSV agree exactly; seven served data/UI
+routes match the committed dashboard snapshot bytes. The existing per-run budgets
+remain 30 historical observations and 40 provider requests; the accepted AI run used
+30 and 40 respectively. These are background limits, not directory admission limits.
 
-The read-only continuity checkpoint at `2026-09-23T12:02:16.803496+00:00` covers
-**4,706 immutable snapshot headers**, digest `7d77ad4fde7c22093e23f7424666093f`.
-The after-attempt verification matched it. No rebaseline, review approval, filing
-upload, new writer/schedule or cloud/legacy activation occurred.
+At **2026-09-23T12:18:08.803926+00:00**, real Edge checks against the deployed site passed
+on both root/standalone views at 1280 and 390 pixels: name-order/case-independent
+Donald Trump lookup, pending-review filter, automatic matching Building history
+expansion, clear and responsive layout. No JavaScript errors occurred and the browser
+was restricted to read-only local requests.
 
-### Next safe action
+### Tests and continuity
 
-The Desktop shortcut **Activate PolitiTrack Profile Search** is ready. Its launcher
-pins the merged revision and tested head above, verifies the prepared helper SHA-256
-`6A8EAEFA223D8A19B4C0024BEBCBEABAC41289FB7545C81426CD89F72C8AEEA5`, prevents
-overlapping launches and requests normal Windows approval. The package is
-`C:\ProgramData\PolitiTrack\releases\profiles232\Apply.ps1`; it reuses the existing
-idle check, web/scheduler stop/start, configuration revision and continuity checks.
-Do not restart or replace PostgreSQL. User-visible launcher and verification
-reports are retained in this task's outputs folder.
+Previously completed source validation: **412 local regression passes** under the
+same UTF-8 configuration as Beast, plus offline browser/replay checks. Offline replay
+retained all 62 prior profile identities, 1,519 observations and history-ledger bytes
+with zero provider calls. All four exact-tested-head CI runs passed:
 
-After owner-approved activation, use `work/publish_profiles232.py` with the merged
-revision to run the existing AI/dashboard producers under their normal locks.
-Run `work/verify_profiles232_live.py` with that revision to compare persisted AI,
-served JSON/CSV and snapshot bytes, directory completeness, per-run budgets,
-original review receipt and parent links. Recheck browser search against the live
-site, repeat the continuity check and record an accepted completion receipt.
-Keep [#232](https://github.com/maglothinm/MyETF-Intelligence/issues/232) open until
-live verification. [#225](https://github.com/maglothinm/MyETF-Intelligence/issues/225)
-retains its independent manual-upload outage acceptance boundary.
+- [Investor Edge tests 35857964119](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964119): attempt 1 success.
+- [Runtime v2 safety tests 35857964150](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964150): attempt 1 success.
+- [Source upload and OCR tests 35857964122](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964122): attempt 1 success.
+- [Current Opportunity offline tests 35857964184](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/35857964184): attempt 1 success.
+
+The after-activation and after-publication read-only fingerprints match all **4,706**
+immutable snapshot headers at cutoff `2026-09-23T12:02:16.803496+00:00`, digest
+`7d77ad4fde7c22093e23f7424666093f`. There are **zero broken snapshot parent links**.
+Installed untracked `legislative-source-status.json` still matches SHA-256
+`E5C1B22AB61D88DB8FA75B228DBF3A499734C37DDD26B22DB445C8B3F7226BF2`. PostgreSQL immutable heads remain the
+authority; no protected GitHub recovery artifact was restored or replaced. No
+rebaseline, new writer/schedule, filing upload or cloud/legacy activation occurred.
+
+### Review boundary and next safe action
+
+Donald Trump's Self profile is visible with 519 retained transactions, one pending
+source review, and `building / insufficient_completed_observations`. His original
+30-page manual upload `a816c4f5-3327-4cdd-9930-a94b53927a64` remains `needs_review`,
+with receipt `fe768ffad0909dbba9095b89615561a5fc3c259423f4a22b191737fbe5e50a3f`.
+Directory publication does not approve it or resolve the suspected municipal-bond
+ticker classification. [#225](https://github.com/maglothinm/MyETF-Intelligence/issues/225)
+retains the independent original pending-upload outage acceptance boundary.
+
+Activation and live acceptance for [#232](https://github.com/maglothinm/MyETF-Intelligence/issues/232)
+are complete. Completion receipt is
+`C:\ProgramData\PolitiTrack\backups\profiles232-complete.json`, with `accepted=true`
+and the expected installed revision. It supersedes the installer-time
+`live_publication_verified=false` checkpoint and makes the prepared Desktop launcher
+a no-op for this completed release. User-facing reports and verification JSON are
+retained in the task outputs folder. Use the live name/status controls; no further
+activation is needed. Leave the existing scheduler to continue bounded evidence
+collection. Handle original source review and #225 separately without re-uploading,
+requeueing, approving, or manufacturing evidence as part of this directory fix.
