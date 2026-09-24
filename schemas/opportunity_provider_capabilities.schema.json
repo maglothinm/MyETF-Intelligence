@@ -13,7 +13,7 @@
       "required": ["security_id", "share_class", "currency", "exchange", "source_url", "valid_from", "valid_through"],
       "properties": {
         "security_id": {"type": "string", "minLength": 1}, "share_class": {"type": "string", "minLength": 1},
-        "currency": {"const": "USD"}, "exchange": {"enum": ["XNYS", "XNAS"]},
+        "currency": {"const": "USD"}, "exchange": {"enum": ["XNYS", "XNAS", "ARCX"]},
         "source_url": {"type": "string", "pattern": "^https://"},
         "valid_from": {"type": "string"}, "valid_through": {"type": "string"}, "cik": {"type": "string", "pattern": "^[0-9]+$"}
       }

@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 from .opportunity_common import day, digest, number, timestamp, utc
+from .opportunity_benchmark import advance_benchmark
 
 
 def advance(previous,record,snapshot,calendar,now,*,deliveries=None,intents=None,cost_bps=10.0):
@@ -73,6 +74,7 @@ def advance(previous,record,snapshot,calendar,now,*,deliveries=None,intents=None
         if factor is None:
             cohort['waiting_reason']='research_split_history_invalid'; continue
         comparable_anchor=float(Decimal(str(anchor['price']))/factor)
+        prior_horizons=set(cohort['outcomes'])
         for horizon in (5,20,60,120):
             if str(horizon) in cohort['outcomes']:
                 continue  # Original results remain immutable when later source revisions arrive.
@@ -93,6 +95,7 @@ def advance(previous,record,snapshot,calendar,now,*,deliveries=None,intents=None
                 'benchmark_relative_fraction':None,'benchmark_status':'matching_benchmark_evidence_not_supplied',
                 'dividend_treatment':'price return only; excludes dividends; not total return',
                 'execution_note':'Hypothetical post-decision reference, not an executable-price guarantee or a trade.'}
+        advance_benchmark(cohort,snapshot,calendar,now,new_horizons=set(cohort['outcomes'])-prior_horizons)
         cohort['waiting_reason']='remaining_horizons_or_matching_benchmark_unavailable'
     return research
 
@@ -101,6 +104,7 @@ def summarize(records):
     cohorts=[c for r in records for c in (r.get('research') or {}).get('cohorts',{}).values()]
     return {'schema_version':1,'cohort_count':len(cohorts),
         'anchored_count':sum(c.get('anchor') is not None for c in cohorts),
+        'matched_benchmark_horizon_counts':{str(h):sum(str(h) in c.get('benchmark_outcomes',{}) for c in cohorts) for h in (5,20,60,120)},
         'measured_horizon_counts':{str(h):sum(str(h) in c.get('outcomes',{}) for c in cohorts) for h in (5,20,60,120)},
         'notice':'Overlapping cohorts are not independent experiments. Missing outcomes are not zero. No benchmark-adjusted edge is claimed without matched benchmark evidence.',
         'records':[{'opportunity_id':r['opportunity_id'],'ticker':r.get('ticker'),'research':r['research']} for r in records if r.get('research')]}

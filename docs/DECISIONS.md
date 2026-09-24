@@ -1753,3 +1753,15 @@ Deployment remains separate from source/test completion. Current historical-data
 endpoint returned premium-only rather than bars; a direct snapshot preflight was
 blocked by the tool safety boundary. Neither is bypassed or described as passed.
 No account upgrade, live investment alerts, orders or cloud reactivation.
+
+### #236 matched benchmark completion
+
+Use the configured, capability-verified benchmark (default SPY) for conditional
+post-decision price-return comparisons. Limit extra provider work to two requests
+from the existing budget and cache it within the invocation. Match original stock
+and benchmark quotes within 120 seconds in the same regular session; incomplete
+identities or price bases remain unknown. Research-only ARCX support cannot
+qualify a primary company opportunity. Later benchmark observations append linked
+results without rewriting prior stock outcomes. Same-session, same-cost price
+return excess is not risk-adjusted alpha. Real entitled data remains a deployment
+prerequisite; this commit supplies tested computation, not observed performance.

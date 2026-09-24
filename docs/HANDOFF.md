@@ -13,7 +13,7 @@ scenario dossiers, post-analysis quotes, conditional post-decision research,
 and dashboard/CSV/JSON under the existing AI snapshot writer. Mode, channels,
 old ledgers/reviews/portfolios and cloud retirement remain unchanged.
 
-Local final broad regression: 427 passed / 0 skipped. TEST return/restart fixture:
+Local final broad regression: 437 passed / 0 skipped. TEST return/restart fixture:
 one simulated opportunity intent, no real calls/messages/trades. Provider probe:
 Alpha Vantage returned a premium-endpoint response with no required bars;
 Finnhub responded but zero-delay entitlement remains unverified. Authoritative

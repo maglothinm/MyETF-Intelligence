@@ -72,3 +72,16 @@ test('v2 dossier keeps quotations inert, risks separate, and scenarios labeled',
   dom.window.eval(axe.source);const result=await dom.window.axe.run(doc,{rules:{'color-contrast':{enabled:false}}});
   assert.equal(result.violations.length,0,JSON.stringify(result.violations.map(v=>v.id)));
 });
+
+test('matched benchmark comparison is displayed separately from unavailable evidence',()=>{
+  const copy=structuredClone(model),r=copy.records[0];
+  r.investment_dossier={status:'ready_for_human_review',case:{},findings:{},claims:[]};
+  r.research={cohorts:{test:{cohort:'full_method',outcomes:{'5':{net_return_fraction:.099,cost_assumption_bps:10}},
+    benchmark_outcomes:{'5':{symbol:'TEST-BENCH',benchmark_relative_fraction:.05}}}}};
+  const doc=page().window.document;render(doc,copy,now);
+  assert.match(doc.body.textContent,/excess over TEST-BENCH: 5\.00%/);
+  assert.match(doc.body.textContent,/not risk-adjusted alpha/);
+  r.research.cohorts.test.benchmark_outcomes={};render(doc,copy,now);
+  assert.match(doc.body.textContent,/benchmark-relative result unavailable/);
+  assert.doesNotMatch(doc.body.textContent,/excess over TEST-BENCH/);
+});

@@ -131,7 +131,8 @@ assumption, not a claimed broker cost. These are price returns excluding dividen
 
 `opportunity-research.json` and the decision CSV/JSON expose the records. A missing
 benchmark is `null`, explicitly unavailable, never zero or a claim of alpha.
-Matched benchmark feeds and out-of-sample live evidence remain necessary before
+The matched-benchmark computation and provider adapter are implemented; actual
+benchmark capability and out-of-sample live evidence remain necessary before
 claiming investment advantage. Buying-only and company-only cohort overlaps must
 not be counted as independent successes.
 
@@ -181,3 +182,21 @@ Official API contracts used:
 - https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 - https://www.sec.gov/about/developer-resources
 - https://platform.openai.com/docs/guides/structured-outputs
+
+### Matched benchmark measurements
+
+Research uses a configurable `research_benchmark_symbol` (default SPY) only when
+its exact identity and entitled price history are verified in the capability
+record. ARCX is admitted for this research-only path, not for primary company
+qualification. A per-invocation cache caps additional benchmark work at two
+requests from the existing request budget; missing data cannot promote or reject
+an otherwise valid company case. No new provider subscription is purchased.
+
+The benchmark anchor must be after the usable decision, within 120 seconds of
+the recorded stock anchor, and in the same regular session, with compatible
+currency, split adjustments and verified timestamps. Comparisons use the exact
+same end session and assumed round-trip cost. Both legs exclude dividends.
+The resulting price-return excess is not risk-adjusted alpha. A missing benchmark
+remains unknown. Later benchmark evidence appends a linked immutable measurement
+without rewriting an already recorded stock outcome. The benchmark rules and
+missing-data behavior are validated with TEST fixtures, not live performance.

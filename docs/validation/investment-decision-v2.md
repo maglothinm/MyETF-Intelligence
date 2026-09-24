@@ -22,7 +22,7 @@ This document records source/test evidence, not production activation.
 | Safe modes and release | existing off/shadow/live contract | original no-send/receipt/restart tests, one simulated re-entry event, no real provider calls in fixtures |
 
 The broad local regression command in the existing CI workflow completed with
-**427 passed, 0 skipped** on the final September 24 run. An earlier run had 426
+**437 passed, 0 skipped** on the final September 24 run. An earlier run had 426
 passes and one optional skip; that check subsequently passed with jsdom configured. That earlier skipped check was the optional standalone Investor Edge DOM check because its
 local jsdom environment was not configured; it was not a database test.
 No live PostgreSQL verification is claimed. The standalone opportunity
@@ -71,3 +71,12 @@ receipts, approved deployed shadow cycles, actual issuer reviews, matched benchm
 observations and prospective outcomes. TEST success does not imply these occurred.
 
 See `docs/INVESTMENT_DECISION_V2.md` for assumptions, limits and guarded rollout.
+
+## Benchmark completion
+
+Added matched post-decision benchmark comparison and the bounded provider path,
+with no account or production changes. Additional tests cover same-session
+anchors, quote-time skew, incompatible identities/currencies, split adjustments,
+late benchmark append without rewriting original stock results, provider caching,
+and data-limited benchmarks that leave primary eligibility unchanged. The final
+commit/CI and exact expanded test totals are recorded in the PR completion receipt.
