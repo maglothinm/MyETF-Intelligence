@@ -1732,3 +1732,36 @@ and the persisted round-robin cursor. The legacy leaderboard_max_investors setti
 remains only a fallback retention-sizing input; it never restricts directory
 visibility. This does not change scoring, market evidence, notifications, review
 decisions, snapshot authority or writer/scheduler ownership.
+
+## 2026-09-24 — Case-first investment decisions with explicit data gates (#236)
+
+Extend the existing opportunity engine; no parallel writer, schedule or trading
+service. Source-quality flags exclude contributions without rewriting ledgers.
+Issuer reviews resume complete bounded segments and retain exact claim passages.
+Ordinary risks remain risks, unsupported material facts require review, and
+supported factual thesis breakers invalidate independently of valuation readiness.
+Company scenarios are explicit assumptions with a human decision boundary;
+political identity/association and model confidence are not investment proof.
+
+Keep existing entry/path safeguards and default OFF. Add the v2 company-case gate,
+fresh post-review quotes, and immutable conditional outcome cohorts anchored only
+after usable decisions or accepted live alerts. Missing benchmarks remain unknown.
+Derived review caches stay under the same AI snapshot owner and cannot replace
+source authority. No historical scoring or old paper-accounting rewrite.
+
+Deployment remains separate from source/test completion. Current historical-data
+endpoint returned premium-only rather than bars; a direct snapshot preflight was
+blocked by the tool safety boundary. Neither is bypassed or described as passed.
+No account upgrade, live investment alerts, orders or cloud reactivation.
+
+### #236 matched benchmark completion
+
+Use the configured, capability-verified benchmark (default SPY) for conditional
+post-decision price-return comparisons. Limit extra provider work to two requests
+from the existing budget and cache it within the invocation. Match original stock
+and benchmark quotes within 120 seconds in the same regular session; incomplete
+identities or price bases remain unknown. Research-only ARCX support cannot
+qualify a primary company opportunity. Later benchmark observations append linked
+results without rewriting prior stock outcomes. Same-session, same-cost price
+return excess is not risk-adjusted alpha. Real entitled data remains a deployment
+prerequisite; this commit supplies tested computation, not observed performance.

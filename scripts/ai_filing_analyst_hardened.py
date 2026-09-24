@@ -189,6 +189,8 @@ def openai_analyze(
     schema: Mapping[str, Any],
     *,
     client_factory: Callable[..., Any] | None = None,
+    payload_validator: Callable[[dict], dict] | None = None,
+    instructions: str | None = None,
 ) -> OpenAIResult:
     """Return exact validated JSON or raise a candidate-scoped deferral.
 
@@ -212,7 +214,7 @@ def openai_analyze(
     client = client_factory(api_key=config.openai_api_key, max_retries=0)
     kwargs: dict[str, Any] = {
         "model": config.model,
-        "instructions": legacy.ANALYST_INSTRUCTIONS,
+        "instructions": instructions if instructions is not None else legacy.ANALYST_INSTRUCTIONS,
         "input": json.dumps(context, sort_keys=True, ensure_ascii=False),
         "reasoning": {"effort": config.reasoning_effort},
         "text": {
@@ -358,7 +360,7 @@ def openai_analyze(
                 raise legacy.AnalystError(
                     "OpenAI structured output was not an object"
                 )
-            validated = legacy.validate_ai_payload(payload)
+            validated = payload_validator(payload) if payload_validator is not None else legacy.validate_ai_payload(payload)
         except (json.JSONDecodeError, legacy.AnalystError, TypeError, ValueError) as exc:
             diagnostics.append(
                 _response_diagnostic(

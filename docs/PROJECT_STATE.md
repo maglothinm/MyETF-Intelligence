@@ -1,5 +1,28 @@
 # PolitiTrack project state
 
+## September 24 #236 — Investment Decision v2 source implementation, not deployed
+
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
+Branch `codex/investment-decision-v2-20260924` from `main`
+`deb18f6632017c8a762a8d9dec2799f82cc6a845`. Installed Beast source inspected at
+`83501363c719aa14a46e141ef4c94cfb0532d23b`; Current Opportunity remains OFF.
+
+Implemented case-level source guards, resumable SEC document/exhibit reviews,
+exact claim passages, distinct risks/uncertainties/thesis breakers, company
+scenario dossiers, post-analysis quotes, conditional post-decision research,
+and dashboard/CSV/JSON under the existing AI snapshot writer. Mode, channels,
+old ledgers/reviews/portfolios and cloud retirement remain unchanged.
+
+Local final broad regression: 437 passed / 0 skipped. TEST return/restart fixture:
+one simulated opportunity intent, no real calls/messages/trades. Provider probe:
+Alpha Vantage returned a premium-endpoint response with no required bars;
+Finnhub responded but zero-delay entitlement remains unverified. Authoritative
+snapshot preflight was tool-blocked, not executed. Do not activate shadow/live
+until documented state/provider gates pass. No production deployment is claimed.
+See `docs/INVESTMENT_DECISION_V2.md` and `docs/validation/investment-decision-v2.md`.
+Issue #236 remains open for operational acceptance; PR #237 records exact-head CI.
+
+
 ## September 23 #232 - activated on Beast; complete directory and search verified live
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.

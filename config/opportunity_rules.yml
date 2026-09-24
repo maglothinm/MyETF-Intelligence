@@ -34,3 +34,10 @@ evidence_document_characters: 12000
 evidence_min_confidence: 0.7
 # Descriptive price-path flag only; does not change opportunity qualification.
 never_crossed_fraction: 0.08
+
+# Scenario gates are provisional shadow-study rules, not measured return probabilities.
+decision_contract_version: 2
+decision_min_upside: 0.15
+decision_min_reward_risk: 2.0
+research_cost_bps: 10.0
+research_benchmark_symbol: 'SPY'

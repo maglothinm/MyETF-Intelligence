@@ -202,6 +202,29 @@
       "type": "number",
       "exclusiveMinimum": 0,
       "maximum": 10
+    },
+    "decision_contract_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "decision_min_upside": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 2
+    },
+    "decision_min_reward_risk": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "research_cost_bps": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "research_benchmark_symbol": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9.]{0,11}$"
     }
   }
 }

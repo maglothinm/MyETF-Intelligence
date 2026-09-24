@@ -11,6 +11,7 @@ from typing import Iterable, Mapping
 from dateutil.relativedelta import relativedelta
 
 from .opportunity_common import day, digest, money, timestamp, utc
+from .opportunity_input_quality import issues as input_quality_issues
 
 
 def amount_range(row: Mapping) -> dict:
@@ -144,6 +145,7 @@ def normalize(rows: Iterable[Mapping], cutoff: datetime) -> tuple[list[dict], li
             row['identity_reasons'].append('required_source_quality')
         if not row.get('source_url'):
             row['identity_reasons'].append('missing_source_evidence')
+        row['identity_reasons'] += input_quality_issues(row)
         result.append(row)
     # Same-looking rows require distinct source line/transaction IDs to count separately.
     lookalikes = defaultdict(list)

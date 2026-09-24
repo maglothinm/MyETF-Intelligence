@@ -181,6 +181,7 @@ def test_existing_runner_checkpoints_live_fakes_and_restart_under_same_owner(tmp
         Path(runner._env()[PATH_KEY]).write_text(json.dumps(queued)+'\n',encoding='utf-8')
     monkeypatch.setattr(runner,'_execute',execute)
     actual_delivery=runtime.deliver_runtime
+    monkeypatch.setattr(runtime, 'load_rules', lambda *a, **kw: rules('live'))  # retained v1 TEST replay
     def fake_delivery(config,environment,checkpoint):
         actual_delivery(config,environment,checkpoint,clock=c,market_provider=market,evidence_provider=evidence,provider=provider)
     monkeypatch.setattr(runtime,'deliver_runtime',fake_delivery)

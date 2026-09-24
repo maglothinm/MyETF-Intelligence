@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import Counter
+from .opportunity_input_quality import issues as input_quality_issues
 from datetime import datetime, timezone
 import json
 import os
@@ -13,7 +15,10 @@ from .opportunity_market import ExchangeCalendar
 from .opportunity_notifications import authorize, deliver
 from .opportunity_providers import EvidenceProvider, MarketProvider, NotificationProvider, RequestBudget, capabilities, enrich_identities
 from .opportunity_state import load, save, validate_directory, event
-from .opportunity_evidence import SourceReviewer
+from .opportunity_review_v2 import InvestmentSourceReviewer, validate_cache
+from .opportunity_common import write_json
+
+CACHE_NAME = 'opportunity-evidence-cache.json'
 from .collector_freshness import nonproduction_evidence
 
 
@@ -52,6 +57,8 @@ class OpportunityRuntime:
         self.clock = clock or (lambda:datetime.now(timezone.utc))
         self.environment = dict(os.environ if environment is None else environment)
         self.state = load(config.ai_dir, self.clock())
+        self.review_cache = read_json(config.ai_dir / CACHE_NAME) if (config.ai_dir / CACHE_NAME).exists() else {'version':1,'issuers':{}}
+        validate_cache(self.review_cache)
         self.activation = None
         if rules['mode'] == 'live':
             if self.environment.get('OPPORTUNITY_MODE') != 'live':
@@ -72,15 +79,24 @@ class OpportunityRuntime:
         market = market_provider or MarketProvider(self.config, self.rules, session, caps, self.clock, budget)
         reviews = [r['evidence'] for r in self.state['opportunities'].values() if r.get('evidence')]
         evidence = evidence_provider or EvidenceProvider(reviews, self.rules,
-            reviewer=SourceReviewer(self.config, self.rules, market, caps, self.clock),
+            reviewer=InvestmentSourceReviewer(self.config, self.rules, market, caps, self.clock, cache=self.review_cache),
             model_budget=self.rules['evidence_model_budget'])
         channels = analyst._requested_candidate_channels(self.config) if self.rules['mode'] == 'live' else ['simulation']
         if self.activation:
             channels = sorted(set(channels) & set(self.activation['channels']))
-        cycle(self.state, enrich_identities(read_history(self.config, now=self.clock(), max_hours=self.rules['evidence_max_hours']), caps, self.clock()), self.rules, self.clock,
+        history = read_history(self.config, now=self.clock(), max_hours=self.rules['evidence_max_hours'])
+        cycle(self.state, enrich_identities(history, caps, self.clock()), self.rules, self.clock,
               calendar or ExchangeCalendar(), market, evidence, channels=channels, activation=self.activation)
         self.state['telemetry']['provider_requests_remaining'] = budget.remaining
         self.state['telemetry']['provider_capability_verified'] = bool(caps)
+        self.state['telemetry']['decision_contract_version'] = self.rules.get('decision_contract_version', 1)
+        self.state['telemetry']['source_quality_reason_counts'] = dict(Counter(reason for row in history for reason in input_quality_issues(row)))
+        docs = [d for issuer in self.review_cache['issuers'].values() for d in issuer.get('documents', {}).values()]
+        self.state['telemetry']['issuer_sections_total'] = sum(len(d.get('chunks', [])) for d in docs)
+        self.state['telemetry']['issuer_sections_reviewed'] = sum(len(d.get('reviews', {})) for d in docs)
+        self.state['telemetry']['investment_case_reason_counts'] = dict(Counter(reason for row in self.state['opportunities'].values() for reason in (row.get('investment_dossier') or {}).get('reason_codes', [])))
+        validate_cache(self.review_cache)
+        write_json(self.config.ai_dir / CACHE_NAME, self.review_cache)
         save(self.config.ai_dir, self.state)
         return self.state['telemetry']
 
@@ -139,9 +155,13 @@ def deliver_runtime(config, environment, checkpoint, *, clock=None, market_provi
     caps = capabilities(config.ai_dir, clock())
     session = analyst.build_session('PolitiTrack Current Opportunity')
     market = market_provider or MarketProvider(config, rules, session, caps, clock, RequestBudget(rules['request_budget']))
+    review_cache = read_json(config.ai_dir / CACHE_NAME) if (config.ai_dir / CACHE_NAME).exists() else {'version':1,'issuers':{}}
+    validate_cache(review_cache)
     evidence = evidence_provider or EvidenceProvider([r['evidence'] for r in state['opportunities'].values()], rules,
-        reviewer=SourceReviewer(config, rules, market, caps, clock), model_budget=rules['evidence_model_budget'])
+        reviewer=InvestmentSourceReviewer(config, rules, market, caps, clock, cache=review_cache), model_budget=rules['evidence_model_budget'])
     def commit(value):
+        validate_cache(review_cache)
+        write_json(config.ai_dir / CACHE_NAME, review_cache)
         save(config.ai_dir, value)
         checkpoint()
     # Persist evaluated intents through the same durable owner before any provider call.

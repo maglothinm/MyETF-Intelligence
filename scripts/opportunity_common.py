@@ -110,6 +110,12 @@ def load_rules(path: Path | None = None, *, mode: str | None = None) -> dict:
     # YAML 1.1 treats unquoted "off" as False; the checked-in value is normalized only here.
     if isinstance(value, dict) and value.get('mode') is False:
         value['mode'] = 'off'
+    if isinstance(value, dict):
+        value.setdefault('decision_contract_version', 2)
+        value.setdefault('decision_min_upside', 0.15)
+        value.setdefault('decision_min_reward_risk', 2.0)
+        value.setdefault('research_cost_bps', 10.0)
+        value.setdefault('research_benchmark_symbol', 'SPY')
     if mode is not None:
         value['mode'] = mode
     schema = read_json(ROOT / 'schemas/opportunity_rules.schema.json')

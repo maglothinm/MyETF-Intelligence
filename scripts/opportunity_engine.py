@@ -12,6 +12,8 @@ from .opportunity_threshold import assess_thresholds, mark_unavailable
 from .opportunity_significance import normalize, significance
 from .opportunity_state import event
 from .discovery_evidence import FIELD, opportunity_values
+from .opportunity_decision import build_dossier
+from .opportunity_research import advance as advance_research
 
 
 def evidence_status(evidence: Mapping, now: datetime, rules: Mapping, membership_hash: str) -> tuple[str, list[str]]:
@@ -77,9 +79,16 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
     path = 'returned_to_range' if 'returned_to_range' in contributing_paths else market['path']
     market['path'] = path
     evstatus, evreasons = evidence_status(evidence, now, rules, mh)
+    dossier = build_dossier(evidence, market.get('quote') or {}, now, rules, snapshot) if rules.get('decision_contract_version', 1) >= 2 else None
+    if dossier and dossier['status'] == 'needs_evidence':
+        evstatus = 'incomplete'
+        evreasons += dossier['reason_codes']
     data_ids = {tid for tid,m in market['metrics'].items() if not m.get('reason_codes') and m.get('path') != 'insufficient_data'}
     data_ok = not market['reason_codes'] and significance(rows, history, rules, eligible_ids=data_ids)['meaningful']
     entry = filtered['meaningful'] and market['discovery_near']
+    if dossier and dossier['status'] != 'ready_for_human_review':
+        entry = False
+        evreasons += dossier['reason_codes']
     reasons = full['reason_codes'] + market['reason_codes'] + evreasons
     if not full['meaningful']:
         reasons.append('meaningful_buying_not_established')
@@ -195,6 +204,13 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
               'return_observations':confirmations[-rules['reentry_observations']:], 'notification_event_ids':ids,
               'last_alert_at':utc(last_alert) if last_alert else None,
               'mode':state['mode'], 'context_only_investor_edge':True}
+    if dossier is not None:
+        record['decision_contract_version'] = 2
+        record['investment_dossier'] = dossier
+        record['gates']['investment_case'] = dossier['status'] == 'ready_for_human_review'
+        record['thesis_status'] = 'invalidated' if evstatus == 'contradicted' else 'supported' if dossier['status'] in ('ready_for_human_review','watching') else previous.get('thesis_status', 'unassessed')
+        record['assessment_status'] = 'current' if data_ok and evstatus in ('sufficient','contradicted') else 'incomplete_or_stale'
+        record['usable_decision_at'] = utc(now)
     quote_time = timestamp(quote.get('at'))
     valid_times = [quote_time+timedelta(seconds=rules['quote_max_seconds'])] if quote_time else []
     if timestamp(evidence.get('valid_until')):
@@ -204,6 +220,8 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
         valid_times.append(interval[1])
     record['display_valid_until'] = utc(min(valid_times)) if valid_times else utc(now)
     record[FIELD] = opportunity_values(rows, previous.get(FIELD), market, snapshot, now, rules, calendar)
+    if dossier is not None:
+        record['research'] = advance_research(previous.get('research'), record, snapshot, calendar, now, deliveries=state['deliveries'], intents=state['intents'], cost_bps=rules.get('research_cost_bps', 10.0))
     record['evaluation_id'] = event(state, 'evaluation', record, now)
     state['opportunities'][oid] = record
     if transition:
@@ -249,6 +267,12 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
             evidence = evidence_provider.review(rows, mh, review_time, force=bool((state['opportunities'].get(oid) or {}).get('was_out_of_range')))
         except DataUnavailable as exc:
             evidence = {'status':'incomplete', 'reason':str(exc)}
+        # Model review may finish after the original quote expires. Never advertise that old price.
+        if rules.get('decision_contract_version', 1) >= 2 and evidence.get('status') == 'sufficient':
+            try:
+                snapshot = market_provider.snapshot(rows, clock(), force=True)
+            except DataUnavailable as exc:
+                snapshot = {'gap':str(exc)}
         evaluate(state, rows, history, snapshot, evidence, rules, clock(), calendar, channels=channels, input_cutoff=input_cutoff)
         # Advance even when the whole due set fits: otherwise a smaller model
         # budget would repeatedly service the same first securities forever.

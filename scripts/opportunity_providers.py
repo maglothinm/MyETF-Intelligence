@@ -58,6 +58,7 @@ class MarketProvider:
     def __init__(self, config, rules, session, caps, clock, budget: RequestBudget):
         self.config, self.rules, self.session, self.caps, self.clock, self.budget = config, rules, session, caps, clock, budget
         self.cache = {}
+        self.benchmark_cache = None
 
     def get(self, url, params=None, headers=None):
         self.budget.consume()
@@ -68,18 +69,19 @@ class MarketProvider:
         except Exception as exc:
             raise DataUnavailable('provider_request_failed:'+type(exc).__name__) from exc
 
-    def snapshot(self, rows, now, force=False):
+    def snapshot(self, rows, now, force=False, *, _research_only=False):
         row = rows[0]
         ticker, sid = row.get('ticker'), row.get('security_id')
         if not sid or not row.get('security_evidence'):
             raise DataUnavailable('security_mapping_not_verified')
-        if row.get('exchange') not in ('XNYS', 'XNAS') or row.get('currency') != 'USD':
+        allowed_exchanges = ('XNYS','XNAS','ARCX') if _research_only else ('XNYS','XNAS')
+        if row.get('exchange') not in allowed_exchanges or row.get('currency') != 'USD':
             raise DataUnavailable('unsupported_exchange_or_currency')
         if not self.caps.get('finnhub_realtime_verified') or not self.caps.get('alphavantage_daily_adjusted_verified'):
             raise DataUnavailable('realtime_and_split_history_entitlements_not_verified')
         if not self.config.finnhub_api_key or not self.config.alphavantage_api_key:
             raise DataUnavailable('required_market_credentials_unavailable')
-        key = (sid, row.get('share_class'), row.get('currency'))
+        key = (sid, row.get('share_class'), row.get('currency'), _research_only)
         if not force and key in self.cache:
             return deepcopy(self.cache[key])
         quote = self.get('https://finnhub.io/api/v1/quote', params={'symbol':ticker,'token':self.config.finnhub_api_key})
@@ -121,8 +123,30 @@ class MarketProvider:
         previous_close = number(quote.get('pc'))
         if previous_bars and previous_close and abs(previous_close/previous_bars[0]['close']-1) > 0.01:
             result['provider_conflict'] = True
+        if not _research_only and self.rules.get('decision_contract_version',1)>=2:
+            result['benchmark']=self.research_benchmark(now)
         self.cache[key] = result
         return deepcopy(result)
+
+
+    def research_benchmark(self,now):
+        """At most two shared-budget requests per invocation; never clear/fail a case gate."""
+        if self.benchmark_cache is not None:
+            return deepcopy(self.benchmark_cache)
+        symbol=self.rules.get('research_benchmark_symbol','SPY')
+        mapping=(self.caps.get('securities') or {}).get(symbol) or {}
+        try:
+            if any(not mapping.get(k) for k in ('source_url','security_id','share_class','currency','exchange')) or not day(mapping.get('valid_from')) or not day(mapping.get('valid_through')) or not day(mapping['valid_from'])<=now.date()<=day(mapping['valid_through']):
+                raise DataUnavailable('benchmark_identity_capability_not_verified')
+            if self.budget.remaining<2:
+                raise DataUnavailable('benchmark_research_budget_unavailable')
+            row={**mapping,'ticker':symbol,'security_evidence':mapping['source_url']}
+            value=self.snapshot([row],now,_research_only=True)
+            value.update(status='available',symbol=symbol)
+            self.benchmark_cache=value
+        except DataUnavailable as exc:
+            self.benchmark_cache={'status':'unavailable','symbol':symbol,'reason':str(exc)}
+        return deepcopy(self.benchmark_cache)
 
 
 class EvidenceProvider:
@@ -131,9 +155,12 @@ class EvidenceProvider:
         self.reviews, self.rules, self.reviewer, self.remaining = reviews, rules, reviewer, model_budget
 
     def review(self, rows, membership_hash, now, force=False):
-        matches = [r for r in self.reviews if r.get('membership_hash') == membership_hash and timestamp(r.get('checked_at')) and timestamp(r['checked_at']) <= now and timestamp(r.get('valid_until')) and now <= timestamp(r['valid_until'])]
+        matches = [r for r in self.reviews if r.get('status') in ('sufficient', 'contradicted') and (self.rules.get('decision_contract_version', 1) < 2 or r.get('decision_contract_version') == 2) and r.get('membership_hash') == membership_hash and timestamp(r.get('checked_at')) and timestamp(r['checked_at']) <= now and timestamp(r.get('valid_until')) and now <= timestamp(r['valid_until'])]
         if matches and (not force or not self.reviewer):
-            return deepcopy(max(matches, key=lambda r:r['checked_at']))
+            latest=max(matches,key=lambda r:r['checked_at'])
+            probe=getattr(self.reviewer, 'cache_is_current', None)
+            if probe is None or probe(latest, rows, now):
+                return deepcopy(latest)
         if self.reviewer and self.remaining > 0:
             self.remaining -= 1
             result = self.reviewer(rows, membership_hash, now)

@@ -1,0 +1,106 @@
+{
+  "source_base": "deb18f6632017c8a762a8d9dec2799f82cc6a845",
+  "branch": "codex/investment-decision-v2-20260924",
+  "local_python": {
+    "passed": 437,
+    "skipped": 0,
+    "seconds": 28.33,
+    "command_scope": "existing Current Opportunity broad regression list with jsdom configured"
+  },
+  "node_axe": {
+    "legacy_projection_passed": 6,
+    "v2_projection_passed": 7
+  },
+  "browser": [
+    {
+      "TEST": true,
+      "browser": "headless Edge",
+      "viewport": [
+        1280,
+        900
+      ],
+      "page_errors": [],
+      "horizontal_page_overflow": false,
+      "screenshot": "TEST-v2-preview-1280.png",
+      "clock": "explicit TEST fixture clock; not current live state"
+    },
+    {
+      "TEST": true,
+      "browser": "headless Edge",
+      "viewport": [
+        390,
+        844
+      ],
+      "page_errors": [],
+      "horizontal_page_overflow": false,
+      "screenshot": "TEST-v2-preview-390.png",
+      "clock": "explicit TEST fixture clock; not current live state"
+    }
+  ],
+  "isolated_fixture": {
+    "TEST": true,
+    "mode": "isolated_shadow",
+    "statuses": [
+      "watching",
+      "watching",
+      "opportunity_available",
+      "opportunity_available"
+    ],
+    "immutable_event_count": 6,
+    "simulated_intents": 1,
+    "actual_provider_calls": 0,
+    "actual_notifications": 0,
+    "actual_trades": 0,
+    "existing_ai_state_unchanged": true,
+    "dossier": "ready_for_human_review"
+  },
+  "provider_preflight": {
+    "scope": "Read-only existing-provider response check for MSFT. No account upgrade, capability activation, notification, order or production state write. Response success alone does not attest feed licensing or zero delay.",
+    "observed_at": "2026-09-24T12:28:10.204578+00:00",
+    "symbol": "MSFT",
+    "providers": {
+      "finnhub": {
+        "http_status": 200,
+        "quote_timestamp": 1790193600,
+        "has_positive_quote": true,
+        "zero_delay_entitlement_verified": false
+      },
+      "alphavantage": {
+        "http_status": 200,
+        "daily_bar_count": 0,
+        "latest_session": null,
+        "split_fields_present": false,
+        "provider_limit_or_error": true,
+        "reported_error_category": "premium_endpoint"
+      }
+    }
+  },
+  "published_transaction_audit": {
+    "scope": "Read-only audit of the published transaction projection; flags require source review and do not rewrite records. Not authoritative snapshot verification.",
+    "payload_sha256": "86588855ac806d652d9fc1c7e597b0f465c519cdb8dc9a0164ac939db5c69e65",
+    "transaction_count": 12765,
+    "flagged_record_count": 274,
+    "reason_counts": {
+      "automatic_or_managed_purchase_not_discretionary_evidence": 6,
+      "not_verified_common_stock": 29,
+      "security_type_conflicts_with_source": 63,
+      "multiple_source_security_symbols": 103,
+      "inverted_disclosed_amount_range": 78,
+      "multiple_source_transaction_rows": 79,
+      "source_direction_conflict": 36,
+      "source_transaction_date_conflict": 5,
+      "source_ticker_conflict": 25
+    }
+  },
+  "production_changes": false,
+  "authoritative_snapshot_preflight": "tool-blocked before execution; unverified",
+  "scope_notice": "Local tests and read-only diagnostics only. CI, deployed shadow cycles and investment performance are separate evidence.",
+  "additional_standalone_surface_check": {
+    "passed": 17,
+    "note": "overlaps broad suite; not added as independent tests"
+  },
+  "benchmark_tests": {
+    "focused_with_decision_tests_passed": 33,
+    "note": "overlaps broad suite; tests prove fixture behavior, not live market performance"
+  }
+}
