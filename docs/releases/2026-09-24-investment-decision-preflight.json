@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-24T15:10:21.347597+00:00",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "issue": 236,
+  "approved_pr": 237,
+  "reviewed_head": "ee7564863f205e2066c41c89cb605478521d238c",
+  "merged_source": "268e6e5fca4895300192028f869c1d6f38fb9d13",
+  "reviewed_and_merged_trees_identical": true,
+  "source_archive_sha256": "481da9e6782ff00cb86bca82d06d9d1a9161d9ae402ba25dfcf035f00f3b5883",
+  "ci": [
+    {
+      "id": 36003133613,
+      "name": "Current Opportunity offline tests",
+      "head_sha": "ee7564863f205e2066c41c89cb605478521d238c",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "html_url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/36003133613",
+      "path": ".github/workflows/current_opportunity_tests.yml",
+      "head_branch": "codex/investment-decision-v2-20260924"
+    },
+    {
+      "id": 36003133764,
+      "name": "Runtime v2 safety tests",
+      "head_sha": "ee7564863f205e2066c41c89cb605478521d238c",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "html_url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/36003133764",
+      "path": ".github/workflows/runtime_v2_tests.yml",
+      "head_branch": "codex/investment-decision-v2-20260924"
+    },
+    {
+      "id": 36003133456,
+      "name": "Source upload and OCR tests",
+      "head_sha": "ee7564863f205e2066c41c89cb605478521d238c",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "html_url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/36003133456",
+      "path": ".github/workflows/source_ocr_tests.yml",
+      "head_branch": "codex/investment-decision-v2-20260924"
+    },
+    {
+      "id": 36003133466,
+      "name": "Investor Edge tests",
+      "head_sha": "ee7564863f205e2066c41c89cb605478521d238c",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "html_url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/36003133466",
+      "path": ".github/workflows/investor_edge_tests.yml",
+      "head_branch": "codex/investment-decision-v2-20260924"
+    }
+  ],
+  "snapshot_preflight": {
+    "status": "passed",
+    "database_transaction_read_only": true,
+    "baseline_cutoff": "2026-09-24 15:01:23.727565+00:00",
+    "history_header_count": 5018,
+    "history_header_sha256": "53a1630da78dd73cf96e4d11fd3e480450a2c236c61624028f570bc6f6fa2a30",
+    "broken_parent_links": 0,
+    "all_heads_match_history": true,
+    "consumer_ai_validation_passed": true,
+    "export_unpack_repack_hashes_match": true,
+    "heads": {
+      "ai": {
+        "generation": 908,
+        "snapshot_id": "51c7f386-9d65-4bc8-8c28-00a130ae5728",
+        "sha256": "54e8796c8149afe8ebc9c385e2049a3b876b72a371b932c1acc50d624afe1c8f",
+        "source_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+        "created_at": "2026-09-24 14:44:38.163909+00:00",
+        "file_count": 1509
+      },
+      "dashboard": {
+        "generation": 1728,
+        "snapshot_id": "e1d06b7c-eed7-4684-b6b9-3911b28c10eb",
+        "sha256": "1d76cce04695175e30b533926ddf112e5cabcab71d5cacb651e18fc4b3fd5183",
+        "source_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+        "created_at": "2026-09-24 14:47:25.075563+00:00",
+        "file_count": 260
+      },
+      "executive": {
+        "generation": 757,
+        "snapshot_id": "5b8351ad-acea-45b3-9967-28d15dd20e8e",
+        "sha256": "dc5bcbb4d11f5bdd2d7aa9bce216501d681f21a15ada29c530b3ed21457915f3",
+        "source_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+        "created_at": "2026-09-24 14:42:04.816257+00:00",
+        "file_count": 343
+      },
+      "legislative": {
+        "generation": 1625,
+        "snapshot_id": "8a5a3e75-ccc5-4425-ac5c-ee180673147a",
+        "sha256": "1b6668660076091ba57b45d15a69355cee274b7bcceabb61257b04b6acd11344",
+        "source_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+        "created_at": "2026-09-24 14:50:11.567129+00:00",
+        "file_count": 914
+      }
+    },
+    "notice": "Private snapshot bytes remain on Beast outside Git. These are verified copies, not replacement production state."
+  },
+  "provider_probe": {
+    "observed_at": "2026-09-24T15:02:51.096946+00:00",
+    "symbol": "MSFT",
+    "scope": "Read-only exact configured provider requests; no entitlement or configuration write",
+    "providers": {
+      "finnhub": {
+        "http_status": 200,
+        "quote_at": "2026-09-24T15:02:32+00:00",
+        "observed_at": "2026-09-24T15:02:51.437370+00:00",
+        "quote_age_seconds": 19.44,
+        "positive_quote": true,
+        "zero_delay_entitlement_attested": false
+      },
+      "alphavantage": {
+        "http_status": 200,
+        "bar_count": 0,
+        "latest_session": null,
+        "message": "Thank you for using Alpha Vantage! This is a premium endpoint. You may subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly unlock all premium endpoints  "
+      }
+    }
+  },
+  "historical_data_plan": {
+    "source": "https://www.alphavantage.co/premium/",
+    "observed_option": "75 requests/min + premium support: $49.99/month",
+    "monthly_usd": 49.99,
+    "requests_per_minute": 75,
+    "plan_scope": "Proposed for daily-adjusted historical data; does not substitute its 15-minute-delayed quote for the required current quote",
+    "purchase_authorized": false,
+    "purchase_made": false
+  },
+  "production": {
+    "installed_source_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+    "current_opportunity_mode": "off",
+    "services_restarted": false,
+    "configuration_changed": false,
+    "new_alerts_enabled": false,
+    "orders_placed": false,
+    "capability_record_present": false,
+    "current_token_elevated": false
+  },
+  "remaining_gates": [
+    "authorized daily-adjusted history access with successful endpoint/coverage tests",
+    "current quote and exact security/owner capability verification",
+    "approved normal Windows elevation for release activation",
+    "observed scheduled shadow cycles and post-activation continuity"
+  ],
+  "next_action": "Obtain owner decision on the paid historical-data plan or an explicitly selected compatible alternative; never purchase, substitute, or set entitlement flags silently."
+}

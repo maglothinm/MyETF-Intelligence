@@ -1,5 +1,41 @@
 # PolitiTrack active handoff
 
+## September 24 #236 — PR #237 merged; state preflight passed, data activation blocked
+
+Owner reviewed the implementation and instructed “Reviewed. Proceed.” Canonical
+repository ID **1349678672**, `maglothinm/MyETF-Intelligence`. PR #237 merged at
+15:00:10 UTC as **268e6e5fca4895300192028f869c1d6f38fb9d13**. Its tree exactly
+matches reviewed/tested head **ee7564863f205e2066c41c89cb605478521d238c**.
+All four exact-head CI workflows passed attempt 1: Current Opportunity 36003133613,
+Runtime safety 36003133764, source OCR 36003133456, Investor Edge 36003133466.
+
+The previous snapshot-read tool blocker is cleared. A read-only repeatable-read
+transaction exported authoritative AI 908, Dashboard 1728, Executive 757 and
+Legislative 1625. Every archive unpack/repack hash matched, the new AI reader
+validated the existing state, and all **5,018** retained snapshot headers form
+unbroken parent chains matching those heads. Private raw exports remain outside
+Git on Beast. This is verified read-only preflight, not a production restore or
+permission to reuse an old baseline at a later deployment.
+
+The exact configured Alpha Vantage daily-adjusted endpoint still returned zero
+bars and a premium-only message. The published entry monthly tier is $49.99 for
+75 requests/minute; no subscription was purchased or cost approved. This proposed
+tier is for historical data, not a substitute delayed quote. Finnhub returned a
+positive regular-session quote 19.44 seconds old; full entitlement/identity
+capability receipts are not yet established. No capability file was fabricated.
+
+Beast remains on **83501363c719aa14a46e141ef4c94cfb0532d23b**; Current Opportunity
+is **OFF**. Database/web/scheduler remain Running/Automatic, without a restart,
+configuration change, new alert, order, source approval, or cloud/legacy activation.
+The remote token is not elevated; normal Windows approval remains necessary at
+actual release time. Issue #236 stays open for operational acceptance.
+
+Next: obtain the owner's decision on historical-data access; verify real provider
+responses and exact security/owner capability evidence; then take a fresh baseline
+and use the existing Beast service boundary for shadow deployment and scheduled
+acceptance. Live investment notifications and brokerage orders remain out of scope.
+See `docs/releases/2026-09-24-investment-decision-preflight.json` for exact receipts.
+
 ## September 24 #236 — Investment Decision v2 source implementation, not deployed
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.

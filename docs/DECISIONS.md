@@ -1765,3 +1765,15 @@ qualify a primary company opportunity. Later benchmark observations append linke
 results without rewriting prior stock outcomes. Same-session, same-cost price
 return excess is not risk-adjusted alpha. Real entitled data remains a deployment
 prerequisite; this commit supplies tested computation, not observed performance.
+
+
+## 2026-09-24 — Separate approved source merge from provider-gated activation (#236)
+
+Owner review authorized merging PR #237 and proceeding with release preflight,
+not a new recurring data purchase. The authoritative state export/round-trip gate
+now passes; prior tool denial is not an ongoing database blocker. Preserve the
+verified copies privately and take a fresh baseline at eventual activation.
+The configured historical endpoint remains premium-only; leave Current Opportunity
+off and preserve services until genuine entitled history, exact capabilities and
+normal Windows elevation are available. Do not relabel a quote response as full
+licensing evidence or replace missing history with generated data.
