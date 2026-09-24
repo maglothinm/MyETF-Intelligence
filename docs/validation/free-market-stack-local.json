@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-24T17:30:30.127065+00:00",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "issue": 239,
+  "branch": "codex/free-market-stack-20260924",
+  "base": "b158d177b222d93bc785570e1c5e5ec8c5dc90f4",
+  "tests": {
+    "python_passed": 518,
+    "python_skipped": 1,
+    "skip_reason": "Optional local login PostgreSQL integration service is not enabled in this isolated run.",
+    "node_axe_passed": 8,
+    "fake_decision_cycles": 4,
+    "fake_intents": 1,
+    "actual_provider_calls_during_tests": 0,
+    "actual_notifications": 0,
+    "actual_trades": 0
+  },
+  "production": {
+    "installed_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+    "mode": "off",
+    "configuration_changed": false,
+    "services_restarted": false,
+    "massive_key_configured": false,
+    "new_subscriptions": 0
+  },
+  "limitations": [
+    "Actual Massive free-account responses require the owner API key.",
+    "No real data entitlement or source identity receipt was fabricated.",
+    "No deployment, scheduled shadow acceptance or investment performance claimed.",
+    "The new history route does not rewrite legacy Investor Edge histories.",
+    "API estimates cover observed text-token usage, not full invoices."
+  ]
+}

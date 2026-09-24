@@ -114,6 +114,10 @@ def save(directory: Path, state: dict) -> None:
 def validate_directory(directory: Path) -> None:
     from .discovery_evidence import load as load_discovery
     load_discovery(directory)
+    massive = directory / 'opportunity-massive-cache.json'
+    if massive.exists():
+        from .opportunity_massive import validate_cache as validate_massive_cache
+        validate_massive_cache(read_json(massive))
     cache = directory / 'opportunity-evidence-cache.json'
     if cache.exists():
         from .opportunity_review_v2 import validate_cache

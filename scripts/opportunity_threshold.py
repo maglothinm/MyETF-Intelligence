@@ -62,7 +62,7 @@ def assess_purchase(row: Mapping, reference: Mapping | None, previous: Mapping,
               'reason_codes': [], 'coverage_complete': False, 'valid_until': now_text,
               'coverage_through': None, 'completed_sessions_through': None,
               'expected_sessions': 0, 'observed_sessions': 0, 'missing_sessions': [],
-              'purchase_day_ordering': 'unknown_excluded', 'session_scope': 'regular',
+              'purchase_day_ordering': 'unknown_excluded', 'session_scope': snapshot.get('history_session_scope', 'regular'),
               'reference_kind': 'trade_date_close', 'current_session_coverage': 'not_required',
               'current_reference_price': None, 'peak_gain_fraction': old.get('peak_gain_fraction'),
               'peak_observation': old.get('peak_observation'), 'crossings': old.get('crossings', {}),
@@ -79,7 +79,7 @@ def assess_purchase(row: Mapping, reference: Mapping | None, previous: Mapping,
     if not ref or ref.get('kind') != 'trade_date_close' or not timestamp(ref.get('at')):
         result['reason_codes'] = ['missing_purchase_reference']
         return result
-    if (ref['at'][:10] != row.get('transaction_date') or
+    if (ref.get('reference_date', ref['at'][:10]) != row.get('transaction_date') or
             any(ref.get(k) != row.get(k) for k in ('security_id', 'share_class', 'currency'))):
         result['reason_codes'] = ['purchase_reference_correction_requires_review']
         return result
@@ -134,7 +134,7 @@ def assess_purchase(row: Mapping, reference: Mapping | None, previous: Mapping,
             raise DataUnavailable('provider_reference_revision_requires_review')
         result.update(current_reference_price=value, expected_sessions=len(expected),
                       observed_sessions=len(path), missing_sessions=missing,
-                      completed_sessions_through=utc(calendar.session(expected[-1])[1]) if expected else None)
+                      completed_sessions_through=(path[-1]['at'] if snapshot.get('history_session_scope') == 'provider_daily_aggregate_not_verified_regular_only' and path else utc(calendar.session(expected[-1])[1]) if expected else None))
         for bar in path:
             observations.append(_point(bar['high']/value-1, bar['high'], bar['date'], at=None,
                 source=snapshot['history_provider'], precision='session', observed_at=utc(history_seen),
@@ -225,7 +225,7 @@ def assess_thresholds(rows: list[dict], anchors: Mapping, prior: Mapping,
                                      snapshot, now, fraction, calendar, quote_max_seconds=rules['quote_max_seconds'])
     counts = Counter(t['status'] for t in trades.values() if t['active'])
     return {'version': VERSION, 'threshold_fraction': fraction, 'evaluated_at': utc(now),
-            'notice': NOTICE, 'trades': trades,
+            'notice': (NOTICE if snapshot.get('history_session_scope','regular') == 'regular' else 'Split-only provider daily aggregates plus observed quotes. Regular-hours-only coverage is not established; purchase-day ordering remains excluded. No crossing is not a forecast or buy recommendation.'), 'trades': trades,
             'counts': {k: counts[k] for k in ('crossed', 'not_crossed', 'unknown')}}
 
 

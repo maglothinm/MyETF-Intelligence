@@ -1,7 +1,7 @@
 """Immutable-decision outcome accounting. No positions, orders or backdated fills."""
 from __future__ import annotations
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 from .opportunity_common import day, digest, number, timestamp, utc
@@ -81,13 +81,17 @@ def advance(previous,record,snapshot,calendar,now,*,deliveries=None,intents=None
             if len(sessions)<=horizon:
                 continue
             target=sessions[horizon]; interval=calendar.session(target)
-            if not interval or interval[1]>now or interval[1]>history_observed or target not in bars:
+            endpoint=interval[1] if interval else None
+            history_scope=snapshot.get('history_session_scope','regular')
+            if history_scope == 'provider_daily_aggregate_not_verified_regular_only':
+                endpoint=datetime.combine(day(target)+timedelta(days=1),datetime.min.time(),ZoneInfo('America/New_York'))
+            if not endpoint or endpoint>now or endpoint>history_observed or target not in bars:
                 continue
             close=number(bars[target].get('close')); cost=number(cohort.get('cost_assumption_bps'))
             if close is None or close<=0 or cost is None or not 0<=cost<=10000:
                 continue
             cohort['outcomes'][str(horizon)]={'status':'measured_price_return','horizon_sessions':horizon,
-                'target_session':target,'endpoint_at':utc(interval[1]),'endpoint_close':close,
+                'target_session':target,'endpoint_at':utc(endpoint),'endpoint_close':close,'history_session_scope':history_scope,
                 'gross_return_fraction':close/comparable_anchor-1,'net_return_fraction':close/comparable_anchor-1-cost/10000,
                 'cost_assumption_bps':cost,'anchor_on_comparable_split_basis':comparable_anchor,
                 'basis_date':snapshot.get('basis_date'),'provider':snapshot.get('history_provider'),

@@ -13,20 +13,25 @@ from .opportunity_research import summarize as summarize_research
 
 
 def load_projection(directory: Path | None) -> dict:
+    usage_path = directory / 'api-usage-summary.json' if directory else None
+    usage = read_json(usage_path) if usage_path and usage_path.exists() else {'schema_version':1,'months':[], 'notice':'API usage has not yet been metered in a published run. This does not mean API usage costs zero.'}
     if directory is None or not (directory / STATE_NAME).exists():
-        return {'schema_version':1,'mode':'off','records':[],'telemetry':{}}
+        return {'schema_version':1,'mode':'off','records':[],'telemetry':{},'api_usage':usage}
     state=read_json(directory / STATE_NAME)
     validate(state)
     records=sorted(deepcopy(list(state['opportunities'].values())),key=lambda r:({'opportunity_available':0,'watching':1,'needs_review':2,'invalidated':3,'archived':4}[r['lifecycle']],r['security_key'])) if state['mode'] != 'off' else []
     return {'schema_version':1,'mode':state['mode'],'records':records,'telemetry':deepcopy(state['telemetry']),
             'research':summarize_research(records),
-            'migration':deepcopy(state['migration']),
+            'migration':deepcopy(state['migration']), 'api_usage':usage,
             'label':'SHADOW / NOT LIVE ALERTS' if state['mode']=='shadow' else 'Potential opportunities for review',
             'method_notice':'Provisional settings; not validated predictors. Investor Edge is context only.',
             'delivery_status':{eid:{channel:value['status'] for channel,value in channels.items()} for eid,channels in state['deliveries'].items()}}
 
 
 def write_exports(projection: dict, output: Path, assets: Path) -> None:
+    (output/'data/api-usage.json').write_text(json.dumps(projection.get('api_usage', {'schema_version':1,'months':[], 'notice':'Not yet metered; no zero-cost claim.'}), ensure_ascii=False, allow_nan=False)+'\n', encoding='utf-8')
+    for name in ('operating-costs.html','operating-costs.js'):
+        (output/name).write_bytes((assets/name).read_bytes())
     (output/'data/current-opportunities.json').write_text(json.dumps(projection,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     with (output/'data/current-opportunities.csv').open('w',encoding='utf-8',newline='') as stream:
         fields=['opportunity_id','ticker','lifecycle','evaluation_cutoff','next_review','rule_hash','evaluation_id','information_value_at_discovery','investment_dossier','decision_provenance_json']
@@ -66,10 +71,11 @@ def write_exports(projection: dict, output: Path, assets: Path) -> None:
 
 
 def integrate_index(source: str, projection: dict) -> str:
+    costs_link = '<a href="operating-costs.html">Operating costs</a>'
     if projection.get('mode') not in ('shadow','live'):
-        return source
+        return source.replace('<!-- current-opportunities-navigation -->', costs_link)
     label='Current opportunities' if projection['mode']=='live' else 'Shadow opportunities'
     link='<a href="current-opportunities.html"><span aria-hidden="true">↗</span> '+label+'</a>'
-    source=source.replace('<!-- current-opportunities-navigation -->',link)
+    source=source.replace('<!-- current-opportunities-navigation -->',link+costs_link)
     card='<article class="surface"><h2>'+label+'</h2><p>'+html.escape(projection.get('label',label))+'</p><p>Current entry, meaningful buying, evidence and data are evaluated separately. Quote time and reasons accompany each assessment.</p><a class="text-link" href="current-opportunities.html">Open the persisted opportunity assessments →</a></article>'
     return source.replace('<!-- current-opportunities-overview -->',card)

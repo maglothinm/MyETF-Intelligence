@@ -7,6 +7,7 @@
     "verified_at": {"type": "string"}, "valid_until": {"type": "string"},
     "verification_reference": {"type": "string", "minLength": 1},
     "finnhub_realtime_verified": {"type": "boolean"},
+    "massive_basic_verified": {"type": "boolean"},
     "alphavantage_daily_adjusted_verified": {"type": "boolean"},
     "securities": {"type": "object", "additionalProperties": {
       "type": "object", "additionalProperties": false,

@@ -59,6 +59,7 @@ class MarketProvider:
         self.config, self.rules, self.session, self.caps, self.clock, self.budget = config, rules, session, caps, clock, budget
         self.cache = {}
         self.benchmark_cache = None
+        self.massive_history = None
 
     def get(self, url, params=None, headers=None):
         self.budget.consume()
@@ -70,6 +71,8 @@ class MarketProvider:
             raise DataUnavailable('provider_request_failed:'+type(exc).__name__) from exc
 
     def snapshot(self, rows, now, force=False, *, _research_only=False):
+        if self.rules.get('history_provider', 'alphavantage') == 'massive':
+            return self._massive_snapshot(rows, now, force, _research_only=_research_only)
         row = rows[0]
         ticker, sid = row.get('ticker'), row.get('security_id')
         if not sid or not row.get('security_evidence'):
@@ -129,6 +132,52 @@ class MarketProvider:
         return deepcopy(result)
 
 
+
+    def _massive_snapshot(self, rows, now, force=False, *, _research_only=False):
+        from .opportunity_massive import MassiveHistory
+        row = rows[0]
+        if not row.get('security_id') or not row.get('security_evidence'):
+            raise DataUnavailable('security_mapping_not_verified')
+        allowed = ('XNYS','XNAS','ARCX') if _research_only else ('XNYS','XNAS')
+        if row.get('exchange') not in allowed or row.get('currency') != 'USD':
+            raise DataUnavailable('unsupported_exchange_or_currency')
+        if not self.caps.get('finnhub_realtime_verified') or not self.caps.get('massive_basic_verified'):
+            raise DataUnavailable('finnhub_and_massive_free_capabilities_not_verified')
+        if not self.config.finnhub_api_key:
+            raise DataUnavailable('finnhub_key_required')
+        if self.massive_history is None:
+            self.massive_history = MassiveHistory(self.config, self.rules, self.clock, self.budget)
+        key = (row['security_id'],row['share_class'],row['currency'],_research_only)
+        if not force and key in self.cache:
+            return deepcopy(self.cache[key])
+        # Free history and any benchmark pacing finish before the current quote.
+        result = self.massive_history.history(row, now)
+        benchmark = self.research_benchmark(now) if not _research_only and self.rules.get('decision_contract_version',1)>=2 else None
+        quote = self.get('https://finnhub.io/api/v1/quote', params={'symbol':row['ticker'],'token':self.config.finnhub_api_key})
+        observed = self.clock()
+        at_number = number(quote.get('t'))
+        if not at_number or at_number <= 0:
+            raise DataUnavailable('provider_quote_timestamp_missing')
+        try:
+            at = utc(datetime.fromtimestamp(at_number, timezone.utc))
+        except (ValueError, OverflowError, OSError):
+            raise DataUnavailable('provider_quote_timestamp_invalid') from None
+        result['quote'] = {'price':number(quote.get('c')),'at':at,'observed_at':utc(observed),
+            'provider':'finnhub','precision':'second','kind':'realtime','feed_delay_seconds':0,
+            'session_high':number(quote.get('h')),'session_low':number(quote.get('l'))}
+        previous = number(quote.get('pc'))
+        prior_close = result['bars'][-1]['close']
+        today = observed.astimezone(ZoneInfo('America/New_York')).date().isoformat()
+        split_today = any(a['kind']=='split' and a['date']==today for a in result['adjustment_events'])
+        result['provider_conflict'] = bool(previous and abs(previous/prior_close-1)>0.01)
+        if split_today and result['provider_conflict']:
+            result['provider_conflict_reason'] = 'previous_close_split_basis_requires_review'
+        if benchmark is not None:
+            result['benchmark'] = benchmark
+        self.cache[key] = result
+        return deepcopy(result)
+
+
     def research_benchmark(self,now):
         """At most two shared-budget requests per invocation; never clear/fail a case gate."""
         if self.benchmark_cache is not None:
@@ -138,7 +187,7 @@ class MarketProvider:
         try:
             if any(not mapping.get(k) for k in ('source_url','security_id','share_class','currency','exchange')) or not day(mapping.get('valid_from')) or not day(mapping.get('valid_through')) or not day(mapping['valid_from'])<=now.date()<=day(mapping['valid_through']):
                 raise DataUnavailable('benchmark_identity_capability_not_verified')
-            if self.budget.remaining<2:
+            if self.budget.remaining < (4 if self.rules.get('history_provider') == 'massive' else 2):
                 raise DataUnavailable('benchmark_research_budget_unavailable')
             row={**mapping,'ticker':symbol,'security_evidence':mapping['source_url']}
             value=self.snapshot([row],now,_research_only=True)

@@ -79,6 +79,7 @@
         detail.append(node(doc,'p',tid+': '+words(d.status)+'. Transaction → discovery: '+(typeof p==='number'?p.toFixed(2)+'%':'Unknown')+'; ATR movement '+text(d.transaction_to_discovery_atr)+'. Observation lag '+text(d.disclosure_lag_days)+' days; quote lag '+text(d.discovery_quote_lag_seconds)+' seconds. '+words(d.reason)));
         const proof=node(doc,'details');proof.append(node(doc,'summary','Discovery price and provenance'),node(doc,'pre',JSON.stringify(d,null,2)));detail.append(proof);
       }
+      if(m.history_notice)detail.append(node(doc,'p',m.history_notice));
       detail.append(node(doc,'h3','Price movement (percent)'));
       for(const [tid,p] of Object.entries(m.metrics||{}))detail.append(node(doc,'p',tid+': transaction → current '+pct(p.transaction_to_current)+'; transaction → release '+pct(p.transaction_to_release)+'; release → discovery '+pct(p.release_to_discovery)+'; maximum rise '+pct(p.max_up_fraction)+'; maximum decline '+pct(p.max_down_fraction)+'; drawdown from high '+pct(p.drawdown_from_high)+'. Resolution: '+text(p.resolution)+'. Entry band: '+text(p.price_band)));
       for(const [tid,tm] of Object.entries(m.timeline||{}))detail.append(node(doc,'p',tid+': first usable discovery quote lag '+text(tm.discovery_quote_lag_seconds)+' seconds. Unknown release times are not inferred.'));

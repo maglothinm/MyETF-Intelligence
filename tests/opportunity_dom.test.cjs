@@ -85,3 +85,18 @@ test('matched benchmark comparison is displayed separately from unavailable evid
   assert.match(doc.body.textContent,/benchmark-relative result unavailable/);
   assert.doesNotMatch(doc.body.textContent,/excess over TEST-BENCH/);
 });
+
+
+test('operating costs distinguishes no observations from free market data and keeps text inert',async()=>{
+  const {render:renderCosts}=require('../scripts/dashboard_assets/operating-costs.js');
+  const html=fs.readFileSync(path.join(assets,'operating-costs.html'),'utf8');
+  const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://example.test/operating-costs.html'}),doc=dom.window.document;
+  renderCosts(doc,{months:[],notice:'Unmetered historical usage is unknown.'});
+  assert.match(doc.body.textContent,/unknown, not \$0/i);
+  renderCosts(doc,{months:[{month_utc:'TEST',attempts:2,usage_reported_attempts:1,input_tokens:1000,cached_input_tokens:200,output_tokens:500,estimated_token_subtotal_usd:'0.00769',unpriced_attempts:1,tool_call_count:1,models:['<img src=x onerror=alert(1)>']}],notice:'Not an invoice.'});
+  assert.match(doc.body.textContent,/\$0\.0077/);assert.match(doc.body.textContent,/Unpriced attempts/);
+  assert.equal(doc.querySelectorAll('img,[onerror]').length,0);
+  dom.window.eval(axe.source);
+  const results=await dom.window.axe.run(doc,{rules:{'color-contrast':{enabled:false}}});
+  assert.equal(results.violations.length,0,JSON.stringify(results.violations));
+});

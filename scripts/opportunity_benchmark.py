@@ -1,5 +1,6 @@
 """Matched benchmark measurements; no backdated anchors or revised original outcomes."""
 from copy import deepcopy
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 from .opportunity_common import day,digest,number,timestamp,utc
@@ -47,11 +48,17 @@ def advance_benchmark(cohort,snapshot,calendar,now,*,new_horizons=()):
     for horizon,own in cohort['outcomes'].items():
         if horizon in results:continue
         target=own['target_session'];end=calendar.session(target)
+        history_scope=b.get('history_session_scope','regular')
+        if own.get('history_session_scope','regular') != history_scope:
+            cohort['benchmark_waiting_reason']='benchmark_session_scope_mismatch';continue
+        endpoint=end[1] if end else None
+        if history_scope == 'provider_daily_aggregate_not_verified_regular_only':
+            endpoint=datetime.combine(day(target)+timedelta(days=1),datetime.min.time(),ZoneInfo('America/New_York'))
         close=number((bars.get(target) or {}).get('close'));cost=number(cohort.get('cost_assumption_bps'))
-        if not end or end[1]>now or end[1]>history_at or not close or close<=0 or cost is None or not 0<=cost<=10000:continue
+        if not endpoint or endpoint>now or endpoint>history_at or not close or close<=0 or cost is None or not 0<=cost<=10000:continue
         gross=close/comparable-1;net=gross-cost/10000
         results[horizon]={'status':'measured_matched_price_excess','symbol':ba['symbol'],
-            'target_session':target,'endpoint_at':utc(end[1]),'endpoint_close':close,'gross_return_fraction':gross,
+            'target_session':target,'endpoint_at':utc(endpoint),'endpoint_close':close,'history_session_scope':history_scope,'gross_return_fraction':gross,
             'net_return_fraction':net,'benchmark_relative_fraction':own['net_return_fraction']-net,
             'cost_assumption_bps':cost,'source_asset_outcome_sha256':digest(own),
             'calculated_at':utc(now),'history_observed_at':b['history_observed_at'],'provider':b.get('history_provider'),

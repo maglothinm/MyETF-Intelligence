@@ -72,7 +72,12 @@ def completed_bars(snapshot: Mapping, now: datetime, calendar: ExchangeCalendar)
             raise DataUnavailable('invalid_price_history')
         if raw.get('observed_at') and (not timestamp(raw['observed_at']) or timestamp(raw['observed_at']) > now):
             continue
-        bars.append({**raw, **values, 'at': utc(interval[1])})
+        bar_at = interval[1]
+        if raw.get('session_scope') == 'provider_daily_aggregate_not_verified_regular_only':
+            bar_at = datetime.combine(day(raw['date'])+timedelta(days=1), datetime.min.time(), ZoneInfo('America/New_York'))
+            if bar_at > now:
+                continue
+        bars.append({**raw, **values, 'at': utc(bar_at)})
     bars.sort(key=lambda b: b['date'])
     if len({b['date'] for b in bars}) != len(bars):
         raise DataUnavailable('conflicting_history_bars')
@@ -96,7 +101,8 @@ def measured_atr(bars: list[dict], at: datetime, periods: int, calendar: Exchang
 
 def anchor(price: float, at: str, snapshot: Mapping, *, kind: str, atr: dict | None, observed_at: str) -> dict:
     return {'price':price, 'at':at, 'observed_at':observed_at, 'provider':snapshot.get('history_provider') if kind == 'trade_date_close' else (snapshot.get('quote') or {}).get('provider'),
-            'precision':'session_close' if kind == 'trade_date_close' else 'second',
+            'precision':('daily_aggregate_boundary' if snapshot.get('history_session_scope') == 'provider_daily_aggregate_not_verified_regular_only' else 'session_close') if kind == 'trade_date_close' else 'second',
+            'history_session_scope':snapshot.get('history_session_scope','regular'),
             'status':'reconstructed' if kind == 'trade_date_close' else 'observed', 'kind':kind,
             'confidence':'supported_market_reference', 'basis':'split_adjusted', 'basis_date':snapshot.get('basis_date'),
             'currency':snapshot.get('currency'), 'security_id':snapshot.get('security_id'), 'share_class':snapshot.get('share_class'), 'atr':atr}
@@ -185,9 +191,10 @@ def assess(rows: list[dict], prior_anchors: Mapping, snapshot: Mapping, now: dat
                 at = timestamp(bar['at'])
                 ref = anchor(bar['close'], bar['at'], snapshot, kind='trade_date_close',
                              atr=measured_atr(bars, at, rules['atr_sessions'], calendar), observed_at=utc(now))
+                ref['reference_date'] = txdate
                 anchors['trades'][tid] = ref
         missing = []
-        if ref and ref.get('kind') == 'trade_date_close' and ref.get('at', '')[:10] != txdate:
+        if ref and ref.get('kind') == 'trade_date_close' and ref.get('reference_date', ref.get('at', '')[:10]) != txdate:
             missing.append('corrected_trade_date_requires_reference_review')
         if not ref:
             missing.append('missing_trade_reference')
@@ -242,6 +249,9 @@ def assess(rows: list[dict], prior_anchors: Mapping, snapshot: Mapping, now: dat
     path = next((p for p in ('insufficient_data','material_decline','already_moved','returned_to_range','never_materially_moved') if p in paths), 'insufficient_data')
     return {'anchors':anchors, 'metrics':metrics, 'eligible_trade_ids':eligible, 'discovery_near':discovery_near,
             'discovery_to_current':discovery_return, 'reason_codes':sorted(set(reasons)), 'path':path,
+            'history_session_scope':snapshot.get('history_session_scope','regular'),
+            'history_notice':snapshot.get('history_notice'),
+            'history_coverage_start':snapshot.get('history_coverage_start'),
             'quote':dict(quote), 'session':'regular' if calendar.regular(now) else 'market_closed',
             'adjustment_events':snapshot.get('adjustment_events', []), 'basis':snapshot.get('basis'),
             'timeline':{r['trade_id']:timeline(r, anchors.get('discovery'), now) for r in rows}}

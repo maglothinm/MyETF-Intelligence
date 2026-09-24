@@ -5,6 +5,8 @@ on:
     paths:
       - "scripts/opportunity_*.py"
       - "scripts/discovery_evidence.py"
+      - "scripts/api_usage.py"
+      - "config/api_usage_rates.json"
       - "scripts/ai_filing_analyst*.py"
       - "scripts/build_trade_dashboard.py"
       - "scripts/dashboard_assets/**"
