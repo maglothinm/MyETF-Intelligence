@@ -297,8 +297,8 @@ class InvestmentSourceReviewer:
             case_key = digest({'claims':verified,'annual_eps':base['fundamentals']['annual_eps'],'membership':membership_hash})
             if slot.get('case_key') != case_key:
                 slot['proposal'] = self._model({'task':'Develop an affirmative company investment case using only supplied claim IDs. Forward EPS and multiples must be explicit reasoned assumptions, never reported facts. Explain why own the company, why now, attributable shareholder economics, bear/base/bull scenarios, and falsifiable review/invalidation conditions. A political relationship alone is insufficient. Classify ordinary risks separately from factual thesis breakers. Put evidence gaps in limitations; use method not_supported when a reported-EPS multiple case is unsuitable.',
-                    'claims':verified,'fundamentals':base['fundamentals'],
-                    'disclosed_activity':[{k:r.get(k) for k in ('trade_id','transaction_type','amount','transaction_date','observed_at_utc')} for r in rows]},CASE_SCHEMA)
+                    'claims':verified,'fundamentals':base['fundamentals'],'evaluation_cutoff':utc(now),
+                    'case_scope':'Company economics only. Do not use political ownership or disclosed buying as evidence that the business is attractive.'},CASE_SCHEMA)
                 slot['case_key'] = case_key; slot.pop('semantic_check',None)
             proposal = slot['proposal']
             if 'semantic_check' not in slot:

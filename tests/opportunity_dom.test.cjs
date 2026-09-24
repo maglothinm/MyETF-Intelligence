@@ -66,6 +66,7 @@ test('v2 dossier keeps quotations inert, risks separate, and scenarios labeled',
   assert.ok(doc.querySelector('.investment-dossier'));
   assert.match(doc.body.textContent,/Scenario valuation — assumptions, not forecasts/);
   assert.match(doc.body.textContent,/Known investment risks/);
+  assert.match(doc.body.textContent,/Scenario entry ceiling: \$113\.33/);
   assert.match(doc.body.textContent,/TEST customer concentration risk/);
   assert.equal(doc.querySelectorAll('img,[onerror],a[href^="javascript:"]').length,0);
   dom.window.eval(axe.source);const result=await dom.window.axe.run(doc,{rules:{'color-contrast':{enabled:false}}});

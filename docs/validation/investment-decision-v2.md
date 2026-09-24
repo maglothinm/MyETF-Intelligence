@@ -22,7 +22,8 @@ This document records source/test evidence, not production activation.
 | Safe modes and release | existing off/shadow/live contract | original no-send/receipt/restart tests, one simulated re-entry event, no real provider calls in fixtures |
 
 The broad local regression command in the existing CI workflow completed with
-**426 passed, 1 skipped** on September 24. The skipped check was the optional standalone Investor Edge DOM check because its
+**427 passed, 0 skipped** on the final September 24 run. An earlier run had 426
+passes and one optional skip; that check subsequently passed with jsdom configured. That earlier skipped check was the optional standalone Investor Edge DOM check because its
 local jsdom environment was not configured; it was not a database test.
 No live PostgreSQL verification is claimed. The standalone opportunity
 suite previously completed **166 passes**; later broad results include the
@@ -64,7 +65,7 @@ capability record was written. The attempted read-only snapshot restoration was
 blocked by the tool safety layer before execution. No production database command,
 state reset, deployment, schedule change or portfolio mutation occurred.
 
-Remaining operational proof: exact-head CI, authoritative snapshot/export
+Required release receipts (CI status is recorded in PR #237): authoritative snapshot/export
 verification, working entitled split-aware history, exact identity/capability
 receipts, approved deployed shadow cycles, actual issuer reviews, matched benchmark
 observations and prospective outcomes. TEST success does not imply these occurred.

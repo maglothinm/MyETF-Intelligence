@@ -29,7 +29,8 @@ def case_fixture(clock):
     facts={'annual_eps':{'value':8,'accession':'0001-26-000001','filed_date':'2026-02-01'}}
     e=Evidence(clock).review([], 'TEST-membership',clock())
     e.update(decision_contract_version=2,investment_case=case,verified_claims=claims,fundamentals=facts,
-             findings={'risk':[{'kind':'risk','claim_id':'TEST-claim','implication':'TEST concentration risk'}]},case_errors=[])
+             findings={'risk':[{'kind':'risk','claim_id':'TEST-claim','implication':'TEST concentration risk'}]},case_errors=[],
+             coverage_detail={'documents_downloaded':1,'sections_total':1,'sections_reviewed':1,'complete':True,'scope':'TEST fixture evidence only'})
     return e,src
 
 
@@ -172,6 +173,8 @@ def test_resumable_review_exceeds_four_documents_and_character_limit(tmp_path):
         elif 'proposal' in context:
             result={'supported':True,'unsupported_claim_ids':[],'limitations':[]}
         else:
+            assert 'disclosed_activity' not in context
+            assert context['case_scope'].startswith('Company economics only')
             case=deepcopy(e['investment_case']); cid=context['claims'][0]['claim_id']
             for k in ('thesis','why_now','shareholder_economics','invalidation','review_conditions'): case[k]['claim_ids']=[cid]
             for sc in case['scenarios'].values(): sc['claim_ids']=[cid]

@@ -69,6 +69,10 @@ case without requiring a workable valuation, so a canceled contract or similar
 fact is not held up by missing scenario inputs. Unsupported critical findings hold
 review rather than create a confident verdict.
 
+The company-case synthesis receives issuer claims and financial facts, not the
+political transaction rows. Disclosed buying remains a separate qualification
+gate rather than evidence that the company economics are attractive.
+
 Each dossier has a source-linked business thesis, why-now assessment, attributable
 shareholder economics, review/invalidation conditions and a 20/60/120-session
 review horizon. Initial valuation support is **positive reported annual GAAP EPS

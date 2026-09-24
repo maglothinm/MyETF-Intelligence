@@ -2,9 +2,10 @@
   "source_base": "deb18f6632017c8a762a8d9dec2799f82cc6a845",
   "branch": "codex/investment-decision-v2-20260924",
   "local_python": {
-    "passed": 426,
-    "skipped": 1,
-    "skip_reason": "optional standalone Investor Edge DOM requires jsdom configuration"
+    "passed": 427,
+    "skipped": 0,
+    "seconds": 27.83,
+    "command_scope": "existing Current Opportunity broad regression list with jsdom configured"
   },
   "node_axe": {
     "legacy_projection_passed": 6,
@@ -93,5 +94,9 @@
   },
   "production_changes": false,
   "authoritative_snapshot_preflight": "tool-blocked before execution; unverified",
-  "scope_notice": "Local tests and read-only diagnostics only. CI, deployed shadow cycles and investment performance are separate evidence."
+  "scope_notice": "Local tests and read-only diagnostics only. CI, deployed shadow cycles and investment performance are separate evidence.",
+  "additional_standalone_surface_check": {
+    "passed": 17,
+    "note": "overlaps broad suite; not added as independent tests"
+  }
 }

@@ -13,14 +13,14 @@ scenario dossiers, post-analysis quotes, conditional post-decision research,
 and dashboard/CSV/JSON under the existing AI snapshot writer. Mode, channels,
 old ledgers/reviews/portfolios and cloud retirement remain unchanged.
 
-Local broad regression: 426 passed / 1 skipped. TEST return/restart fixture:
+Local final broad regression: 427 passed / 0 skipped. TEST return/restart fixture:
 one simulated opportunity intent, no real calls/messages/trades. Provider probe:
 Alpha Vantage returned a premium-endpoint response with no required bars;
 Finnhub responded but zero-delay entitlement remains unverified. Authoritative
 snapshot preflight was tool-blocked, not executed. Do not activate shadow/live
 until documented state/provider gates pass. No production deployment is claimed.
 See `docs/INVESTMENT_DECISION_V2.md` and `docs/validation/investment-decision-v2.md`.
-Issue #236 remains open for exact-head review/CI and operational acceptance.
+Issue #236 remains open for operational acceptance; PR #237 records exact-head CI.
 
 
 ## September 23 #232 - activated on Beast; complete directory and search verified live
