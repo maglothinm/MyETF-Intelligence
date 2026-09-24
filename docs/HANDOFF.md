@@ -1,5 +1,37 @@
 # PolitiTrack active handoff
 
+## September 24 #239 — Free stack merged; owner API key is the next setup input
+
+PR **#240** merged as **0b70118fc8911e54e427d0011a43672a7029f8ab**;
+the tree exactly matches tested head **41eb60b90d65e49ed9578d60c41810884ba62318**.
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
+All four exact-head CI workflows succeeded: Current Opportunity 36035728639,
+Investor Edge 36035728339, Runtime safety 36035728272, source OCR 36035728574.
+Local verification: 518 Python passes / one optional PostgreSQL-service skip,
+eight Node/axe passes, and headless Edge cost-page checks at 1280/390 pixels.
+
+Massive free EOD history, explicit splits, rate limiting and restart caching are
+implemented for the Current Opportunity/research path with Finnhub/SEC retained.
+The test-only free adapter cycle passed the investment case gates and preserved
+old state. API usage/cost estimates and the separate cost screen are implemented;
+no invoice or historical unmetered charge is fabricated.
+
+The **PolitiTrack Free Data Setup** launcher is on Beast's Desktop, pinned to the
+tested clean source. It requests a free Massive key locally with hidden input,
+performs a read-only provider probe and creates a restricted credential file after
+success. It does not create an account, purchase a plan, activate a capability,
+change production settings, enable an alert or place a trade. No Massive key was
+present at closeout. Do not ask the owner to paste credentials into chat.
+
+Installed application remains 83501363c719aa14a46e141ef4c94cfb0532d23b with Current
+Opportunity OFF; no services, production settings, histories or portfolios changed.
+No new scheduler or cloud writer was created. Retired GitHub writers remain disabled.
+After local key setup, verify actual free-tier responses, precise capability/source
+identities and a fresh authoritative snapshot baseline; then use normal Windows
+release approval and observed shadow cycles. Keep #239/#236 open for live acceptance.
+See `docs/releases/2026-09-24-free-stack-source.json` and `docs/FREE_MARKET_STACK.md`.
+
+
 ## September 24 #239 — Free market stack implementation; activation awaits owner key
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.

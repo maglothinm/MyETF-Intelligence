@@ -1797,3 +1797,11 @@ estimates from dated exact-model tariffs, with unknown/unobserved/tool charges
 explicit; never imply an empty history or free market data means a zero API bill.
 The native journal survives failed runs; only the existing AI writer publishes its
 summary. No model change, account purchase or brokerage action is introduced.
+
+### #239 source acceptance and next boundary
+
+Merged tested free-stack PR #240 with all four CI workflows successful. Preserve
+source versus deployment distinction: the owner must enter a free key through
+the pinned local helper before actual provider/shadow verification. Do not turn
+missing credentials or free-plan constraints into a paid subscription or fake
+capability flag. The source merge changes no running services or trading state.
