@@ -211,6 +211,8 @@ def openai_analyze(
             ) from exc
         client_factory = OpenAI
 
+    from scripts import api_usage
+    import uuid
     client = client_factory(api_key=config.openai_api_key, max_retries=0)
     kwargs: dict[str, Any] = {
         "model": config.model,
@@ -242,10 +244,12 @@ def openai_analyze(
         attempt = attempt_index + 1
         kwargs["max_output_tokens"] = token_limit
         response = None
+        usage_attempt_id = uuid.uuid4().hex
         try:
             legacy.pace_openai_request()
             response = client.responses.create(**kwargs)
         except Exception as exc:  # noqa: BLE001 - classified below
+            api_usage.record_attempt(config, usage_attempt_id, getattr(exc, "response", None), error_type=type(exc).__name__)
             message = _safe_error(exc, config)
             message_lower = str(exc).casefold()
             status_code = getattr(exc, "status_code", None)
@@ -312,6 +316,7 @@ def openai_analyze(
             time.sleep(delay)
             continue
 
+        api_usage.record_attempt(config, usage_attempt_id, response)
         status = str(getattr(response, "status", "") or "").strip().casefold()
         incomplete = getattr(response, "incomplete_details", None)
         reason = str(_object_value(incomplete, "reason", "") or "").strip()
@@ -824,6 +829,8 @@ def _finish_analyst_run(
     state: legacy.AIState,
     state_path: Path,
 ) -> AnalystRunResult:
+    from scripts import api_usage
+    api_usage.publish(config)
     result.finished_utc = legacy.iso_utc()
     result.fatal_errors = list(result.errors)
     if result.fatal_errors:

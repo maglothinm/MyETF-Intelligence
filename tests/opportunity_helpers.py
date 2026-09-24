@@ -21,6 +21,7 @@ def rules(mode='shadow', **changes):
     # Preserve the historical v1 behavioral fixtures; new v2 tests opt in explicitly.
     # Production configuration validation only admits decision contract v2.
     result['decision_contract_version']=1
+    result['history_provider']='alphavantage'  # Retain the original TEST provider contract.
     result.update(changes)
     return result
 

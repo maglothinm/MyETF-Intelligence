@@ -1,5 +1,39 @@
 # PolitiTrack active handoff
 
+## September 24 #239 — Free market stack implementation; activation awaits owner key
+
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
+Branch `codex/free-market-stack-20260924`, based on main
+`b158d177b222d93bc785570e1c5e5ec8c5dc90f4`. The owner approved Massive Basic free
+history + existing Finnhub quotes + SEC, not a paid Alpha Vantage subscription.
+
+Implemented explicit Massive history selection, raw OHLC/dated split reconciliation,
+separate dividend provenance, two-year coverage limits, safe resumable pagination,
+shared five/minute pacing, snapshot-owned derived caching, truthful daily-window
+scope and matched research. Added API request/token accounting and a separate
+Operating costs screen; missing usage is not a zero bill and token estimates are
+not invoices. No model upgrade or additional paid call is made by a test.
+
+A local hidden-input setup/probe helper accepts the owner's free API key without
+putting it in Git, logs or command arguments. Current runtime has no Massive key;
+no real Massive response, account creation or capability activation is claimed.
+The data adapter is not a silent migration of legacy Investor Edge prices or old
+paper accounting. Current Opportunity remains OFF on installed source
+`83501363c719aa14a46e141ef4c94cfb0532d23b`; production configuration and services
+are unchanged. See `docs/FREE_MARKET_STACK.md` for exact scope and setup.
+
+Local verification: **518 Python passes / one optional PostgreSQL-service skip**;
+**eight Node/axe checks passed**. The free adapter executed the existing decision
+cycle with TEST provider responses and no Alpha key, preserved original AI state,
+and generated one simulated intent. No actual market/model/notification call was
+made by the tests. See `docs/validation/free-market-stack-local.json`.
+
+Next: exact-head CI/review, owner free key and actual response tests, genuine
+provider/security/owner receipts, fresh authoritative snapshot preflight, then
+the existing Windows release boundary and scheduled shadow acceptance. No live
+investment alerts, subscriptions, orders, new writers or cloud reactivation.
+
+
 ## September 24 #236 — PR #237 merged; state preflight passed, data activation blocked
 
 Owner reviewed the implementation and instructed “Reviewed. Proceed.” Canonical

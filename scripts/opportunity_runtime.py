@@ -89,6 +89,8 @@ class OpportunityRuntime:
               calendar or ExchangeCalendar(), market, evidence, channels=channels, activation=self.activation)
         self.state['telemetry']['provider_requests_remaining'] = budget.remaining
         self.state['telemetry']['provider_capability_verified'] = bool(caps)
+        history_client = getattr(market, 'massive_history', None)
+        self.state['telemetry']['market_stack'] = {'history_provider':self.rules.get('history_provider','alphavantage'), 'quote_provider':'finnhub', 'issuer_provider':'sec', 'massive_requests_this_run':getattr(history_client,'requests',0), 'massive_cache_hits':getattr(history_client,'hits',0), 'free_data_subscription_usd':0 if self.rules.get('history_provider')=='massive' else None}
         self.state['telemetry']['decision_contract_version'] = self.rules.get('decision_contract_version', 1)
         self.state['telemetry']['source_quality_reason_counts'] = dict(Counter(reason for row in history for reason in input_quality_issues(row)))
         docs = [d for issuer in self.review_cache['issuers'].values() for d in issuer.get('documents', {}).values()]

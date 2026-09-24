@@ -1777,3 +1777,23 @@ The configured historical endpoint remains premium-only; leave Current Opportuni
 off and preserve services until genuine entitled history, exact capabilities and
 normal Windows elevation are available. Do not relabel a quote response as full
 licensing evidence or replace missing history with generated data.
+
+## 2026-09-24 — Explicit free history and honest API cost accounting (#239)
+
+Select Massive Basic for the new opportunity/research history path, preserving
+Finnhub live-quote and SEC evidence contracts. No paid fallback, blanket provider
+capability flag, legacy performance rewrite, new writer or cloud component.
+Raw daily bars are adjusted once with explicit dated splits; cash dividends are
+separate. Daily aggregate scope is not falsely regular-hours-only. Preserve real
+window times, original dates and incomplete two-year coverage.
+
+Rate coordination is local operational metadata, not trading-state authority.
+Derived history pages are bounded, hash-validated and persisted by the existing
+AI owner. Real free-tier response and exact identity/entitlement evidence remain
+activation prerequisites. Source tests are not proof of an enabled live engine.
+
+Record API attempts/tokens without prompts or credentials. Publish observed-token
+estimates from dated exact-model tariffs, with unknown/unobserved/tool charges
+explicit; never imply an empty history or free market data means a zero API bill.
+The native journal survives failed runs; only the existing AI writer publishes its
+summary. No model change, account purchase or brokerage action is introduced.
