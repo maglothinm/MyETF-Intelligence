@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-24T17:46:34.965255+00:00",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "issue": 239,
+  "branch": "codex/free-market-stack-20260924",
+  "base": "b158d177b222d93bc785570e1c5e5ec8c5dc90f4",
+  "tests": {
+    "python_passed": 518,
+    "python_skipped": 1,
+    "skip_reason": "Optional local login PostgreSQL integration service is not enabled in this isolated run.",
+    "node_axe_passed": 8,
+    "fake_decision_cycles": 4,
+    "fake_intents": 1,
+    "actual_provider_calls_during_tests": 0,
+    "actual_notifications": 0,
+    "actual_trades": 0
+  },
+  "production": {
+    "installed_revision": "83501363c719aa14a46e141ef4c94cfb0532d23b",
+    "mode": "off",
+    "configuration_changed": false,
+    "services_restarted": false,
+    "massive_key_configured": false,
+    "new_subscriptions": 0
+  },
+  "limitations": [
+    "Actual Massive free-account responses require the owner API key.",
+    "No real data entitlement or source identity receipt was fabricated.",
+    "No deployment, scheduled shadow acceptance or investment performance claimed.",
+    "The new history route does not rewrite legacy Investor Edge histories.",
+    "API estimates cover observed text-token usage, not full invoices."
+  ],
+  "tested_head": "41eb60b90d65e49ed9578d60c41810884ba62318",
+  "merged_source": "0b70118fc8911e54e427d0011a43672a7029f8ab",
+  "pull_request": 240,
+  "ci": [
+    {
+      "id": 36035728639,
+      "name": "Current Opportunity offline tests",
+      "conclusion": "success"
+    },
+    {
+      "id": 36035728339,
+      "name": "Investor Edge tests",
+      "conclusion": "success"
+    },
+    {
+      "id": 36035728272,
+      "name": "Runtime v2 safety tests",
+      "conclusion": "success"
+    },
+    {
+      "id": 36035728574,
+      "name": "Source upload and OCR tests",
+      "conclusion": "success"
+    }
+  ],
+  "browser_checks": [
+    {
+      "TEST": true,
+      "page": "operating-costs",
+      "viewport": [
+        1280,
+        900
+      ],
+      "page_errors": [],
+      "horizontal_overflow": false,
+      "no_live_provider_calls": true
+    },
+    {
+      "TEST": true,
+      "page": "operating-costs",
+      "viewport": [
+        390,
+        844
+      ],
+      "page_errors": [],
+      "horizontal_overflow": false,
+      "no_live_provider_calls": true
+    }
+  ],
+  "setup_launcher": {
+    "name": "PolitiTrack Free Data Setup.cmd",
+    "created": true,
+    "sha256": "4aeda16d16a0a13d2f4a4b6cc659754c43d7f9b9ec9243c9ad8a014b3cbea0c6",
+    "pinned_source": "41eb60b90d65e49ed9578d60c41810884ba62318",
+    "executed_with_real_key": false
+  },
+  "source_status": "merged_not_deployed",
+  "next_step": "Owner free Massive account/key entered locally; actual provider and normal release/shadow verification remain required."
+}
