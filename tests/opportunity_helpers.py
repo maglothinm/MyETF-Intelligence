@@ -18,6 +18,9 @@ class Clock:
 
 def rules(mode='shadow', **changes):
     result=load_rules(mode=mode)
+    # Preserve the historical v1 behavioral fixtures; new v2 tests opt in explicitly.
+    # Production configuration validation only admits decision contract v2.
+    result['decision_contract_version']=1
     result.update(changes)
     return result
 

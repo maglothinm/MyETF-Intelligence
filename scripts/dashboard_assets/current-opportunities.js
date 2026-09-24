@@ -8,6 +8,35 @@
   function effectiveStatus(record,now){return record.lifecycle==='opportunity_available'&&(!Number.isFinite(now)||!Number.isFinite(Date.parse(record.display_valid_until))||now>=Date.parse(record.display_valid_until))?'needs_review':record.lifecycle;}
   function thresholdStatus(t,now){return t.status==='not_crossed'&&(!Number.isFinite(now)||!Number.isFinite(Date.parse(t.valid_until))||now>=Date.parse(t.valid_until))?'unknown':t.status;}
   function thresholdMatches(r,filter,now){return filter==='all'||Object.values(r.purchase_thresholds?.trades||{}).some(t=>t.active&&thresholdStatus(t,now)===filter);}
+
+  function renderDossier(doc,r,article) {
+    const d=r.investment_dossier;if(!d)return;
+    const details=node(doc,'details',undefined,'investment-dossier');details.append(node(doc,'summary','Investment case — human review required'));
+    details.append(node(doc,'p','Recorded case status: '+words(d.status)+' · '+text(d.evaluated_at)+'. This is not an order or an execution-price guarantee.','notice'));
+    const c=d.case||{};
+    for(const [key,label] of [['thesis','Why own this company?'],['why_now','Why consider it now?'],['shareholder_economics','Attributable shareholder economics'],['invalidation','What would invalidate the case?'],['review_conditions','What happens next?']]){
+      details.append(node(doc,'h3',label),node(doc,'p',c[key]?.text||'Required evidence unavailable'));
+      details.append(node(doc,'p','Claim references: '+text(c[key]?.claim_ids),'muted'));
+    }
+    details.append(node(doc,'h3','Scenario valuation — assumptions, not forecasts'));
+    const table=node(doc,'table'),head=node(doc,'tr');['Scenario','Assumed annual EPS','Assumed multiple','Scenario value','Rationale'].forEach(v=>head.append(node(doc,'th',v)));const thead=node(doc,'thead');thead.append(head);table.append(thead);
+    const body=node(doc,'tbody');for(const name of ['bear','base','bull']){const s=c.scenarios?.[name]||{},row=node(doc,'tr');[words(name),s.annual_eps,s.multiple,d.scenario_prices?.[name],s.assumption].forEach(v=>row.append(node(doc,'td',v)));body.append(row);}table.append(body);
+    const wrap=node(doc,'div',undefined,'table-wrap');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Scenario valuation, scroll horizontally');wrap.append(table);details.append(wrap);
+    details.append(node(doc,'p','Scenario entry ceiling: '+text(d.entry_max)+' · Base upside: '+pct(d.base_upside_fraction)+' · Bear scenario decline: '+pct(d.bear_downside_fraction)+' · Scenario reward/risk: '+text(d.scenario_reward_risk)));
+    details.append(node(doc,'p',d.valuation_notice),node(doc,'p',d.risk_notice));
+    for(const [key,label] of [['thesis_breaker','Thesis-breaking facts'],['uncertainty','Unresolved uncertainties'],['risk','Known investment risks'],['support','Supporting evidence']]){
+      details.append(node(doc,'h3',label));const list=node(doc,'ul');for(const f of d.findings?.[key]||[])list.append(node(doc,'li',f.implication+' ['+f.claim_id+']'));if(!list.children.length)list.append(node(doc,'li','None identified in the checked evidence; not a claim of complete risk coverage.'));details.append(list);
+    }
+    const claims=node(doc,'details');claims.append(node(doc,'summary','Exact supporting passages and provenance'));
+    for(const claim of d.claims||[]){claims.append(node(doc,'h4',claim.claim_id+' · '+words(claim.kind)),node(doc,'p',claim.text));for(const ref of claim.references||[]){claims.append(node(doc,'blockquote',ref.quote));try{const u=new URL(ref.url);if(u.protocol==='https:'&&!u.username&&!u.password){const link=node(doc,'a','Source passage');link.href=u.href;link.rel='noreferrer';claims.append(link,node(doc,'p','Observed '+text(ref.observed_at)+' · SHA-256 '+text(ref.document_sha256),'muted'));}}catch{claims.append(node(doc,'p','Source URL unavailable'));}}}details.append(claims);
+    details.append(node(doc,'p','Review coverage: '+text(d.source_coverage)),node(doc,'p',d.transaction_verification),node(doc,'p',d.capital_authorization));
+    const research=r.research?.cohorts||{};if(Object.keys(research).length){const tracking=node(doc,'details');tracking.append(node(doc,'summary','Post-decision research — not portfolio trades'));
+      for(const cohort of Object.values(research)){tracking.append(node(doc,'h4',words(cohort.cohort)),node(doc,'p','Timing basis: '+words(cohort.timing_basis)+' · Usable decision: '+text(cohort.decision_usable_at)+' · Anchor: '+text(cohort.anchor?.price)+' at '+text(cohort.anchor?.at)));
+        for(const h of [5,20,60,120]){const out=cohort.outcomes?.[String(h)];tracking.append(node(doc,'p',h+' sessions: '+(out?'net price return '+pct(out.net_return_fraction)+'; assumed round-trip cost '+text(out.cost_assumption_bps)+' basis points; benchmark-relative result unavailable':'Not yet measured.')));}}
+      tracking.append(node(doc,'p','Cohorts overlap and are conditional on the evaluated disclosure population. Price returns exclude dividends; missing outcomes are not zero.'));details.append(tracking);}
+    article.append(details);
+  }
+
   function render(doc,model,now,filter='all',thresholdFilter='all') {
     const mode=doc.getElementById('mode');mode.textContent=model.mode==='shadow'?'SHADOW / NOT LIVE ALERTS':model.mode==='live'?'Persisted current-opportunity assessments':'Current Opportunity is off';
     doc.getElementById('method').textContent=model.method_notice||'Provisional settings; not validated investment rules.';
@@ -31,6 +60,7 @@
       if(active.length){const count=key=>active.filter(t=>thresholdStatus(t,now)===key).length;
         thresholdSummary.textContent='Purchase gain threshold +'+pct(thresholds.threshold_fraction)+': '+count('not_crossed')+' not crossed; '+count('crossed')+' previously crossed; '+count('unknown')+' unknown / needs refresh.';
       }else thresholdSummary.textContent='Purchase gain threshold: not evaluated.';a.append(thresholdSummary);
+      renderDossier(doc,r,a);
       const detail=node(doc,'details');detail.append(node(doc,'summary','Timeline, price movement and source evidence'));
       detail.append(node(doc,'h3','Disclosure timeline — gaps remain unknown'));
       const wrap=node(doc,'div',undefined,'table-wrap');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Disclosure timeline, scroll horizontally');const table=node(doc,'table'),thead=node(doc,'thead'),hr=node(doc,'tr');['Transaction','Anchor','Value / actual timestamp','Precision / confidence'].forEach(v=>hr.append(node(doc,'th',v)));thead.append(hr);table.append(thead);const tbody=node(doc,'tbody');

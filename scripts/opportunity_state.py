@@ -48,6 +48,9 @@ def validate(state: dict) -> None:
         eid = record.get('evaluation_id')
         if oid != record['opportunity_id'] or eid not in evaluations or evaluations[eid]['payload'] != {k:v for k,v in record.items() if k != 'evaluation_id'}:
             raise OpportunityError('opportunity projection differs from its immutable evaluation')
+        if record.get('decision_contract_version') == 2 and record['lifecycle'] == 'opportunity_available':
+            if record['gates'].get('investment_case') is not True or (record.get('investment_dossier') or {}).get('status') != 'ready_for_human_review':
+                raise OpportunityError('available v2 opportunity lacks a verified decision contract')
         if record['lifecycle'] == 'opportunity_available' and not all(record['gates'].values()):
             raise OpportunityError('available opportunity has a failed gate')
         if not timestamp(record['evaluation_cutoff']) or not timestamp(record['next_review']):
@@ -111,6 +114,10 @@ def save(directory: Path, state: dict) -> None:
 def validate_directory(directory: Path) -> None:
     from .discovery_evidence import load as load_discovery
     load_discovery(directory)
+    cache = directory / 'opportunity-evidence-cache.json'
+    if cache.exists():
+        from .opportunity_review_v2 import validate_cache
+        validate_cache(read_json(cache))
     if (directory / STATE_NAME).exists():
         validate_existing_ai(directory)
         validate(read_json(directory / STATE_NAME))

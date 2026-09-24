@@ -47,6 +47,8 @@ jobs:
         run: |
           python tests/opportunity_shadow_fixture.py --output test-output
           node --test tests/opportunity_dom.test.cjs
+          python tests/opportunity_decision_fixture.py --output test-output-v2
+          OPPORTUNITY_FIXTURE_JSON="${GITHUB_WORKSPACE}/test-output-v2/dashboard/data/current-opportunities.json" node --test tests/opportunity_dom.test.cjs
       - name: Retain isolated review evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -55,6 +57,7 @@ jobs:
           path: |
             test-results.xml
             test-output/
+            test-output-v2/
           retention-days: 14
           if-no-files-found: error
           include-hidden-files: true # Include the TEST dashboard .nojekyll checksum entry.

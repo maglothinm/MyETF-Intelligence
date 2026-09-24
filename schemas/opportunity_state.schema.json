@@ -26,7 +26,7 @@
         "reason_codes": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
         "lifecycle": {"enum": ["opportunity_available", "watching", "needs_review", "invalidated", "archived"]},
         "evidence_status": {"enum": ["sufficient", "contradicted", "incomplete"]},
-        "gates": {"type": "object", "additionalProperties": false, "required": ["meaningful_buying", "acceptable_current_entry", "sufficient_current_evidence", "trustworthy_required_data"], "properties": {"meaningful_buying": {"type": "boolean"}, "acceptable_current_entry": {"type": "boolean"}, "sufficient_current_evidence": {"type": "boolean"}, "trustworthy_required_data": {"type": "boolean"}}},
+        "gates": {"type": "object", "additionalProperties": false, "required": ["meaningful_buying", "acceptable_current_entry", "sufficient_current_evidence", "trustworthy_required_data"], "properties": {"meaningful_buying": {"type": "boolean"}, "acceptable_current_entry": {"type": "boolean"}, "sufficient_current_evidence": {"type": "boolean"}, "trustworthy_required_data": {"type": "boolean"}, "investment_case": {"type": "boolean"}}},
         "evaluation_cutoff": {"type": "string"},
         "next_review": {"type": "string"},
         "rule_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},

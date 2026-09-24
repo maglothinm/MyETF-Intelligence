@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .opportunity_common import STATE_NAME, read_json
 from .opportunity_state import validate
+from .opportunity_research import summarize as summarize_research
 
 
 def load_projection(directory: Path | None) -> dict:
@@ -18,6 +19,7 @@ def load_projection(directory: Path | None) -> dict:
     validate(state)
     records=sorted(deepcopy(list(state['opportunities'].values())),key=lambda r:({'opportunity_available':0,'watching':1,'needs_review':2,'invalidated':3,'archived':4}[r['lifecycle']],r['security_key'])) if state['mode'] != 'off' else []
     return {'schema_version':1,'mode':state['mode'],'records':records,'telemetry':deepcopy(state['telemetry']),
+            'research':summarize_research(records),
             'migration':deepcopy(state['migration']),
             'label':'SHADOW / NOT LIVE ALERTS' if state['mode']=='shadow' else 'Potential opportunities for review',
             'method_notice':'Provisional settings; not validated predictors. Investor Edge is context only.',
@@ -27,16 +29,18 @@ def load_projection(directory: Path | None) -> dict:
 def write_exports(projection: dict, output: Path, assets: Path) -> None:
     (output/'data/current-opportunities.json').write_text(json.dumps(projection,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     with (output/'data/current-opportunities.csv').open('w',encoding='utf-8',newline='') as stream:
-        fields=['opportunity_id','ticker','lifecycle','evaluation_cutoff','next_review','rule_hash','evaluation_id','information_value_at_discovery','decision_provenance_json']
+        fields=['opportunity_id','ticker','lifecycle','evaluation_cutoff','next_review','rule_hash','evaluation_id','information_value_at_discovery','investment_dossier','decision_provenance_json']
         writer=csv.DictWriter(stream,fieldnames=fields)
         writer.writeheader()
         for record in projection.get('records',[]):
             row={key:record.get(key) for key in fields[:-1]}
             row['decision_provenance_json']=json.dumps(record,ensure_ascii=False,allow_nan=False)
+            row['investment_dossier']=json.dumps(record.get('investment_dossier',{}),ensure_ascii=False,allow_nan=False)
             row['information_value_at_discovery']=json.dumps(record.get('information_value_at_discovery',{}),ensure_ascii=False,allow_nan=False)
             # Neutralize spreadsheet formula interpretation without discarding JSON provenance.
             row={k:("'"+v if isinstance(v,str) and v[:1] in ('=','+','-','@') else v) for k,v in row.items()}
             writer.writerow(row)
+    (output/'data/opportunity-research.json').write_text(json.dumps(projection.get('research') or {},ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     # One row per purchase; stock-level summaries must not hide mixed histories.
     with (output/'data/purchase-thresholds.csv').open('w',encoding='utf-8',newline='') as stream:
         fields=['opportunity_id','ticker','trade_id','active','status','threshold_fraction',

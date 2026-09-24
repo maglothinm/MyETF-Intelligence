@@ -131,9 +131,12 @@ class EvidenceProvider:
         self.reviews, self.rules, self.reviewer, self.remaining = reviews, rules, reviewer, model_budget
 
     def review(self, rows, membership_hash, now, force=False):
-        matches = [r for r in self.reviews if r.get('membership_hash') == membership_hash and timestamp(r.get('checked_at')) and timestamp(r['checked_at']) <= now and timestamp(r.get('valid_until')) and now <= timestamp(r['valid_until'])]
+        matches = [r for r in self.reviews if r.get('status') in ('sufficient', 'contradicted') and (self.rules.get('decision_contract_version', 1) < 2 or r.get('decision_contract_version') == 2) and r.get('membership_hash') == membership_hash and timestamp(r.get('checked_at')) and timestamp(r['checked_at']) <= now and timestamp(r.get('valid_until')) and now <= timestamp(r['valid_until'])]
         if matches and (not force or not self.reviewer):
-            return deepcopy(max(matches, key=lambda r:r['checked_at']))
+            latest=max(matches,key=lambda r:r['checked_at'])
+            probe=getattr(self.reviewer, 'cache_is_current', None)
+            if probe is None or probe(latest, rows, now):
+                return deepcopy(latest)
         if self.reviewer and self.remaining > 0:
             self.remaining -= 1
             result = self.reviewer(rows, membership_hash, now)

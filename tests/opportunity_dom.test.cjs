@@ -53,3 +53,21 @@ test('purchase threshold filter distinguishes crossed, quiet and unknown per pur
   render(doc,copy,now+120000,'all','not_crossed');assert.equal(doc.querySelectorAll('article').length,0);
   render(doc,copy,NaN,'all','crossed');assert.equal(doc.querySelectorAll('article').length,1);
 });
+
+test('v2 dossier keeps quotations inert, risks separate, and scenarios labeled',async()=>{
+  const copy=structuredClone(model),r=copy.records[0];
+  r.investment_dossier={status:'ready_for_human_review',evaluated_at:new Date(now).toISOString(),
+    case:{thesis:{text:'TEST <img src=x onerror=alert(1)> economics',claim_ids:['TEST-claim']},scenarios:{bear:{annual_eps:6,multiple:15,assumption:'TEST assumption'}}},
+    claims:[{claim_id:'TEST-claim',kind:'fact',text:'TEST reported evidence',references:[{quote:'TEST <script>alert(1)</script>',url:'javascript:alert(1)'}]}],
+    findings:{risk:[{implication:'TEST customer concentration risk',claim_id:'TEST-claim'}]},scenario_prices:{bear:90},
+    entry_max:113.33,base_upside_fraction:.6,bear_downside_fraction:.1,scenario_reward_risk:6,
+    valuation_notice:'TEST assumptions, not forecasts.',risk_notice:'TEST scenario loss is not a maximum.',capital_authorization:'No trade authorization.'};
+  const dom=page(),doc=dom.window.document;render(doc,copy,now);
+  assert.ok(doc.querySelector('.investment-dossier'));
+  assert.match(doc.body.textContent,/Scenario valuation — assumptions, not forecasts/);
+  assert.match(doc.body.textContent,/Known investment risks/);
+  assert.match(doc.body.textContent,/TEST customer concentration risk/);
+  assert.equal(doc.querySelectorAll('img,[onerror],a[href^="javascript:"]').length,0);
+  dom.window.eval(axe.source);const result=await dom.window.axe.run(doc,{rules:{'color-contrast':{enabled:false}}});
+  assert.equal(result.violations.length,0,JSON.stringify(result.violations.map(v=>v.id)));
+});
