@@ -1,5 +1,22 @@
 # PolitiTrack project state
 
+## September 28 #239 — Recover failed Massive setup without discarding credentials
+
+The owner entered a key locally, but the saved probe receipt reports
+`massive_http_400`, `success=false`, and no credential file. No history pages or
+endpoint diagnostics were retained, so the failing stage/root cause is not yet
+established. Closing the launcher was not successful account setup.
+
+Branch `codex/massive-setup-recovery-20260928` from canonical main
+`4f805818562b66b6c0971c1496c62410dfa62ecd` adds bounded secret-redacted HTTP
+request diagnostics, requests latest metadata without the unnecessary date filter,
+and securely preserves locally entered credentials before network validation.
+Credential storage never sets provider capability or activates production.
+Focused offline validation: 38 tests passed. The owner must re-enter the key once
+because the old routine discarded it. Actual provider/release/shadow verification
+remains pending. Installed application and services remain unchanged.
+
+
 ## September 24 #239 — Free stack merged; owner API key is the next setup input
 
 PR **#240** merged as **0b70118fc8911e54e427d0011a43672a7029f8ab**;
