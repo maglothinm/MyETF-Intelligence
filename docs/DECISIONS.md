@@ -1846,3 +1846,17 @@ starve the same later case indefinitely. Next-review deadlines start at the inpu
 minute, not the completion of slow requests, so regular 30-minute invocations can
 resume work. This changes work scheduling only, not investment qualification,
 source certainty, price bands or historical return assumptions.
+
+## 2026-09-28 — Hold live delivery after verified runtime deployment (#239)
+
+The deployed Current Opportunity engine is genuinely shadow-active, not OFF and
+not an isolated synthetic preview. Two native scheduled snapshots, repeated
+capability import, restart continuity, real provider data and published UI were
+verified. This establishes infrastructure operation, not a complete investment
+case or a measured investment edge. Leave live AI investment delivery suppressed.
+
+Treat the three-company/two-report capability set as a bounded initial acceptance
+scope. It expires September 29 at 14:44:22 UTC and cannot silently renew itself.
+The next autonomous acceptance check is scheduled before expiry. Broader identity
+coverage, verified renewal and complete issuer/model review remain open; no new
+API key or subscription is needed merely because acceptance remains incomplete.
