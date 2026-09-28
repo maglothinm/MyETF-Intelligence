@@ -26,7 +26,7 @@ def test_latest_metadata_omits_optional_date(tmp_path):
 
 def test_failed_probe_retains_private_key_and_diagnostic(tmp_path,monkeypatch):
     private=tmp_path/'private.json';out=tmp_path/'probe'
-    monkeypatch.setattr(setup,'getpass',lambda _: 'TEST-OWNER-KEY')
+    monkeypatch.setattr(setup,'prompt_key',lambda: 'TEST-OWNER-KEY')
     def create(path,key):
         path.write_text(json.dumps({'provider':'massive','plan':'stocks_basic_free','api_key':key}))
     monkeypatch.setattr(setup,'private_key_file',create)
@@ -43,3 +43,26 @@ def test_failed_probe_retains_private_key_and_diagnostic(tmp_path,monkeypatch):
     assert receipt['stage']=='latest_security_metadata'
     assert 'TEST-OWNER-KEY' not in json.dumps(receipt)
     assert private.exists()
+
+
+@pytest.mark.parametrize('value',['\x16','\x03','x','bad key','\u200bFAKEKEY123456'])
+def test_console_control_and_invalid_input_cannot_be_saved(value):
+    from scripts.opportunity_massive import load_key
+    with pytest.raises(DataUnavailable):
+        load_key({'MASSIVE_API_KEY':value})
+
+
+def test_windows_prompt_uses_masked_paste_friendly_widget(monkeypatch):
+    import tkinter
+    from tkinter import simpledialog
+    calls=[]
+    class Window:
+        def withdraw(self):pass
+        def attributes(self,*a):pass
+        def destroy(self):calls.append('destroyed')
+    monkeypatch.setattr(tkinter,'Tk',Window)
+    def dialog(title,prompt,**kwargs):
+        assert kwargs['show']=='*' and 'Ctrl+V' in prompt
+        return 'TEST-OWNER-KEY'
+    monkeypatch.setattr(simpledialog,'askstring',dialog)
+    assert setup.prompt_key(platform='nt')=='TEST-OWNER-KEY' and calls==['destroyed']

@@ -1,5 +1,25 @@
 # PolitiTrack project state
 
+## September 28 #239 — Windows Ctrl+V input defect identified and corrected
+
+The saved key from the resumed setup consisted solely of the Ctrl+V control
+character (length one, nonprintable), not the owner's API key. A bounded direct
+request returned plain HTTP 400. This explains why the hidden console prompt did
+not authenticate; no bad-key/subscription verdict is drawn about the real key.
+The unusable control-only file was preserved privately and removed from the active
+credential path; no valid credential or production state was overwritten.
+
+Branch `codex/massive-setup-recovery-20260928`, PR #242: use a native Windows
+masked password dialog supporting Ctrl+V; reject nonprintable, whitespace,
+non-ASCII and implausibly short input before saving or sending. Preserve securely
+entered credentials independently of verification and retain redacted endpoint
+failure diagnostics. Latest metadata requests omit the unnecessary date filter.
+
+The owner must paste the real key once in the new local dialog. Successful actual
+free-data access and deployment remain unverified; production settings/services
+and Current Opportunity OFF are unchanged. No paid subscription or trade.
+
+
 ## September 28 #239 — Recover failed Massive setup without discarding credentials
 
 The owner entered a key locally, but the saved probe receipt reports

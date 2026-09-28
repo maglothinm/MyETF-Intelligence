@@ -51,7 +51,7 @@ def load_key(environment):
         if value.get('provider') != 'massive' or value.get('plan') != 'stocks_basic_free':
             raise DataUnavailable('massive_free_key_configuration_invalid')
         key = str(value.get('api_key') or '').strip()
-    if not key or any(c.isspace() for c in key) or len(key) > 512:
+    if not key or not key.isascii() or not key.isprintable() or any(c.isspace() for c in key) or not 8 <= len(key) <= 512:
         raise DataUnavailable('massive_free_api_key_required')
     return key
 

@@ -20,6 +20,27 @@ from scripts.opportunity_massive import MassiveHistory, SharedPacer, load_key
 from scripts.opportunity_providers import RequestBudget
 
 
+
+def prompt_key(*, platform=None):
+    """Native masked edit control accepts Ctrl+V; console getpass does not on Windows."""
+    if (platform or os.name) != 'nt':
+        return getpass('Paste the Massive API key (hidden): ').strip()
+    import tkinter as tk
+    from tkinter import simpledialog
+    window=tk.Tk()
+    window.withdraw()
+    window.attributes('-topmost',True)
+    try:
+        value=simpledialog.askstring('PolitiTrack - Massive API key',
+            'Paste your Massive API key here (Ctrl+V is supported).\nThe key stays on this PC; no paid subscription is created.',
+            parent=window,show='*')
+        if value is None:
+            raise DataUnavailable('massive_key_entry_cancelled')
+        return value.strip()
+    finally:
+        window.destroy()
+
+
 def private_key_file(path: Path, key: str):
     """Create a new owner/SYSTEM/admin-only credential file; never overwrite a key."""
     if path.exists():
@@ -64,7 +85,7 @@ def main(argv=None):
         env['MASSIVE_API_KEY_FILE']=str(args.key_file)
     else:
         print('Use a free Massive Stocks Basic account. No card, subscription or paid upgrade will be requested by this helper.')
-        key=getpass('Paste the Massive API key (hidden): ').strip()
+        key=prompt_key()
         env['MASSIVE_API_KEY']=key
         load_key(env)  # Validate syntax before saving; never claim account verification.
         private_key_file(args.key_file,key)
