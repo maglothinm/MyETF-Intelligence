@@ -1,5 +1,62 @@
 # PolitiTrack active handoff
 
+## September 28 #239 — Current Opportunity is deployed and running in SHADOW
+
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
+Installed executable release: **efae28e99f02dabb0122a6cb53062ecc2bbe13e2** (#244),
+following deployed #243. The existing Windows scheduler/web service boundaries
+were used; PostgreSQL PID 5008 stayed running. No new scheduler, cloud runtime,
+state reset, paid data subscription or brokerage action was introduced.
+
+The existing AI owner imported the pinned Massive/Finnhub receipt in shadow mode.
+Its initial scope is BE, INTC, MSFT, benchmark SPY and two verified House reports.
+LocalService has Read access to the retained private Massive key. AI alert and
+notification dispatch are explicitly suppressed during this validation period.
+Do not request the key again or confuse the Runtime v2 production-state owner
+with the Current Opportunity feature's SHADOW mode.
+
+Two normal scheduled AI runs succeeded, including a zero-new-disclosure follow-up:
+AI **1101** at 15:17 UTC (`6dfba9fcae67cc2681daa4c322570f2a16b6892d8e4f0270a5d0e232bbb29b57`)
+and **1102** at 15:44 UTC (`4a705a3d1351860d9608d76aeb294a503fa8a91e371a68dc901cb37d8ede2d77`).
+The first made 12 real Massive requests and retrieved Finnhub quotes and SEC data.
+The second retained the imported configuration and prior work. All 5,630 initial
+snapshot headers and retained disclosure/analysis/review ledger prefixes were
+preserved; no broken parent links. The original 21 opportunity events are still
+present in the 41-event follow-up journal. No opportunity intents or deliveries.
+
+Dashboard **2116**, source efae28e, published AI1102 at 15:47 UTC. Current
+Opportunity and Operating costs HTML/JSON routes match committed snapshot bytes.
+Read-only live browser checks at 1280 and 390 pixels found no script errors or
+horizontal overflow. Cost accounting is deployed, but no new metered model request
+has completed in these initial runs; historical unmetered cost remains unknown.
+
+**Runtime acceptance is not investment-case acceptance.** Forty groups have been
+audited, but only three companies have initial verified mappings. Two issuer
+documents/four text sections are downloaded, zero sections are model-reviewed and
+zero investment dossiers are complete. Live notifications remain disabled.
+The scoped capability receipt expires **2026-09-29T14:44:22Z**. Continuous renewal
+and broader independent identity coverage are not implemented by this release.
+Do not silently extend verification or treat the full unresolved inventory as
+verified. A separate unattended acceptance check is scheduled around 08:00 Eastern
+on September 29, before expiry, to continue the readiness assessment.
+
+#244 prioritizes verified identity work and fixes round-robin/deadline scheduling
+without changing investment gates. Its exact tested head c65554d passed 288 local
+tests and CI runs **36443712569** and **36443712584**. An additional optional tweak
+for already-retained legacy deadlines and its test remain **uncommitted** in
+`C:\Users\maglo\PolitiTrack-work\free-stack-deploy-20260928`; a write was blocked,
+so it was not merged or installed. Do not confuse its separate 289-test result
+with the deployed commit. The first eligible case follow-up remains future work;
+the second native run audited unresolved rows while prior deadlines were pending.
+
+Keep #239/#236 open for completed issuer/model review, durable verification renewal
+and full live-readiness acceptance. The owner's request for autonomous progress
+through steps 2–6 does not justify bypassing missing evidence or enabling orders.
+Read `docs/releases/2026-09-28-shadow-acceptance.json` for exact deployment/CI,
+snapshot, browser and remaining-acceptance evidence. Private exports are retained
+under `C:\ProgramData\PolitiTrack\backups\free-stack-deploy-20260928` outside Git.
+
+
 ## September 28 #239 — Deployed on Beast; first scheduled shadow run succeeded
 
 Owner authorized steps 2–6 autonomously. Merged #243 revision
