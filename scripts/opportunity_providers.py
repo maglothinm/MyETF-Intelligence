@@ -44,6 +44,10 @@ def enrich_identities(rows: list[dict], caps: dict, now: datetime) -> list[dict]
     for raw in rows:
         row = dict(raw)
         match = (caps.get('securities') or {}).get(str(row.get('ticker')))
+        from .opportunity_input_quality import issues as source_issues
+        wrong_security = {'not_verified_common_stock','security_type_conflicts_with_source','source_ticker_conflict','multiple_source_security_symbols'}
+        if row.get('equity_like') is not True or wrong_security.intersection(source_issues(row)):
+            match = None  # An option or municipal bond must not inherit its issuer's common-stock identity.
         if match and match.get('source_url') and day(match.get('valid_from')) and day(match.get('valid_through')) and day(row.get('transaction_date')) and day(match['valid_from']) <= day(row['transaction_date']) <= day(match['valid_through']) and now.date() <= day(match['valid_through']):
             row.update({k:match[k] for k in ('security_id','currency','share_class','exchange') if k in match})
             row['security_evidence'] = match['source_url']

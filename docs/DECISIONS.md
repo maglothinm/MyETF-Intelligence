@@ -1821,3 +1821,12 @@ native edit widget that supports normal paste and reject control/invalid input
 before any credential file or HTTP header is created. Existing valid files are
 never overwritten by the setup helper; the known control-only file is preserved
 privately as invalid evidence. No account entitlement is inferred from file creation.
+
+## 2026-09-28 — Keep successful free-key setup separate from runtime activation (#239)
+
+Actual free-data responses now succeed. Retain the valid credential; no further
+owner entry is required. The capability write was tool-blocked before execution;
+do not bypass that boundary or claim configuration/activation. Proposed shadow
+receipt import remains pinned, schema-validated, expiry-aware and under the existing
+AI owner. Options and bonds cannot inherit a common-stock mapping merely because
+the ticker matches. No running source, permissions, service or portfolio changed.

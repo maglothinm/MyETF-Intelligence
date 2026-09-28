@@ -74,6 +74,8 @@ class OpportunityRuntime:
 
     def evaluate(self, session, *, market_provider=None, evidence_provider=None, calendar=None):
         from . import ai_filing_analyst as analyst
+        from .opportunity_capability_import import import_receipt
+        receipt_import = import_receipt(self.config.ai_dir, self.environment, self.clock())
         caps = capabilities(self.config.ai_dir, self.clock())
         budget = RequestBudget(self.rules['request_budget'])
         market = market_provider or MarketProvider(self.config, self.rules, session, caps, self.clock, budget)
@@ -89,6 +91,10 @@ class OpportunityRuntime:
               calendar or ExchangeCalendar(), market, evidence, channels=channels, activation=self.activation)
         self.state['telemetry']['provider_requests_remaining'] = budget.remaining
         self.state['telemetry']['provider_capability_verified'] = bool(caps)
+        self.state['telemetry']['capability_import'] = receipt_import
+        self.state['telemetry']['capability_valid_until'] = caps.get('valid_until')
+        self.state['telemetry']['verified_security_count'] = len(caps.get('securities', {}))
+        self.state['telemetry']['verified_report_count'] = len(caps.get('filers_by_report', {}))
         history_client = getattr(market, 'massive_history', None)
         self.state['telemetry']['market_stack'] = {'history_provider':self.rules.get('history_provider','alphavantage'), 'quote_provider':'finnhub', 'issuer_provider':'sec', 'massive_requests_this_run':getattr(history_client,'requests',0), 'massive_cache_hits':getattr(history_client,'hits',0), 'free_data_subscription_usd':0 if self.rules.get('history_provider')=='massive' else None}
         self.state['telemetry']['decision_contract_version'] = self.rules.get('decision_contract_version', 1)
