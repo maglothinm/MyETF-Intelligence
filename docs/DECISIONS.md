@@ -1805,3 +1805,19 @@ source versus deployment distinction: the owner must enter a free key through
 the pinned local helper before actual provider/shadow verification. Do not turn
 missing credentials or free-plan constraints into a paid subscription or fake
 capability flag. The source merge changes no running services or trading state.
+
+## 2026-09-28 — Preserve locally entered credentials independently of verification (#239)
+
+A provider HTTP failure must not discard an owner-entered private key or be
+presented as successful setup. Store the key with existing restrictive ACLs,
+retain a separate unsuccessful probe receipt, and never derive entitlement from
+file existence. Request current metadata without an unnecessary historical date
+filter; collect bounded credential-redacted endpoint diagnostics for failures.
+
+### #239 Windows credential input correction
+
+Python console getpass received only Ctrl+V, not a pasted API key. Use a masked
+native edit widget that supports normal paste and reject control/invalid input
+before any credential file or HTTP header is created. Existing valid files are
+never overwritten by the setup helper; the known control-only file is preserved
+privately as invalid evidence. No account entitlement is inferred from file creation.

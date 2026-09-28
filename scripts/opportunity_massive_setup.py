@@ -16,8 +16,29 @@ from types import SimpleNamespace
 if not __package__:
     sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scripts.opportunity_common import DataUnavailable, load_rules, utc, write_json
-from scripts.opportunity_massive import MassiveHistory, SharedPacer
+from scripts.opportunity_massive import MassiveHistory, SharedPacer, load_key
 from scripts.opportunity_providers import RequestBudget
+
+
+
+def prompt_key(*, platform=None):
+    """Native masked edit control accepts Ctrl+V; console getpass does not on Windows."""
+    if (platform or os.name) != 'nt':
+        return getpass('Paste the Massive API key (hidden): ').strip()
+    import tkinter as tk
+    from tkinter import simpledialog
+    window=tk.Tk()
+    window.withdraw()
+    window.attributes('-topmost',True)
+    try:
+        value=simpledialog.askstring('PolitiTrack - Massive API key',
+            'Paste your Massive API key here (Ctrl+V is supported).\nThe key stays on this PC; no paid subscription is created.',
+            parent=window,show='*')
+        if value is None:
+            raise DataUnavailable('massive_key_entry_cancelled')
+        return value.strip()
+    finally:
+        window.destroy()
 
 
 def private_key_file(path: Path, key: str):
@@ -64,16 +85,23 @@ def main(argv=None):
         env['MASSIVE_API_KEY_FILE']=str(args.key_file)
     else:
         print('Use a free Massive Stocks Basic account. No card, subscription or paid upgrade will be requested by this helper.')
-        key=getpass('Paste the Massive API key (hidden): ').strip()
+        key=prompt_key()
         env['MASSIVE_API_KEY']=key
+        load_key(env)  # Validate syntax before saving; never claim account verification.
+        private_key_file(args.key_file,key)
+        print('Key saved securely on this PC. Access is still unverified; a failed network check will not discard it.')
     clock=lambda:datetime.now(timezone.utc)
     config=SimpleNamespace(ai_dir=args.output/'derived-cache',request_timeout=(10,45))
     rules=load_rules(mode='off');rules['massive_requests_per_run']=8
     receipt={'observed_at':utc(clock()),'scope':'Read-only Massive free-data probe; not production activation or Finnhub entitlement verification.',
-        'mode':'isolated_probe','symbol':args.symbol,'success':False,'subscription_purchased':False,'capability_flags_written':False}
+        'mode':'isolated_probe','symbol':args.symbol,'credential_file_saved':args.key_file.exists(),'success':False,'subscription_purchased':False,'capability_flags_written':False}
     try:
+        receipt['stage']='client_configuration'
         client=MassiveHistory(config,rules,clock,RequestBudget(8),environment=env)
-        metadata=client.metadata(args.symbol,clock().date().isoformat())
+        receipt['stage']='latest_security_metadata'
+        metadata=client.metadata(args.symbol)
+        receipt['metadata']=metadata
+        receipt['stage']='historical_prices_and_actions'
         if metadata['type']!='CS' or metadata['active'] is not True or metadata['primary_exchange'] not in ('XNYS','XNAS'):
             raise DataUnavailable('probe_requires_active_US_common_stock')
         row={'ticker':args.symbol,'security_id':metadata['composite_figi'],'share_class':metadata['share_class_figi'],'currency':'USD'}
@@ -84,17 +112,21 @@ def main(argv=None):
             split_count=sum(a['kind']=='split' for a in history['adjustment_events']),
             dividend_count=sum(a['kind']=='dividend' for a in history['adjustment_events']),
             requests=client.requests,provider_pages=history['source_pages'])
-        if not existing:
-            private_key_file(args.key_file,key)
         receipt['credential_file_saved']=True
+        receipt['stage']='complete'
     except DataUnavailable as exc:
+        receipt['success']=False
         receipt['reason']=str(exc)
+        if 'client' in locals():
+            receipt['failed_request']=client.last_error or client.last_request
     except Exception as exc:
         receipt['success']=False
         receipt['reason']='local_setup_failed:'+type(exc).__name__
     write_json(args.output/'massive-probe.json',receipt)
     print(json.dumps(receipt,indent=2))
     if not receipt['success']:
+        print('SETUP CHECK FAILED. Your saved key is retained for repair; PolitiTrack has not been activated.')
+        print('Diagnostic receipt: '+str(args.output/'massive-probe.json'))
         return 2
     print('Free data response verified for this symbol. Production remains unchanged; source identities, Finnhub capability and normal release acceptance are still required.')
     return 0

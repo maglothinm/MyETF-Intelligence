@@ -51,7 +51,7 @@ def load_key(environment):
         if value.get('provider') != 'massive' or value.get('plan') != 'stocks_basic_free':
             raise DataUnavailable('massive_free_key_configuration_invalid')
         key = str(value.get('api_key') or '').strip()
-    if not key or any(c.isspace() for c in key) or len(key) > 512:
+    if not key or not key.isascii() or not key.isprintable() or any(c.isspace() for c in key) or not 8 <= len(key) <= 512:
         raise DataUnavailable('massive_free_api_key_required')
     return key
 
@@ -114,6 +114,8 @@ class MassiveHistory:
         self.cache = read_json(path) if path.exists() else {'version':1, 'entries':{}}
         validate_cache(self.cache)
         self.requests, self.hits = 0, 0
+        self.last_request = None
+        self.last_error = None
         self.account = hashlib.sha256(self.key.encode()).hexdigest()
 
     def _save(self):
@@ -127,15 +129,45 @@ class MassiveHistory:
         query = [(k,v) for k,v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() not in ('apikey','api_key','token')]
         return urlunsplit(('https','api.massive.com',parts.path,urlencode(query),''))
 
+    def _diagnostic(self, response):
+        result = {**(self.last_request or {}), 'http_status':response.status_code}
+        def clean(value):
+            if not isinstance(value,(str,int)):
+                return None
+            text = str(value).replace(self.key, '[credential redacted]')
+            text = re.sub(r'(?i)(bearer\s+|api[_-]?key[\s:=]+|token[\s:=]+)[^\s,;]+', '[credential redacted]', text)
+            text = re.sub(r'https?://\S+', '[URL omitted]', text)
+            text = re.sub(r'[A-Za-z0-9_\-]{25,}', '[identifier omitted]', text)
+            return ''.join(c for c in text[:360] if c.isprintable())
+        try:
+            raw=bytearray()
+            for chunk in response.iter_content(chunk_size=2048):
+                raw.extend(chunk)
+                if len(raw)>8192:
+                    return result
+            payload=json.loads(raw)
+            if isinstance(payload,dict):
+                for key in ('status','code','error','message','request_id'):
+                    value=clean(payload.get(key))
+                    if value:
+                        result[key]=value
+        except Exception:
+            pass
+        return result
+
     def _get(self, url, params=None):
         if self.requests >= self.rules.get('massive_requests_per_run', 12):
             raise DataUnavailable('massive_per_run_budget_exhausted')
         self.budget.consume()
         self.pacer.acquire()
         self.requests += 1
+        self.last_request = {'path':urlsplit(url).path, 'requested_at':utc(self.clock()), 'parameter_names':sorted((params or {}).keys())}
+        self.last_error = None
         try:
             response = self.session.get(url, params=params, headers={'Authorization':'Bearer '+self.key},
                 timeout=self.config.request_timeout, allow_redirects=False, stream=True)
+            if response.status_code != 200:
+                self.last_error = self._diagnostic(response)
             if response.status_code == 429:
                 retry = number(response.headers.get('Retry-After')) or 65
                 self.pacer.backoff(retry)
@@ -310,10 +342,10 @@ class MassiveHistory:
                     'payload_hash':digest(p)} for p in all_pages],
                 'history_notice':'Free EOD history, not a current quote. Provider daily aggregates use eligible-trade rules; regular-hours-only coverage is not asserted. Dividends are retained separately, not added to price returns.'}
 
-    def metadata(self, ticker, date):
-        if not re.fullmatch(r'[A-Z][A-Z0-9.\-]{0,14}',ticker) or not day(date):
+    def metadata(self, ticker, date=None):
+        if not re.fullmatch(r'[A-Z][A-Z0-9.\-]{0,14}',ticker) or (date is not None and not day(date)):
             raise DataUnavailable('massive_metadata_input_invalid')
-        payload = self._get(BASE+'/v3/reference/tickers/'+quote(ticker,safe=''), {'date':date})
+        payload = self._get(BASE+'/v3/reference/tickers/'+quote(ticker,safe=''), {'date':date} if date is not None else None)
         value = payload.get('results')
         if not isinstance(value,dict) or value.get('ticker') != ticker or value.get('market')!='stocks' or value.get('locale')!='us' or not value.get('composite_figi') or not value.get('share_class_figi') or str(value.get('currency_name','')).upper()!='USD':
             raise DataUnavailable('massive_security_identity_unresolved')
