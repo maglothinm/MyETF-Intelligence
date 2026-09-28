@@ -1830,3 +1830,19 @@ do not bypass that boundary or claim configuration/activation. Proposed shadow
 receipt import remains pinned, schema-validated, expiry-aware and under the existing
 AI owner. Options and bonds cannot inherit a common-stock mapping merely because
 the ticker matches. No running source, permissions, service or portfolio changed.
+
+## 2026-09-28 — Verified shadow reviews must progress despite unresolved inventory (#239)
+
+Existing shadow activation is distinct from Runtime v2's production-state owner:
+the same scheduler/AI lease commits additive observations, while Current Opportunity
+is shadow and AI notification dispatch is suppressed. Do not rebaseline or use a
+simulation writer to obtain real evidence. The native LocalService receives only
+Read access to the existing private market key.
+
+Within unchanged per-run budgets, review identity-supported opportunities before
+unresolved-source audit groups and rotate supported reviews before timestamp
+ordering. Otherwise real response durations and a smaller document/model budget
+starve the same later case indefinitely. Next-review deadlines start at the input
+minute, not the completion of slow requests, so regular 30-minute invocations can
+resume work. This changes work scheduling only, not investment qualification,
+source certainty, price bands or historical return assumptions.

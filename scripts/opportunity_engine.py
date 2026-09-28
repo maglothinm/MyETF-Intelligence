@@ -197,7 +197,7 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
               'gates':{'meaningful_buying':full['meaningful'], 'acceptable_current_entry':bool(entry), 'sufficient_current_evidence':evstatus == 'sufficient', 'trustworthy_required_data':data_ok},
               'evaluation_cutoff':utc(now), 'input_cutoff':utc(input_cutoff), 'last_attempted_review':utc(now),
               'last_successful_review':utc(now) if data_ok and evstatus == 'sufficient' else previous.get('last_successful_review'),
-              'next_review':utc(now+timedelta(minutes=rules['review_minutes'])), 'rule_hash':rules['method_hash'],
+              'next_review':utc(input_cutoff.replace(second=0,microsecond=0)+timedelta(minutes=rules['review_minutes'])), 'rule_hash':rules['method_hash'],
               'first_qualifying_discovery':first_discovery, 'monitoring_until':utc(horizon) if horizon else None,
               'administrative_decision':administration, 'activation_id':activation['activation_id'] if activation else None,
               'activation_baseline':baseline, 'was_out_of_range':was_out, 'last_out_of_range_at':last_out_at, 'return_started_at':returned_at,
@@ -250,10 +250,13 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
         prior = state['opportunities'].get(oid) or {}
         if not prior or membership(rows) != prior.get('membership_hash') or not timestamp(prior.get('next_review')) or timestamp(prior['next_review']) <= input_cutoff or prior.get('rule_hash') != rules['method_hash'] or (prior.get('purchase_thresholds') or {}).get('threshold_fraction') != rules.get('never_crossed_fraction', 0.08) or (activation and prior.get('activation_id') != activation['activation_id']):
             due.append((prior.get('last_attempted_review') or '', key, rows))
-    # Oldest-attempt first plus durable cyclic tie-break prevents repeated budget starvation.
+    # Verified source/security identities get bounded review work before unresolved audit rows.
+    # Rotate before timestamp ties: real requests take time, so oldest-first alone
+    # repeatedly gave the same issuer the smaller evidence/document budget.
     cursor = state.get('cursor') or ''
+    identity_ready = {key:any(r.get('transaction_type') == 'Purchase' and not r['identity_reasons'] for r in rows) for _,key,rows in due}
     archived_keys = {p['security_key'] for p in state['opportunities'].values() if p['lifecycle'] == 'archived'}
-    due.sort(key=lambda item:(item[1] in archived_keys, item[0], item[1] <= cursor, item[1]))
+    due.sort(key=lambda item:(not identity_ready[item[1]], item[1] in archived_keys, item[1] <= cursor, item[0], item[1]))
     attempted = 0
     for _, key, rows in due[:rules['security_budget']]:
         try:
@@ -301,6 +304,9 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
     overdue_times += [min(timestamp(r['first_observed_at_utc']) for r in rows) for _, key, rows in due[attempted:]]
     oldest = min(overdue_times, default=now)
     state['telemetry'] = {'input_cutoff':utc(input_cutoff), 'finished_at':utc(now), 'due_count':len(due), 'attempted_count':attempted,
+                          'verified_identity_due_count':sum(identity_ready.values()),
+                          'unresolved_identity_due_count':len(due)-sum(identity_ready.values()),
+                          'review_policy':'verified_identity_first; durable round_robin; no qualification threshold change',
                           'overdue_count':len(missed), 'budget_exhausted':bool(missed), 'oldest_unreviewed_hours':max(0,(now-oldest).total_seconds()/3600),
                           'starvation_warning':(now-oldest).total_seconds() >= rules['starvation_hours']*3600,
                           'excluded_transactions':excluded, 'reason_counts':dict(Counter(r for p in state['opportunities'].values() for r in p['reason_codes']))}

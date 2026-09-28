@@ -1,5 +1,49 @@
 # PolitiTrack active handoff
 
+## September 28 #239 — Deployed on Beast; first scheduled shadow run succeeded
+
+Owner authorized steps 2–6 autonomously. Merged #243 revision
+`5e6d53e080c76335280074a4224eae7427586716` was installed at 15:05 UTC using the
+existing scheduler/web service boundaries. PostgreSQL PID 5008 was not restarted.
+Fresh frozen export/repack verification passed for all four heads and 5,630
+historical snapshot headers had no broken parent links. The existing untracked
+source-status file was preserved; no head was reset or replaced.
+
+The verified, pinned provider receipt covers three companies (BE, INTC, MSFT)
+and the SPY benchmark, with two explicitly checked House report-to-bioguide links.
+Those links were checked against original public disclosure pages and the Clerk's
+member directory. All other unresolved identities remain unresolved. LocalService
+was granted Read access to the existing Massive key file only; no broad user grant
+or credential/account change. Current Opportunity is configured **shadow** in the
+existing AI invocation; AI alert and notification dispatch are explicitly suppressed.
+The receipt expires 2026-09-29 14:44:22 UTC; renewal/expanded identity verification
+is not inferred from mere file presence or extended silently.
+
+The normal 15:14 UTC AI run committed generation **1101**, snapshot
+`6dfba9fcae67cc2681daa4c322570f2a16b6892d8e4f0270a5d0e232bbb29b57`.
+Its committed opportunity state is shadow and contains the successful capability
+import, 12 real Massive requests, current Finnhub prices, SEC facts, two downloaded
+issuer documents/four text sections, 20 evaluated groups, and zero opportunity
+alert intents/deliveries. No section model reviews have completed yet. The served
+Current Opportunity projection reports shadow and the Operating costs page is HTTP
+200. Empty measured API usage is explicitly unknown historical cost, not a $0 bill.
+
+The first run exposed review scheduling that would leave verified, unfinished
+cases behind 1,365 unresolved groups. The deployment branch adds identity-ready
+review priority plus true round-robin ordering ahead of duration-dependent
+timestamps, and start-minute-based review deadlines to avoid missing the next
+30-minute slot merely because downloads took minutes. Unresolved rows remain in
+bounded audit work, no buying/entry/evidence threshold is relaxed, and retained
+source records, original anchors and notification history are not rewritten.
+Local targeted regression: **288 passed**. Exact-head CI and guarded service
+installation of this corrective patch remain distinct from these tests.
+
+Keep #239/#236 open. Live investment notifications are not enabled. Full issuer
+case review, a further zero-new-filing scheduled cycle, continuity checks and live
+readiness assessment remain to be completed; initial data access is not proof of
+an actionable investment or complete universe coverage.
+
+
 ## September 28 #239 — Owner key validated; actual free feeds verified, activation not applied
 
 The owner entered the key through the corrected masked Windows dialog. The
