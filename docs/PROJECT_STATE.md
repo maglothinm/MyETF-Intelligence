@@ -1,5 +1,39 @@
 # PolitiTrack project state
 
+## September 28 #239 — Owner key validated; actual free feeds verified, activation not applied
+
+The owner entered the key through the corrected masked Windows dialog. The
+14:35 UTC successful setup receipt verifies MSFT metadata, 499 daily bars through
+September 25, eight dividends and a securely retained local credential. No key is
+stored in this repository or these notes. PR #242 merged as
+c5d754647c5074165573d1aaf959cabafc385222 after both exact-head CI runs succeeded.
+
+Additional bounded read-only checks verified current/as-of security metadata and
+499 daily bars each for BE, INTC, MSFT and benchmark SPY. Existing Finnhub quotes
+were 15–34 seconds old at observation. These are actual API response checks, not
+investment recommendations, complete feed licensing claims or universe-wide
+identity certification. No paid subscription or model call was made for the probes.
+
+A fresh read-only snapshot export verified AI 1099, Dashboard 2111, Executive 766,
+and Legislative 1649, with archive round-trip hashes and new-reader validation.
+The running source remains 83501363c719aa14a46e141ef4c94cfb0532d23b and Current
+Opportunity remains OFF. No production service, scheduler, setting, state or
+portfolio was changed. The credential currently permits owner/admin/SYSTEM only;
+the existing LocalService runtime has not been granted access by this session.
+
+The attempted combined source-verification/capability-configuration write was
+blocked by the tool safety check before execution. The target capability file
+was confirmed absent. Do not bypass that boundary or manufacture capabilities.
+No source-filer capability mapping was imported. Deployment requires the permitted
+verification/configuration path and a fresh release-time state check; this earlier
+preflight must not be reused as a frozen later deployment baseline.
+
+Branch codex/free-stack-shadow-20260928 contains an unactivated, pinned shadow-only
+capability import and a guard against assigning common-stock identity to options
+or bonds. It has not been installed or enabled. Source/test status is recorded in
+its PR. No owner re-entry of the valid key is needed.
+
+
 ## September 28 #239 — Windows Ctrl+V input defect identified and corrected
 
 The saved key from the resumed setup consisted solely of the Ctrl+V control
