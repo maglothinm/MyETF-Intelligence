@@ -1,0 +1,79 @@
+{
+  "observed_at": "2026-09-29T15:16:17.481830+00:00",
+  "repository_id": 1349678672,
+  "repair_pr": 247,
+  "merge_commit": "4aeb2a6e78d869a33333f0e1d099189a6239dfbd",
+  "tested_head": "d520aa7d8a4894195ed3ad64aea10a8348b6c04d",
+  "canonical_ci": [
+    {
+      "run_id": 36587550280,
+      "conclusion": "success"
+    },
+    {
+      "run_id": 36587550107,
+      "conclusion": "success"
+    },
+    {
+      "run_id": 36587550200,
+      "conclusion": "success"
+    }
+  ],
+  "deployment": "blocked_safely_rolled_back",
+  "error": {
+    "operation": "atomic replacement of config/runtime.json",
+    "type": "PermissionError",
+    "winerror": 5
+  },
+  "config_bytes_unchanged": true,
+  "installed_source": "efae28e99f02dabb0122a6cb53062ecc2bbe13e2",
+  "repaired_source_snapshot_count": 0,
+  "native_heads": [
+    {
+      "namespace": "ai",
+      "generation": 1131,
+      "source_revision": "efae28e99f02dabb0122a6cb53062ecc2bbe13e2",
+      "created_at": "2026-09-29 06:15:28.094648+00"
+    },
+    {
+      "namespace": "dashboard",
+      "generation": 2209,
+      "source_revision": "efae28e99f02dabb0122a6cb53062ecc2bbe13e2",
+      "created_at": "2026-09-29 15:02:42.134034+00"
+    },
+    {
+      "namespace": "executive",
+      "generation": 798,
+      "source_revision": "efae28e99f02dabb0122a6cb53062ecc2bbe13e2",
+      "created_at": "2026-09-29 15:12:19.728428+00"
+    },
+    {
+      "namespace": "legislative",
+      "generation": 1747,
+      "source_revision": "efae28e99f02dabb0122a6cb53062ecc2bbe13e2",
+      "created_at": "2026-09-29 15:05:22.55579+00"
+    }
+  ],
+  "database_pid_unchanged": 5008,
+  "services_restarted_on_original_release": true,
+  "AI_deliveries_queued_since_shadow": 0,
+  "windows_file_use": {
+    "target": "runtime.json",
+    "application": "Desktop Commander",
+    "process": "node.exe",
+    "pid": 34184,
+    "restart_manager_success": true,
+    "locking_mode_not_directly_observed": true
+  },
+  "file_not_read_only": true,
+  "admin_elevation_verified": true,
+  "admin_and_owner_ACLs_allow_full_control": true,
+  "matching_defender_CFA_event_found": false,
+  "quota_integration": "tool_blocked_not_implemented",
+  "funding_or_model_changed": false,
+  "capability_receipt_expired": true,
+  "investment_case_acceptance": false,
+  "remaining_owner_actions": [
+    "Restart and reconnect Desktop Commander; authorize retry of release and quota edit",
+    "Only after snapshot publication is verified, restore/correct existing API quota without a new subscription"
+  ]
+}

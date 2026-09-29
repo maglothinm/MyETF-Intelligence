@@ -1,48 +1,61 @@
 # PolitiTrack active handoff
 
-## September 29 #246 â€” Snapshot-growth repair prepared; native recovery pending
+## September 29 #246 â€” Repair merged; deployment safely rolled back at file-access block
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
-Installed executable remains **efae28e99f02dabb0122a6cb53062ecc2bbe13e2** (#244).
-Repair branch `codex/runtime-growth-429-20260929` starts at `0590dd5` (main).
-No repaired executable or authoritative snapshot has been installed at this stage.
+Snapshot repair **PR #247** is merged as **4aeb2a6e78d869a33333f0e1d099189a6239dfbd**.
+Exact tested head **d520aa7d8a4894195ed3ad64aea10a8348b6c04d** passed 519 local
+relevant tests (one skipped) and canonical CI **36587550280**, **36587550107**,
+**36587550200**. The complete historical suite is not claimed Windows-compatible:
+its legacy Linux-only fcntl imports prevent collection of several unrelated tests.
 
-Read-only native inspection found AI1131 stalled at 2026-09-29 06:15:28 UTC.
-Its uncompressed snapshot is 526,698,384 bytes, including a 406,618,603-byte
-opportunity journal. Sixteen later AI runs through 14:14 UTC failed the unchanged
-512-MiB archive gate. The engine had appended 7,975 full no-work evaluation events
-beside 620 actual evaluations because every budget-skipped record was copied again.
+**The repair is NOT deployed.** The existing-service release attempt reached a
+fresh verified four-head freeze (5,884 headers, no broken links) but Windows
+rejected atomic replacement of `config/runtime.json` with PermissionError/WinError 5.
+The original configuration is byte-identical to its private backup. The helper
+rolled source back to **efae28e99f02dabb0122a6cb53062ecc2bbe13e2** and restarted
+the original scheduler/web services. PostgreSQL PID **5008** never restarted.
+No authoritative snapshot from the repaired source exists; AI remains **1131**
+(last committed 06:15:28 UTC). No AI delivery was queued since shadow activation.
 
-The prepared repair retains the first freshness invalidation, makes repeated
-identical missed-work states idempotent, and stores exact historical subtrees
-once using a hash-validated content-addressed JSON envelope. All 8,596 original
-events and 533 projections were verified logically identical in a private clone;
-all 1,607 other AI files were byte-identical. Full snapshot pack/unpack/repack
-passed at 225,361,624 bytes, with the archive ceiling unchanged. This is offline
-representation acceptance, not native deployment or investment acceptance.
-See `docs/OPPORTUNITY_STORAGE.md` and
-`docs/releases/2026-09-29-snapshot-growth-source.json`.
+Windows Restart Manager identifies Desktop Commander's `node.exe` PID **34184**
+as the application using `runtime.json`. The exact share/locking mode was not
+observed. The operation was already administrator-elevated, the file is not
+read-only, and its administrator/owner ACLs allow full control. No matching
+Defender controlled-folder-access event was returned. Do not force-close handles,
+kill security/connector processes, weaken ACLs or bypass the separate tool block.
+Request that the owner fully restart/reconnect Desktop Commander and authorize
+the release/quota-edit retry. Take a NEW frozen export on the next attempt; do not
+reuse/overwrite the existing freeze or blindly rerun the dated deployment helper.
 
-The actual OpenAI response identifies a nontransient account-quota failure, not
-TPM/RPM congestion. No balance, subscription, credential or model was changed.
-A local `scripts/openai_health.py` draft remains uncommitted and is not integrated;
-the separate quota-integration write was tool-blocked. Do not bypass the block
-or claim the cooldown is active. Owner action is needed for that authorization
-and to resolve the existing API quota before model-backed acceptance.
+The two original causes are established: 7,975 full no-work evaluation copies
+amplified snapshot growth beside only 620 actual evaluations, and the retained
+OpenAI response identifies a nontransient exhausted account quota. The source
+repair makes repeated identical missed-work states idempotent and deduplicates
+exact JSON subtrees. Private real-state pack/restore/repack preserved all 8,596
+events, 533 projections and 1,607 other files, reducing the full uncompressed
+snapshot from 526,698,384 to **225,361,624 bytes** under the unchanged 512-MiB cap.
+See `docs/OPPORTUNITY_STORAGE.md` and the September 29 source/blocker receipts.
 
-The original capability receipt expired at 2026-09-29T14:44:22Z. Do not extend
-its time without genuine verification. The retained review cache contains 17
-documents/79 sections, zero reviewed sections and no accepted investment dossiers.
-Keep Current Opportunity SHADOW and AI delivery suppressed. Keep #246/#239/#236
-open. Recovery needs canonical CI, the existing service/release boundary, normal
-scheduled AI and dashboard advancement, fresh capability checks, and issuer review.
-An executable rollback after encoded publication must retain compatible readers;
-never rewind the authoritative snapshot head to make old code work.
+A local `scripts/openai_health.py` draft remains UNCOMMITTED and UNINTEGRATED.
+Its quota-handling integration was tool-blocked; no durable cooldown is active.
+**Do not fund the API before the snapshot repair is deployed and verified:** the
+old release can otherwise spend on analyses whose oversized snapshots fail to
+publish. After safe publication is restored, resolve the existing API quota
+without a new subscription, then complete genuine capability and issuer review.
+No balance, subscription, credential or model was changed.
 
-Private evidence is retained under
-`C:\ProgramData\PolitiTrack\backups\runtime-growth-429-20260929`.
-The read-only four-head preflight verified 5,880 retained snapshot headers with
-zero broken links. No database writer, scheduler, cloud service or alert was added.
+The original capability receipt expired at **2026-09-29T14:44:22Z**; no renewal
+was fabricated. Retained issuer evidence has 17 documents/79 sections, zero
+model-reviewed sections and zero accepted investment dossiers. Keep SHADOW and
+AI delivery suppression; keep #246/#239/#236 open. A compatible codec/reader must
+remain in any rollback build after encoded state first publishes; never rewind
+an authoritative head to accommodate an obsolete executable.
+
+Private evidence: `C:\ProgramData\PolitiTrack\backups\runtime-growth-429-20260929`.
+Worktree: `C:\Users\maglo\PolitiTrack-work\runtime-growth-429-20260929`.
+Current follow-up branch `codex/runtime-growth-blockers-20260929` is documentation
+only. The original repair branch retains the exact tested implementation.
 
 ## September 28 #239 — Deployed on Beast; first scheduled shadow run succeeded
 
