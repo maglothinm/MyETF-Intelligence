@@ -1882,3 +1882,22 @@ readers. Rewinding state to accommodate an obsolete executable is prohibited.
 The independent OpenAI account-quota blocker requires genuine recovery, not
 rate-limit retries, a silent model substitute or new paid subscriptions. The
 quota-cooldown integration was tool-blocked and is not part of this repair.
+
+
+### #246 deployment boundary and funding sequence
+
+The PR #247 deployment attempt failed at the existing atomic runtime-config
+replacement with WinError 5; it did not install an active repaired producer.
+Preserve the byte-identical old configuration, source-only rollback and restored
+services. The database remained running. Windows identifies Desktop Commander's
+Node process as using the target file, but no specific share-mode flag was read.
+Request an owner-controlled connector restart/reconnection and authorization,
+not a forced handle close, ACL weakening or tool-policy bypass.
+
+Do not ask the owner to replenish API credits before the snapshot repair has
+actually published successfully: the old failure can discard paid analysis work
+at the final archive gate. Restore the existing snapshot publication first; then
+resolve genuine existing-account quota and verify the existing model. No new
+subscription or plan is required by the snapshot fix. The quota cooldown remains
+unintegrated because its write was tool-blocked. Expired capabilities and missing
+issuer/model evidence remain genuine live-readiness blockers.
