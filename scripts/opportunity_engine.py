@@ -288,6 +288,15 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
     for oid, prior in list(state['opportunities'].items()):
         removed = prior['security_key'] not in grouped
         if removed or prior['security_key'] in missed or (prior.get('lifecycle') == 'opportunity_available' and timestamp(prior.get('display_valid_until')) and now > timestamp(prior['display_valid_until'])):
+            reason = ('membership_removed_or_superseded' if removed else
+                      'review_budget_exhausted' if prior['security_key'] in missed
+                      else 'stale_quote_or_evidence')
+            # Repeated missed work is queue telemetry, not another evaluation.
+            # Keep the first invalidation and its actual review timestamp.
+            if (prior['lifecycle'] == 'needs_review'
+                    and prior['gates'].get('trustworthy_required_data') is False
+                    and reason in prior['reason_codes']):
+                continue
             record = deepcopy(prior)
             record.pop('evaluation_id')
             record['lifecycle'] = 'needs_review'

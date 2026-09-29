@@ -1,0 +1,52 @@
+{
+  "verified_at": "2026-09-29T15:00:04.885759+00:00",
+  "mode": "offline_private_clone_no_database_or_provider_calls",
+  "old_state_bytes": 406618603,
+  "new_state_bytes": 105281843,
+  "snapshot_uncompressed_bytes": 225361624,
+  "unchanged_archive_limit": 536870912,
+  "snapshot_sha256": "7157537dcf1e91572319e9d1f9e1c59828c0e88dd3b15d1e94995a313a716ed4",
+  "all_other_files_byte_identical": 1607,
+  "all_logical_state_identical": true,
+  "immutable_events_preserved": 8596,
+  "opportunities_preserved": 533,
+  "round_trip_verified": true,
+  "elapsed_seconds": 82.67,
+  "repository_id": 1349678672,
+  "base_commit": "0590dd5134edb5297f7a9a8dd70d1fadf49962af",
+  "branch": "codex/runtime-growth-429-20260929",
+  "deployed": false,
+  "root_cause": {
+    "actual_evaluation_events": 620,
+    "no_work_evaluation_events": 7975,
+    "no_work_event_bytes": 359615857,
+    "mechanism": "Every budget-skipped retained opportunity appended a full historical evaluation again; inventory admission amplified each subsequent run."
+  },
+  "preflight": {
+    "header_count": 5880,
+    "broken_links": 0,
+    "four_heads_verified": true,
+    "read_only_database": true
+  },
+  "openai": {
+    "classification": "nontransient_account_quota",
+    "root_cause_verified_from_retained_response": true,
+    "billing_changed": false,
+    "model_changed": false,
+    "cooldown_integration": "tool_blocked_not_implemented"
+  },
+  "remaining": [
+    "canonical CI and deployment",
+    "native scheduled acceptance",
+    "owner resolution of existing API quota",
+    "quota-handling code-write authorization",
+    "fresh capability verification after receipt expiry",
+    "issuer review and complete investment cases"
+  ],
+  "tests": {
+    "focused_storage_and_regression_passed": 519,
+    "skipped": 1,
+    "command_scope": "existing current_opportunity_tests workflow suite plus new storage tests",
+    "all_tests_windows_attempt": "blocked during collection by legacy Linux-only fcntl imports; not reported as passed"
+  }
+}

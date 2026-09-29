@@ -80,12 +80,18 @@ def read_json(path: Path) -> dict:
         value = json.loads(path.read_text(encoding='utf-8'), parse_constant=lambda v: (_ for _ in ()).throw(ValueError(v)))
         if not isinstance(value, dict):
             raise ValueError('expected an object')
+        if path.name == STATE_NAME:
+            from .opportunity_storage import decode
+            value = decode(value)
         return value
     except (OSError, ValueError) as exc:
         raise OpportunityError(f'invalid retained JSON: {path.name}') from exc
 
 
 def write_json(path: Path, value: Mapping) -> None:
+    if path.name == STATE_NAME:
+        from .opportunity_storage import encode
+        value = encode(dict(value))
     write_bytes(path, (canonical(value) + '\n').encode('utf-8'))
 
 
