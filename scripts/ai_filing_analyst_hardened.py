@@ -857,7 +857,8 @@ def _finish_analyst_run(
         history += legacy.read_jsonl(config.legislative_dir / "purchases.jsonl") if config.legislative_dir else []
         history += legacy.read_jsonl(config.executive_dir / "purchases.jsonl") if config.executive_dir else []
         opportunity_path = config.ai_dir / "opportunity-state.json"
-        opportunities = json.loads(opportunity_path.read_text(encoding="utf-8")).get("opportunities", {}) if opportunity_path.exists() else {}
+        from scripts.opportunity_common import read_json as read_opportunity_json
+        opportunities = read_opportunity_json(opportunity_path).get("opportunities", {}) if opportunity_path.exists() else {}
         values = discovery_evidence.persist(config.ai_dir, history, all_analyses, opportunities=opportunities)
         # Keep the ledger as the sole durable representation; generated exports
         # belong beside the run's other outputs and in the dashboard snapshot.

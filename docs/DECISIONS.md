@@ -1860,3 +1860,25 @@ scope. It expires September 29 at 14:44:22 UTC and cannot silently renew itself.
 The next autonomous acceptance check is scheduled before expiry. Broader identity
 coverage, verified renewal and complete issuer/model review remain open; no new
 API key or subscription is needed merely because acceptance remains incomplete.
+
+
+## 2026-09-29 — Lossless journal deduplication and idempotent missed-work status (#246)
+
+Keep the opportunity journal's logical schema, historical event IDs/hash chain,
+projection/intent checks, single AI owner and existing archive ceiling. Store exact
+canonical JSON subtrees once in a versioned, hash-verified content-addressed
+envelope at the same state filename. Bound the complete graph and detach mutable
+projections from shared historical objects. Read old plain JSON and new envelopes;
+conversion occurs only through the normal validated AI snapshot publication path.
+
+A first skipped/removed/stale refresh still invalidates freshness durably. A
+repeated identical no-work condition updates queue telemetry, not another full
+historical evaluation or the record's actual review timestamps. Actual reviews
+and changed invalidation reasons remain journaled. This addresses the observed
+inventory-amplified growth without trimming history or weakening investment gates.
+
+After encoded state is published, rollback must retain the compatible codec and
+readers. Rewinding state to accommodate an obsolete executable is prohibited.
+The independent OpenAI account-quota blocker requires genuine recovery, not
+rate-limit retries, a silent model substitute or new paid subscriptions. The
+quota-cooldown integration was tool-blocked and is not part of this repair.

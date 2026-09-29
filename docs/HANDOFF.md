@@ -1,61 +1,48 @@
 # PolitiTrack active handoff
 
-## September 28 #239 — Current Opportunity is deployed and running in SHADOW
+## September 29 #246 â€” Snapshot-growth repair prepared; native recovery pending
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
-Installed executable release: **efae28e99f02dabb0122a6cb53062ecc2bbe13e2** (#244),
-following deployed #243. The existing Windows scheduler/web service boundaries
-were used; PostgreSQL PID 5008 stayed running. No new scheduler, cloud runtime,
-state reset, paid data subscription or brokerage action was introduced.
+Installed executable remains **efae28e99f02dabb0122a6cb53062ecc2bbe13e2** (#244).
+Repair branch `codex/runtime-growth-429-20260929` starts at `0590dd5` (main).
+No repaired executable or authoritative snapshot has been installed at this stage.
 
-The existing AI owner imported the pinned Massive/Finnhub receipt in shadow mode.
-Its initial scope is BE, INTC, MSFT, benchmark SPY and two verified House reports.
-LocalService has Read access to the retained private Massive key. AI alert and
-notification dispatch are explicitly suppressed during this validation period.
-Do not request the key again or confuse the Runtime v2 production-state owner
-with the Current Opportunity feature's SHADOW mode.
+Read-only native inspection found AI1131 stalled at 2026-09-29 06:15:28 UTC.
+Its uncompressed snapshot is 526,698,384 bytes, including a 406,618,603-byte
+opportunity journal. Sixteen later AI runs through 14:14 UTC failed the unchanged
+512-MiB archive gate. The engine had appended 7,975 full no-work evaluation events
+beside 620 actual evaluations because every budget-skipped record was copied again.
 
-Two normal scheduled AI runs succeeded, including a zero-new-disclosure follow-up:
-AI **1101** at 15:17 UTC (`6dfba9fcae67cc2681daa4c322570f2a16b6892d8e4f0270a5d0e232bbb29b57`)
-and **1102** at 15:44 UTC (`4a705a3d1351860d9608d76aeb294a503fa8a91e371a68dc901cb37d8ede2d77`).
-The first made 12 real Massive requests and retrieved Finnhub quotes and SEC data.
-The second retained the imported configuration and prior work. All 5,630 initial
-snapshot headers and retained disclosure/analysis/review ledger prefixes were
-preserved; no broken parent links. The original 21 opportunity events are still
-present in the 41-event follow-up journal. No opportunity intents or deliveries.
+The prepared repair retains the first freshness invalidation, makes repeated
+identical missed-work states idempotent, and stores exact historical subtrees
+once using a hash-validated content-addressed JSON envelope. All 8,596 original
+events and 533 projections were verified logically identical in a private clone;
+all 1,607 other AI files were byte-identical. Full snapshot pack/unpack/repack
+passed at 225,361,624 bytes, with the archive ceiling unchanged. This is offline
+representation acceptance, not native deployment or investment acceptance.
+See `docs/OPPORTUNITY_STORAGE.md` and
+`docs/releases/2026-09-29-snapshot-growth-source.json`.
 
-Dashboard **2116**, source efae28e, published AI1102 at 15:47 UTC. Current
-Opportunity and Operating costs HTML/JSON routes match committed snapshot bytes.
-Read-only live browser checks at 1280 and 390 pixels found no script errors or
-horizontal overflow. Cost accounting is deployed, but no new metered model request
-has completed in these initial runs; historical unmetered cost remains unknown.
+The actual OpenAI response identifies a nontransient account-quota failure, not
+TPM/RPM congestion. No balance, subscription, credential or model was changed.
+A local `scripts/openai_health.py` draft remains uncommitted and is not integrated;
+the separate quota-integration write was tool-blocked. Do not bypass the block
+or claim the cooldown is active. Owner action is needed for that authorization
+and to resolve the existing API quota before model-backed acceptance.
 
-**Runtime acceptance is not investment-case acceptance.** Forty groups have been
-audited, but only three companies have initial verified mappings. Two issuer
-documents/four text sections are downloaded, zero sections are model-reviewed and
-zero investment dossiers are complete. Live notifications remain disabled.
-The scoped capability receipt expires **2026-09-29T14:44:22Z**. Continuous renewal
-and broader independent identity coverage are not implemented by this release.
-Do not silently extend verification or treat the full unresolved inventory as
-verified. A separate unattended acceptance check is scheduled around 08:00 Eastern
-on September 29, before expiry, to continue the readiness assessment.
+The original capability receipt expired at 2026-09-29T14:44:22Z. Do not extend
+its time without genuine verification. The retained review cache contains 17
+documents/79 sections, zero reviewed sections and no accepted investment dossiers.
+Keep Current Opportunity SHADOW and AI delivery suppressed. Keep #246/#239/#236
+open. Recovery needs canonical CI, the existing service/release boundary, normal
+scheduled AI and dashboard advancement, fresh capability checks, and issuer review.
+An executable rollback after encoded publication must retain compatible readers;
+never rewind the authoritative snapshot head to make old code work.
 
-#244 prioritizes verified identity work and fixes round-robin/deadline scheduling
-without changing investment gates. Its exact tested head c65554d passed 288 local
-tests and CI runs **36443712569** and **36443712584**. An additional optional tweak
-for already-retained legacy deadlines and its test remain **uncommitted** in
-`C:\Users\maglo\PolitiTrack-work\free-stack-deploy-20260928`; a write was blocked,
-so it was not merged or installed. Do not confuse its separate 289-test result
-with the deployed commit. The first eligible case follow-up remains future work;
-the second native run audited unresolved rows while prior deadlines were pending.
-
-Keep #239/#236 open for completed issuer/model review, durable verification renewal
-and full live-readiness acceptance. The owner's request for autonomous progress
-through steps 2–6 does not justify bypassing missing evidence or enabling orders.
-Read `docs/releases/2026-09-28-shadow-acceptance.json` for exact deployment/CI,
-snapshot, browser and remaining-acceptance evidence. Private exports are retained
-under `C:\ProgramData\PolitiTrack\backups\free-stack-deploy-20260928` outside Git.
-
+Private evidence is retained under
+`C:\ProgramData\PolitiTrack\backups\runtime-growth-429-20260929`.
+The read-only four-head preflight verified 5,880 retained snapshot headers with
+zero broken links. No database writer, scheduler, cloud service or alert was added.
 
 ## September 28 #239 — Deployed on Beast; first scheduled shadow run succeeded
 
