@@ -1,0 +1,44 @@
+{
+  "observed_at": "2026-09-30T12:54:51.096185+00:00",
+  "repository_id": 1349678672,
+  "source_main": "43d30baf366172dec4a38355c6f692ef3427bee7",
+  "installed_source": "638abc04cde135fb4240046160875a2723b01a1d",
+  "first_uac_approved": true,
+  "first_installer": "canceled_in_idle_preflight_before_any_service_or_config_change",
+  "preflight_issue": "One old executive run remained marked running but had no writer lock; revised preflight checks actual pg_locks and scheduler children. Historical row not changed.",
+  "revised_uac": "Windows reported cancellation before helper execution",
+  "revised_release_log_exists": false,
+  "initial_release_phase_started": false,
+  "own_installer_processes_exited": true,
+  "configuration_unchanged": true,
+  "billing_table_exists": false,
+  "heads": {
+    "ai": 1131,
+    "dashboard": 2296,
+    "executive": 828,
+    "legislative": 1834
+  },
+  "AI_delivery_rows_since_shadow": 0,
+  "installation_focused_tests": {
+    "passed": 104,
+    "skipped": 23
+  },
+  "native_services": {
+    "PolitiTrackDatabase": {
+      "status": "running",
+      "pid": 5008
+    },
+    "PolitiTrackScheduler": {
+      "status": "running",
+      "pid": 38196
+    },
+    "PolitiTrackWeb": {
+      "status": "running",
+      "pid": 19376
+    }
+  },
+  "new_balance_records": 0,
+  "approval_required": "Normal Windows administrator prompt for revised pinned installer",
+  "next_installer_path": "C:\\ProgramData\\PolitiTrack\\backups\\billing-install-250-20260930T124844Z\\release\\deploy_billing.py",
+  "next_installer_sha256": "0635779155af2e87150ec2c81a6e0d3dd5aaa3ccddb723fe7e1c12d686782cce"
+}

@@ -1950,3 +1950,19 @@ all existing services and producer state. Request renewed owner approval at Beas
 do not retry elevation or use a different installation route after cancellation.
 The API account now accepts the verified probe, while AI persistence remains a
 separate unresolved runtime acceptance item. No provider balance was inferred.
+
+
+### #250 release preflight must inspect live locks, not historical run labels
+
+A prior executive row remained marked running without owning a writer lock.
+Preserve that historical record and distinguish it from a live producer. Release
+preflight checks actual PostgreSQL namespace/backup locks and current scheduler
+children before using the existing service boundary. Do not repair a run-history
+row merely to pass an installation gate. Real active work must still drain.
+
+The initial renewed preflight was canceled before it entered the release phase.
+The revised helper's normal UAC prompt returned cancellation, so it did not run.
+Only the session-owned idle installer processes were cleaned up using ordinary
+access; no native services or producer state changed. Obtain renewed Windows
+approval before another launch. A successful API response remains distinct from
+AI publication and the funding dashboard's installation acceptance.
