@@ -30,7 +30,7 @@ def load_projection(directory: Path | None) -> dict:
 
 def write_exports(projection: dict, output: Path, assets: Path) -> None:
     (output/'data/api-usage.json').write_text(json.dumps(projection.get('api_usage', {'schema_version':1,'months':[], 'notice':'Not yet metered; no zero-cost claim.'}), ensure_ascii=False, allow_nan=False)+'\n', encoding='utf-8')
-    for name in ('operating-costs.html','operating-costs.js'):
+    for name in ('operating-costs.html','operating-costs.js','billing-funding.js','billing-funding.css'):
         (output/name).write_bytes((assets/name).read_bytes())
     (output/'data/current-opportunities.json').write_text(json.dumps(projection,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     with (output/'data/current-opportunities.csv').open('w',encoding='utf-8',newline='') as stream:
@@ -71,9 +71,12 @@ def write_exports(projection: dict, output: Path, assets: Path) -> None:
 
 
 def integrate_index(source: str, projection: dict) -> str:
-    costs_link = '<a href="operating-costs.html">Operating costs</a>'
+    costs_link = '<a href="operating-costs.html">Operating costs &amp; funding</a>'
+    funding = '<article class="surface"><h2>Funding &amp; paid services</h2><p id="billing-summary-status" role="status">Private funding checks require local dashboard sign-in.</p><a class="text-link" href="operating-costs.html">Open balances, API status and operating costs</a><p>OpenAI API credits are separate from ChatGPT.</p></article>'
+    source = source.replace('<!-- current-opportunities-overview -->', funding + '<!-- current-opportunities-overview -->')
+    source = source.replace('</body>', '<script src="billing-funding.js" defer></script></body>')
     if projection.get('mode') not in ('shadow','live'):
-        return source.replace('<!-- current-opportunities-navigation -->', costs_link)
+        return source.replace('<!-- current-opportunities-navigation -->', costs_link).replace('<!-- current-opportunities-overview -->', '')
     label='Current opportunities' if projection['mode']=='live' else 'Shadow opportunities'
     link='<a href="current-opportunities.html"><span aria-hidden="true">↗</span> '+label+'</a>'
     source=source.replace('<!-- current-opportunities-navigation -->',link+costs_link)

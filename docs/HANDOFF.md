@@ -1,5 +1,35 @@
 # PolitiTrack active handoff
 
+## September 30 #250 - Funding dashboard implementation prepared
+
+Owner clarified that the new payment now funds the OpenAI API, not ChatGPT.
+A real minimal request at 12:06:27 UTC returned HTTP 200 / completed on the
+existing configured model (10 input, 5 output tokens). This establishes API
+request availability, not a dollar balance or investment-case completion.
+
+Branch `codex/billing-dashboard-250-20260930`, based on main `54b9ed7`, adds a
+private Funding & paid services overview counter and expanded Operating costs
+page. Exact API/ChatGPT separation, live observed usage/error health, dated
+owner-reported balances, conservative token-only estimates, low/stale/renewal
+warnings and separate currency/request units are explicit. There are no paid
+requests on page refresh or automatic payments. Unknown balances stay unknown.
+
+Owner observations use the existing authenticated review session and append to
+an additive PostgreSQL metadata table. Existing review revisions, trading state,
+notifications and scheduled writers are unchanged. The native usage journal gets
+only a private scope digest, purpose and whitelisted error codes. Financial
+amounts remain private; public snapshot assets contain no owner balance values.
+Read `docs/BILLING_STATUS.md` for boundaries and operator schema initialization.
+
+Local acceptance: 606 tests passed, 33 skipped (including optional PostgreSQL
+cases not enabled locally); offline browser login/save tests passed at 1280 and
+390 pixels with no script errors or horizontal overflow. Canonical CI, merge,
+operator schema initialization and live release verification are still pending.
+Installed source remains `638abc0`; the earlier manual AI recovery remained
+running at last inspection, so no new authoritative AI snapshot is claimed.
+SHADOW and both AI delivery suppressions remain enabled. The original capability
+receipt is expired; issuer/model review and #246/#239/#236 remain open.
+
 ## September 30 #246 - Repair deployed; persistence acceptance still blocked
 
 Installed source **638abc04cde135fb4240046160875a2723b01a1d** at11:18:31UTC

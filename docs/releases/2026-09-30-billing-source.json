@@ -1,0 +1,78 @@
+{
+  "repository_id": 1349678672,
+  "base_commit": "54b9ed759ac62d691020939b767d95902d9fcd36",
+  "branch": "codex/billing-dashboard-250-20260930",
+  "source_only": true,
+  "deployed": false,
+  "tests": {
+    "passed": 606,
+    "skipped": 33
+  },
+  "browser": {
+    "mode": "TEST_ONLY_NO_REAL_BALANCES_OR_PROVIDERS",
+    "results": [
+      {
+        "width": 1280,
+        "login_and_save_passed": true,
+        "no_script_errors": true,
+        "no_horizontal_overflow": true,
+        "services_rendered": 12,
+        "requests_intercepted": true
+      },
+      {
+        "width": 390,
+        "login_and_save_passed": true,
+        "no_script_errors": true,
+        "no_horizontal_overflow": true,
+        "services_rendered": 12,
+        "requests_intercepted": true
+      }
+    ],
+    "mutations": [
+      [
+        "POST",
+        "/api/reviews/login"
+      ],
+      [
+        "POST",
+        "/api/billing/observations"
+      ],
+      [
+        "POST",
+        "/api/reviews/login"
+      ],
+      [
+        "POST",
+        "/api/billing/observations"
+      ]
+    ]
+  },
+  "api_request_verified": {
+    "observed_at": "2026-09-30T12:06:27.879301+00:00",
+    "purpose": "availability_check",
+    "requested_model": "gpt-5.6-terra",
+    "max_output_tokens": 512,
+    "retries": 0,
+    "balance_amount_verified": false,
+    "subscription_or_payment_changed": false,
+    "api_available": true,
+    "http_status": 200,
+    "response_status": "completed",
+    "response_id": "resp_00c54b0675aee985016abcfb451cac87d2bcdc4f713d7c1d69",
+    "usage": {
+      "status": "reported",
+      "input_tokens": 10,
+      "output_tokens": 5,
+      "cached_input_tokens": 0,
+      "cache_write_tokens": 0,
+      "reasoning_tokens": 0,
+      "cache_write_detail_reported": true,
+      "note": "Cached/write tokens are input subsets; reasoning tokens are already included in output tokens."
+    },
+    "actual_model": "gpt-5.6-terra"
+  },
+  "actual_remaining_balance": null,
+  "balance_source": "owner_observation_required",
+  "automatic_payments": false,
+  "paid_dashboard_requests": false
+}

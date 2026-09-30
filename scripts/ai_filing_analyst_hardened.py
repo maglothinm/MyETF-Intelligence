@@ -249,7 +249,7 @@ def openai_analyze(
             legacy.pace_openai_request()
             response = client.responses.create(**kwargs)
         except Exception as exc:  # noqa: BLE001 - classified below
-            api_usage.record_attempt(config, usage_attempt_id, getattr(exc, "response", None), error_type=type(exc).__name__)
+            api_usage.record_attempt(config, usage_attempt_id, getattr(exc, "response", None), error_type=type(exc).__name__, error=exc)
             message = _safe_error(exc, config)
             message_lower = str(exc).casefold()
             status_code = getattr(exc, "status_code", None)
