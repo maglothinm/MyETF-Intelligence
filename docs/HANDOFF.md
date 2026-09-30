@@ -1,5 +1,36 @@
 # PolitiTrack active handoff
 
+## September 30 #250 - Funding dashboard merged; installation approval canceled
+
+Funding dashboard PR **#251** is merged as
+**f6b51ad3b4a80847d1a459a56ed43522c6376973**. Tested head
+**fdc6dc996f43fc5759a94d06f0ef26568856ecf6** passed 606 local tests (33
+optional/platform skips), four canonical PR workflows and desktop/mobile TEST
+browser acceptance. The API funding correction is real: the existing configured
+API returned HTTP 200 / completed at 12:06:27 UTC. No dollar balance was returned.
+
+**This dashboard change is NOT installed.** Windows returned 'The operation was
+canceled by the user' during normal UAC elevation. The release helper never
+started, no release log was created, and the new metadata table does not exist.
+Installed source remains **638abc0**. PostgreSQL, scheduler and web services were
+not changed by this attempt. SHADOW and both AI delivery suppressions remain true.
+Do not retry elevation or use another installation route without renewed owner
+approval. Request that the owner be at Beast and approve the next normal prompt.
+
+The separate earlier manual AI recovery ended in TimeoutExpired at 12:17:57 UTC;
+all four related processes exited without manual termination. AI head remains
+1131; no successful AI persistence or investment evidence is claimed. Keep
+#246/#239/#236 open independently of the funding UI. The expired capability
+receipt was not renewed and no investment alert or order was authorized.
+
+After approved installation, initialize only the additive billing metadata table,
+verify native publication and live UI/routes, and have the owner record the
+remaining API balance shown in the correct provider account. Balance values are
+owner-reported observations; estimates are separate and missing coverage stays
+unknown. No provider admin key, account upgrade or payment is required by the UI.
+Read `docs/BILLING_STATUS.md` and the billing installation-blocked receipt.
+Private evidence: `C:\ProgramData\PolitiTrack\backups\billing-dashboard-250-20260930T115321Z`.
+
 ## September 30 #250 - Funding dashboard implementation prepared
 
 Owner clarified that the new payment now funds the OpenAI API, not ChatGPT.

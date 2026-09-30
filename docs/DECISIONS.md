@@ -1939,3 +1939,14 @@ summed. Low/stale/renewal warnings are dashboard-only and do not buy credits,
 change providers/models, resume cloud hosting, alter investment gates or enable
 alerts. A real post-correction API request succeeded; its small metered usage is
 operational evidence only. Retain pending issuer/capability acceptance separately.
+
+
+### #250 installation requires a renewed normal administrator approval
+
+The funding release was merged and tested, but Windows canceled the UAC launch
+before the release helper started. Do not equate a merged dashboard with a live
+route, a created metadata table or a saved balance. Preserve the installed source,
+all existing services and producer state. Request renewed owner approval at Beast;
+do not retry elevation or use a different installation route after cancellation.
+The API account now accepts the verified probe, while AI persistence remains a
+separate unresolved runtime acceptance item. No provider balance was inferred.
