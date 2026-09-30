@@ -1966,3 +1966,27 @@ Only the session-owned idle installer processes were cleaned up using ordinary
 access; no native services or producer state changed. Obtain renewed Windows
 approval before another launch. A successful API response remains distinct from
 AI publication and the funding dashboard's installation acceptance.
+
+
+### #250 deployed funding is separate from account balance and investment acceptance
+
+The renewed normal Windows approval installed the tested funding release. A
+post-install assertion used a status-file hash captured before waiting for live
+collectors; the collector legitimately changed that file while the installer
+waited. The current file's state hash matched the final frozen Legislative state,
+and its modification time preceded deployment. Read-only postcondition checks
+confirmed installed source, unchanged configuration apart from source SHA, the
+additive table, restored services and private-route protection. Preserve the
+failed log and explicit reconciliation; never relabel the original exit as zero.
+Future release helpers capture mutable source-status hashes after final drain.
+
+Actual dashboard publication and desktop/mobile read-only browser checks passed.
+The AI writer also committed a first recovered snapshot with 20 completed analyses
+while preserving original event and ledger prefixes. Neither finding authorizes
+live investment delivery or implies complete issuer evidence or investing returns.
+
+Owner balances remain absent until a real authenticated observation is entered.
+Initial request-scope freshness remains distinct from previously successful API
+responses. An optional passive-watcher write was tool-blocked and not rerouted.
+No extra provider probe, fabricated account/session/balance, new subscription,
+cloud runtime, archive ceiling increase, or notification activation was performed.

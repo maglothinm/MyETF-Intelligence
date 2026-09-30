@@ -1,0 +1,262 @@
+{
+  "repository_id": 1349678672,
+  "installed_source": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+  "tested_head": "fdc6dc996f43fc5759a94d06f0ef26568856ecf6",
+  "source_config_installed_at": "2026-09-30T13:07:29.508033+00:00",
+  "verification_finished_at": "2026-09-30T13:10:01.562153+00:00",
+  "CI_successful_runs": [
+    36713693780,
+    36713693620,
+    36713693718,
+    36713693596
+  ],
+  "installation_tests": {
+    "passed": 594,
+    "skipped": 24
+  },
+  "deployment": {
+    "verified_at": "2026-09-30T13:08:40.136234+00:00",
+    "source_config_installed_at": "2026-09-30T13:07:29.508033+00:00",
+    "repository_id": 1349678672,
+    "source_revision": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+    "previous_source": "638abc04cde135fb4240046160875a2723b01a1d",
+    "tested_head": "fdc6dc996f43fc5759a94d06f0ef26568856ecf6",
+    "database_pid_unchanged": 5008,
+    "metadata_table_initialized": true,
+    "owner_balance_rows": 0,
+    "private_route_unauthenticated_http": 401,
+    "ready_http": 200,
+    "environments_unchanged": true,
+    "baseline": {
+      "cutoff": "2026-09-30T13:07:02.853913+00:00",
+      "heads": {
+        "ai": {
+          "generation": 1132,
+          "snapshot_id": "3f081b76-75b3-4306-8579-41de478792dd",
+          "sha256": "da84a80efb905d6a4f73bd8e32dc4bf3257de1ed2dd9e30bb2e3388d9c3f0294",
+          "source_revision": "638abc04cde135fb4240046160875a2723b01a1d",
+          "created_at": "2026-09-30 13:06:56.136614+00",
+          "file_count": 1635
+        },
+        "dashboard": {
+          "generation": 2297,
+          "snapshot_id": "a07cba9f-a4f1-4b95-aaa3-5dccf706fd21",
+          "sha256": "ea3069d47dea7832e5a731bd9c26908763d9a58cb78945d6bbf3a3daabd336f5",
+          "source_revision": "638abc04cde135fb4240046160875a2723b01a1d",
+          "created_at": "2026-09-30 13:02:38.690243+00",
+          "file_count": 264
+        },
+        "executive": {
+          "generation": 828,
+          "snapshot_id": "f4eb60ff-42a7-4f71-86cc-ac724d98d2a7",
+          "sha256": "f74d90c8d9305f0ba6a313863ef9376857e903d9d0323056b07509e87f67ba0c",
+          "source_revision": "638abc04cde135fb4240046160875a2723b01a1d",
+          "created_at": "2026-09-30 12:12:08.834417+00",
+          "file_count": 344
+        },
+        "legislative": {
+          "generation": 1835,
+          "snapshot_id": "894b201b-6e0e-4242-aba0-c53408df5029",
+          "sha256": "622ec6acb90b7e831f5b0086b6a45b61f581e874bba8726fd446f91d481cca3f",
+          "source_revision": "638abc04cde135fb4240046160875a2723b01a1d",
+          "created_at": "2026-09-30 13:05:16.213574+00",
+          "file_count": 917
+        }
+      },
+      "header_count": 6092,
+      "header_sha256": "fbf7a89bb8efc3d948913cbbe9d9da8de54ae58d8e3124f97f97c5ffd4711ee3",
+      "broken_links": 0,
+      "round_trip_verified": true,
+      "database_transaction_read_only": true
+    },
+    "services": {
+      "PolitiTrackDatabase": {
+        "status": "running",
+        "pid": 5008
+      },
+      "PolitiTrackScheduler": {
+        "status": "running",
+        "pid": 23288
+      },
+      "PolitiTrackWeb": {
+        "status": "running",
+        "pid": 28516
+      }
+    },
+    "current_opportunity_mode": "shadow",
+    "published_dashboard_acceptance": "pending",
+    "installer_exit_status": "assertion_failed_after_source_and_config_install",
+    "reconciliation": "read_only_verification_of_actual_deployment_postconditions",
+    "untracked_file_check": {
+      "cause": "Collector legitimately updated source-status during producer-drain wait; original early hash was stale.",
+      "status_finished_at": "2026-09-30T13:05:11Z",
+      "matched_frozen_legislative_state_sha256": "b9c3ab675f2943f8dfa2b39e8a92e95f96c20e9a4551c33de0e33b9bd4034dde",
+      "untracked_file_mtime_precedes_release": true,
+      "current_source_status_preserved": true
+    },
+    "no_reinstall_or_permission_change": true
+  },
+  "native_acceptance": {
+    "observed_at": "2026-09-30T13:09:39.802144+00:00",
+    "source": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+    "historical_headers_preserved": 6092,
+    "current_header_count": 6093,
+    "broken_links": 0,
+    "read_only_database": true,
+    "heads": [
+      {
+        "namespace": "ai",
+        "generation": 1132,
+        "sha256": "da84a80efb905d6a4f73bd8e32dc4bf3257de1ed2dd9e30bb2e3388d9c3f0294",
+        "source": "638abc04cde135fb4240046160875a2723b01a1d",
+        "created_at": "2026-09-30 13:06:56.136614+00",
+        "bytes": 228072223
+      },
+      {
+        "namespace": "dashboard",
+        "generation": 2298,
+        "sha256": "65624a7f83d753a7821fd85a2b9e6e2583b0e8499a66b2a65afa9f9add84c559",
+        "source": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+        "created_at": "2026-09-30 13:09:37.847623+00",
+        "bytes": 317117128
+      },
+      {
+        "namespace": "executive",
+        "generation": 828,
+        "sha256": "f74d90c8d9305f0ba6a313863ef9376857e903d9d0323056b07509e87f67ba0c",
+        "source": "638abc04cde135fb4240046160875a2723b01a1d",
+        "created_at": "2026-09-30 12:12:08.834417+00",
+        "bytes": 13999170
+      },
+      {
+        "namespace": "legislative",
+        "generation": 1835,
+        "sha256": "622ec6acb90b7e831f5b0086b6a45b61f581e874bba8726fd446f91d481cca3f",
+        "source": "638abc04cde135fb4240046160875a2723b01a1d",
+        "created_at": "2026-09-30 13:05:16.213574+00",
+        "bytes": 30984533
+      }
+    ],
+    "AI_deliveries_queued_since_shadow": 0,
+    "owner_observation_count": 0,
+    "existing_enabled_accounts": 1,
+    "private_route_unauthenticated_http": 401,
+    "ready_http": 200,
+    "api_health": {
+      "status": "newer_request_scope_unverified",
+      "observed_at": null,
+      "last_success_at": null,
+      "error_code": null,
+      "balance_verified": false
+    },
+    "api_usage_coverage": "observed_requests_only",
+    "actual_balance_seeded": false,
+    "assets": {
+      "operating-costs.html": {
+        "http": 200,
+        "matches_source": true
+      },
+      "billing-funding.js": {
+        "http": 200,
+        "matches_source": true
+      },
+      "billing-funding.css": {
+        "http": 200,
+        "matches_source": true
+      }
+    },
+    "overview_funding_counter_present": true,
+    "dashboard_source_current": true,
+    "published_asset_acceptance": true
+  },
+  "AI_continuity": {
+    "observed_at": "2026-09-30T13:09:40.873473+00:00",
+    "baseline_AI_generation": 1131,
+    "current_AI_head": {
+      "generation": 1132,
+      "snapshot_id": "3f081b76-75b3-4306-8579-41de478792dd",
+      "sha256": "da84a80efb905d6a4f73bd8e32dc4bf3257de1ed2dd9e30bb2e3388d9c3f0294",
+      "source_revision": "638abc04cde135fb4240046160875a2723b01a1d",
+      "created_at": "2026-09-30 13:06:56.136614+00",
+      "file_count": 1635
+    },
+    "snapshot_advanced": true,
+    "original_events_preserved": 8596,
+    "current_events": 8636,
+    "original_opportunity_IDs_preserved": 533,
+    "current_opportunities": 553,
+    "ledger_prefixes_preserved": [
+      "analyses.jsonl",
+      "information-value-at-discovery.jsonl",
+      "runs.jsonl"
+    ],
+    "old_completed_analysis_IDs_preserved": 376,
+    "completed_analysis_IDs_now": 396,
+    "opportunity_intents": 0,
+    "opportunity_deliveries": 0,
+    "last_analyst_run": {
+      "started_utc": "2026-09-30T12:44:13Z",
+      "finished_utc": "2026-09-30T13:06:21Z",
+      "run_status": "success",
+      "success": true,
+      "state_publishable": true,
+      "attempted_count": 20,
+      "completed_count": 20,
+      "deferred_count": null
+    },
+    "opportunity_review": {
+      "provider_capability_verified": false,
+      "capability_valid_until": null,
+      "issuer_sections_total": 79,
+      "issuer_sections_reviewed": 0,
+      "market_stack": {
+        "free_data_subscription_usd": 0,
+        "history_provider": "massive",
+        "issuer_provider": "sec",
+        "massive_cache_hits": 0,
+        "massive_requests_this_run": 0,
+        "quote_provider": "finnhub"
+      }
+    },
+    "complete_dossiers": 0,
+    "private_readonly_evidence": true
+  },
+  "live_browser": {
+    "observed_at": "2026-09-30T13:10:01.562153+00:00",
+    "mode": "actual_local_runtime_readonly_browser",
+    "results": [
+      {
+        "width": 1280,
+        "page_http": 200,
+        "login_form_visible": true,
+        "private_status": "Sign in to view private funding balances. Sign in with your existing PolitiTrack review account to view funding.",
+        "overview_status": "Sign in to view private funding balances. Sign in with your existing PolitiTrack review account to view funding.",
+        "no_page_script_errors": true,
+        "no_horizontal_overflow": true,
+        "only_local_get_requests": true,
+        "account_or_balance_writes": 0,
+        "private_data_authenticated_view_not_tested": true
+      },
+      {
+        "width": 390,
+        "page_http": 200,
+        "login_form_visible": true,
+        "private_status": "Sign in to view private funding balances. Sign in with your existing PolitiTrack review account to view funding.",
+        "overview_status": "Sign in to view private funding balances. Sign in with your existing PolitiTrack review account to view funding.",
+        "no_page_script_errors": true,
+        "no_horizontal_overflow": true,
+        "only_local_get_requests": true,
+        "account_or_balance_writes": 0,
+        "private_data_authenticated_view_not_tested": true
+      }
+    ]
+  },
+  "remaining_acceptance": {
+    "authenticated_owner_balance_entry": "not performed; no fabricated session or balance",
+    "current_scope_native_request": "initial status newer_request_scope_unverified; optional read-only follow-up watcher write tool-blocked; not rerouted",
+    "issuer_sections_reviewed": 0,
+    "completed_company_dossiers": 0,
+    "original_capability_receipt": "expired, not renewed",
+    "investment_delivery": "SHADOW and suppressed; no activation"
+  }
+}
