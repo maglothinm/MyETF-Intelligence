@@ -1901,3 +1901,17 @@ resolve genuine existing-account quota and verify the existing model. No new
 subscription or plan is required by the snapshot fix. The quota cooldown remains
 unintegrated because its write was tool-blocked. Expired capabilities and missing
 issuer/model evidence remain genuine live-readiness blockers.
+
+
+## 2026-09-30 - Approved native deployment and unresolved API/tool evidence (#246)
+
+Owner reconnection and standard UAC approval allowed the pinned snapshot repair
+release. Keep the same database, scheduler, namespace writer and suppressed
+SHADOW configuration. A successful install/readiness response is not a successful
+new AI publication: verify actual controller and subsequent scheduled results.
+A user-reported credit purchase is not proof of API availability; the observed
+request still identifies exhausted quota. Do not buy more credits or change
+plans/models automatically. No new provider entitlement is inferred from an old
+receipt or a retained key. Respect the separately denied quota/probe writes and
+evidence read. Record incomplete acceptance honestly, preserve the prior draft,
+and leave live investment delivery disabled until actual gates pass.

@@ -1,5 +1,26 @@
 # PolitiTrack active handoff
 
+## September 30 #246 - Repair deployed; persistence acceptance still blocked
+
+Installed source **638abc04cde135fb4240046160875a2723b01a1d** at11:18:31UTC
+through normal Windows UAC. The executable matches tested d520aa7; only docs
+differ. Fresh read-only four-head export verified6074 headers and zero broken
+links. Database PID5008 never restarted; scheduler/web restarted; readyz200.
+Current Opportunity remains SHADOW; both AI delivery suppressions remain true.
+
+The user's added credits did not establish API recovery: an actual11:19UTC
+request still returned exhausted account quota. The manual recovery controller
+invocation was pending at its last permitted read; its later outcome/API-usage
+read was platform-blocked. Do not claim a new AI snapshot or scheduled success.
+Quota integration and free-provider verification writes were separately blocked
+before execution. No denied operation was attempted through another route.
+No capability renewal, completed investment case or investing performance is
+accepted. Keep #246/#239/#236 open. The owner must resolve actual API account
+availability, and tool read/write blocks must be cleared before verification.
+
+See **docs/releases/2026-09-30-resume.md** for exact evidence and next actions.
+Private evidence: C:\ProgramData\PolitiTrack\backups\runtime-resume-20260930T111742Z.
+
 ## September 29 #246 â€” Repair merged; deployment safely rolled back at file-access block
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`.
