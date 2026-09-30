@@ -1,5 +1,38 @@
 # PolitiTrack active handoff
 
+## September 30 #250 - Renewed installation attempt stopped before release
+
+The owner authorized installation again. The first normal Windows UAC prompt
+was approved, but preflight found an old executive run marked running with no
+actual writer lock. Its historical row was preserved. A revised installer now
+checks actual PostgreSQL writer/backup locks plus current scheduler descendants,
+not the historical status label. It still waits for real active jobs to finish.
+
+The second normal UAC prompt returned cancellation before the revised helper
+started. No repeated elevation or alternate installation was attempted. The
+first idle installer was then canceled using ordinary process access; both of
+its Python processes exited before any service/configuration/schema mutation.
+No native producer, connector or security process was terminated.
+
+Verified at 12:54:51 UTC: installed source remains **638abc0**, the configuration
+is unchanged, and the billing metadata table is absent. PostgreSQL PID 5008,
+scheduler PID 38196 and web PID 19376 remain running without restart by this
+attempt. AI head 1131 and zero AI deliveries since SHADOW remain the last checked
+facts. The scheduled AI run is making genuine HTTP 200 model requests; its final
+publication is still pending. Do not turn those requests into acceptance claims.
+
+The tested funding implementation remains merged via #251. An additional local
+installation-focused regression passed **104 tests**, with 23 optional/platform
+skips; JavaScript syntax and Git diff checks passed. Funding is still NOT live.
+No balances were fabricated, credentials requested, payments made or live alerts
+enabled. Keep #250/#246/#239/#236 open pending their respective acceptance gates.
+
+Next safe action: obtain a new normal Windows administrator approval for the
+revised pinned helper, refresh source identity and active locks, then deploy and
+verify real publication, private routes and desktop/mobile live rendering.
+Read `docs/releases/2026-09-30-billing-install-retry-blocked.json` for exact state.
+Private evidence: `C:\ProgramData\PolitiTrack\backups\billing-install-250-20260930T124844Z`.
+
 ## September 30 #250 - Funding dashboard merged; installation approval canceled
 
 Funding dashboard PR **#251** is merged as
