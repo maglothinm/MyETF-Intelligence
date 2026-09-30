@@ -66,6 +66,11 @@ def environment(config, job):
                   ALLOW_STATE_INITIALIZATION="false", BOOTSTRAP_ALERTS="false")
     result["PATH"] = os.pathsep.join(config["tool_paths"] + [result.get("PATH", "")])
     result["TEMP"] = result["TMP"] = str(root / "temp")
+    if job == 'web':
+        from scripts.billing_status import api_scope
+        ai_environment = config['environments']['ai']
+        result['RUNTIME_BILLING_USAGE_PATH'] = str(root / 'logs' / 'api-usage.sqlite3')
+        result['RUNTIME_OPENAI_BILLING_SCOPE'] = api_scope(ai_environment.get('OPENAI_API_KEY'), ai_environment) or ''
     if job == "ai":
         result["MASSIVE_RATE_LIMIT_PATH"] = str(root / "temp" / "massive-pacing.sqlite3")
         result["POLITITRACK_API_USAGE_PATH"] = str(root / "logs" / "api-usage.sqlite3")

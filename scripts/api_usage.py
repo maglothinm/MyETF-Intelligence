@@ -75,7 +75,7 @@ def journal_path(config):
     return Path(selected) if selected else config.ai_dir/'api-usage.sqlite3'
 
 
-def record_attempt(config,attempt_id,response=None,*,error_type=None):
+def record_attempt(config,attempt_id,response=None,*,error_type=None,error=None,request_purpose="analysis"):
     """Accounting failure must not turn a retry into a duplicated investment action."""
     try:
         at=utc(datetime.now(timezone.utc)); usage=capture(response)
@@ -93,6 +93,10 @@ def record_attempt(config,attempt_id,response=None,*,error_type=None):
             'request_error_type':str(error_type)[:100] if error_type else None,'usage':usage,
             'tool_call_count':tools,'tools_configured':bool(config.web_search_enabled),
             'billing':billing,'cost_scope':'text-token estimate only; excludes tools, tax, discounts, unreported cache-write charges and unobserved requests'}
+        from .billing_status import api_scope, error_metadata
+        event['billing_scope'] = api_scope(config.openai_api_key, os.environ)
+        event['request_purpose'] = request_purpose if request_purpose in ('analysis', 'availability_check') else 'unclassified'
+        event['provider_error'] = error_metadata(error) if error is not None else None
         path=journal_path(config); path.parent.mkdir(parents=True,exist_ok=True)
         with closing(sqlite3.connect(path,timeout=5)) as db:
             with db:

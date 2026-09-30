@@ -1915,3 +1915,27 @@ plans/models automatically. No new provider entitlement is inferred from an old
 receipt or a retained key. Respect the separately denied quota/probe writes and
 evidence read. Record incomplete acceptance honestly, preserve the prior draft,
 and leave live investment delivery disabled until actual gates pass.
+
+
+## 2026-09-30 - Private funding observations, not inferred provider balances (#250)
+
+Separate OpenAI API funding from ChatGPT/Codex credits in the overview and costs
+page. Successful requests, token estimates, key existence, and a paid top-up do
+not reveal the provider's current remaining balance. Use the supported costs
+contract only for what it reports; do not scrape private billing endpoints or
+browser-session credentials. No billing admin key or new plan is required here.
+
+Owner-entered balance/plan observations are append-only private PostgreSQL
+operator metadata under the existing review-account session, with same-origin,
+account/revision, idempotency and history-integrity checks. They are covered by
+the existing physical database backup, not a parallel trading-state authority.
+Live usage is read from the native accounting journal independently of stale AI
+publication; no paid API request is made by a page refresh. Current-key scope is
+a private hash, not proof of an organization identity or monetary entitlement.
+
+Label owner-reported balance, incomplete data and token-only local estimates
+separately. Unknown never means zero; money and request/credit allowances are not
+summed. Low/stale/renewal warnings are dashboard-only and do not buy credits,
+change providers/models, resume cloud hosting, alter investment gates or enable
+alerts. A real post-correction API request succeeded; its small metered usage is
+operational evidence only. Retain pending issuer/capability acceptance separately.

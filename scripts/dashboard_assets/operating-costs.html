@@ -1,7 +1,44 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PolitiTrack operating costs</title><link rel="stylesheet" href="current-opportunities.css"><script src="operating-costs.js" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PolitiTrack funding and operating costs</title>
+<link rel="stylesheet" href="current-opportunities.css"><link rel="stylesheet" href="billing-funding.css">
+<script src="operating-costs.js" defer></script><script src="billing-funding.js" defer></script></head>
 <body><header><a href="index.html">PolitiTrack</a><nav aria-label="Main"><a href="index.html">Overview</a> <a href="current-opportunities.html">Current opportunities</a></nav></header>
-<main><h1>Operating costs</h1><p>Free market data is separate from paid AI usage.</p><p id="status" role="status">Loading recorded usage.</p>
-<section aria-labelledby="data-title"><h2 id="data-title">Selected market-data stack</h2><p>Massive Stocks Basic + existing Finnhub quotes + SEC filings. Planned new data-subscription cost: $0/month. This is not a provider invoice or a claim that account entitlements are verified. No cloud-hosting subscription is introduced.</p></section>
-<section aria-labelledby="usage-title"><h2 id="usage-title">Observed OpenAI API usage</h2><p id="notice"></p><div id="usage"></div><p><a href="data/api-usage.json" download>Export recorded usage summary</a></p></section>
+<main><h1>Funding &amp; operating costs</h1>
+<p class="billing-warning"><strong>OpenAI API credits fund PolitiTrack. ChatGPT credits do not.</strong> These are separate accounts and balances. A successful API request does not reveal a dollar balance.</p>
+<section aria-labelledby="funding-title"><h2 id="funding-title">Paid services and remaining funding</h2>
+<p id="billing-status" role="status">Checking private funding observations.</p>
+<p id="billing-counters"></p><button type="button" id="billing-refresh">Refresh checks</button>
+<p>Checks read existing observations; refreshing does not make a paid API call, buy credits, change a subscription, or enable investment alerts.</p>
+<form id="billing-login" hidden><h3>Sign in to your existing PolitiTrack account</h3>
+<p>This is your dashboard review-account sign-in, not your OpenAI account. Never enter an API key here.</p>
+<label>Username <input name="username" autocomplete="username" required></label>
+<label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit">Sign in</button></form>
+<div id="billing-services" class="billing-grid"></div>
+<p id="billing-policy">Amounts are not available until observed. Unknown never means $0. Monetary balances, non-dollar credits, and request allowances are not interchangeable.</p>
+</section>
+<section id="billing-editor" hidden aria-labelledby="billing-editor-title"><h2 id="billing-editor-title">Record a balance or plan</h2>
+<p>Copy the <strong>remaining balance shown now</strong> in the correct provider account, not the amount you just purchased. This records your observation only; it does not move money.</p>
+<form id="billing-form" class="billing-form">
+<label>Service <select name="provider" required></select></label>
+<label>Billing type <select name="funding_type"><option value="prepaid">Prepaid</option><option value="subscription">Subscription</option><option value="one_time">One-time purchase</option><option value="free">Free</option><option value="included">Included / no separate charge</option><option value="unknown">Unverified</option></select></label>
+<label>Balance unit <select name="unit"><option value="USD">USD dollars</option><option value="credits">Provider credit units</option><option value="requests">Request allowance (not money)</option></select></label>
+<label>Remaining balance <input name="remaining" type="number" step="any" placeholder="Unknown until entered"></label>
+<label>Observed at <input name="observed_at" type="datetime-local" step="1" required></label>
+<label>Low-balance warning threshold <input name="low_threshold" type="number" min="0" step="any"></label>
+<label>Plan charge in USD (optional) <input name="charge_usd" type="number" min="0" step="any"></label>
+<label>Next renewal / credit expiration (optional) <input name="next_due" type="datetime-local" step="1"></label>
+<label>Non-sensitive service label (optional) <input name="label" maxlength="80" placeholder="No keys, card details or account numbers"></label>
+<p class="billing-full"><label><input name="confirmed" type="checkbox" required> I checked this service's own account. For OpenAI API, I checked the organization associated with PolitiTrack's API key, not ChatGPT.</label></p>
+<p class="billing-full"><button type="submit">Record observation</button> <button type="button" id="billing-cancel">Cancel</button></p>
+</form></section>
+<section aria-labelledby="live-usage-title"><h2 id="live-usage-title">Live observed API activity</h2>
+<p id="billing-health">No current API request evidence yet.</p><div id="billing-live-usage"></div>
+<p>These observations survive a failed AI snapshot. They do not establish investment-case completion, total account charges, or actual account balance.</p></section>
+<section aria-labelledby="data-title"><h2 id="data-title">Selected market-data stack</h2>
+<p>Massive Stocks Basic + existing Finnhub quotes + SEC filings. Planned new data-subscription cost: $0/month. This is not a provider invoice or verification of account entitlements. No cloud runtime is introduced.</p></section>
+<section aria-labelledby="usage-title"><h2 id="usage-title">Last published OpenAI API usage</h2>
+<p id="status" role="status">Loading recorded usage.</p><p id="notice"></p><div id="usage"></div>
+<p>This snapshot-backed section may lag the live operational observations above. <a href="data/api-usage.json" download>Export the last published usage summary</a></p></section>
 </main></body></html>

@@ -130,6 +130,8 @@ def create_app(
     personal_reviews = review_store or PersonalReviewStore()
     app.extensions["personal_reviews"] = personal_reviews
     app.register_blueprint(create_blueprint(personal_reviews, cache))
+    from .billing_api import create_blueprint as billing_blueprint
+    app.register_blueprint(billing_blueprint(personal_reviews))
     from .operations_api import create_blueprint as operations_blueprint
     app.register_blueprint(operations_blueprint(personal_reviews, operation_store, operation_cloud))
     from .source_ocr_api import create_blueprint as source_ocr_blueprint
