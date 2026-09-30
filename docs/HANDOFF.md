@@ -1,5 +1,60 @@
 # PolitiTrack active handoff
 
+## September 30 #250 - Funding dashboard deployed; native AI persistence recovered
+
+Canonical repository **1349678672**, `maglothinm/MyETF-Intelligence`.
+Installed source **867893922e61c9fe30b1535e4deb32de8fc0d211** at **13:07:29 UTC**.
+Its executable matches tested funding head `fdc6dc9` / merged PR #251; later
+commits contain documentation only. All four canonical CI runs passed. The
+installation regression passed **594 tests**, with 24 optional/platform skips.
+
+The owner approved the normal Windows prompt. The installer waited for the
+active AI writer to finish without interrupting paid work. Its source-status
+hash assertion then failed AFTER installing source/configuration because the
+collector had legitimately updated that untracked status file during the wait.
+Read-only reconciliation proved its 13:05:11 modification predates the release,
+and its state hash exactly matches the frozen authoritative Legislative state.
+The original failed log is retained. No permission was bypassed, state rewound,
+installer rerun or historical row changed to manufacture a passing receipt.
+Future release helpers must capture this hash at the final frozen boundary.
+
+Actual postconditions passed: existing database PID **5008** remained running;
+scheduler/web restarted successfully; configuration differs only in source SHA;
+billing metadata table exists with **zero fabricated owner observations**; the
+private route returns **401 SIGN_IN_REQUIRED** with no-store headers to an
+unauthenticated request. Existing account/review and snapshot histories remain.
+
+The existing locked dashboard controller published **dashboard 2298** at
+**13:09:37 UTC**, SHA `65624a7f83d753a7821fd85a2b9e6e2583b0e8499a66b2a65afa9f9add84c559`.
+Funding HTML/JS/CSS match installed source bytes; the overview counter is present.
+Actual local-browser reads at **1280 and 390 pixels** passed without page errors,
+overflow, external requests or account writes. Authenticated owner balance entry
+has not been exercised on production; no user session or balance was fabricated.
+
+The preceding scheduled AI run also genuinely recovered publication: **AI1132**
+committed at **13:06:56 UTC**, SHA
+`da84a80efb905d6a4f73bd8e32dc4bf3257de1ed2dd9e30bb2e3388d9c3f0294`,
+with 20 completed analyses and a **228,072,223-byte** uncompressed snapshot under
+the unchanged safety cap. Original 8,596 opportunity events, 533 opportunity IDs,
+376 completed-analysis IDs and all retained JSONL prefixes were preserved.
+Completed-analysis IDs increased to 396. The release preserved all **6,092**
+frozen snapshot headers with zero broken links. No AI delivery was queued.
+
+This is funding deployment and first recovered AI publication, not investment
+case or performance acceptance. Current Opportunity remains SHADOW; both AI
+delivery suppressions stay true. The original capabilities are expired, all
+79 retained issuer sections remain unreviewed, and no company dossier is ready.
+Keep #239/#236 open and retain #246 for sustained operational acceptance.
+
+The funding panel correctly leaves actual balances unknown until the owner signs
+in to PolitiTrack and records the remaining amount in the correct provider account.
+At initial verification its request scope was not yet reverified by a newly
+instrumented native request. An optional passive follow-up watcher write was
+tool-blocked before execution and was not rerouted. Keep #250 open for the first
+authenticated owner-entry acceptance; no further installation is pending.
+See `docs/releases/2026-09-30-billing-deployed.json` for exact evidence.
+Private evidence: `C:\ProgramData\PolitiTrack\backups\billing-install-250-20260930T124844Z\release`.
+
 ## September 30 #250 - Renewed installation attempt stopped before release
 
 The owner authorized installation again. The first normal Windows UAC prompt
