@@ -1,0 +1,29 @@
+{
+  "observed_at": "2026-09-30T12:23:46.830229+00:00",
+  "repository_id": 1349678672,
+  "merged_pr": 251,
+  "merge_sha": "f6b51ad3b4a80847d1a459a56ed43522c6376973",
+  "tested_head": "fdc6dc996f43fc5759a94d06f0ef26568856ecf6",
+  "local_tests": {
+    "passed": 606,
+    "skipped": 33
+  },
+  "ci": {
+    "Runtime_v2": 36713693718,
+    "Current_Opportunity": 36713693620,
+    "Investor_Edge": 36713693780,
+    "Source_upload_OCR": 36713693596
+  },
+  "ci_conclusion": "all_success",
+  "deployment": "not_started_uac_canceled",
+  "installed_source": "638abc04cde135fb4240046160875a2723b01a1d",
+  "billing_table_exists": false,
+  "release_log_exists": false,
+  "owner_balance_seeded": false,
+  "provider_balance_amount_verified": false,
+  "API_availability_probe": "HTTP200_completed_2026-09-30T12:06:27Z",
+  "manual_AI_recovery": "TimeoutExpired_2026-09-30T12:17:57Z",
+  "authoritative_AI_generation": 1131,
+  "renewed_owner_approval_required": true,
+  "private_evidence_directory": "C:\\ProgramData\\PolitiTrack\\backups\\billing-dashboard-250-20260930T115321Z"
+}
