@@ -1,5 +1,43 @@
 # PolitiTrack project state
 
+## October 5 #255 — Cross-document source correction merged; installation still blocked
+
+PR #258 merged as 8c9f22ee8ab95bdde2ebe6673bc8beb294b490e0.
+Exact CI head 27dbb3c53293844caab542d04704b23ee44ce079 is source-identical to
+locally tested 71e694e5845be6e58484cf5b403d22141d0365f2. The merged tree was
+independently compared and matches. Current Opportunity workflow 37330315025
+(Python 3.11/3.12 plus DOM fixtures) and Runtime safety 37330315061 both succeeded.
+Local regression: 576 passed, seven optional skips. The initial PR event produced
+no run; a source-identical synchronization commit triggered the existing checks.
+No workflow setting, production schedule or retired cloud job was enabled.
+
+The correction resolves section limitations only against the completed, verified
+cross-document issuer claim catalog. Material unresolved facts, missing documents,
+unmatched quotations and unsupported references remain blocking; original limits,
+prior reviews, all financial gates and budgets remain unchanged.
+
+Real-data diagnostic: one retained MSFT primary section completed with four exact
+validated claims. The old isolated-section check could not see its retained
+companion exhibit. A later companion attempt failed one quotation check and was
+rejected. Three structured model invocations occurred in an isolated diagnostic;
+no native state, completed investment case or investing performance was produced.
+Private diagnostic SHA256 e79da847117d5f6de81292bafe32e048141220841d426d92e2445fb0c12864b7.
+
+At 15:08:54 UTC, Beast still ran 867893922e61c9fe30b1535e4deb32de8fc0d211;
+Database, Scheduler and Web were Running/Automatic; shadow and both suppressions
+were unchanged; the refresh flag was absent and the installer did not exist.
+The installer creation and a separate optional cache-validator append were
+safety-blocked and were not rerouted. Independent permitted source work continued.
+
+Connection settings were inspected: the app override is already Allow all actions,
+while the global default is Allow low-risk actions. A switch of only Remote
+Desktop Commander to Always ask was proposed for explicit owner oversight and
+awaits the owner's specific choice. It is not a safety override or guaranteed fix.
+No connection/security settings changed. Keep #255/#239/#236 open. The next release
+must use the latest reviewed source and a fresh frozen state export, not an older
+rejected installer template. Source repair, native installation and real-case
+acceptance remain distinct. See docs/validation/usefulness-cross-document-20261005.json.
+
 ## October 5 #255 — Real-data validation found cross-document limitation defect
 
 Continuation of the owner's instruction to resolve the repair. Production still
