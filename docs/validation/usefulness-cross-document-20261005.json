@@ -33,7 +33,8 @@
     "accepted_investment_cases": 0,
     "native_state_writes": 0,
     "alerts": 0,
-    "orders": 0
+    "orders": 0,
+    "private_receipt_sha256": "e79da847117d5f6de81292bafe32e048141220841d426d92e2445fb0c12864b7"
   },
   "access_diagnostic": {
     "Beast": "Online",
@@ -47,6 +48,25 @@
     "installed_source": "867893922e61c9fe30b1535e4deb32de8fc0d211",
     "new_source_installed": false,
     "fresh_release_freeze": false,
-    "production_usefulness_accepted": false
-  }
+    "production_usefulness_accepted": false,
+    "last_verified_at": "2026-10-05T15:08:54.4180082Z",
+    "services": "Database, Scheduler, Web Running/Automatic"
+  },
+  "source_commit": "71e694e5845be6e58484cf5b403d22141d0365f2",
+  "ci_head": "27dbb3c53293844caab542d04704b23ee44ce079",
+  "merge_commit": "8c9f22ee8ab95bdde2ebe6673bc8beb294b490e0",
+  "pull_request": 258,
+  "ci": [
+    {
+      "name": "Current Opportunity offline tests",
+      "run_id": 37330315025,
+      "conclusion": "success"
+    },
+    {
+      "name": "Runtime v2 safety tests",
+      "run_id": 37330315061,
+      "conclusion": "success"
+    }
+  ],
+  "merge_tree_equals_tested_tree": true
 }
