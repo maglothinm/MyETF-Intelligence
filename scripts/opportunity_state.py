@@ -118,6 +118,10 @@ def validate_directory(directory: Path) -> None:
     if massive.exists():
         from .opportunity_massive import validate_cache as validate_massive_cache
         validate_massive_cache(read_json(massive))
+    refreshed = directory / 'opportunity-capability-refresh.json'
+    if refreshed.exists():
+        from .opportunity_capability_refresh import validate_cache as validate_refresh
+        validate_refresh(read_json(refreshed))
     cache = directory / 'opportunity-evidence-cache.json'
     if cache.exists():
         from .opportunity_review_v2 import validate_cache

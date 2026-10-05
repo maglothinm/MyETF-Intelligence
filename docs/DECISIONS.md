@@ -1990,3 +1990,26 @@ Initial request-scope freshness remains distinct from previously successful API
 responses. An optional passive-watcher write was tool-blocked and not rerouted.
 No extra provider probe, fabricated account/session/balance, new subscription,
 cloud runtime, archive ceiling increase, or notification activation was performed.
+
+
+## 2026-10-05 — Measure decision completion, preserve identity and fail closed (#255)
+
+Historical identity evidence and current market capability are separate contracts.
+A feed expiry cannot create a new economic case for an already verified historical
+trade, but it still withdraws current price/entry qualification. Genuine observed
+renewal is bounded within the sole native SHADOW AI writer; it cannot extend a
+receipt by time alone, infer new identities, or authorize live alerts.
+
+Source work must progress incrementally without calling partial coverage complete.
+Full-text streaming keeps raw hashes, explicit byte limits and preserved source
+provenance. Original limitations remain auditable when a separate source-bound
+assessment classifies nonmaterial scope notices; material uncertainty still blocks.
+Unsupported valuation is a method limitation, not an economic rejection. Track
+attempts, actual section progress and completed investment reviews separately.
+
+Keep full exports and history; reduce default browser work with a compact index,
+bounded cards and exact-evaluation-linked on-demand detail. Do not loosen entry
+rules, purchase subscriptions, reset state or create a new scheduler to increase
+signal counts. Source/test success and actual useful investment cases require
+separate acceptance evidence. Honor the tool-blocked exported-data inspection;
+do not install or claim real-case progress around that unresolved boundary.

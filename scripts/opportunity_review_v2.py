@@ -63,6 +63,9 @@ def validate_cache(cache):
     for slot in cache['issuers'].values():
         if not isinstance(slot,dict) or not isinstance(slot.get('documents',{}),dict):
             raise OpportunityError('invalid opportunity evidence cursor')
+        failures = slot.get('document_failures',{})
+        if not isinstance(failures,dict) or len(failures)>2000 or any(not isinstance(v,dict) or not isinstance(v.get('reason'),str) or not timestamp(v.get('observed_at')) or not timestamp(v.get('retry_after')) for v in failures.values()):
+            raise OpportunityError('invalid document failure provenance')
         for names in slot.get('manifests',{}).values():
             if not isinstance(names,list) or any(not isinstance(n,str) or not re.fullmatch(r'[A-Za-z0-9_.-]+\.(?:htm|html|txt)',n,re.I) for n in names):
                 raise OpportunityError('invalid cached SEC document manifest')
@@ -120,6 +123,11 @@ class InvestmentSourceReviewer:
         finally:
             if 'response' in locals():
                 response.close()
+
+    def _document(self,url):
+        from .opportunity_document import stream_document
+        self.market.budget.consume(); self._pace()
+        return stream_document(self.market.session,url,self.config.sec_user_agent,self.config.request_timeout)
 
     def _model(self,context,schema):
         if self.models_remaining <= 0:
@@ -181,11 +189,88 @@ class InvestmentSourceReviewer:
             'document_sha256':doc['sha256'],'observed_at':doc['observed_at'],'published_at':doc['published_at'],
             'precision':'date','section_index':i,'section_kind':'complete contiguous document segment'}
 
+    def _acquire_documents(self, slot, inventory, now):
+        """Acquire bounded documents without starving already available research.
+
+        All listed documents remain required. A blocked/oversized document never
+        clears issuer coverage. Cooldowns avoid downloading the same oversized
+        response every tick; completed source bytes and reviews remain unchanged.
+        """
+        active, pending = [], []
+        failures = slot.setdefault('document_failures', {})
+        for report in inventory:
+            acc = report['accessionNumber']
+            prefix = f'https://www.sec.gov/Archives/edgar/data/{int(self._current_cik)}/{acc.replace("-", "")}/'
+            index_key = acc + '/@index'
+            try:
+                if acc not in slot['manifests']:
+                    failure = failures.get(index_key, {})
+                    if timestamp(failure.get('retry_after')) and now < timestamp(failure['retry_after']):
+                        raise DataUnavailable(failure['reason'])
+                    if self.documents_remaining <= 0:
+                        raise DataUnavailable('issuer_inventory_progress_pending')
+                    self.documents_remaining -= 1
+                    soup = BeautifulSoup(self._text(prefix+acc+'-index.html'),'html.parser')
+                    table = soup.find('table',attrs={'summary':'Document Format Files'})
+                    if table is None:
+                        raise DataUnavailable('issuer_exhibit_inventory_unavailable')
+                    names = {report['primaryDocument']}
+                    for tr in table.find_all('tr'):
+                        cells = tr.find_all('td')
+                        if len(cells) >= 4 and re.match(r'EX-(?:10|99)(?:\.|$)',cells[3].get_text(strip=True)):
+                            link = cells[2].find('a')
+                            if not link:
+                                raise DataUnavailable('issuer_exhibit_locator_missing')
+                            target = urljoin(prefix,link.get('href',''))
+                            if not target.startswith(prefix):
+                                raise DataUnavailable('issuer_exhibit_locator_outside_filing')
+                            names.add(target[len(prefix):])
+                    if any(not re.fullmatch(r'[A-Za-z0-9_.-]+\.(?:htm|html|txt)',n,re.I) for n in names):
+                        raise DataUnavailable('non_text_issuer_document_requires_review')
+                    slot['manifests'][acc] = sorted(names)
+                    failures.pop(index_key,None)
+            except DataUnavailable as exc:
+                pending.append({'document_id':index_key,'reason':str(exc)})
+                if index_key not in failures or not timestamp(failures[index_key].get('retry_after')) or now >= timestamp(failures[index_key]['retry_after']):
+                    failures[index_key]={'reason':str(exc),'observed_at':utc(self.clock()),'retry_after':utc(now+timedelta(minutes=30))}
+                continue
+            for name in slot['manifests'][acc]:
+                did = acc+'/'+name
+                if did in slot['documents']:
+                    active.append(did)
+                    continue
+                try:
+                    failure = failures.get(did,{})
+                    if timestamp(failure.get('retry_after')) and now < timestamp(failure['retry_after']):
+                        raise DataUnavailable(failure['reason'])
+                    if self.documents_remaining <= 0:
+                        raise DataUnavailable('issuer_download_progress_pending')
+                    self.documents_remaining -= 1
+                    document = self._document(prefix+name)
+                    pieces = chunks(document['text'],self.rules['evidence_document_characters'])
+                    if not pieces:
+                        raise DataUnavailable('empty_issuer_document')
+                    if len(json.dumps(self.cache,allow_nan=False))+len(json.dumps(pieces))*2 > 31_000_000:
+                        raise DataUnavailable('evidence_cache_capacity_requires_review')
+                    slot['documents'][did]={'id':did,'url':prefix+name,'sha256':document['sha256'],
+                        'extraction':{k:v for k,v in document.items() if k!='text'},
+                        'chunks':pieces,'text_digest':digest(pieces),'reviews':{},'form':report['form'],
+                        'published_at':report['filingDate'],'observed_at':utc(self.clock())}
+                    failures.pop(did,None)
+                    active.append(did)
+                except DataUnavailable as exc:
+                    pending.append({'document_id':did,'reason':str(exc)})
+                    if did not in failures or not timestamp(failures[did].get('retry_after')) or now >= timestamp(failures[did]['retry_after']):
+                        delay = timedelta(hours=24) if str(exc) in ('issuer_document_byte_safety_limit','issuer_document_transport_safety_limit','issuer_document_text_safety_limit','non_text_issuer_document_requires_review') else timedelta(minutes=30)
+                        failures[did]={'reason':str(exc),'observed_at':utc(self.clock()),'retry_after':utc(now+delay)}
+        return active, pending
+
     def __call__(self,rows,membership_hash,now):
         mapping = (self.caps.get('securities') or {}).get(rows[0].get('ticker')) or {}
         cik = str(mapping.get('cik') or '')
         if not re.fullmatch(r'\d{1,10}',cik) or not self.config.sec_user_agent or not self.config.openai_api_key:
             raise DataUnavailable('SEC_identity_user_agent_or_evidence_model_unavailable')
+        self._current_cik = cik
         key = rows[0].get('security_key') or rows[0].get('security_id') or cik
         slot = self.cache['issuers'].setdefault(key,{'documents':{},'manifests':{}})
         base = {'decision_contract_version':2,'membership_hash':membership_hash,'status':'incomplete',
@@ -225,53 +310,11 @@ class InvestmentSourceReviewer:
                     'observed_at':utc(self.clock()),'payload_sha256':digest(facts)}
                 slot['facts_day'] = now.date().isoformat()
             base['fundamentals'] = deepcopy(slot['fundamentals'])
-            active = []
-            for r in inventory:
-                acc = r['accessionNumber']
-                prefix = f'https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace("-", "")}/'
-                if acc not in slot['manifests']:
-                    if self.documents_remaining <= 0:
-                        raise DataUnavailable('issuer_inventory_progress_pending')
-                    self.documents_remaining -= 1
-                    soup = BeautifulSoup(self._text(prefix+acc+'-index.html'),'html.parser')
-                    table = soup.find('table',attrs={'summary':'Document Format Files'})
-                    if table is None:
-                        raise DataUnavailable('issuer_exhibit_inventory_unavailable')
-                    names = {r['primaryDocument']}
-                    for tr in table.find_all('tr'):
-                        cells = tr.find_all('td')
-                        if len(cells) >= 4 and re.match(r'EX-(?:10|99)(?:\.|$)',cells[3].get_text(strip=True)):
-                            link = cells[2].find('a')
-                            if not link:
-                                raise DataUnavailable('issuer_exhibit_locator_missing')
-                            target = urljoin(prefix,link.get('href',''))
-                            if not target.startswith(prefix):
-                                raise DataUnavailable('issuer_exhibit_locator_outside_filing')
-                            names.add(target[len(prefix):])
-                    if any(not re.fullmatch(r'[A-Za-z0-9_.-]+\.(?:htm|html|txt)',n,re.I) for n in names):
-                        raise DataUnavailable('non_text_issuer_document_requires_review')
-                    slot['manifests'][acc] = sorted(names)
-                for name in slot['manifests'][acc]:
-                    did = acc+'/'+name; active.append(did)
-                    if did not in slot['documents']:
-                        if self.documents_remaining <= 0:
-                            raise DataUnavailable('issuer_download_progress_pending')
-                        self.documents_remaining -= 1
-                        content = self._text(prefix+name)
-                        soup = BeautifulSoup(content,'html.parser')
-                        for el in soup(['script','style']):
-                            el.decompose()
-                        pieces = chunks(soup.get_text(' ',strip=True),self.rules['evidence_document_characters'])
-                        if not pieces:
-                            raise DataUnavailable('empty_issuer_document')
-                        if len(json.dumps(self.cache,allow_nan=False))+len(json.dumps(pieces))*2 > 31_000_000:
-                            raise DataUnavailable('evidence_cache_capacity_requires_review')
-                        slot['documents'][did] = {'id':did,'url':prefix+name,'sha256':hashlib.sha256(content).hexdigest(),
-                            'chunks':pieces,'text_digest':digest(pieces),'reviews':{},'form':r['form'],
-                            'published_at':r['filingDate'],'observed_at':utc(self.clock())}
+            active, pending = self._acquire_documents(slot, inventory, now)
             slot['active_documents'] = active
+            base['pending_documents'] = pending
             if not active:
-                raise DataUnavailable('issuer_material_documents_unavailable')
+                raise DataUnavailable(pending[0]['reason'] if pending else 'issuer_material_documents_unavailable')
             sources, claims, limitations = [], [], []
             for did in active:
                 doc = slot['documents'][did]
@@ -283,8 +326,21 @@ class InvestmentSourceReviewer:
                         if not result['reviewed'] or errors:
                             raise DataUnavailable('unverified_section_claims')
                         doc['reviews'][str(i)] = {'claims':verified,'limitations':result['limitations'],'completed_at':utc(self.clock())}
-                    claims.extend(doc['reviews'][str(i)]['claims'])
-                    limitations.extend(doc['reviews'][str(i)]['limitations'])
+                    reviewed = doc['reviews'][str(i)]
+                    claims.extend(reviewed['claims'])
+                    if reviewed['limitations']:
+                        key = digest({'source':src,'claims':reviewed['claims'],'limitations':reviewed['limitations']})
+                        adjudications = reviewed.setdefault('limitation_reviews',{})
+                        if key not in adjudications:
+                            adjudicated = self._model({'task':'Check the listed section limitations against this exact source and claims. supported=true only if every limitation is a generic scope notice or ordinary disclosed risk and no missing material fact, interpretation, unit, entity or period can affect the investment case. Any material uncertainty or inability to decide requires supported=false and an explicit limitation. Do not infer facts from absence or relax evidence requirements. This is a separate check, not a confidence score.', 'source':src,'claims':reviewed['claims'],'original_limitations':reviewed['limitations']},CHECK_SCHEMA)
+                            adjudications[key] = {'completed_at':utc(self.clock()),'result':adjudicated}
+                        adjudication=adjudications[key]['result']
+                        if not adjudication['supported'] or adjudication['unsupported_claim_ids'] or adjudication['limitations']:
+                            limitations.extend(reviewed['limitations'])
+                            limitations.extend(adjudication['limitations'])
+            # Partial research is real progress, but never complete coverage.
+            if pending:
+                raise DataUnavailable('issuer_inventory_incomplete')
             if limitations:
                 raise DataUnavailable('issuer_section_review_has_unresolved_limits')
             verified, errors = verify_claims(claims,sources,self.clock())
@@ -294,6 +350,9 @@ class InvestmentSourceReviewer:
                 raise DataUnavailable('issuer_claim_catalog_requires_bounded_manual_review')
             base['verified_claims'] = verified
             base['sources'] += [{k:v for k,v in s.items() if k != 'text'} for s in sources]
+            eps = (base['fundamentals'].get('annual_eps') or {}).get('value')
+            if isinstance(eps,(int,float)) and eps <= 0:
+                raise DataUnavailable('valuation_method_not_supported_for_nonpositive_eps')
             case_key = digest({'claims':verified,'annual_eps':base['fundamentals']['annual_eps'],'membership':membership_hash})
             if slot.get('case_key') != case_key:
                 slot['proposal'] = self._model({'task':'Develop an affirmative company investment case using only supplied claim IDs. Forward EPS and multiples must be explicit reasoned assumptions, never reported facts. Explain why own the company, why now, attributable shareholder economics, bear/base/bull scenarios, and falsifiable review/invalidation conditions. A political relationship alone is insufficient. Classify ordinary risks separately from factual thesis breakers. Put evidence gaps in limitations; use method not_supported when a reported-EPS multiple case is unsuitable.',
@@ -328,6 +387,9 @@ class InvestmentSourceReviewer:
         except DataUnavailable as exc:
             base['reason'] = str(exc)
             base['case_errors'] = sorted(set(base.get('case_errors',[])+[str(exc)]))
+        # Classify method support independently of prices and document progress.
+        eps = ((base.get('fundamentals') or {}).get('annual_eps') or {}).get('value')
+        base['valuation_support'] = ('unsupported_nonpositive_reported_eps' if isinstance(eps,(int,float)) and eps <= 0 else 'positive_reported_eps_reference' if isinstance(eps,(int,float)) and eps > 0 else 'reference_unavailable')
         checked = self.clock()
         base['checked_at'] = utc(checked)
         base['valid_until'] = utc(checked+timedelta(hours=self.rules['evidence_max_hours']))
@@ -336,6 +398,8 @@ class InvestmentSourceReviewer:
             'sections_total':sum(len(d.get('chunks',[])) for d in docs.values()),
             'sections_reviewed':sum(len(d.get('reviews',{})) for d in docs.values()),
             'complete':base['coverage']['issuer'],'reason':base.get('reason'),
+            'pending_documents':base.get('pending_documents',[]),
+            'last_substantive_progress_at':max((v['completed_at'] for d in docs.values() for v in d.get('reviews',{}).values()),default=None),
             'public_availability':'SEC observation; filing date is not exact public-release time','scope':base['scope']}
         validate_cache(self.cache)
         return base
