@@ -1,0 +1,52 @@
+{
+  "repository_id": 1349678672,
+  "issue": 255,
+  "date": "2026-10-05",
+  "base_commit": "a12d4834af5160ef2df9a231e06010b28b0b6298",
+  "branch": "codex/usefulness-cross-document-review-20261005",
+  "finding": "Section-only limitation adjudication cannot see a companion exhibit already retained elsewhere in the issuer evidence catalog. This can block a complete case even after the relevant exhibit is reviewed.",
+  "implemented_correction": "Resolve original section limitations only after complete source acquisition and exact-quotation validation, against the combined verified issuer claim catalog. Each limitation must be accounted for; material unresolved facts and missing or invented claim references remain blocking. Preserve original limitations and prior section-only review records.",
+  "deterministic_acceptance": {
+    "python_passed": 576,
+    "optional_skipped": 7,
+    "cross_document_fixture": "Three bounded cycles: two section reviews, catalog limitation resolution and case synthesis, then semantic review. Case becomes sufficient only at the final cycle.",
+    "production_state_writes": 0,
+    "model_budget_changed": false,
+    "qualification_thresholds_changed": false
+  },
+  "real_data_diagnostic": {
+    "scope": "Isolated in-memory diagnostic using the verified October 5 12:36 UTC source export; not a native production run or complete issuer review.",
+    "issuer": "MSFT",
+    "main_document_id": "0001193125-26-380280/d291965d8k.htm",
+    "companion_document_id": "0001193125-26-380280/d291965dex991.htm",
+    "main_document_sha256": "401e7d99b1d6a27451dcfa70c745aa9104a89d1daca66fdc3901e30f58ad1995",
+    "main_section_reviewed": true,
+    "main_section_exact_claims": 4,
+    "main_section_excerpt_errors": 0,
+    "old_section_only_adjudication_supported": false,
+    "old_adjudication_reason": "The source refers to Exhibit 99.1, but its contents were absent from the single-segment adjudication context.",
+    "companion_segment_attempted": 1,
+    "companion_segment_accepted": false,
+    "companion_failure": "One model-generated quotation was not an exact source match. The section was rejected rather than accepting incomplete material evidence.",
+    "structured_model_invocations": 3,
+    "http_attempt_count": null,
+    "accepted_investment_cases": 0,
+    "native_state_writes": 0,
+    "alerts": 0,
+    "orders": 0
+  },
+  "access_diagnostic": {
+    "Beast": "Online",
+    "app_permission": "Allow all actions",
+    "global_default": "Allow low-risk actions",
+    "installer_creation": "Rejected by OpenAI safety check; no alternate execution route used",
+    "optional_cache_validator_append": "Rejected by OpenAI safety check; append not performed and not rerouted",
+    "proposed_explicit_approval_setting": "Always ask for Remote Desktop Commander only; awaiting owner selection; not represented as a safety override or guaranteed fix"
+  },
+  "deployment": {
+    "installed_source": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+    "new_source_installed": false,
+    "fresh_release_freeze": false,
+    "production_usefulness_accepted": false
+  }
+}
