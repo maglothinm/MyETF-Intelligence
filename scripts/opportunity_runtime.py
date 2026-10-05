@@ -77,24 +77,38 @@ class OpportunityRuntime:
         from .opportunity_capability_import import import_receipt
         receipt_import = import_receipt(self.config.ai_dir, self.environment, self.clock())
         caps = capabilities(self.config.ai_dir, self.clock())
+        identity_caps = capabilities(self.config.ai_dir, self.clock(), historical_identity_only=True)
         budget = RequestBudget(self.rules['request_budget'])
         market = market_provider or MarketProvider(self.config, self.rules, session, caps, self.clock, budget)
+        from .opportunity_capability_refresh import refresh
+        refresh_report, refreshed_caps, history_client = refresh(self.config,self.rules,session,self.environment,self.clock,budget,history_client=getattr(market,'massive_history',None),calendar=calendar)
+        if refreshed_caps is not None:
+            caps = refreshed_caps
+            market.caps = caps
+            market.massive_history = history_client
+            identity_caps.setdefault('securities',{}).update(caps.get('securities',{}))
+        if refresh_report.get('observation_changed'):
+            event(self.state,'capability_observation',refresh_report,self.clock())
         reviews = [r['evidence'] for r in self.state['opportunities'].values() if r.get('evidence')]
         evidence = evidence_provider or EvidenceProvider(reviews, self.rules,
-            reviewer=InvestmentSourceReviewer(self.config, self.rules, market, caps, self.clock, cache=self.review_cache),
+            reviewer=InvestmentSourceReviewer(self.config, self.rules, market, identity_caps, self.clock, cache=self.review_cache),
             model_budget=self.rules['evidence_model_budget'])
         channels = analyst._requested_candidate_channels(self.config) if self.rules['mode'] == 'live' else ['simulation']
         if self.activation:
             channels = sorted(set(channels) & set(self.activation['channels']))
         history = read_history(self.config, now=self.clock(), max_hours=self.rules['evidence_max_hours'])
-        cycle(self.state, enrich_identities(history, caps, self.clock()), self.rules, self.clock,
+        cycle(self.state, enrich_identities(history, identity_caps, self.clock()), self.rules, self.clock,
               calendar or ExchangeCalendar(), market, evidence, channels=channels, activation=self.activation)
         self.state['telemetry']['provider_requests_remaining'] = budget.remaining
         self.state['telemetry']['provider_capability_verified'] = bool(caps)
+        self.state['telemetry']['capability_refresh'] = refresh_report
         self.state['telemetry']['capability_import'] = receipt_import
         self.state['telemetry']['capability_valid_until'] = caps.get('valid_until')
         self.state['telemetry']['verified_security_count'] = len(caps.get('securities', {}))
         self.state['telemetry']['verified_report_count'] = len(caps.get('filers_by_report', {}))
+        self.state['telemetry']['retained_historical_security_count'] = len(identity_caps.get('securities', {}))
+        self.state['telemetry']['retained_historical_report_count'] = len(identity_caps.get('filers_by_report', {}))
+        self.state['telemetry']['capability_action'] = None if caps else 'Refresh current provider and security observations; historical identity remains usable for research only.'
         history_client = getattr(market, 'massive_history', None)
         self.state['telemetry']['market_stack'] = {'history_provider':self.rules.get('history_provider','alphavantage'), 'quote_provider':'finnhub', 'issuer_provider':'sec', 'massive_requests_this_run':getattr(history_client,'requests',0), 'massive_cache_hits':getattr(history_client,'hits',0), 'free_data_subscription_usd':0 if self.rules.get('history_provider')=='massive' else None}
         self.state['telemetry']['decision_contract_version'] = self.rules.get('decision_contract_version', 1)
@@ -103,6 +117,8 @@ class OpportunityRuntime:
         self.state['telemetry']['issuer_sections_total'] = sum(len(d.get('chunks', [])) for d in docs)
         self.state['telemetry']['issuer_sections_reviewed'] = sum(len(d.get('reviews', {})) for d in docs)
         self.state['telemetry']['investment_case_reason_counts'] = dict(Counter(reason for row in self.state['opportunities'].values() for reason in (row.get('investment_dossier') or {}).get('reason_codes', [])))
+        self.state['telemetry']['research_disposition_counts'] = dict(Counter((r.get('research_disposition') or {}).get('status','unassessed') for r in self.state['opportunities'].values()))
+        self.state['telemetry']['completed_investment_reviews'] = sum((r.get('research_disposition') or {}).get('investment_review_complete') is True for r in self.state['opportunities'].values())
         validate_cache(self.review_cache)
         write_json(self.config.ai_dir / CACHE_NAME, self.review_cache)
         save(self.config.ai_dir, self.state)

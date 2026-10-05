@@ -33,6 +33,8 @@ def write_exports(projection: dict, output: Path, assets: Path) -> None:
     for name in ('operating-costs.html','operating-costs.js','billing-funding.js','billing-funding.css'):
         (output/name).write_bytes((assets/name).read_bytes())
     (output/'data/current-opportunities.json').write_text(json.dumps(projection,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
+    index = compact_projection(projection)
+    (output/'data/current-opportunities-index.json').write_text(json.dumps(index,ensure_ascii=False,allow_nan=False,separators=(',',':'))+'\n',encoding='utf-8')
     with (output/'data/current-opportunities.csv').open('w',encoding='utf-8',newline='') as stream:
         fields=['opportunity_id','ticker','lifecycle','evaluation_cutoff','next_review','rule_hash','evaluation_id','information_value_at_discovery','investment_dossier','decision_provenance_json']
         writer=csv.DictWriter(stream,fieldnames=fields)
@@ -82,3 +84,22 @@ def integrate_index(source: str, projection: dict) -> str:
     source=source.replace('<!-- current-opportunities-navigation -->',link+costs_link)
     card='<article class="surface"><h2>'+label+'</h2><p>'+html.escape(projection.get('label',label))+'</p><p>Current entry, meaningful buying, evidence and data are evaluated separately. Quote time and reasons accompany each assessment.</p><a class="text-link" href="current-opportunities.html">Open the persisted opportunity assessments →</a></article>'
     return source.replace('<!-- current-opportunities-overview -->',card)
+
+
+def compact_projection(projection):
+    """The overview is not a replacement for the original decision export."""
+    result={k:deepcopy(projection.get(k)) for k in ('schema_version','mode','telemetry','label','method_notice','delivery_status')}
+    result['index_only']=True
+    result['records']=[]
+    for record in projection.get('records',[]):
+        r={k:deepcopy(record.get(k)) for k in ('opportunity_id','evaluation_id','ticker','issuer','lifecycle','gates','display_valid_until','evaluation_cutoff','identity_superseded_by')}
+        d=record.get('research_disposition') or {}
+        r['research_disposition']={k:deepcopy(d[k]) for k in ('status','investment_review_complete','method_screen_complete','sections_reviewed','sections_total','next_action') if k in d}
+        r['reason_codes']=list(record.get('reason_codes') or [])[:5]
+        r['reason_count']=len(record.get('reason_codes') or [])
+        r['index_only']=True
+        thresholds=record.get('purchase_thresholds') or {}
+        r['purchase_thresholds']={'threshold_fraction':thresholds.get('threshold_fraction'), 'trades':{k:{f:v.get(f) for f in ('active','status','valid_until')} for k,v in (thresholds.get('trades') or {}).items()}}
+        result['records'].append(r)
+    result['detail_notice']='Complete persisted decisions and all reasons remain in the full JSON/CSV export. Full details load only on request.'
+    return result

@@ -100,3 +100,40 @@ test('operating costs distinguishes no observations from free market data and ke
   const results=await dom.window.axe.run(doc,{rules:{'color-contrast':{enabled:false}}});
   assert.equal(results.violations.length,0,JSON.stringify(results.violations));
 });
+
+
+test('compact index paginates without expanding large decision payloads',()=>{
+  const copy=structuredClone(model);copy.records=Array.from({length:61},(_,i)=>({
+    opportunity_id:'TEST-index-'+i,evaluation_id:'TEST-eval-'+i,ticker:'TEST'+i,issuer:'TEST issuer',
+    lifecycle:'needs_review',index_only:true,research_disposition:{status:'blocked',investment_review_complete:false,sections_reviewed:0,sections_total:10,next_action:'TEST resolve evidence.'}}));
+  const doc=page().window.document;render(doc,copy,now);
+  assert.equal(doc.querySelectorAll('article').length,25);
+  assert.equal(doc.querySelectorAll('pre,.investment-dossier').length,0);
+  assert.match(doc.body.textContent,/Page 1 of 3/);
+  [...doc.querySelectorAll('nav button')].find(b=>b.textContent==='Next').click();
+  assert.equal(doc.querySelectorAll('article').length,25);
+  assert.match(doc.body.textContent,/Page 2 of 3/);
+  [...doc.querySelectorAll('nav button')].find(b=>b.textContent==='Next').click();
+  assert.equal(doc.querySelectorAll('article').length,11);
+  assert.match(doc.body.textContent,/Page 3 of 3/);
+  assert.doesNotMatch(doc.getElementById('telemetry').textContent,/ · Reviewed:/);
+});
+
+test('full details load only by explicit click and match the original evaluation',async()=>{
+  const full=structuredClone(model);const original=full.records[0];
+  const copy=structuredClone(full);copy.records=[{opportunity_id:original.opportunity_id,evaluation_id:original.evaluation_id,
+    ticker:original.ticker,lifecycle:'needs_review',index_only:true,research_disposition:{status:'blocked'}}];
+  let calls=0;const previous=global.fetch;
+  global.fetch=async url=>{calls++;assert.equal(url,'data/current-opportunities.json');return {ok:true,json:async()=>full};};
+  try{
+    const doc=page().window.document;render(doc,copy,now);assert.equal(calls,0);
+    [...doc.querySelectorAll('article button')].find(b=>b.textContent.startsWith('Load full')).click();
+    await new Promise(r=>setImmediate(r));
+    assert.equal(calls,1);assert.ok(doc.querySelector('summary'));
+    assert.equal(copy.records[0].evaluation_id,original.evaluation_id);
+    const changed=structuredClone(copy);changed.records=[{opportunity_id:original.opportunity_id,evaluation_id:'TEST-other-evaluation',ticker:'TEST',lifecycle:'needs_review',index_only:true}];
+    render(doc,changed,now);doc.querySelector('article button').click();await new Promise(r=>setImmediate(r));
+    assert.match(doc.querySelector('article button').textContent,/snapshot changed/);
+    assert.equal(changed.records[0].index_only,true);
+  }finally{global.fetch=previous;}
+});

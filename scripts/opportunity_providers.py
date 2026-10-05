@@ -24,7 +24,7 @@ class RequestBudget:
         self.remaining -= 1
 
 
-def capabilities(ai_dir: Path, now: datetime) -> dict:
+def capabilities(ai_dir: Path, now: datetime, *, historical_identity_only=False) -> dict:
     path = ai_dir / 'opportunity-provider-capabilities.json'
     if not path.exists():
         return {}
@@ -33,9 +33,14 @@ def capabilities(ai_dir: Path, now: datetime) -> dict:
     errors = list(Draft202012Validator(read_json(ROOT/'schemas/opportunity_provider_capabilities.schema.json')).iter_errors(value))
     if errors:
         raise OpportunityError('invalid provider capability record: '+errors[0].message)
-    if value.get('version') != 1 or not timestamp(value.get('verified_at')) or not timestamp(value.get('valid_until')) or not timestamp(value['verified_at']) <= now <= timestamp(value['valid_until']) or not value.get('verification_reference'):
+    start, end = timestamp(value.get('verified_at')), timestamp(value.get('valid_until'))
+    if value.get('version') != 1 or not start or not end or start > now or end < start or not value.get('verification_reference'):
         return {}
-    return value
+    if historical_identity_only:
+        return {'securities':deepcopy(value['securities']), 'filers_by_report':deepcopy(value['filers_by_report']),
+                'historical_identity_only':True, 'verified_at':value['verified_at'],
+                'verification_reference':value['verification_reference']}
+    return value if now <= end else {}
 
 
 def enrich_identities(rows: list[dict], caps: dict, now: datetime) -> list[dict]:
@@ -48,7 +53,7 @@ def enrich_identities(rows: list[dict], caps: dict, now: datetime) -> list[dict]
         wrong_security = {'not_verified_common_stock','security_type_conflicts_with_source','source_ticker_conflict','multiple_source_security_symbols'}
         if row.get('equity_like') is not True or wrong_security.intersection(source_issues(row)):
             match = None  # An option or municipal bond must not inherit its issuer's common-stock identity.
-        if match and match.get('source_url') and day(match.get('valid_from')) and day(match.get('valid_through')) and day(row.get('transaction_date')) and day(match['valid_from']) <= day(row['transaction_date']) <= day(match['valid_through']) and now.date() <= day(match['valid_through']):
+        if match and match.get('source_url') and day(match.get('valid_from')) and day(match.get('valid_through')) and day(row.get('transaction_date')) and day(match['valid_from']) <= day(row['transaction_date']) <= day(match['valid_through']) and (caps.get('historical_identity_only') is True or now.date() <= day(match['valid_through'])):
             row.update({k:match[k] for k in ('security_id','currency','share_class','exchange') if k in match})
             row['security_evidence'] = match['source_url']
         filer = (caps.get('filers_by_report') or {}).get(str(row.get('source'))+'|'+str(row.get('report_id')))
@@ -74,7 +79,17 @@ class MarketProvider:
         except Exception as exc:
             raise DataUnavailable('provider_request_failed:'+type(exc).__name__) from exc
 
+    def _current_identity(self,row,now):
+        # Every persisted/native capability record has version 1 and a security
+        # catalog. Low-level legacy provider fixtures omit the catalog entirely.
+        if self.caps.get('version') != 1:
+            return
+        mapping=(self.caps.get('securities') or {}).get(row.get('ticker')) or {}
+        if any(mapping.get(k)!=row.get(k) for k in ('security_id','share_class','currency','exchange')) or not mapping.get('source_url') or not day(mapping.get('valid_through')) or now.date()>day(mapping['valid_through']):
+            raise DataUnavailable('current_security_identity_not_verified')
+
     def snapshot(self, rows, now, force=False, *, _research_only=False):
+        self._current_identity(rows[0],now)
         if self.rules.get('history_provider', 'alphavantage') == 'massive':
             return self._massive_snapshot(rows, now, force, _research_only=_research_only)
         row = rows[0]

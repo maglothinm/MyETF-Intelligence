@@ -1,0 +1,49 @@
+{
+  "repository_id": 1349678672,
+  "issue": 255,
+  "base_commit": "1d790b4fb0d1252e196d57b75712daf1255b8c4b",
+  "date": "2026-10-05",
+  "source_acceptance": {
+    "python_regression_passed": 567,
+    "python_optional_skipped": 7,
+    "node_dom_axe_passed": 10,
+    "javascript_syntax": "passed",
+    "git_diff_check": "passed",
+    "test_fixture": {
+      "explicit_TEST": true,
+      "cycle_statuses": ["watching", "watching", "opportunity_available", "opportunity_available"],
+      "simulated_intents": 1,
+      "actual_provider_calls": 0,
+      "actual_notifications": 0,
+      "actual_trades": 0,
+      "existing_fixture_AI_state_unchanged": true
+    },
+    "chromium_TEST": {
+      "widths": [1280, 390],
+      "page_errors": 0,
+      "external_requests": 0,
+      "horizontal_overflow": false,
+      "index_first": true,
+      "full_evidence_only_after_click": true
+    }
+  },
+  "read_only_preflight": {
+    "cutoff_utc": "2026-10-05T12:36:34.672073+00:00",
+    "head_generations": {"ai": 1367, "dashboard": 2762, "executive": 1036, "legislative": 2300},
+    "snapshot_header_count": 7465,
+    "broken_parent_links": 0,
+    "all_four_archive_round_trips": "verified",
+    "database_read_only": true,
+    "not_a_future_release_freeze": true
+  },
+  "production_acceptance": {
+    "installed_source_unchanged": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+    "deployed_this_session": false,
+    "live_case_progress_claimed": false,
+    "live_investment_acceptance": false,
+    "capability_refresh_activated": false,
+    "blocker": "Tool security check blocked subsequent inspection of exported case data; no rerouting or production installation attempted.",
+    "current_opportunity_mode": "shadow",
+    "AI_delivery_suppression_preserved": true
+  }
+}

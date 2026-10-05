@@ -40,18 +40,36 @@
     article.append(details);
   }
 
-  function render(doc,model,now,filter='all',thresholdFilter='all') {
+  let detailPromise=null;
+  function render(doc,model,now,filter='all',thresholdFilter='all',page=0) {
     const mode=doc.getElementById('mode');mode.textContent=model.mode==='shadow'?'SHADOW / NOT LIVE ALERTS':model.mode==='live'?'Persisted current-opportunity assessments':'Current Opportunity is off';
     doc.getElementById('method').textContent=model.method_notice||'Provisional settings; not validated investment rules.';
-    const t=model.telemetry||{};doc.getElementById('telemetry').textContent='Last evaluation: '+text(t.finished_at)+' · Due: '+text(t.due_count)+' · Reviewed: '+text(t.attempted_count)+' · Overdue: '+text(t.overdue_count)+(t.budget_exhausted?' · Review budget exhausted':'');
+    const t=model.telemetry||{};doc.getElementById('telemetry').textContent='Last evaluation: '+text(t.finished_at)+' · Due: '+text(t.due_count)+' · Attempted: '+text(t.attempted_count)+' · Completed investment reviews: '+text(t.completed_investment_reviews)+' · Overdue: '+text(t.overdue_count)+(t.budget_exhausted?' · Review budget exhausted':'');
     const box=doc.getElementById('opportunities');box.replaceChildren();
     const rows=(model.records||[]).filter(r=>(filter==='all'||effectiveStatus(r,now)===filter)&&thresholdMatches(r,thresholdFilter,now));
     if(!rows.length)box.append(node(doc,'p','No persisted assessments in this view.','muted'));
-    for(const r of rows){
+    const renderedAt=typeof performance!=='undefined'?performance.now():0;const freshNow=()=>now+(typeof performance!=='undefined'?performance.now()-renderedAt:0);
+    const pageSize=25,pages=Math.max(1,Math.ceil(rows.length/pageSize));page=Math.max(0,Math.min(page,pages-1));
+    if(rows.length>pageSize){const nav=node(doc,'nav');nav.setAttribute('aria-label','Assessment pages');nav.append(node(doc,'p','Page '+(page+1)+' of '+pages+'; '+rows.length+' retained entries. These are not completed investment cases.'));for(const [label,next] of [['Previous',page-1],['Next',page+1]]){const b=node(doc,'button',label);b.type='button';b.disabled=next<0||next>=pages;b.addEventListener('click',()=>render(doc,model,freshNow(),filter,thresholdFilter,next));nav.append(b);}box.append(nav);}
+    for(const r of rows.slice(page*pageSize,(page+1)*pageSize)){
       const status=effectiveStatus(r,now),a=node(doc,'article');a.id=r.opportunity_id;
       const head=node(doc,'div',undefined,'card-head'),title=node(doc,'div');title.append(node(doc,'h2',r.ticker),node(doc,'p',r.issuer,'muted'));
       head.append(title,node(doc,'span',labels[status]||status,'status'+(status==='opportunity_available'?' available':'')));a.append(head);
       if(status!==r.lifecycle)a.append(node(doc,'p','The available assessment has expired. A fresh eligible session quote and review are required.','notice'));
+      const progress=r.research_disposition||{};
+      a.append(node(doc,'p','Research disposition: '+words(progress.status||'unassessed')+'. '+(progress.next_action||'No completed investment assessment is established.'),'notice'));
+      if(r.index_only){
+        a.append(node(doc,'p','Issuer sections reviewed: '+text(progress.sections_reviewed)+' / '+text(progress.sections_total)+'. Investment review complete: '+(progress.investment_review_complete===true?'yes':'no')+'.'));
+        if(r.identity_superseded_by)a.append(node(doc,'p','Historical unresolved entry; retained successor: '+r.identity_superseded_by));
+        const b=node(doc,'button','Load full case and source evidence');b.type='button';
+        b.addEventListener('click',async()=>{b.disabled=true;b.textContent='Loading complete evidence export…';try{
+          if(!detailPromise)detailPromise=fetch('data/current-opportunities.json',{cache:'no-store'}).then(x=>{if(!x.ok)throw Error('Detail unavailable');return x.json();}).catch(e=>{detailPromise=null;throw e;});
+          const full=await detailPromise,item=(full.records||[]).find(x=>x.opportunity_id===r.opportunity_id&&x.evaluation_id===r.evaluation_id);
+          if(!item)throw Error('Snapshot changed; refresh this page');
+          model.records[model.records.indexOf(r)]=item;render(doc,model,freshNow(),filter,thresholdFilter,page);doc.getElementById(r.opportunity_id)?.querySelector('.investment-dossier')?.setAttribute('open','');
+        }catch(e){b.disabled=false;b.textContent='Details unavailable or snapshot changed — refresh and retry';}});
+        a.append(b);box.append(a);continue;
+      }
       a.append(node(doc,'p','Gates at the recorded evaluation time','muted'));const gates=node(doc,'ul',undefined,'gates');for(const [k,v] of Object.entries(r.gates||{}))gates.append(node(doc,'li',(v?'✓ ':'○ ')+words(k),v?'pass':'fail'));a.append(gates);
       const s=r.significance||{},m=r.market||{},q=m.quote||{},amount=s.buy_range||{};
       const facts=node(doc,'dl',undefined,'facts');
@@ -95,7 +113,7 @@
   }
   const api={render,effectiveStatus,thresholdStatus,thresholdMatches};if(typeof module!=='undefined'&&module.exports)module.exports=api;
   if(root.document){let model=null,filter='all',thresholdFilter='all',base=NaN,started=0;const doc=root.document;
-    fetch('data/current-opportunities.json',{cache:'no-store'}).then(async response=>{if(!response.ok)throw Error('Projection unavailable');model=await response.json();const server=Date.parse(response.headers.get('date'));base=Number.isFinite(server)?server:NaN;started=performance.now();
+    fetch('data/current-opportunities-index.json',{cache:'no-store'}).then(async response=>{if(!response.ok)throw Error('Projection unavailable');model=await response.json();const server=Date.parse(response.headers.get('date'));base=Number.isFinite(server)?server:NaN;started=performance.now();
       const filters=doc.getElementById('filters');for(const [key,label] of Object.entries({all:'All assessments',...labels})){const button=node(doc,'button',label);button.type='button';button.setAttribute('aria-pressed',String(key===filter));button.addEventListener('click',()=>{filter=key;for(const b of filters.children)b.setAttribute('aria-pressed',String(b===button));render(doc,model,base+performance.now()-started,filter,thresholdFilter);});filters.append(button);}render(doc,model,base,filter,thresholdFilter);
       doc.getElementById('threshold-filter').addEventListener('change',event=>{thresholdFilter=event.target.value;render(doc,model,base+performance.now()-started,filter,thresholdFilter);});
       const target=doc.getElementById(decodeURIComponent(location.hash.slice(1)));if(target){target.querySelector('details')?.setAttribute('open','');target.scrollIntoView();}

@@ -1,5 +1,37 @@
 # PolitiTrack project state
 
+## October 5 #255 — Usefulness repairs implemented; live verification blocked
+
+Owner requested Repair after the live audit. Isolated branch
+`codex/usefulness-repair-20261005`, base `1d790b4` in canonical repository
+1349678672. Installed source remains `8678939`; no production change occurred.
+
+Implemented historical identity preservation separate from feed expiry, genuine
+bounded shadow capability renewal, complete bounded streaming of markup-heavy
+issuer documents, per-document failure isolation/cooldowns and incremental section
+review. Added retained source-bound limitation adjudication, explicit unsupported
+valuation/research dispositions, truthful completion timestamps/counts, exact
+trade-ID placeholder linkage, and a compact paginated dashboard index with
+on-demand full evidence. Economic gates, histories, portfolios and delivery
+suppression remain unchanged. Read `docs/USEFULNESS_REPAIR.md`.
+
+Fresh read-only preflight at 2026-10-05 12:36:34 UTC verified AI1367, Dashboard2762,
+Executive1036, Legislative2300; all four archive round trips passed. All 7,465
+snapshot headers have unbroken parent chains. This is not a later release freeze.
+Private evidence is outside Git under the owner's PolitiTrack-work directory.
+
+Source validation before the final provenance-only refinement passed 567 Python
+tests, seven optional skips, and ten Node/axe checks. TEST four-cycle acceptance
+retained prior AI state, produced one simulated intent and made no provider,
+notification or trading calls. Exact final-head results and CI remain to be
+recorded before merge/release acceptance.
+
+A tool security check subsequently blocked inspection of exported case data.
+No denied inspection was rerouted. Production deployment and real-case acceptance
+remain blocked pending permitted verification access and normal release approval.
+The existing provider seed contains only three companies and one benchmark; this
+repair is not a claim of broad-universe coverage or investment performance.
+
 ## September 30 #250 - Funding dashboard deployed; native AI persistence recovered
 
 Canonical repository **1349678672**, `maglothinm/MyETF-Intelligence`.

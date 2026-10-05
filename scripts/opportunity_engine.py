@@ -13,6 +13,7 @@ from .opportunity_significance import normalize, significance
 from .opportunity_state import event
 from .discovery_evidence import FIELD, opportunity_values
 from .opportunity_decision import build_dossier
+from .opportunity_disposition import disposition
 from .opportunity_research import advance as advance_research
 
 
@@ -210,7 +211,8 @@ def evaluate(state: dict, rows: list[dict], history: list[dict], snapshot: Mappi
         record['gates']['investment_case'] = dossier['status'] == 'ready_for_human_review'
         record['thesis_status'] = 'invalidated' if evstatus == 'contradicted' else 'supported' if dossier['status'] in ('ready_for_human_review','watching') else previous.get('thesis_status', 'unassessed')
         record['assessment_status'] = 'current' if data_ok and evstatus in ('sufficient','contradicted') else 'incomplete_or_stale'
-        record['usable_decision_at'] = utc(now)
+        record['research_disposition'] = disposition(evidence, dossier, now)
+        record['usable_decision_at'] = utc(now) if data_ok and evstatus in ('sufficient','contradicted') and record['research_disposition']['investment_review_complete'] else None
     quote_time = timestamp(quote.get('at'))
     valid_times = [quote_time+timedelta(seconds=rules['quote_max_seconds'])] if quote_time else []
     if timestamp(evidence.get('valid_until')):
@@ -293,13 +295,20 @@ def cycle(state: dict, raw_rows: list[dict], rules: Mapping, clock, calendar, ma
                       else 'stale_quote_or_evidence')
             # Repeated missed work is queue telemetry, not another evaluation.
             # Keep the first invalidation and its actual review timestamp.
+            link_candidates = [r['opportunity_id'] for r in state['opportunities'].values() if removed and prior['security_key'].startswith('unresolved:') and prior.get('trade_ids') and not r['security_key'].startswith('unresolved:') and set(prior['trade_ids']).issubset(set(r.get('trade_ids') or []))]
+            link_pending = not prior.get('identity_superseded_by') and len(link_candidates)==1
             if (prior['lifecycle'] == 'needs_review'
                     and prior['gates'].get('trustworthy_required_data') is False
-                    and reason in prior['reason_codes']):
+                    and reason in prior['reason_codes'] and not link_pending):
                 continue
             record = deepcopy(prior)
             record.pop('evaluation_id')
             record['lifecycle'] = 'needs_review'
+            if removed and prior['security_key'].startswith('unresolved:'):
+                prior_ids = set(prior.get('trade_ids') or [])
+                matches = [r['opportunity_id'] for r in state['opportunities'].values() if not r['security_key'].startswith('unresolved:') and prior_ids and prior_ids.issubset(set(r.get('trade_ids') or []))]
+                if len(matches) == 1:
+                    record['identity_superseded_by'] = matches[0]
             record['gates']['trustworthy_required_data'] = False
             record['reason_codes'] = sorted(set(record['reason_codes']+['membership_removed_or_superseded' if removed else 'review_budget_exhausted' if prior['security_key'] in missed else 'stale_quote_or_evidence']))
             record['evaluation_cutoff'] = utc(now)
