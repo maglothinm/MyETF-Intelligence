@@ -1,9 +1,38 @@
 {
   "repository_id": 1349678672,
   "issue": 255,
-  "base_commit": "1d790b4fb0d1252e196d57b75712daf1255b8c4b",
-  "date": "2026-10-05",
-  "source_acceptance": {
+  "pull_request": 256,
+  "stage": "source_merged_not_deployed",
+  "tested_source": "7a7d3343997ff783bfb2d5c8ad90722495cf4364",
+  "merge_commit": "580fb3f2bd701e5cf16d126024ba2e5a671a05a9",
+  "merge_tree_matches_tested_tree": true,
+  "ci": [
+    {
+      "name": "Current Opportunity offline tests",
+      "run_id": 37313433785,
+      "conclusion": "success",
+      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
+    },
+    {
+      "name": "Runtime v2 safety tests",
+      "run_id": 37313434017,
+      "conclusion": "success",
+      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
+    },
+    {
+      "name": "Investor Edge tests",
+      "run_id": 37313433906,
+      "conclusion": "success",
+      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
+    },
+    {
+      "name": "Source upload and OCR tests",
+      "run_id": 37313433956,
+      "conclusion": "success",
+      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
+    }
+  ],
+  "local_acceptance": {
     "python_regression_passed": 567,
     "python_optional_skipped": 7,
     "node_dom_axe_passed": 10,
@@ -49,7 +78,7 @@
     "database_read_only": true,
     "not_a_future_release_freeze": true
   },
-  "production_acceptance": {
+  "production": {
     "installed_source_unchanged": "867893922e61c9fe30b1535e4deb32de8fc0d211",
     "deployed_this_session": false,
     "live_case_progress_claimed": false,
@@ -59,33 +88,12 @@
     "current_opportunity_mode": "shadow",
     "AI_delivery_suppression_preserved": true
   },
-  "tested_source": "7a7d3343997ff783bfb2d5c8ad90722495cf4364",
-  "merged_source": "580fb3f2bd701e5cf16d126024ba2e5a671a05a9",
-  "pull_request": 256,
-  "canonical_ci": [
-    {
-      "name": "Current Opportunity offline tests",
-      "run_id": 37313433785,
-      "conclusion": "success",
-      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
-    },
-    {
-      "name": "Runtime v2 safety tests",
-      "run_id": 37313434017,
-      "conclusion": "success",
-      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
-    },
-    {
-      "name": "Investor Edge tests",
-      "run_id": 37313433906,
-      "conclusion": "success",
-      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
-    },
-    {
-      "name": "Source upload and OCR tests",
-      "run_id": 37313433956,
-      "conclusion": "success",
-      "tested_head": "7a7d3343997ff783bfb2d5c8ad90722495cf4364"
-    }
-  ]
+  "final_service_read": {
+    "at": "2026-10-05T13:03:46.9457350Z",
+    "installed_source": "867893922e61c9fe30b1535e4deb32de8fc0d211",
+    "database": "Running/Automatic",
+    "scheduler": "Running/Automatic",
+    "web": "Running/Automatic"
+  },
+  "next_gate": "Permitted live case-data inspection and fresh native release preflight; no approval/security bypass."
 }

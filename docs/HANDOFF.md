@@ -1,36 +1,49 @@
 # PolitiTrack active handoff
 
-## October 5 #255 — Usefulness repairs implemented; live verification blocked
+## October 5 #255 — Source repair merged and verified; NOT installed
 
-Owner requested Repair after the live audit. Isolated branch
-`codex/usefulness-repair-20261005`, base `1d790b4` in canonical repository
-1349678672. Installed source remains `8678939`; no production change occurred.
+Canonical repository **1349678672**, `maglothinm/MyETF-Intelligence`.
+PR **#256** merged as **580fb3f2bd701e5cf16d126024ba2e5a671a05a9** from exact tested source
+**7a7d3343997ff783bfb2d5c8ad90722495cf4364**. The merge tree equals the tested source tree.
+All four canonical PR workflows passed on that head: Current Opportunity
+37313433785 (Python 3.11 and 3.12), Runtime v2 safety 37313434017,
+Investor Edge 37313433906, Source upload/OCR 37313433956.
+
+Final local regression: **567 passed / 7 optional skips**; **10 Node/axe passes**.
+Chromium TEST at 1280 and 390 pixels verified index-first loading, full evidence
+only after an explicit click, zero page errors/external requests and no horizontal
+overflow. Four-cycle TEST retained earlier AI fixture state, produced one simulated
+intent and made no real provider, notification or trading calls.
 
 Implemented historical identity preservation separate from feed expiry, genuine
-bounded shadow capability renewal, complete bounded streaming of markup-heavy
-issuer documents, per-document failure isolation/cooldowns and incremental section
-review. Added retained source-bound limitation adjudication, explicit unsupported
-valuation/research dispositions, truthful completion timestamps/counts, exact
-trade-ID placeholder linkage, and a compact paginated dashboard index with
-on-demand full evidence. Economic gates, histories, portfolios and delivery
-suppression remain unchanged. Read `docs/USEFULNESS_REPAIR.md`.
+bounded opt-in SHADOW capability renewal, complete bounded streaming of markup-heavy
+issuer documents, incremental section review despite explicit missing documents,
+retained source-bound limitation adjudication, honest research/valuation dispositions,
+completion timestamps/counts, exact trade-ID placeholder linkage, and a compact
+paginated index with on-demand exact-evaluation evidence. All economic gates and
+existing history/delivery/portfolio contracts remain unchanged. Read
+`docs/USEFULNESS_REPAIR.md` and `docs/releases/2026-10-05-usefulness-source.json`.
 
-Fresh read-only preflight at 2026-10-05 12:36:34 UTC verified AI1367, Dashboard2762,
-Executive1036, Legislative2300; all four archive round trips passed. All 7,465
-snapshot headers have unbroken parent chains. This is not a later release freeze.
-Private evidence is outside Git under the owner's PolitiTrack-work directory.
+Fresh read-only preflight at 12:36:34 UTC verified AI1367, Dashboard2762,
+Executive1036 and Legislative2300; all four archive round trips passed and all
+**7,465 snapshot headers** have unbroken parent chains. This is not a later frozen
+release baseline. Subsequent exported-case inspection was tool-blocked. No denied
+inspection was rerouted or used as a reason to install without verification.
 
-Source validation before the final provenance-only refinement passed 567 Python
-tests, seven optional skips, and ten Node/axe checks. TEST four-cycle acceptance
-retained prior AI state, produced one simulated intent and made no provider,
-notification or trading calls. Exact final-head results and CI remain to be
-recorded before merge/release acceptance.
+**Production remains unchanged.** At 13:03:46 UTC, installed source was still
+**867893922e61c9fe30b1535e4deb32de8fc0d211** and the existing Database, Scheduler
+and Web services were Running/Automatic. No production configuration, service,
+state, credential, schedule, subscription, notification or portfolio was changed.
+The new refresh flag has not been enabled. No real-case improvement is claimed.
 
-A tool security check subsequently blocked inspection of exported case data.
-No denied inspection was rerouted. Production deployment and real-case acceptance
-remain blocked pending permitted verification access and normal release approval.
-The existing provider seed contains only three companies and one benchmark; this
-repair is not a claim of broad-universe coverage or investment performance.
+Next safe action: restore permitted case-data verification access; confirm current
+source/configuration and actual native locks; take a NEW frozen four-head export;
+then use normal Windows approval for the reviewed existing-service release.
+Only the source SHA and explicit AI shadow-refresh flag may change. Observe actual
+regular-session renewal, persisted section progress, case dispositions, preserved
+histories and no AI delivery before accepting #255/#239/#236. Do not merely extend
+the old receipt expiry, add a writer or manufacture a buy. Broader universe coverage
+beyond the seed allowlist and investment performance remain separately unproven.
 
 ## September 30 #250 - Funding dashboard deployed; native AI persistence recovered
 
