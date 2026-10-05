@@ -1,5 +1,41 @@
 # PolitiTrack active handoff
 
+## October 5 #255 — Real-data validation found cross-document limitation defect
+
+Continuation of the owner's instruction to resolve the repair. Production still
+runs 8678939; no installer, service/configuration change or new native writer was
+executed. The installer write was again rejected by the remote-tool safety check.
+The connection's actual app-specific permission is already Allow all actions;
+its global default is Allow low-risk actions. No permission was changed. A switch
+to Always ask was proposed for explicit owner oversight, not as a safety override,
+and awaits the owner's specific selection.
+
+Independent in-memory validation now used the configured model and a retained
+real MSFT filing. The primary section completed with four exact source-validated
+claims. Its existing section-only limitation check correctly reported missing
+Exhibit 99.1 information because it could not see the companion exhibit already
+present elsewhere in the evidence cache. A companion-segment attempt subsequently
+failed one exact-quotation check and was rejected, not counted as completed.
+Three structured-model invocations were made; this is not a full investment case,
+a production run, a fresh state freeze, or evidence of investing performance.
+
+Source correction on `codex/usefulness-cross-document-review-20261005` moves
+limitation adjudication after complete document acquisition and all section claim
+verification, using the combined cited issuer catalog. Each original limitation
+must have one disposition. Resolved material information needs valid claim IDs;
+missing or invented references and unresolved material facts stay blocking.
+Original limitations and prior section-only reviews remain preserved. Resumable
+catalog review is hash-bound to the exact limitations, claims and source versions.
+No economic gate, model choice, request budget or source-coverage gate is relaxed.
+An optional additional cache-validator append was tool-blocked and NOT applied;
+on-access integrity checks and the snapshot hash remain in place.
+
+Final local regression: 576 passed, seven optional skips. The new three-cycle
+TEST proves source reviews, cross-document resolution, case and semantic checks
+must all finish before sufficient status. Canonical CI and merge are pending.
+Read `docs/validation/usefulness-cross-document-20261005.json` for exact evidence.
+Live release and real-case acceptance remain separate, blocked requirements.
+
 ## October 5 #255 — Source repair merged and verified; NOT installed
 
 Canonical repository **1349678672**, `maglothinm/MyETF-Intelligence`.

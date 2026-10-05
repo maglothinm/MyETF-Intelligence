@@ -127,7 +127,7 @@ def test_limitation_adjudication_preserves_original_and_keeps_material_gaps(tmp_
     r=rules(evidence_model_budget=4)
     def model(context,*args,**kwargs):
         if 'original_limitations' in context:
-            return SimpleNamespace(payload={'supported':False,'unsupported_claim_ids':[], 'limitations':['TEST material missing fact']})
+            return SimpleNamespace(payload={'resolutions':[{'limitation_id':v['limitation_id'],'classification':'unresolved','explanation':'TEST material missing fact','claim_ids':[]} for v in context['original_limitations']], 'limitations':['TEST material missing fact']})
         src=context['source']
         return SimpleNamespace(payload={'reviewed':True,'limitations':['TEST unresolved material customer commitment'],
             'claims':[{'claim_id':src['source_id'],'kind':'fact','text':src['text'],
@@ -137,5 +137,5 @@ def test_limitation_adjudication_preserves_original_and_keeps_material_gaps(tmp_
     assert result['status']=='incomplete'
     review=next(iter(next(iter(cache['issuers'].values()))['documents'].values()))['reviews']['0']
     assert review['limitations']==['TEST unresolved material customer commitment']
-    assert len(review['limitation_reviews'])==1
-    assert result['reason']=='issuer_section_review_has_unresolved_limits'
+    assert len(next(iter(cache['issuers'].values()))['catalog_limitation_reviews'])==1
+    assert result['reason']=='issuer_catalog_limitations_require_review'

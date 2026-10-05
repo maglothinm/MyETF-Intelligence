@@ -2013,3 +2013,21 @@ rules, purchase subscriptions, reset state or create a new scheduler to increase
 signal counts. Source/test success and actual useful investment cases require
 separate acceptance evidence. Honor the tool-blocked exported-data inspection;
 do not install or claim real-case progress around that unresolved boundary.
+
+
+## 2026-10-05 — Resolve segment limitations across verified companion sources (#255)
+
+A missing fact in an isolated section is not necessarily missing from the issuer
+record. Defer limitation adjudication until every required document and section
+is reviewed, then use only the combined verified claim catalog with source quotes.
+Every original limitation remains preserved and explicitly accounted for. Missing
+material facts or unsupported cross-source references cannot clear investment
+coverage. This corrects a real section-only context defect without loosening
+qualification or granting a model confidence score factual authority.
+
+Separate isolated live-provider diagnostics from canonical native publication.
+The diagnostic accepted one primary section and rejected a companion response for
+an unmatched quotation; neither is a completed investment case. Respect the denied
+installer creation and optional cache-validator append; no alternate write or
+execution route was used. App full-access mode is not proof that a safety-denied
+action can run. Any permission-mode change needs the owner's specific choice.

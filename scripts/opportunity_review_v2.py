@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 from .opportunity_common import DataUnavailable, OpportunityError, day, digest, timestamp, utc
 from .opportunity_decision import annual_eps, classify_findings, validate_case, verify_claims
 from .opportunity_input_quality import issues
+from .opportunity_limitations import item as limitation_item, resolve as resolve_limitations
 
 
 def obj(properties):
@@ -328,26 +329,20 @@ class InvestmentSourceReviewer:
                         doc['reviews'][str(i)] = {'claims':verified,'limitations':result['limitations'],'completed_at':utc(self.clock())}
                     reviewed = doc['reviews'][str(i)]
                     claims.extend(reviewed['claims'])
-                    if reviewed['limitations']:
-                        key = digest({'source':src,'claims':reviewed['claims'],'limitations':reviewed['limitations']})
-                        adjudications = reviewed.setdefault('limitation_reviews',{})
-                        if key not in adjudications:
-                            adjudicated = self._model({'task':'Check the listed section limitations against this exact source and claims. supported=true only if every limitation is a generic scope notice or ordinary disclosed risk and no missing material fact, interpretation, unit, entity or period can affect the investment case. Any material uncertainty or inability to decide requires supported=false and an explicit limitation. Do not infer facts from absence or relax evidence requirements. This is a separate check, not a confidence score.', 'source':src,'claims':reviewed['claims'],'original_limitations':reviewed['limitations']},CHECK_SCHEMA)
-                            adjudications[key] = {'completed_at':utc(self.clock()),'result':adjudicated}
-                        adjudication=adjudications[key]['result']
-                        if not adjudication['supported'] or adjudication['unsupported_claim_ids'] or adjudication['limitations']:
-                            limitations.extend(reviewed['limitations'])
-                            limitations.extend(adjudication['limitations'])
+                    limitations.extend(limitation_item(src['source_id'],n,text) for n,text in enumerate(reviewed['limitations']))
             # Partial research is real progress, but never complete coverage.
             if pending:
                 raise DataUnavailable('issuer_inventory_incomplete')
-            if limitations:
-                raise DataUnavailable('issuer_section_review_has_unresolved_limits')
             verified, errors = verify_claims(claims,sources,self.clock())
             if errors or not verified:
                 raise DataUnavailable('issuer_claim_catalog_incomplete')
-            if len(json.dumps(verified)) > 120_000:
+            if len(json.dumps(verified))+len(json.dumps(limitations)) > 120_000:
                 raise DataUnavailable('issuer_claim_catalog_requires_bounded_manual_review')
+            resolution, unresolved = resolve_limitations(limitations,verified,sources,slot,self._model,self.clock)
+            base['limitation_resolution'] = resolution
+            if unresolved:
+                base['case_errors'].extend(unresolved)
+                raise DataUnavailable('issuer_catalog_limitations_require_review')
             base['verified_claims'] = verified
             base['sources'] += [{k:v for k,v in s.items() if k != 'text'} for s in sources]
             eps = (base['fundamentals'].get('annual_eps') or {}).get('value')

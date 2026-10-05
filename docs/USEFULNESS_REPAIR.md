@@ -120,3 +120,16 @@ new disposition counts, dashboard agreement and zero real AI deliveries.
 Actual case completion, sustainable coverage beyond the seed allowlist, and
 investment performance remain separate acceptance items. Do not call the repair
 fully accepted merely because code, fixtures or an installation succeeds.
+
+
+## October 5 real-data correction — companion context
+
+The initial section-only limitation adjudicator could block a section for missing
+exhibit contents even when those contents were reviewed separately. The correction
+moves adjudication to the complete verified issuer claim catalog. Original section
+limitations remain immutable; every limitation must receive an explicit outcome.
+Cross-source resolution requires valid quoted claim references. Required pending
+documents, incomplete sections and material unresolved facts still prevent a case
+from becoming sufficient. Tests exercise bounded multi-cycle completion, invented
+references, omissions, duplicate resolutions and changed source/cache integrity.
+The new source correction is distinct from still-unperformed native installation.
