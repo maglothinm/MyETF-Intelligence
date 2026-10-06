@@ -1,10 +1,11 @@
 # PolitiTrack active handoff
 
-## October 6 #261 — Executive OCR repair prepared; deployment blocked
+## October 6 #261 — Executive OCR repair merged; deployment blocked
 
 Owner authorized implementation and deployment after the Executive diagnosis.
-Work is on `codex/executive-ocr-261`, based on canonical repository ID 1349678672,
-main `a7a8ecf7e44ad920e842e4b72d91ed909a0ec8a8`. Production was last verified
+PR [#262](https://github.com/maglothinm/MyETF-Intelligence/pull/262) merged to
+canonical repository ID 1349678672, `maglothinm/MyETF-Intelligence`, `main` at
+`64d79157a1ba3954be4ef05af436b2ebc93590c8`. Production was last verified
 at `e01d03be8c2e8f91178a8d3fc502ed952b5f914b`; it has NOT been changed by this task.
 
 The verified 1068 snapshot has 4,176 Executive filings: 3,832 Form-201/request-only
@@ -31,7 +32,17 @@ calls. Four filings with ambiguous wrapped asset tails remained reviewable.
 Sparse optical text may omit row numbers, but native row numbers and exact page,
 row-count and field agreement remain mandatory. These are parser diagnostics,
 NOT production imports or a promise that every unresolved document is supported.
-Integrated worker regression and canonical CI remain required before merge.
+Canonical CI for tested head `5ac40141868164126fcbbcb50e0168026865f677` passed:
+- Source OCR [37501086300](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37501086300):
+  421 pytest passes, one skip, six Node health tests, and desktop/mobile correction UI acceptance.
+- Runtime safety [37501086271](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37501086271): success.
+- Investor Edge [37501086272](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37501086272): success.
+- Current Opportunity [37501086243](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37501086243): success.
+
+Browser artifact 11430565011 belongs to Source OCR run 37501086300 and canonical
+repository ID 1349678672. It is isolated UI evidence, never production-state authority.
+The merge tree `e7dced769a0b1294f62c6862381159dcddee208a` exactly matches the tested
+source head. Source and test success do not establish native installation or imports.
 
 The deployment preflight command was rejected by Remote Desktop Commander:
 `MCP tool call requires approval, but approval policy is never`, even after the
@@ -40,7 +51,7 @@ change, state write, credential/security change, or permission bypass was used.
 No fresh release backup has been taken in this task. Existing snapshot export is
 diagnostic evidence, not a current frozen deployment baseline.
 
-Next: complete exact-head CI; when permitted runtime execution is available,
+Next: when permitted runtime execution is available,
 inspect current source/status and native locks, drain the existing writer, verify
 a NEW backup/four-head export, deploy through the existing service boundary, then
 prove actual committed imports and preserved historical prefixes. Keep automatic
