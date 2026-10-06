@@ -1,5 +1,83 @@
 # PolitiTrack active handoff
 
+## October 6 #255 — Corrected release verified; first real research progress committed
+
+Installed application source is `e01d03be8c2e8f91178a8d3fc502ed952b5f914b`
+(PR #260), installed at **14:49:29 UTC**. Its tested head
+`622b358adb3d0f6061c65c4dfbaa299a68e03c75` passed Current Opportunity
+[37481024817](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37481024817)
+and Runtime safety
+[37481024854](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37481024854).
+The source regression report records **579 passes / 7 optional skips**.
+An independent follow-up reran all **15** offline installer/drain/correction-wrapper
+checks successfully and reproduced the base installer's recorded SHA-256
+`f962b5ebadfe9b800998339815f7d628d65a129c6c7807a4fa9500f5ec39abc1`.
+
+The correction adds the emitted `capability_observation` event to the explicit
+schema; unknown kinds and tampered hashes remain rejected. The first correction
+attempt waited for an active writer and did not install. The subsequent normal
+release drained work and verified a fresh frozen four-head export at
+**14:48:37 UTC**: AI1397, Dashboard2822, Executive1068, Legislative2360;
+**7,647 snapshot headers**, no broken parent links, exact archive round trips.
+PostgreSQL PID5044 stayed unchanged. The original 14:31 release and failed
+14:35/14:47 AI attempts remain recorded; do not relabel them as successful.
+The October 6 nightly physical backup separately records a successful
+`pg_verifybackup`; the frozen release export is a four-namespace state backup,
+not a newly run full physical database backup.
+
+The corrected native AI acceptance invocation completed with **exit 0** at
+**14:59:02 UTC**, committing **AI1398** (snapshot
+`f8bfdd5b-e96a-44a9-89ff-ffb0bdce48ff`, SHA-256
+`8ce168e5fa574c36e410c7c477c78f7e44e23b5204053c753b94d9e775f0ea42`).
+Read-only post-release export verified all four current archives and **7,649**
+headers with no broken links. Comparison preserves the original **18,975-event
+prefix**, all **1,385 opportunity IDs**, all 17 checked AI/Legislative/Executive
+JSONL prefixes, original document bytes/reviews and all 418 completed-analysis IDs.
+The event count is now 19,016; completed legacy analysis IDs remain 418.
+The run used the existing native owner and locks; it was a manual acceptance
+invocation, not proof of a subsequent scheduled AI cycle.
+
+**Actual research progress:** BE acquired four additional retained documents
+(6 to 10), expanded its source coverage from 40 to 104 sections and persisted
+**two reviewed sections**, previously zero. Total retained issuer sections rose
+from 79 to 143. BE also obtained a genuine current capability receipt, checked at
+14:54:34 UTC against a quote approximately 12.8 seconds old; this verifies one
+security, not the broader universe. The original expired September receipt was
+not extended by changing its date.
+
+**Remaining limits:** completed investment reviews = **0**. BE and INTC now have
+explicit `unsupported_valuation_method` dispositions because their retained
+annual EPS references are nonpositive for the installed EPS-multiple method.
+These are method limits, not completed economic rejections. MSFT remains
+`blocked` with `current_source_backed_contradiction_review_unavailable`.
+Retained historical mappings cover four securities/two reports; only BE has a
+renewed current capability in this accepted run. Keep #255/#239/#236 open for
+full case completion, sustained scheduled progress and broader coverage.
+
+Dashboard acceptance exited 0 at **15:01:33 UTC**; the subsequent scheduled
+dashboard publication also succeeded as **Dashboard2824**, SHA-256
+`b7be7188ddceb49e0badfd4300f41686eb3d707d59be3c12936da9e20c84f1e5`.
+The live compact index was independently read successfully and agrees with
+AI1398: two reviewed sections out of 143, BE capability verified, zero completed
+investment reviews and SHADOW mode. Several data-route reads returned 503 while
+dashboard publication overlapped; a later read recovered. This observation does
+not establish that transient reader/writer contention has been repaired.
+
+SHADOW and both AI delivery suppressions remain in place; native opportunity
+intents and delivery records are zero. No new schedule, investment rule change,
+subscription, state reset or live investment alert is part of this release.
+After publication of the additive event, any rollback must retain compatible
+readers; never rewind authoritative state to accommodate the older schema.
+
+Private evidence remains under
+`C:\ProgramData\PolitiTrack\backups\usefulness-deploy-255-20261005T132655Z`:
+`schema-apply-20261006T144804Z/release-receipt.json`,
+`verified-after-20261006T145919Z/progress-acceptance.json`, and the AI/dashboard
+acceptance logs/receipts. Next: verify sustained scheduled AI publication,
+continue bounded source review, and resolve MSFT's source-backed contradiction
+review and the separately reviewed valuation-method requirement. Do not equate
+this first persisted progress with completed investment cases or investment returns.
+
 ## October 6 #255 — Native repair installed; first run exposed missing event schema
 
 The prior remote-tool execution barrier cleared. The reviewed installer ran after
