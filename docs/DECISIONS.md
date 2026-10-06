@@ -2042,3 +2042,19 @@ must exercise that integrated publication path. Unknown events remain rejected.
 Old histories and the failed real run are retained. Do not suppress verification
 errors or fabricate a successful head. After additive event publication, any
 rollback reader must remain schema-compatible; no authoritative head rewind.
+
+
+## 2026-10-06 — OGE interpretation is versioned separately from extraction (#261)
+
+Keep the conservative rejection for unsupported layouts. A supported OGE 278-T
+parser must validate numbered rows against both native text and OCR, preserve
+physical duplicates, and reject partial/mismatched documents. Do not concatenate
+ambiguous asset tails or remove a guard just to generate imports. A parser upgrade
+can consume retained exact-version evidence while normal source checks still detect
+changed bytes. Identical content/parser is not new extraction or interpretation.
+
+Known Form-201 links are access-blocked metadata, not runnable PDF work. Report
+this even before a receipt exists without inventing an OCR attempt. Preserve raw
+unobserved counts, old receipts, review acknowledgements and trusted transaction
+sets. No admission/page limits, writer ownership, historical notification rules,
+or approval boundaries change. Owner consent does not bypass a tool policy rejection.

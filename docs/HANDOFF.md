@@ -1,5 +1,50 @@
 # PolitiTrack active handoff
 
+## October 6 #261 — Executive OCR repair prepared; deployment blocked
+
+Owner authorized implementation and deployment after the Executive diagnosis.
+Work is on `codex/executive-ocr-261`, based on canonical repository ID 1349678672,
+main `a7a8ecf7e44ad920e842e4b72d91ed909a0ec8a8`. Production was last verified
+at `e01d03be8c2e8f91178a8d3fc502ed952b5f914b`; it has NOT been changed by this task.
+
+The verified 1068 snapshot has 4,176 Executive filings: 3,832 Form-201/request-only
+links, 335 review receipts (324 parser/layout failures, seven native/OCR disagreements,
+four automatic page limits), and nine technical retries. All 2,441 unobserved
+filings are request-only. Runs through 16:11 UTC kept committing without new OCR
+extractions or appended transactions. Retained nine retries separately explain
+the September 19 last-healthy-pass timestamp; do not claim that processing stopped then.
+
+The source repair adds a conservative OGE 278-T numbered-table parser. It accepts
+only explicit headers/row boundaries with exact native/OCR field and page agreement;
+missing/ambiguous rows and asset tails remain reviewable. It preserves unknown
+ownership/notification dates, physical row identity and existing trusted-set
+conflict checks. Parser versioning permits affected official-download review
+receipts to be retried once using existing extraction evidence. Subsequent checks
+at unchanged URLs still detect changed bytes, but unchanged bytes/parser keep the
+prior outcome without another interpretation. Known request-only links are
+excluded from ready work and reported separately without fabricating attempts.
+
+Local verification: 12 stdlib parser tests and six Node health tests pass; changed
+Python files compile. A private diagnostic using retained Scott Kupor July 31
+evidence recovered both July 30 sale rows with exact native/OCR agreement and no
+new OCR/provider call. This is a parser diagnostic, NOT a production import.
+Integrated worker regression and canonical CI remain required before merge.
+
+The deployment preflight command was rejected by Remote Desktop Commander:
+`MCP tool call requires approval, but approval policy is never`, even after the
+owner's explicit authorization. No alternative runtime execution route, service
+change, state write, credential/security change, or permission bypass was used.
+No fresh release backup has been taken in this task. Existing snapshot export is
+diagnostic evidence, not a current frozen deployment baseline.
+
+Next: complete exact-head CI; when permitted runtime execution is available,
+inspect current source/status and native locks, drain the existing writer, verify
+a NEW backup/four-head export, deploy through the existing service boundary, then
+prove actual committed imports and preserved historical prefixes. Keep automatic
+30-page limits, authenticated manual exemptions, existing schedules and suppression
+settings. Keep #261 open until native deployment and real progress are verified.
+
+
 ## October 6 #255 — Corrected release verified; first real research progress committed
 
 Installed application source is `e01d03be8c2e8f91178a8d3fc502ed952b5f914b`

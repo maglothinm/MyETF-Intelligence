@@ -12,9 +12,11 @@ COUNTS = (
     "transactions_appended", "complete_count", "needs_review_count", "access_required_count",
     "retry_delayed_count", "not_applicable_count", "ready_remaining", "review_remaining",
     "access_remaining", "retry_remaining", "unobserved_remaining",
+    "request_only_remaining", "unobserved_access_remaining", "unchanged_documents",
 )
 TIMES = ("started_at", "heartbeat_at", "finished_at", "last_document_completed_at", "oldest_ready_at")
 CODE_KEYS = ("error_code", "intake_error_code", "cleanup_error_code")
+OPTIONAL_COUNTS = {"request_only_remaining", "unobserved_access_remaining", "unchanged_documents"}
 
 
 def instant(value: Any) -> datetime | None:
@@ -33,6 +35,8 @@ def safe_metrics(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("invalid_ocr_health_stage")
     result = {"schema_version": SCHEMA_VERSION, "enabled": value.get("enabled") is True, "stage": value["stage"]}
     for key in COUNTS:
+        if key in OPTIONAL_COUNTS and key not in value:
+            continue  # Old snapshots do not establish a zero for newer telemetry.
         number = value.get(key, 0)
         if isinstance(number, bool) or not isinstance(number, int) or not 0 <= number <= 1_000_000_000:
             raise ValueError("invalid_ocr_health_count")

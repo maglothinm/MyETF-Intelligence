@@ -20,6 +20,7 @@ from scripts import government_trade_tracker as tracker
 from scripts.historical_transaction_bootstrap import _original_observation, _report
 from scripts.oge_access import is_direct_oge_pdf_url, normalize_oge_listing_access
 from scripts.source_ocr import VERSION, DOCUMENT_POLICY_VERSION, MAX_BYTES, MAX_PAGES, OCRError, extract, now
+from scripts.source_ocr_oge import PARSER_VERSION as OGE_PARSER_VERSION, OGETableError, parse_verified_oge
 
 SENATE_LAYOUT_REVIEW_CODES = frozenset({"PaperFilingError", "page_image_download_requires_review"})
 
@@ -133,6 +134,29 @@ def _parse(filing, evidence, approved_rows=None):
         # A successful engine invocation does not prove a page was blank.
         # Preserve its evidence, but never import a partial document.
         raise OCRError("unreadable_page_needs_review")
+    if filing["source"] == "oge" and approved_rows is None:
+        if not "\n".join(evidence.get("native_pages", [])).strip():
+            raise OCRError("unsupported_scanned_layout")
+        if not _matching_filer(filing, evidence):
+            raise OCRError("filer_identity_needs_review")
+        try:
+            rows = parse_verified_oge(evidence["native_pages"], evidence["ocr_text"])
+        except OGETableError as error:
+            raise OCRError(str(error)) from None
+        trades = []
+        for row in rows:
+            trade = tracker.make_trade(branch=filing["branch"], source="oge", report=_report(filing),
+                owner="", asset=row["asset"], ticker="", asset_type="",
+                transaction_type=row["transaction_type"], transaction_date=row["transaction_date"],
+                notification_date="", amount=row["amount"],
+                raw_row=json.dumps({"sha256": evidence["sha256"], "parser_version": OGE_PARSER_VERSION,
+                    **row}, sort_keys=True), confidence="medium")
+            # Preserve two equal-looking physical rows. Existing trusted imports
+            # still require _import's exact-set conflict check; never replace them.
+            identifier = tracker.stable_id("ocr-trade", (filing["filing_key"], evidence["sha256"],
+                                                        str(row["page"]), str(row["row"])))
+            trades.append(replace(trade, trade_id=identifier))
+        return trades
     table = evidence["house_table"]
     if approved_rows is not None:
         if filing["source"] != "house" or not table["recognized"] or table["problems"]:
@@ -234,6 +258,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
     for item in pending_uploads:
         incoming.setdefault(item["filing_key"], item)
     candidates = []
+    request_only = set()
     for key, filing in index.items():
         if filing.get("branch") != branch or filing.get("source") not in {"house", "senate", "oge"}:
             continue
@@ -243,6 +268,13 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         if manual_only and key not in incoming:
             continue
         receipt = receipts.get(key, {})
+        if (key not in incoming and filing.get("source") == "oge"
+                and filing.get("access_mode") == "request"
+                and not is_direct_oge_pdf_url(str(filing.get("source_url") or ""))):
+            # This is known access metadata, not a download attempt or successful
+            # extraction. Preserve receipts/history and exclude it from ready work.
+            request_only.add(key)
+            continue
         # Repair the known classification from its retained diagnostic, without
         # downloading again or pretending an extraction/attempt took place.
         # Append through this producer's normal atomic snapshot; old receipts,
@@ -266,7 +298,12 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                              or (receipt.get("error_code") == "access_required" and filing.get("source") == "oge"
                                  and is_direct_oge_pdf_url(str(filing.get("source_url") or "")))))
         changed = receipt.get("source_url") != filing.get("source_url") or receipt.get("version") != VERSION
-        if key not in incoming and not changed and not policy_retry and receipt.get("status") in {"complete", "needs_review", "not_applicable"} and receipt.get("revalidate_after", "") > now():
+        parser_retry = (filing.get("source") == "oge"
+                        and receipt.get("origin", "official_download") == "official_download"
+                        and receipt.get("status") == "needs_review" and receipt.get("evidence")
+                        and receipt.get("error_code") in {"PaperFilingError", "native_ocr_disagreement"}
+                        and receipt.get("parser_version") != OGE_PARSER_VERSION)
+        if key not in incoming and not changed and not policy_retry and not parser_retry and receipt.get("status") in {"complete", "needs_review", "not_applicable"} and receipt.get("revalidate_after", "") > now():
             continue
         if not policy_retry and receipt.get("next_attempt_at", "") > now():
             queued = incoming.get(key)
@@ -279,6 +316,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         # mandatory; oldest attempts lead within the retry tier.
         is_new = not receipt and filing.get("first_seen_utc", "") >= (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         priority = (0 if key in incoming else 1 if is_new else 2 if receipt.get("status") == "retry_delayed"
+                    else 3 if parser_retry
                     else 3 if filing.get("status") == "review_required" else 4)
         if key not in incoming and filing.get("source") == "oge" and filing.get("access_mode") != "direct":
             # Real Form 201 requests cannot consume every slot ahead of publicly
@@ -301,7 +339,10 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         current = [receipts.get(key, {}) for key, filing in index.items() if filing.get("branch") == branch]
         for target, status in (("review_remaining", "needs_review"), ("access_remaining", "access_required"), ("retry_remaining", "retry_delayed")):
             metrics[target] = sum(row.get("status") == status for row in current)
+        metrics["access_remaining"] += sum(receipts.get(key, {}).get("status") != "access_required" for key in request_only)
+        metrics["request_only_remaining"] = len(request_only)
         metrics["unobserved_remaining"] = sum(not row for row in current)
+        metrics["unobserved_access_remaining"] = sum(not receipts.get(key) for key in request_only)
         metrics["heartbeat_at"] = now()
         if on_progress is not None:
             on_progress(metrics)
@@ -318,6 +359,8 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                    "document_policy_version": DOCUMENT_POLICY_VERSION,
                    "attempted_at": now(), "attempts": int(prior.get("attempts", 0)) + 1,
                    "origin": "user_upload" if upload else "official_download", "status": "retry_delayed"}
+        if filing.get("source") == "oge":
+            receipt["parser_version"] = OGE_PARSER_VERSION
         evidence = None
         importing = False
         persisting = False
@@ -346,6 +389,22 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                 if upload and digest != upload["sha256"]:
                     raise OCRError("upload_digest_mismatch")
                 previous_evidence = _cached_evidence(directory, digest)
+                if (not upload and filing.get("source") == "oge" and previous_evidence is not None
+                        and prior.get("sha256") == digest and prior.get("version") == VERSION
+                        and prior.get("parser_version") == OGE_PARSER_VERSION
+                        and prior.get("source_url") == filing["source_url"]
+                        and prior.get("status") in {"complete", "needs_review"}):
+                    # A periodic source-version check is still necessary at an
+                    # unchanged URL. Same bytes/parser cannot resolve a review:
+                    # keep its exact outcome, and do not report another parse.
+                    refreshed = {**prior, "source_checked_at": now(),
+                                 "revalidate_after": receipt["revalidate_after"]}
+                    tracker.append_jsonl(ledger, [refreshed])
+                    receipts[key] = refreshed
+                    metrics["unchanged_documents"] += 1
+                    handled.add(key)
+                    report_progress()
+                    continue
                 if previous_evidence is not None:
                     evidence = previous_evidence
                     metrics["extractions_reused"] += 1

@@ -499,3 +499,90 @@ def test_long_manual_upload_reaches_private_inbox_and_keeps_coverage(intake):
     with intake.engine.begin() as conn:
         row = conn.execute(select(uploads)).mappings().one()
     assert row["page_count"] == 75 and row["payload"] is None
+
+# #261: source-version checks, parser repair and known Form-201 access metadata.
+def _oge_repair_fixture(tmp_path):
+    from test_source_ocr_oge import NATIVE, OPTICAL
+    directory = source_state(tmp_path)
+    filing = {**FILING, "branch": "executive", "source": "oge", "filer": "Example Official",
+              "filing_key": "oge|TEST-261", "report_id": "TEST-261", "access_mode": "direct",
+              "source_url": "https://extapps2.oge.gov/201/$FILE/TEST-261.pdf"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    blob = b"TEST-261-unchanged-public-bytes"
+    payload = {**evidence(blob), "native_pages": NATIVE, "ocr_text": OPTICAL,
+               "page_count": 2, "completed_pages": [1, 2],
+               "house_table": {"recognized": False, "rows": [], "problems": ["unsupported_form"]}}
+    relative = "ocr-evidence/" + payload["sha256"] + "-" + VERSION + ".json"
+    (directory / "ocr-evidence").mkdir()
+    (directory / relative).write_text(json.dumps(payload), encoding="utf-8")
+    prior = {"filing_key": filing["filing_key"], "source_url": filing["source_url"], "version": VERSION,
+             "document_policy_version": DOCUMENT_POLICY_VERSION, "origin": "official_download",
+             "status": "needs_review", "error_code": "PaperFilingError", "sha256": payload["sha256"],
+             "evidence": {k: payload[k] for k in ("sha256", "version", "page_count", "completed_pages", "ocr_completed_at")},
+             "evidence_path": relative, "attempts": 3, "attempted_at": "2026-09-20T00:00:00Z",
+             "revalidate_after": "2099-01-01T00:00:00Z"}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    return directory, filing, blob, payload
+
+
+def test_oge_parser_upgrade_reuses_evidence_preserves_history_and_distinct_rows(tmp_path):
+    from runtime_v2.source_ocr_worker import OGE_PARSER_VERSION
+    directory, filing, blob, payload = _oge_repair_fixture(tmp_path)
+    prefix = (directory / "source-ocr.jsonl").read_bytes()
+    reviews = (directory / "pending-review.jsonl").read_bytes()
+    original = (directory / ("ocr-evidence/" + payload["sha256"] + "-" + VERSION + ".json")).read_bytes()
+    health = {}
+    run_pass(directory, "executive", ENV, loader=lambda *_: blob,
+             extractor=lambda *a, **k: pytest.fail("unchanged extraction rerun"), health=health)
+    rows = tracker.read_jsonl(directory / "transactions.jsonl")
+    assert len(rows) == 2 and len({row["trade_id"] for row in rows}) == 2
+    assert all(row["historical_bootstrap"] and row["source_ocr"] for row in rows)
+    assert all(row["observed_at_utc"] == filing["first_seen_utc"] for row in rows)
+    assert health["transactions_appended"] == 2 and health["extractions_reused"] == 1
+    assert health["documents_completed"] == 0
+    receipt = tracker.latest_records(directory / "source-ocr.jsonl", "filing_key")[filing["filing_key"]]
+    assert receipt["status"] == "complete" and receipt["parser_version"] == OGE_PARSER_VERSION
+    assert (directory / "source-ocr.jsonl").read_bytes().startswith(prefix)
+    assert (directory / "pending-review.jsonl").read_bytes() == reviews
+    assert (directory / receipt["evidence_path"]).read_bytes() == original
+    run_pass(directory, "executive", ENV, loader=lambda *_: pytest.fail("successful filing retried early"),
+             extractor=lambda *a, **k: pytest.fail("extraction repeated"))
+    # Expiry allows a content-version check, not another interpretation/import.
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [{**receipt, "revalidate_after": "2020-01-01T00:00:00Z"}])
+    health = {}
+    run_pass(directory, "executive", ENV, loader=lambda *_: blob,
+             extractor=lambda *a, **k: pytest.fail("extraction repeated"), health=health)
+    assert health["unchanged_documents"] == 1
+    assert health["transactions_appended"] == health["complete_count"] == health["needs_review_count"] == 0
+    assert len(tracker.read_jsonl(directory / "transactions.jsonl")) == 2
+
+
+def test_oge_repair_does_not_replace_trusted_transaction_set(tmp_path):
+    directory, filing, blob, _ = _oge_repair_fixture(tmp_path)
+    trusted = {"source": "oge", "report_id": filing["report_id"], "trade_id": "keep-trusted-original"}
+    tracker.append_jsonl(directory / "transactions.jsonl", [trusted])
+    before = (directory / "transactions.jsonl").read_bytes()
+    run_pass(directory, "executive", ENV, loader=lambda *_: blob,
+             extractor=lambda *a, **k: pytest.fail("extraction repeated"))
+    receipt = tracker.latest_records(directory / "source-ocr.jsonl", "filing_key")[filing["filing_key"]]
+    assert receipt["status"] == "needs_review" and receipt["error_code"] == "existing_transaction_conflict"
+    assert (directory / "transactions.jsonl").read_bytes() == before
+
+
+def test_request_only_inventory_is_blocked_without_fabricated_attempt_receipts(tmp_path):
+    directory = source_state(tmp_path)
+    for index in range(3):
+        tracker.append_jsonl(directory / "filings.jsonl", [{
+            **FILING, "source": "oge", "branch": "executive", "filing_key": f"oge|request-{index}",
+            "report_id": f"request-{index}", "access_mode": "request",
+            "source_url": f"https://extapps2.oge.gov/201%20Request?OpenForm&Filer=TEST{index}"}])
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [{"filing_key": "oge|request-0",
+                         "status": "access_required", "attempted_at": "2026-09-20T00:00:00Z"}])
+    before = (directory / "source-ocr.jsonl").read_bytes()
+    health = {}
+    run_pass(directory, "executive", ENV, loader=lambda *_: pytest.fail("request form downloaded"),
+             extractor=lambda *a, **k: pytest.fail("request form OCRed"), health=health)
+    assert health["request_only_remaining"] == health["access_remaining"] == 3
+    assert health["unobserved_access_remaining"] == health["unobserved_remaining"] == 2
+    assert health["eligible_count"] == health["ready_remaining"] == health["documents_attempted"] == 0
+    assert (directory / "source-ocr.jsonl").read_bytes() == before
