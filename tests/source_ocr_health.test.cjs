@@ -56,3 +56,12 @@ test('compact and detailed cards keep collection and OCR history in separate sec
     assert.match(html,/Last successful analysis/);
   }
 });
+
+test('request-only backlog and unchanged-content checks are separate from runnable work',()=>{
+  const html=PT.healthCards(model({ready_remaining:0,request_only_remaining:3832,
+    unobserved_remaining:2441,unobserved_access_remaining:2441,unchanged_documents:5}),true);
+  for(const label of ['OGE document requests required','Of these, awaiting document access',
+    'Unchanged documents checked','Ready work remaining']) assert.ok(html.includes(label),label);
+  assert.ok(PT.healthCards(model(),true).includes('Not reported'));
+});
+
