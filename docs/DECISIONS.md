@@ -2031,3 +2031,14 @@ an unmatched quotation; neither is a completed investment case. Respect the deni
 installer creation and optional cache-validator append; no alternate write or
 execution route was used. App full-access mode is not proof that a safety-denied
 action can run. Any permission-mode change needs the owner's specific choice.
+
+
+## 2026-10-06 — Persist observed capability events under the existing journal (#255)
+
+The deployed renewal integration must declare capability_observation in the
+explicit event schema, with normal event hashes and prefix-preservation checks.
+A provider test alone did not cover native evaluate/save/restore; the regression
+must exercise that integrated publication path. Unknown events remain rejected.
+Old histories and the failed real run are retained. Do not suppress verification
+errors or fabricate a successful head. After additive event publication, any
+rollback reader must remain schema-compatible; no authoritative head rewind.

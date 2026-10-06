@@ -1,5 +1,37 @@
 # PolitiTrack project state
 
+## October 6 #255 — Native repair installed; first run exposed missing event schema
+
+The prior remote-tool execution barrier cleared. The reviewed installer ran after
+12 offline release/drain checks and a fresh read-only preflight. At 14:31:07 UTC,
+Beast installed canonical source c06f5054a46de0e38c81cf234de57d240953884f and enabled
+only OPPORTUNITY_REFRESH_CAPABILITIES=true in the existing AI environment.
+Scheduler/Web resumed; PostgreSQL PID5044 stayed unchanged. Four frozen heads and
+all 7,643 prior snapshot headers verified with exact archive hashes and no broken
+parent links. No reset, new schedule, live alert, account or subscription change.
+
+The deployed compact index is HTTP200 / 1,989,108 bytes. Real Chromium desktop
+1280 and mobile390 checks passed 25-card pagination, index-first fetching, zero
+page errors/external requests and no overflow. Full evidence is not auto-fetched.
+
+A manual acceptance invocation of the existing AI owner made genuine HTTP200 model
+calls but failed at 14:35:56 UTC: capability_observation was emitted by the refresh
+integration yet omitted from opportunity_state.schema.json's event enum. This is
+a source integration/test coverage defect, not API funding or tool access failure.
+The failed invocation did not publish its candidate AI snapshot. Preserve that
+failed run; no cached diagnostic or blank state may replace the committed head.
+
+The isolated corrective branch adds exactly the implemented event to the enum.
+A new regression executes OpportunityRuntime.evaluate through save, immutable
+journal validation, archive roundtrip, restore and a second unchanged cycle.
+It also checks unknown events and tampered event hashes remain rejected. Three
+focused tests passed. Full regression/CI and this schema fix's native installation
+must still be verified. Do not call the research pipeline recovered yet.
+
+Any rollback after the new event first publishes must retain its compatible reader;
+turn the feature off rather than rewind state or restore an obsolete schema.
+Private installation/evidence: C:\ProgramData\PolitiTrack\backups\usefulness-deploy-255-20261005T132655Z.
+
 ## October 5 #255 — Cross-document source correction merged; installation still blocked
 
 PR #258 merged as 8c9f22ee8ab95bdde2ebe6673bc8beb294b490e0.
