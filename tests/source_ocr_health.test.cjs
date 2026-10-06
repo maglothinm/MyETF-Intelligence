@@ -64,3 +64,4 @@ test('request-only backlog and unchanged-content checks are separate from runnab
     'Unchanged documents checked','Ready work remaining']) assert.ok(html.includes(label),label);
   assert.ok(PT.healthCards(model(),true).includes('Not reported'));
 });
+

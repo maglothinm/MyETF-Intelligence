@@ -586,3 +586,4 @@ def test_request_only_inventory_is_blocked_without_fabricated_attempt_receipts(t
     assert health["unobserved_access_remaining"] == health["unobserved_remaining"] == 2
     assert health["eligible_count"] == health["ready_remaining"] == health["documents_attempted"] == 0
     assert (directory / "source-ocr.jsonl").read_bytes() == before
+

@@ -22,14 +22,14 @@ HEADER = re.compile(
     r"RECEIVED\s+OVER\s+30\s+DAYS\s+AGO\s+AMOUNT)",
     re.IGNORECASE,
 )
-FORM = re.compile(r"OGE\s+Form\s+278\s*[--]\s*T\b", re.IGNORECASE)
+FORM = re.compile(r"OGE\s+Form\s+278\s*[-–]\s*T\b", re.IGNORECASE)
 ROW_START = re.compile(r"(?m)^[ \t]*(\d{1,4})(?:[ \t]+|\r?\n)")
 STOP = re.compile(r"(?im)^[ \t]*(Endnotes|Summary of Contents|Privacy Act Statement)\s*$")
 FOOTER = re.compile(r"(?m)^[^\n]{1,160} - Page \d+[ \t]*$")
 ROW = re.compile(
     r"(?P<asset>.+?)\s+(?P<type>Purchase|Sale(?:\s*\((?:Partial|Full)\))?|Exchange)"
     r"\s+(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+(?P<late>Yes|No)"
-    r"\s+(?P<amount>\$[\d,]+\s*[---]\s*\$[\d,]+|Over\s+\$[\d,]+)",
+    r"\s+(?P<amount>\$[\d,]+\s*[-–—]\s*\$[\d,]+|Over\s+\$[\d,]+)",
     re.IGNORECASE,
 )
 RANGES = {
@@ -48,7 +48,7 @@ def _amount(value):
         if int(re.sub(r"\D", "", value)) != 50000000:
             raise OGETableError("oge_amount_needs_review")
         return "Over $50,000,000"
-    low, high = (int(re.sub(r"\D", "", part)) for part in re.split(r"[---]", value))
+    low, high = (int(re.sub(r"\D", "", part)) for part in re.split(r"[-–—]", value))
     if (low, high) not in RANGES:
         raise OGETableError("oge_amount_needs_review")
     return f"${low:,} - ${high:,}"
@@ -127,3 +127,4 @@ def parse_verified_oge(native_pages, ocr_text):
     if native != optical:
         raise OGETableError("native_ocr_disagreement")
     return native
+
