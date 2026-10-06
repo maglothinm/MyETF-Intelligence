@@ -74,7 +74,28 @@ class TestOGERows(unittest.TestCase):
         self.assertTrue(rows[0]["notification_over_30_days"])
         self.assertEqual(rows[0]["notification_date"], "")
 
+    def test_optical_row_numbers_may_be_absent_with_exact_count_and_field_agreement(self):
+        optical = INTRO + "\f" + HEADER.replace("# ", "") + BODY.replace("1 Example", "Example").replace("2 Example", "Example") + "Endnotes"
+        self.assertEqual(len(parse_verified_oge(NATIVE, optical)), 2)
+
+    def test_missing_identical_optical_row_is_not_inferred_from_native(self):
+        optical = INTRO + "\f" + HEADER.replace("# ", "") + BODY.splitlines()[0][2:] + "\nEndnotes"
+        with self.assertRaisesRegex(OGETableError, "native_ocr_disagreement"):
+            parse_verified_oge(NATIVE, optical)
+
+    def test_reordered_optical_cells_still_require_independent_field_agreement(self):
+        optical = INTRO + "\f" + HEADER.replace("# ", "") + (
+            "Purchase 07/30/2026 No Example Company (TEST) $1,001 - $15,000\n" * 2
+        ) + "Endnotes"
+        self.assertEqual(len(parse_verified_oge(NATIVE, optical)), 2)
+        with self.assertRaisesRegex(OGETableError, "native_ocr_disagreement"):
+            parse_verified_oge(NATIVE, optical.replace("07/30/2026", "07/29/2026", 1))
+
+    def test_native_row_numbers_remain_required(self):
+        bad = [INTRO, HEADER + BODY.replace("1 Example", "Example").replace("2 Example", "Example")]
+        with self.assertRaisesRegex(OGETableError, "rows_needs_review"):
+            parse_verified_oge(bad, "\f".join(bad))
+
 
 if __name__ == "__main__":
     unittest.main()
-

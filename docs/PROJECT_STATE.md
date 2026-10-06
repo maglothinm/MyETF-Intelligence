@@ -24,10 +24,13 @@ at unchanged URLs still detect changed bytes, but unchanged bytes/parser keep th
 prior outcome without another interpretation. Known request-only links are
 excluded from ready work and reported separately without fabricating attempts.
 
-Local verification: 12 stdlib parser tests and six Node health tests pass; changed
-Python files compile. A private diagnostic using retained Scott Kupor July 31
-evidence recovered both July 30 sale rows with exact native/OCR agreement and no
-new OCR/provider call. This is a parser diagnostic, NOT a production import.
+Local verification: 16 stdlib parser tests and six Node health tests pass; changed
+Python files compile. Private diagnostics over seven retained filings recovered nine
+transactions across Kupor, McMaster and Criswell documents without new OCR/provider
+calls. Four filings with ambiguous wrapped asset tails remained reviewable.
+Sparse optical text may omit row numbers, but native row numbers and exact page,
+row-count and field agreement remain mandatory. These are parser diagnostics,
+NOT production imports or a promise that every unresolved document is supported.
 Integrated worker regression and canonical CI remain required before merge.
 
 The deployment preflight command was rejected by Remote Desktop Commander:
