@@ -65,3 +65,29 @@ test('request-only backlog and unchanged-content checks are separate from runnab
   assert.ok(PT.healthCards(model(),true).includes('Not reported'));
 });
 
+
+
+test('Overview and Operations show committed cached imports and preserve last import on later zero runs',()=>{
+  const m=model({committed_pass:true,transactions_appended:0,extractions_reused:5,documents_completed:0,
+    last_transaction_import_at:'2026-09-17T19:40:00Z',last_transaction_import_count:10,
+    source_unavailable_remaining:9,retry_remaining:0});
+  for(const detailed of [false,true]) {
+    const html=PT.healthCards(m,detailed);
+    assert.match(html,/Latest committed pass: <strong>0 transactions appended/);
+    assert.match(html,/5 cached extractions reused/);
+    assert.match(html,/0 new extractions/);
+    assert.match(html,/Last transaction import/);
+    assert.match(html,/10 transactions/);
+    assert.match(html,/9 source documents unavailable/);
+    assert.match(html,/Needs attention/); // Progress must never override an independent failure.
+  }
+  const uncommitted=PT.healthCards(model({committed_pass:false,transactions_appended:999}),false);
+  assert.doesNotMatch(uncommitted,/Latest committed pass|999 transactions/);
+});
+test('run tooltip separates imports, fresh extractions, and outstanding technical retries',()=>{
+  const label=PT.ocrRunLabel({source_ocr_metrics:{stage:'complete',cleanup_status:'not_needed',
+    transactions_appended:10,documents_completed:0,extractions_reused:5,retry_delayed_count:0,retry_remaining:10}});
+  assert.match(label,/10 transactions appended/);
+  assert.match(label,/5 cached extractions reused/);
+  assert.match(label,/0 retries this pass; 10 technical retries outstanding/);
+});

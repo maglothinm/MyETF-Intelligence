@@ -13,10 +13,12 @@ COUNTS = (
     "retry_delayed_count", "not_applicable_count", "ready_remaining", "review_remaining",
     "access_remaining", "retry_remaining", "unobserved_remaining",
     "request_only_remaining", "unobserved_access_remaining", "unchanged_documents",
+    "source_unavailable_remaining",
 )
 TIMES = ("started_at", "heartbeat_at", "finished_at", "last_document_completed_at", "oldest_ready_at")
 CODE_KEYS = ("error_code", "intake_error_code", "cleanup_error_code")
-OPTIONAL_COUNTS = {"request_only_remaining", "unobserved_access_remaining", "unchanged_documents"}
+OPTIONAL_COUNTS = {"request_only_remaining", "unobserved_access_remaining", "unchanged_documents",
+                   "source_unavailable_remaining"}
 
 
 def instant(value: Any) -> datetime | None:
@@ -137,6 +139,12 @@ def branch_health(timeline: list[Mapping[str, Any]], as_of: datetime | None,
     result["last_completed_pass_at"] = max((row["finished_at"] for row in completed), key=instant, default=None)
     result["last_success_at"] = max((row["finished_at"] for row in completed if row["status"] in {"success", "stale"}), key=instant, default=None)
     result["last_document_completed_at"] = max((row["last_document_completed_at"] for row in completed if row.get("last_document_completed_at")), key=instant, default=None)
+    # Keep the latest proven import visible after later zero-import passes, even
+    # when that pass had separate document failures. Never use uncommitted counts.
+    last_import = max((row for row in completed if row.get("transactions_appended", 0) > 0),
+                      key=lambda row: instant(row["finished_at"]), default={})
+    result["last_transaction_import_at"] = last_import.get("finished_at")
+    result["last_transaction_import_count"] = last_import.get("transactions_appended")
     # A due backlog with no movement over three independent completed attempts is
     # a stall. Waiting for access/review/backoff alone is not a stall.
     recent = successes[:3]
