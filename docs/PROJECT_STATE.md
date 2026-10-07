@@ -1,5 +1,66 @@
 # PolitiTrack project state
 
+## October 7 UTC / October 6 Eastern #261 — Fresh preflight verified; device disconnected before approval
+
+Resumed through Remote Desktop Commander on Beast, device
+`2cf9a73a-facb-4848-88c6-52344ff96055`. Canonical repository ID 1349678672,
+`maglothinm/MyETF-Intelligence`, default branch `main`, was independently verified.
+PR #262 is merged at `64d79157a1ba3954be4ef05af436b2ebc93590c8`.
+Staged current source `e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f` differs from
+CI-tested `5ac40141868164126fcbbcb50e0168026865f677` only in HANDOFF/PROJECT_STATE.
+All four exact-head CI runs were independently confirmed successful.
+
+Installed HEAD was still `e01d03be8c2e8f91178a8d3fc502ed952b5f914b`; Database,
+Scheduler and Web were Running/Automatic. Tracked source was unchanged; the
+existing untracked `legislative-source-status.json` was preserved.
+
+Fresh read-only four-head export at 2026-10-07T00:49:44Z completed successfully:
+AI1417, Dashboard2863, Executive1088, Legislative2400. All 7,768 snapshot headers
+have unbroken parent chains, and all four archive hashes round-trip exactly.
+This is preflight, not a drained/frozen release baseline. Private receipt:
+`C:\Users\maglo\PolitiTrack-work\executive-ocr-261-operations\preflight-20261007T004943Z\readonly-before\receipt.json`.
+
+The nightly physical backup `routine-20261007T000002Z-d100a329.base` records
+78,629,359,208 bytes, completion 00:07:07Z and pg_verifybackup passed. A new
+verification was started. The first invocation identified the subsequently
+added `verified.json` receipt as absent from PostgreSQL's manifest. A separate
+verification excludes only that receipt using `--ignore=verified.json`.
+Its final result was NOT retrieved before disconnect; do not claim the recheck passed.
+
+Prepared isolated source checkout:
+`C:\Users\maglo\PolitiTrack-work\executive-ocr-deploy-261-20261007`.
+Operations helpers:
+`C:\Users\maglo\PolitiTrack-work\executive-ocr-261-operations`.
+Pinned `release_261.py` SHA256:
+`e4c98b98e47203136dab75909afa9a7ce13ae0f6c9e11a3c02836ff838fb016f`.
+It reuses the verified existing release implementation
+`f962b5ebadfe9b800998339815f7d628d65a129c6c7807a4fa9500f5ec39abc1`,
+requires OLD e01d03b and TARGET e58c449, retains the entire configuration except
+source_revision, drains existing writers/backups, holds the established locks,
+exports fresh frozen state, and pauses/resumes only existing Scheduler/Web.
+Database, state heads, schedules, automatic page limits and manual exemptions
+are not changed. Acceptance and read-only continuity helpers are prepared.
+
+All 15 existing offline release/drain checks and three wrapper checks passed;
+helpers compile. Additional native focused pytest initially failed because the
+test shell lacked installed Tesseract/Poppler on PATH. A rerun with those installed
+paths progressed without the earlier failures, but its final result and Node
+results were NOT retrieved. Canonical CI remains separately verified.
+
+Remote calls then intermittently returned INVALID_ARGUMENT / [object Object].
+The final call explicitly reported no device online and instructed restarting
+Desktop Commander Remote. No deployment apply, Windows elevation prompt, native
+acceptance invocation, service change or configuration change was issued.
+No execution approval is pending; no real imports are claimed by this continuation.
+
+Next: reconnect Beast using Desktop Commander Remote, retrieve physical backup
+verification and focused test outcomes, refresh canonical/installed source and
+locks, and recheck the pinned helper. Present normal execution/Windows administrator
+approval to the owner for the reviewed apply action. Apply must take a NEW frozen
+export after draining. Then invoke the existing Executive owner, verify committed
+imports and compare all old headers/ledger prefixes/filing and trade IDs/evidence
+against that frozen baseline with `verify_261.py`. Keep #261 open.
+
 ## October 6 #261 — Executive OCR repair merged; deployment blocked
 
 Owner authorized implementation and deployment after the Executive diagnosis.
