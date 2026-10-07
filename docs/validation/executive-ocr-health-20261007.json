@@ -1,0 +1,433 @@
+{
+  "verified_at": "2026-10-07T14:27:14.701228+00:00",
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "branch": "main",
+  "installed_source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+  "tested_head": "27665ca3152fece03e444276cfb8494b2410281f",
+  "ci_merge": "9ef41c36e0cfefbb1e8fb620d681da942458ef98",
+  "verified_tree": "d59ed55db7bf2e01e6dadb26f9390e8ddc691961",
+  "pull_requests": [
+    263,
+    264
+  ],
+  "actions": [
+    {
+      "run_id": 37634317962,
+      "attempt": 1,
+      "conclusion": "success",
+      "name": "Current Opportunity offline tests"
+    },
+    {
+      "run_id": 37634317985,
+      "attempt": 1,
+      "conclusion": "success",
+      "name": "Runtime v2 safety tests",
+      "passed": 889,
+      "skipped": 2
+    },
+    {
+      "run_id": 37634318055,
+      "attempt": 1,
+      "conclusion": "success",
+      "name": "Source upload and OCR tests",
+      "passed": 436,
+      "skipped": 1,
+      "node_passed": 8,
+      "desktop_mobile_ui": "passed",
+      "browser_artifact_id": 11488480121,
+      "artifact_sha256": "fb98e1f35c63afe921666c13dcf1aaa18ef090d1bccb6f02702cc093d7d2140d"
+    }
+  ],
+  "local_followup_tests": {
+    "passed": 44,
+    "postgres_skipped": 2,
+    "wrapper_tests_passed": 3
+  },
+  "release": {
+    "repository_id": 1349678672,
+    "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+    "tested_source": "27665ca3152fece03e444276cfb8494b2410281f",
+    "installed_at": "2026-10-07T14:22:25.487186+00:00",
+    "previous_source": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+    "database_pid_unchanged": 41008,
+    "baseline": {
+      "cutoff": "2026-10-07T14:21:25.651663+00:00",
+      "heads": {
+        "ai": {
+          "generation": 1445,
+          "snapshot_id": "05baedc4-1fb6-4411-85d9-c95c7cb7cfb9",
+          "sha256": "6e07aa33e0196d19d521ca725241c4cc74d439c82a3de6c462ec31b3d2948bd8",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:20:57.138315+00",
+          "file_count": 1692
+        },
+        "dashboard": {
+          "generation": 2917,
+          "snapshot_id": "14e78462-8f74-465f-be87-54174bc90a9c",
+          "sha256": "8999942bf66b14f269ad55411bd0184963b9e59dcc3975cc94ae8f3c6cbef944",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:18:36.180025+00",
+          "file_count": 267
+        },
+        "executive": {
+          "generation": 1118,
+          "snapshot_id": "1951968c-984e-458a-a344-17470b6e2758",
+          "sha256": "8eae84a92db39e4c6c3386421003f90571a1e5d9d4bf1fb594aa06eceb898b11",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:11:12.370115+00",
+          "file_count": 344
+        },
+        "legislative": {
+          "generation": 2455,
+          "snapshot_id": "b8692202-1805-417e-a050-c32981dff4ac",
+          "sha256": "c44abc126a8655163e135bd59c04bfeb2f95636f37f9b27736e88a194a27ec8a",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:20:16.460654+00",
+          "file_count": 925
+        }
+      },
+      "header_count": 7935,
+      "header_sha256": "a9a5cef293b58439c3f0a3702052a0cde5c0f2293255cb4f4e38e511cbaa1196",
+      "broken_links": 0,
+      "round_trip_verified": true,
+      "database_transaction_read_only": true
+    },
+    "opportunity_mode": "shadow",
+    "AI_alerts_suppressed": true,
+    "shadow_refresh_enabled": true,
+    "new_schedules": false,
+    "snapshot_heads_rewritten": false,
+    "real_case_acceptance": "pending",
+    "ready_http": 200
+  },
+  "snapshot_producers": [
+    {
+      "run_id": "49ed9fd8-fd7b-4ae6-998e-abe90f5c1714",
+      "namespace": "ai",
+      "status": "success",
+      "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+      "snapshot_id": "05baedc4-1fb6-4411-85d9-c95c7cb7cfb9",
+      "snapshot_sha256": "6e07aa33e0196d19d521ca725241c4cc74d439c82a3de6c462ec31b3d2948bd8",
+      "started_at": "2026-10-07 14:15:01.310163+00",
+      "finished_at": "2026-10-07 14:20:57.138315+00",
+      "runtime_mode": "production",
+      "evidence_kind": "snapshot_provenance",
+      "run_attempt": 1
+    },
+    {
+      "run_id": "165f3201-6c8d-4b56-8ee5-b3f8b5e74d5a",
+      "namespace": "dashboard",
+      "status": "success",
+      "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+      "snapshot_id": "9e47888e-712f-43c7-8c05-e3d35b9a1648",
+      "snapshot_sha256": "75c067fd794459093e2091c037a63a8720f69d4588a7057bea5a6ed220349874",
+      "started_at": "2026-10-07 14:23:02.914157+00",
+      "finished_at": "2026-10-07 14:24:21.045957+00",
+      "runtime_mode": "production",
+      "evidence_kind": "snapshot_provenance",
+      "run_attempt": 1
+    },
+    {
+      "run_id": "ed0d3637-c2e5-4a61-8c65-d026dcc01d54",
+      "namespace": "executive",
+      "status": "success",
+      "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+      "snapshot_id": "1951968c-984e-458a-a344-17470b6e2758",
+      "snapshot_sha256": "8eae84a92db39e4c6c3386421003f90571a1e5d9d4bf1fb594aa06eceb898b11",
+      "started_at": "2026-10-07 14:11:05.109019+00",
+      "finished_at": "2026-10-07 14:11:12.370115+00",
+      "runtime_mode": "production",
+      "evidence_kind": "snapshot_provenance",
+      "run_attempt": 1
+    },
+    {
+      "run_id": "89f0baae-2322-47c2-a6f9-7cd1a093e85a",
+      "namespace": "legislative",
+      "status": "success",
+      "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+      "snapshot_id": "b8692202-1805-417e-a050-c32981dff4ac",
+      "snapshot_sha256": "c44abc126a8655163e135bd59c04bfeb2f95636f37f9b27736e88a194a27ec8a",
+      "started_at": "2026-10-07 14:20:05.111655+00",
+      "finished_at": "2026-10-07 14:20:16.460654+00",
+      "runtime_mode": "production",
+      "evidence_kind": "snapshot_provenance",
+      "run_attempt": 1
+    }
+  ],
+  "verified_imports": [
+    {
+      "run_id": "db69c8c0-12ed-4fa6-bea6-b57da5f93247",
+      "snapshot_id": "983804a5-29b2-49c9-8d28-7ec5d17049be",
+      "transactions_appended": "10",
+      "finished_at": "2026-10-07T13:14:51.103922Z"
+    },
+    {
+      "run_id": "ed0d3637-c2e5-4a61-8c65-d026dcc01d54",
+      "snapshot_id": "1951968c-984e-458a-a344-17470b6e2758",
+      "transactions_appended": "2",
+      "finished_at": "2026-10-07T14:11:12.407910Z"
+    }
+  ],
+  "continuity": {
+    "verified_at": "2026-10-07T14:25:20.594372+00:00",
+    "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+    "export": {
+      "cutoff": "2026-10-07T14:24:24.242832+00:00",
+      "heads": {
+        "ai": {
+          "generation": 1445,
+          "snapshot_id": "05baedc4-1fb6-4411-85d9-c95c7cb7cfb9",
+          "sha256": "6e07aa33e0196d19d521ca725241c4cc74d439c82a3de6c462ec31b3d2948bd8",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:20:57.138315+00",
+          "file_count": 1692
+        },
+        "dashboard": {
+          "generation": 2918,
+          "snapshot_id": "9e47888e-712f-43c7-8c05-e3d35b9a1648",
+          "sha256": "75c067fd794459093e2091c037a63a8720f69d4588a7057bea5a6ed220349874",
+          "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+          "created_at": "2026-10-07 14:24:21.045957+00",
+          "file_count": 267
+        },
+        "executive": {
+          "generation": 1118,
+          "snapshot_id": "1951968c-984e-458a-a344-17470b6e2758",
+          "sha256": "8eae84a92db39e4c6c3386421003f90571a1e5d9d4bf1fb594aa06eceb898b11",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:11:12.370115+00",
+          "file_count": 344
+        },
+        "legislative": {
+          "generation": 2455,
+          "snapshot_id": "b8692202-1805-417e-a050-c32981dff4ac",
+          "sha256": "c44abc126a8655163e135bd59c04bfeb2f95636f37f9b27736e88a194a27ec8a",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:20:16.460654+00",
+          "file_count": 925
+        }
+      },
+      "header_count": 7936,
+      "header_sha256": "236efb480de14c5ed8cac13a9b444e018a2330f5a906c13287782cf70c9c9180",
+      "broken_links": 0,
+      "round_trip_verified": true,
+      "database_transaction_read_only": true
+    },
+    "old_headers_preserved": 7935,
+    "ledger_prefixes_preserved": [
+      "ai/analyses.jsonl",
+      "ai/information-value-at-discovery.jsonl",
+      "ai/runs.jsonl",
+      "executive/filings.jsonl",
+      "executive/historical-backfill.jsonl",
+      "executive/pending-review.jsonl",
+      "executive/purchases.jsonl",
+      "executive/runs.jsonl",
+      "executive/source-ocr.jsonl",
+      "executive/transactions.jsonl",
+      "legislative/filings.jsonl",
+      "legislative/historical-backfill.jsonl",
+      "legislative/pending-review.jsonl",
+      "legislative/purchases.jsonl",
+      "legislative/runs.jsonl",
+      "legislative/source-ocr.jsonl",
+      "legislative/transactions.jsonl"
+    ],
+    "executive_ids_preserved": {
+      "seen_filings": {
+        "before": 3,
+        "after": 3
+      },
+      "seen_reviews": {
+        "before": 1568,
+        "after": 1568
+      },
+      "seen_trades": {
+        "before": 531,
+        "after": 531
+      }
+    },
+    "original_ocr_evidence_preserved": true,
+    "new_transactions": 0,
+    "new_ocr_receipt_counts": {}
+  },
+  "prior_263_continuity": {
+    "verified_at": "2026-10-07T14:04:45.617352+00:00",
+    "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+    "export": {
+      "cutoff": "2026-10-07T14:03:46.118599+00:00",
+      "heads": {
+        "ai": {
+          "generation": 1444,
+          "snapshot_id": "eb0fc663-5a61-4bae-9b52-5d9b6996f9b8",
+          "sha256": "145c1e5ea931a97f4f22fcf221e572821567b4dbe7ccf9f4a6b0387a7e819b37",
+          "source_revision": "e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f",
+          "created_at": "2026-10-07 13:50:56.539277+00",
+          "file_count": 1692
+        },
+        "dashboard": {
+          "generation": 2916,
+          "snapshot_id": "164ccb00-fe63-4e9e-bdcb-c386e5667398",
+          "sha256": "c712571fa87525ac962a48f3971e89d673fe37a1fd333c403afa063bdede2ec7",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:03:42.701662+00",
+          "file_count": 267
+        },
+        "executive": {
+          "generation": 1117,
+          "snapshot_id": "4d59572f-d3e9-4c27-a830-deeb63e02161",
+          "sha256": "e23d5515ea2203002fc04f5a10a74cb7fd47a534f0da086f84c5091e5270e86e",
+          "source_revision": "7c4fd4850466d38ef131da203d5c86626dbf8ee7",
+          "created_at": "2026-10-07 14:01:53.544278+00",
+          "file_count": 344
+        },
+        "legislative": {
+          "generation": 2453,
+          "snapshot_id": "7ea5a071-b8d1-48d8-b9bd-b1ce5a72705c",
+          "sha256": "a92dee3c463b6f7057f09a2407bb524f6701197b1dd8d0f408f13fb922eb6be7",
+          "source_revision": "e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f",
+          "created_at": "2026-10-07 13:50:14.186774+00",
+          "file_count": 925
+        }
+      },
+      "header_count": 7930,
+      "header_sha256": "da3db0a0eec39aac3398f743fe5b3593e94b7b183afd48a06382094d424eeb09",
+      "broken_links": 0,
+      "round_trip_verified": true,
+      "database_transaction_read_only": true
+    },
+    "old_headers_preserved": 7927,
+    "ledger_prefixes_preserved": [
+      "ai/analyses.jsonl",
+      "ai/information-value-at-discovery.jsonl",
+      "ai/runs.jsonl",
+      "executive/filings.jsonl",
+      "executive/historical-backfill.jsonl",
+      "executive/pending-review.jsonl",
+      "executive/purchases.jsonl",
+      "executive/runs.jsonl",
+      "executive/source-ocr.jsonl",
+      "executive/transactions.jsonl",
+      "legislative/filings.jsonl",
+      "legislative/historical-backfill.jsonl",
+      "legislative/pending-review.jsonl",
+      "legislative/purchases.jsonl",
+      "legislative/runs.jsonl",
+      "legislative/source-ocr.jsonl",
+      "legislative/transactions.jsonl"
+    ],
+    "executive_ids_preserved": {
+      "seen_filings": {
+        "before": 3,
+        "after": 3
+      },
+      "seen_reviews": {
+        "before": 1568,
+        "after": 1568
+      },
+      "seen_trades": {
+        "before": 529,
+        "after": 529
+      }
+    },
+    "original_ocr_evidence_preserved": true,
+    "new_transactions": 0,
+    "new_ocr_receipt_counts": {
+      "access_required": 9,
+      "needs_review": 1
+    }
+  },
+  "source_ocr": {
+    "status": "success",
+    "activity": "complete",
+    "enabled": true,
+    "detail": "OCR maintenance completed; documents needing interpretation or access are tracked separately.",
+    "run_id": "executive:ed0d3637-c2e5-4a61-8c65-d026dcc01d54",
+    "stale_after_minutes": 60,
+    "schema_version": 1,
+    "stage": "complete",
+    "inventory_count": 4176,
+    "eligible_count": 320,
+    "documents_attempted": 5,
+    "documents_completed": 0,
+    "extractions_reused": 5,
+    "acknowledgements_replayed": 0,
+    "pages_completed": 0,
+    "pages_expected": 0,
+    "transactions_appended": 2,
+    "complete_count": 2,
+    "needs_review_count": 3,
+    "access_required_count": 0,
+    "retry_delayed_count": 0,
+    "not_applicable_count": 0,
+    "ready_remaining": 315,
+    "review_remaining": 330,
+    "access_remaining": 3841,
+    "retry_remaining": 0,
+    "unobserved_remaining": 2397,
+    "request_only_remaining": 3832,
+    "unobserved_access_remaining": 2397,
+    "unchanged_documents": 0,
+    "source_unavailable_remaining": 9,
+    "started_at": "2026-10-07T14:11:05.109462Z",
+    "heartbeat_at": "2026-10-07T14:11:12.407921Z",
+    "finished_at": "2026-10-07T14:11:12.407910Z",
+    "oldest_ready_at": "2026-08-26T12:14:33Z",
+    "intake_status": "ok",
+    "cleanup_status": "not_needed",
+    "engine_version": "source-ocr-v2",
+    "duration_seconds": 1.92,
+    "age_minutes": 12.443201499999999,
+    "committed_pass": true,
+    "required": true,
+    "last_completed_pass_at": "2026-10-07T14:11:12.407910Z",
+    "last_success_at": "2026-10-07T14:11:12.407910Z",
+    "last_document_completed_at": "2026-09-30T09:42:56.762592Z",
+    "last_transaction_import_at": "2026-10-07T14:11:12.407910Z",
+    "last_transaction_import_count": 2
+  },
+  "source_exceptions": {
+    "fresh_http_404": 9,
+    "document_byte_limit": 1,
+    "oversized_document_bytes": 26880519
+  },
+  "initial_acceptance_failure": {
+    "assertion": "last_transaction_import_count == 10 and last_transaction_import_at",
+    "observed_before_264": "Not recorded; bounded SQL history omitted the earlier committed import",
+    "resolution": "PR264 adds a provenance-validated transaction-import anchor. The initial ten-import query was verified read-only before deployment. The 14:11 scheduled run then legitimately advanced the latest import to two; both committed imports are independently verified and retained."
+  },
+  "acceptance_expectation_update": {
+    "initial_count": 10,
+    "published_latest_count": 2,
+    "reason": "The normal 14:11 scheduled Executive run imported two additional transactions while the release waited for AI. The first post-release fixed-count assertion failed and is retained in finish-release.log. The updated assertion verifies the exact newer timestamp and both committed import receipts."
+  },
+  "browser_acceptance": {
+    "checked_at": "2026-10-07T14:28:25.698498+00:00",
+    "url": "http://127.0.0.1:8765/",
+    "views": [
+      "Overview",
+      "Operations"
+    ],
+    "expected_last_import_count": 2,
+    "expected_last_import_at": "2026-10-07T14:11:12.407910Z",
+    "prior_ten_imports_visible_in_run_history": true,
+    "executive_ocr": "Successful",
+    "technical_retries": 0
+  },
+  "limits": {
+    "automatic_pages": 30,
+    "manual_page_exemption": true,
+    "bytes": 20971520
+  },
+  "backup": {
+    "path": "C:\\ProgramData\\PolitiTrack\\backups\\routine-20261007T000002Z-d100a329.base",
+    "reverified_at": "2026-10-07T13:57:29.301703Z",
+    "exit_code": 0
+  },
+  "private_receipt_sha256": {
+    "apply-20261007T142123Z\\release-receipt.json": "d25c02f0841cb7638c18a9f4fe9e7ad98f199f0cad5c3e1cf69e012b6224e506",
+    "verified-after-20261007T142424Z\\acceptance.json": "10d459f51116cb72b4cbf1d823d92740a01e406eb21f0538a2e495748c354052"
+  },
+  "next_action": "Normal existing schedules continue; unavailable sources and the oversized document remain explicit exceptions."
+}

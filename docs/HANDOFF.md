@@ -1,37 +1,89 @@
 # PolitiTrack active handoff
 
-## October 7 #261/#263 follow-up — OCR restored; import-history acceptance caught a missing anchor
+## October 7 #261 follow-through complete - OCR health and imported transactions visible
 
-PR #263 installed at 14:00:19 UTC on Beast as
-`7c4fd4850466d38ef131da203d5c86626dbf8ee7`. The existing Executive writer completed
-two five-document passes at 14:01:44/14:01:53 UTC. All ten ambiguous retries were
-rechecked: nine fresh HTTP404 outcomes became access-required; the 26,880,519-byte
-PDF became document_byte_limit review-required. Technical retries are zero.
-The limits, source receipts, IDs, schedules, SHADOW and notification suppressions
-remain unchanged. Backup verification passed at 13:57:29 UTC. Database PID41008
-stayed running. Fresh frozen baseline: AI1444/Dashboard2915/Executive1115/
-Legislative2453, 7,927 headers.
+Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`, `main`.
+PRs #263 and #264 are merged. Beast runs
+`1fc7b71182aeb5eb7f47325635dde34d417c1180`; the final documentation commit is
+evidence-only and does not require another deployment. Tested head
+`27665ca3152fece03e444276cfb8494b2410281f`, CI merge
+`9ef41c36e0cfefbb1e8fb620d681da942458ef98`, and installed merge share tree
+`d59ed55db7bf2e01e6dadb26f9390e8ddc691961`.
 
-Dashboard2916 published at 14:03:42 UTC and reports healthy Executive OCR.
-Read-only continuity verification at 14:04:45 UTC preserved all 7,927 headers,
-17 JSONL prefixes, all original OCR evidence and filing/review/trade IDs.
-Executive1117 retains 529 seen trades. There are no additional imports in these
-two classification passes. The earlier ten imports are retained unchanged.
+The ten retained ambiguous MonitorError retries were freshly rechecked through
+the ordinary five-document Executive batches: nine official OGE URLs returned
+HTTP404 and became access-required; one 26,880,519-byte PDF became
+document_byte_limit review-required. There are **zero technical retries**.
+The automatic 30-page limit, manual page exemption and 20 MiB ceiling are intact.
+Source blockers are not reported as successful extractions. Existing OCR receipts
+remain append-only. The bounded official download now preserves safe HTTP and
+size outcomes; transient failures retain normal backoff.
 
-Final live acceptance correctly FAILED its last-import assertion: the bounded
-history projection selected collector/completed/healthy/extraction anchors but
-omitted the earlier degraded-yet-committed transaction import. Do not claim the
-new history label is complete. The follow-up adds one provenance-validated
-transaction-import anchor to that read-only query and exercises the real
-PostgreSQL query beyond the seven-attempt window, including malformed, failed and
-mismatched receipt rejection. No data migration or writer change is needed.
+The first #263 live assertion correctly failed because the last-import history
+query omitted the degraded-but-committed ten-transaction import. PR #264 adds an
+independently provenance-validated import anchor outside the seven-attempt
+window. The real PostgreSQL regression rejects failed and mismatched receipts.
+The historical ten-import anchor was verified read-only against the real database
+before deployment. The normal 14:11 UTC Executive run then imported **two more
+transactions**, so the original fixed-ten latest-import assertion correctly
+failed again after publication. That result remains in finish-release.log. The
+final acceptance explicitly verifies both committed import receipts and the
+exact newer timestamp; it does not treat the old expected count as current.
+Executive OCR is successful, technical retries are zero, and **Last transaction
+import: 2 transactions** points to `2026-10-07T14:11:12.407910Z`
+(October 7, 10:11 AM EDT). The prior ten imports at 9:14 AM remain in run history.
+Overview and Operations were checked in the user's existing Chrome tab.
+Later passes with zero new transactions do not erase a prior import anchor.
 
-Branch `codex/executive-ocr-import-history-20261007` starts from the installed
-#263 merge. Validate the exact follow-up commit, install through the same native
-boundary, republish Dashboard and rerun the unchanged import-history assertion.
-Private evidence remains under
-`C:\Users\maglo\PolitiTrack-work\executive-ocr-health-operations`.
-The initial acceptance failure is preserved; it must not be relabeled as passed.
+Deployment used the same pinned native installer and fresh frozen exports.
+The first #264 attempt at 14:15 UTC exited before any service/source change
+because the existing AI job still held its writer lock. The subsequent attempt
+waited for normal completion. No running producer was killed. The physical
+nightly backup was reverified at 13:57:29 UTC (exit 0); Database PID41008 stayed
+running across both releases. Only the installed source revision changed in
+configuration; the inherited generic log wording about SHADOW refresh is not a
+configuration change. SHADOW, alert/notification suppressions, services and
+schedules remain intact.
+
+Final read-only continuity check at `2026-10-07T14:25:20.594372+00:00` preserves
+**7,935** prior snapshot headers, all **17** JSONL
+prefixes, original OCR evidence, and all filing/review/trade IDs. The earlier
+#263 verification also preserved all 7,927 pre-release headers. Executive keeps
+**531** seen trades;
+no additional transaction import is claimed for the source-classification runs.
+The final export has 7,936 headers, zero broken
+links and verified snapshot round trips. Native snapshots and their committed
+Runtime v2 producer receipts remain the state authority; no GitHub artifact was
+used as production state.
+
+| Namespace | Generation | Snapshot ID | SHA256 |
+| --- | ---: | --- | --- |
+| ai | 1445 | `05baedc4-1fb6-4411-85d9-c95c7cb7cfb9` | `6e07aa33e0196d19d521ca725241c4cc74d439c82a3de6c462ec31b3d2948bd8` |
+| dashboard | 2918 | `9e47888e-712f-43c7-8c05-e3d35b9a1648` | `75c067fd794459093e2091c037a63a8720f69d4588a7057bea5a6ed220349874` |
+| executive | 1118 | `1951968c-984e-458a-a344-17470b6e2758` | `8eae84a92db39e4c6c3386421003f90571a1e5d9d4bf1fb594aa06eceb898b11` |
+| legislative | 2455 | `b8692202-1805-417e-a050-c32981dff4ac` | `c44abc126a8655163e135bd59c04bfeb2f95636f37f9b27736e88a194a27ec8a` |
+
+All exact-head Actions attempt 1 checks passed:
+[Runtime v2 37634317985](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37634317985)
+(889 passed, 2 skipped),
+[Source OCR 37634318055](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37634318055)
+(436 passed, 1 skipped; 8 Node checks and desktop/mobile UI passed), and
+[Current Opportunity 37634317962](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/37634317962).
+Local follow-up: 44 passed, 2 PostgreSQL skips; native wrapper: 3 passed.
+Browser CI artifact `11488480121` has SHA256
+`fb98e1f35c63afe921666c13dcf1aaa18ef090d1bccb6f02702cc093d7d2140d`.
+
+Full sanitized evidence, exact source-branch snapshot receipts and hashes:
+[`docs/validation/executive-ocr-health-20261007.json`](validation/executive-ocr-health-20261007.json).
+Private deployment exports and logs remain in the two
+`executive-ocr-health-operations` / `executive-ocr-import-history-operations`
+directories under `C:\Users\maglo\PolitiTrack-work`.
+
+**Next safe action:** let the existing schedules continue. Nine unavailable
+official documents and the oversized PDF remain explicit source/review
+exceptions; no relaxed limits, rebaseline, cloud writer, new alert integration,
+or new owner approval is needed. Earlier status sections below are historical
+and superseded by this verified result.
 
 ## October 7 #261 follow-up — Correct source-unavailable/size-limit reporting and expose imports
 
