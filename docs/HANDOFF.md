@@ -1,65 +1,69 @@
 # PolitiTrack active handoff
 
-## October 7 UTC / October 6 Eastern #261 — Fresh preflight verified; device disconnected before approval
+## October 7 #261 — Repair installed on Beast; ten real OCR transactions committed
 
-Resumed through Remote Desktop Commander on Beast, device
-`2cf9a73a-facb-4848-88c6-52344ff96055`. Canonical repository ID 1349678672,
-`maglothinm/MyETF-Intelligence`, default branch `main`, was independently verified.
-PR #262 is merged at `64d79157a1ba3954be4ef05af436b2ebc93590c8`.
-Staged current source `e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f` differs from
-CI-tested `5ac40141868164126fcbbcb50e0168026865f677` only in HANDOFF/PROJECT_STATE.
-All four exact-head CI runs were independently confirmed successful.
+The owner launched the reviewed release through Administrator PowerShell after
+RDC authentication failed and this chat's execution approvals repeatedly aborted.
+The earlier unelevated attempt stopped at its administrator check. A PowerShell
+exit-code capture defect in the proposed launcher was corrected and checked with
+Windows PowerShell 5.1 (exit 0 and exit 7) before the elevated deployment.
 
-Installed HEAD was still `e01d03be8c2e8f91178a8d3fc502ed952b5f914b`; Database,
-Scheduler and Web were Running/Automatic. Tracked source was unchanged; the
-existing untracked `legislative-source-status.json` was preserved.
+Installed application source is **e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f**,
+verified ready at **13:14:39 UTC**. This is the pinned #262 repair plus documentation,
+from canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`, `main`.
+Canonical main at inspection was `e1d379e83a6f7e19646be9bc0ed7bd5bba752a60`; its two commits
+after the pinned release change only HANDOFF/PROJECT_STATE. All four exact-tested-head
+CI workflows on `5ac40141868164126fcbbcb50e0168026865f677` remain successful.
+The original installer and #261 wrapper hashes match the staged handoff; all three
+wrapper checks passed again in the elevated run. The earlier additional native
+pytest/Node rerun outcome was not recovered and is not newly claimed as passed.
 
-Fresh read-only four-head export at 2026-10-07T00:49:44Z completed successfully:
-AI1417, Dashboard2863, Executive1088, Legislative2400. All 7,768 snapshot headers
-have unbroken parent chains, and all four archive hashes round-trip exactly.
-This is preflight, not a drained/frozen release baseline. Private receipt:
-`C:\Users\maglo\PolitiTrack-work\executive-ocr-261-operations\preflight-20261007T004943Z\readonly-before\receipt.json`.
+The 78,629,359,208-byte nightly physical backup completed at 00:07:07 UTC and was
+independently reverified at **12:40:52 UTC**, exit **0**, ignoring only the added
+`verified.json` receipt. This is verification of the existing nightly backup.
+The release separately drained writers/backups and created a **new frozen four-head
+export at 13:13:41 UTC**: AI1442, Dashboard2912, Executive1113, Legislative2450.
+All **7,917** historical snapshot headers had intact parent chains; every archive
+round-tripped exactly. Scheduler/Web were paused and resumed using the existing
+service boundary. PostgreSQL PID **41008** stayed unchanged; readiness returned HTTP200.
 
-The nightly physical backup `routine-20261007T000002Z-d100a329.base` records
-78,629,359,208 bytes, completion 00:07:07Z and pg_verifybackup passed. A new
-verification was started. The first invocation identified the subsequently
-added `verified.json` receipt as absent from PostgreSQL's manifest. A separate
-verification excludes only that receipt using `--ignore=verified.json`.
-Its final result was NOT retrieved before disconnect; do not claim the recheck passed.
+Only `source_revision` changed in runtime configuration. SHADOW, both AI delivery
+suppressions, schedules, the automatic 30-page limit and manual-upload exemptions
+remain intact. The base installer's generic flag-change log is inherited wording;
+the #261 wrapper preserved the existing refresh flag and all other settings.
 
-Prepared isolated source checkout:
-`C:\Users\maglo\PolitiTrack-work\executive-ocr-deploy-261-20261007`.
-Operations helpers:
-`C:\Users\maglo\PolitiTrack-work\executive-ocr-261-operations`.
-Pinned `release_261.py` SHA256:
-`e4c98b98e47203136dab75909afa9a7ce13ae0f6c9e11a3c02836ff838fb016f`.
-It reuses the verified existing release implementation
-`f962b5ebadfe9b800998339815f7d628d65a129c6c7807a4fa9500f5ec39abc1`,
-requires OLD e01d03b and TARGET e58c449, retains the entire configuration except
-source_revision, drains existing writers/backups, holds the established locks,
-exports fresh frozen state, and pauses/resumes only existing Scheduler/Web.
-Database, state heads, schedules, automatic page limits and manual exemptions
-are not changed. Acceptance and read-only continuity helpers are prepared.
+The manual acceptance invocation of the existing Executive owner exited **0** at
+**13:14:51 UTC** and committed **Executive1114**:
+snapshot `983804a5-29b2-49c9-8d28-7ec5d17049be`,
+SHA-256 `f62c8e4f89bb3a5f19781442b4d362ba1775b0a73ef4a38d43c0fb8221ba094b`.
+The committed ledger contains **10 new historical transactions** from three completed
+OCR receipts: Eric Scott Turner (1), Randal Quarles (1), Nuria Fernandez (8).
+Two additional OCR receipts remain `needs_review`. These are actual native imports,
+separate from the earlier nine-transaction offline diagnostic. The ordinary collector
+run's zero `transaction_counts.oge` does not override the separately verified OCR
+ledger append.
 
-All 15 existing offline release/drain checks and three wrapper checks passed;
-helpers compile. Additional native focused pytest initially failed because the
-test shell lacked installed Tesseract/Poppler on PATH. A rerun with those installed
-paths progressed without the earlier failures, but its final result and Node
-results were NOT retrieved. Canonical CI remains separately verified.
+Read-only verification completed at **13:15:50 UTC**. It preserved all **7,917**
+previous snapshot headers, all **17** checked AI/Executive/Legislative JSONL prefixes,
+all original Executive filing/review/trade IDs, and every retained OCR-evidence byte.
+Seen trades advanced **519 -> 529**. All four new exports passed round-trip checks;
+**7,918** headers have zero broken parent links. Other heads were unchanged at that
+verification cutoff.
 
-Remote calls then intermittently returned INVALID_ARGUMENT / [object Object].
-The final call explicitly reported no device online and instructed restarting
-Desktop Commander Remote. No deployment apply, Windows elevation prompt, native
-acceptance invocation, service change or configuration change was issued.
-No execution approval is pending; no real imports are claimed by this continuation.
+Private evidence is under
+`C:\Users\maglo\PolitiTrack-work\executive-ocr-261-operations`:
+the release receipt at installed_at 13:14:39 UTC,
+`executive-acceptance-20261007T131442Z.{log,json}`, and
+`verified-after-20261007T131451Z/acceptance.json`.
+A sanitized canonical receipt is
+[`docs/validation/executive-ocr-261-beast-20261007.json`](validation/executive-ocr-261-beast-20261007.json).
 
-Next: reconnect Beast using Desktop Commander Remote, retrieve physical backup
-verification and focused test outcomes, refresh canonical/installed source and
-locks, and recheck the pinned helper. Present normal execution/Windows administrator
-approval to the owner for the reviewed apply action. Apply must take a NEW frozen
-export after draining. Then invoke the existing Executive owner, verify committed
-imports and compare all old headers/ledger prefixes/filing and trade IDs/evidence
-against that frozen baseline with `verify_261.py`. Keep #261 open.
+**Remaining scope:** this proves installation, one successful native Executive
+acceptance run and preserved continuity. It does not establish a later scheduled
+Executive cycle or a newly published dashboard projection. Keep #261 open for that
+follow-through and the remaining unsupported/review-required and access-blocked
+inventory. Do not re-run the installer: it intentionally requires the old revision.
+No pending execution approval or further owner setup is needed for this installed repair.
 
 ## October 6 #261 — Executive OCR repair merged; deployment blocked
 

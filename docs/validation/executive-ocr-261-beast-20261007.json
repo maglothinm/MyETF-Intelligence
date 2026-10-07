@@ -1,0 +1,219 @@
+{
+  "repository_id": 1349678672,
+  "repository": "maglothinm/MyETF-Intelligence",
+  "branch": "main",
+  "issue": 261,
+  "pr": 262,
+  "status": "installed_and_one_native_ocr_acceptance_verified",
+  "installed_source": "e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f",
+  "tested_source": "5ac40141868164126fcbbcb50e0168026865f677",
+  "canonical_main_at_inspection": "e1d379e83a6f7e19646be9bc0ed7bd5bba752a60",
+  "installed_at": "2026-10-07T09:14:39.953418-04:00",
+  "previous_source": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+  "installer_sha256": "f962b5ebadfe9b800998339815f7d628d65a129c6c7807a4fa9500f5ec39abc1",
+  "wrapper_sha256": "e4c98b98e47203136dab75909afa9a7ce13ae0f6c9e11a3c02836ff838fb016f",
+  "physical_backup": {
+    "bytes": 78629359208,
+    "completed_at": "2026-10-06T20:07:07.684751-04:00",
+    "directory": "routine-20261007T000002Z-d100a329.base",
+    "kind": "postgresql16_physical",
+    "manifest_sha256": "4a0c9f1abb02a17f4246872059c479ebe53cf73c62c413daa846f1ab7ca4f447",
+    "pg_verifybackup": "passed",
+    "repository_id": 1349678672,
+    "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+    "started_at": "2026-10-06T20:00:02.965509-04:00",
+    "reverified_at": "2026-10-07T12:40:52.1467408Z",
+    "reverify_exit_code": 0,
+    "verification_ignored_files": [
+      "verified.json"
+    ],
+    "new_physical_backup_created_by_this_release": false
+  },
+  "frozen_baseline": {
+    "cutoff": "2026-10-07T09:13:41.292608-04:00",
+    "heads": {
+      "ai": {
+        "generation": 1442,
+        "snapshot_id": "bb196de3-516d-43ad-8eb1-628880d42249",
+        "sha256": "3468e5803f63e1b88fb724acbf991274afc1f3e4f84beb69c7782de3584bc6ff",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 12:50:19.195075+00",
+        "file_count": 1692
+      },
+      "dashboard": {
+        "generation": 2912,
+        "snapshot_id": "493c4624-2c0b-4f88-8358-012d13360322",
+        "sha256": "1fbfad4dc6455abcdc934ed357e7b2139807123358360b305be64e14fbdc1b34",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 13:03:35.286558+00",
+        "file_count": 267
+      },
+      "executive": {
+        "generation": 1113,
+        "snapshot_id": "0c838e7c-2867-4287-93e2-805c4df81f3b",
+        "sha256": "e2eea6dc8f0a66a756f3421d95790194dcfaed51becb0f1060bcb7439ed06bff",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 13:11:09.34459+00",
+        "file_count": 344
+      },
+      "legislative": {
+        "generation": 2450,
+        "snapshot_id": "dc34ab9c-94a8-467d-90df-250958c4cd98",
+        "sha256": "25fd8826bfca7d02e65d43dcc70f9e6f440182bfd95a7998713f4cf1098c30b1",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 13:05:17.614282+00",
+        "file_count": 925
+      }
+    },
+    "header_count": 7917,
+    "header_sha256": "d82cedfa80eab6f2dc61aff7569e4918577199eb0be701de85b53fbd1366ee87",
+    "broken_links": 0,
+    "round_trip_verified": true,
+    "database_transaction_read_only": true
+  },
+  "acceptance_export": {
+    "cutoff": "2026-10-07T09:14:51.326477-04:00",
+    "heads": {
+      "ai": {
+        "generation": 1442,
+        "snapshot_id": "bb196de3-516d-43ad-8eb1-628880d42249",
+        "sha256": "3468e5803f63e1b88fb724acbf991274afc1f3e4f84beb69c7782de3584bc6ff",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 12:50:19.195075+00",
+        "file_count": 1692
+      },
+      "dashboard": {
+        "generation": 2912,
+        "snapshot_id": "493c4624-2c0b-4f88-8358-012d13360322",
+        "sha256": "1fbfad4dc6455abcdc934ed357e7b2139807123358360b305be64e14fbdc1b34",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 13:03:35.286558+00",
+        "file_count": 267
+      },
+      "executive": {
+        "generation": 1114,
+        "snapshot_id": "983804a5-29b2-49c9-8d28-7ec5d17049be",
+        "sha256": "f62c8e4f89bb3a5f19781442b4d362ba1775b0a73ef4a38d43c0fb8221ba094b",
+        "source_revision": "e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f",
+        "created_at": "2026-10-07 13:14:51.06008+00",
+        "file_count": 344
+      },
+      "legislative": {
+        "generation": 2450,
+        "snapshot_id": "dc34ab9c-94a8-467d-90df-250958c4cd98",
+        "sha256": "25fd8826bfca7d02e65d43dcc70f9e6f440182bfd95a7998713f4cf1098c30b1",
+        "source_revision": "e01d03be8c2e8f91178a8d3fc502ed952b5f914b",
+        "created_at": "2026-10-07 13:05:17.614282+00",
+        "file_count": 925
+      }
+    },
+    "header_count": 7918,
+    "header_sha256": "0715c60a587d8d713b80bba30ec37a16bed5f12688695ec8439ff8c55abfee53",
+    "broken_links": 0,
+    "round_trip_verified": true,
+    "database_transaction_read_only": true
+  },
+  "configuration_changes": [
+    "source_revision"
+  ],
+  "database_pid_unchanged": 41008,
+  "ready_http": 200,
+  "manual_executive_acceptance": {
+    "started_at": "2026-10-07T13:14:42.422359+00:00",
+    "finished_at": "2026-10-07T13:14:51.223292+00:00",
+    "exit_code": 0,
+    "new_transactions": 10,
+    "transaction_kind": "historical OCR imports",
+    "completed_ocr_receipts": 3,
+    "needs_review_receipts": 2,
+    "filers": [
+      {
+        "name": "Turner, Eric Scott",
+        "transactions": 1
+      },
+      {
+        "name": "Quarles, Randal K",
+        "transactions": 1
+      },
+      {
+        "name": "Fernandez, Nuria",
+        "transactions": 8
+      }
+    ]
+  },
+  "continuity": {
+    "verified_at": "2026-10-07T09:15:50.627978-04:00",
+    "old_headers_preserved": 7917,
+    "ledger_prefixes_preserved": [
+      "ai/analyses.jsonl",
+      "ai/information-value-at-discovery.jsonl",
+      "ai/runs.jsonl",
+      "executive/filings.jsonl",
+      "executive/historical-backfill.jsonl",
+      "executive/pending-review.jsonl",
+      "executive/purchases.jsonl",
+      "executive/runs.jsonl",
+      "executive/source-ocr.jsonl",
+      "executive/transactions.jsonl",
+      "legislative/filings.jsonl",
+      "legislative/historical-backfill.jsonl",
+      "legislative/pending-review.jsonl",
+      "legislative/purchases.jsonl",
+      "legislative/runs.jsonl",
+      "legislative/source-ocr.jsonl",
+      "legislative/transactions.jsonl"
+    ],
+    "executive_ids_preserved": {
+      "seen_filings": {
+        "before": 3,
+        "after": 3
+      },
+      "seen_reviews": {
+        "before": 1568,
+        "after": 1568
+      },
+      "seen_trades": {
+        "before": 519,
+        "after": 529
+      }
+    },
+    "original_ocr_evidence_preserved": true
+  },
+  "checks": {
+    "current_wrapper_tests_passed": 3,
+    "previous_release_drain_checks_passed_as_recorded_in_handoff": 15,
+    "additional_native_pytest_node_rerun_outcome": "not_retrieved",
+    "exact_head_ci": [
+      {
+        "id": 37501086300,
+        "name": "Source upload and OCR tests",
+        "conclusion": "success"
+      },
+      {
+        "id": 37501086271,
+        "name": "Runtime v2 safety tests",
+        "conclusion": "success"
+      },
+      {
+        "id": 37501086272,
+        "name": "Investor Edge tests",
+        "conclusion": "success"
+      },
+      {
+        "id": 37501086243,
+        "name": "Current Opportunity offline tests",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "private_receipt_hashes": {
+    "release": "37d64c0a2417f45b1b139d90261b652663b2399d4013fd1bb0d3ecf1287f9c6f",
+    "acceptance": "1531443df756ecf041296da54ad4d70c03782c5af5f593de6d4b810cb985751a",
+    "backup_recheck": "4d94cc531aeee7a8799083f25661f618dae04fcd9cd81d92dd313912d8bdc4d1"
+  },
+  "remaining_unverified": [
+    "subsequent scheduled Executive cycle",
+    "post-acceptance dashboard projection"
+  ],
+  "issue_left_open": true
+}
