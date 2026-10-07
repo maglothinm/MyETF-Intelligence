@@ -215,15 +215,17 @@ def test_ocr_download_reclassifies_only_official_pdf_not_form201(tmp_path, monke
     from unittest.mock import Mock
     pdf = {**FILING, "source": "oge", "branch": "executive", "access_mode": "request",
            "source_url": "https://extapps2.oge.gov/201/$FILE/test.pdf"}
-    resolve = Mock(return_value=b"%PDF-test")
-    monkeypatch.setattr(tracker, "resolve_oge_pdf", resolve)
+    response = SimpleNamespace(status_code=200, headers={}, raise_for_status=lambda: None,
+                               iter_content=lambda _: iter([b"%PDF-test"]), close=lambda: None)
+    transport = Mock(return_value=response)
+    monkeypatch.setattr(worker.requests.Session, "get", transport)
     config = worker._configuration(tmp_path, "executive", ENV)
     assert worker.download(pdf, config) == b"%PDF-test"
-    assert resolve.call_args.args[1]["access_mode"] == "direct"
-    resolve.reset_mock()
+    assert transport.call_args.args[0] == pdf["source_url"]
+    transport.reset_mock()
     with pytest.raises(OCRError, match="access_required"):
         worker.download({**pdf, "source_url": "https://extapps2.oge.gov/201%20Request?Document=test.pdf"}, config)
-    resolve.assert_not_called()
+    transport.assert_not_called()
 
 
 def test_shadow_cannot_read_uploads_or_download_sources(tmp_path):
@@ -587,3 +589,96 @@ def test_request_only_inventory_is_blocked_without_fabricated_attempt_receipts(t
     assert health["eligible_count"] == health["ready_remaining"] == health["documents_attempted"] == 0
     assert (directory / "source-ocr.jsonl").read_bytes() == before
 
+
+
+@pytest.mark.parametrize("status,expected", [(404, "access_required"), (410, "access_required"), (503, "retry_delayed")])
+def test_oge_http_status_reclassifies_only_after_fresh_response_and_keeps_backoff(tmp_path, monkeypatch, status, expected):
+    from runtime_v2 import source_ocr_worker as worker
+    directory = source_state(tmp_path)
+    filing = {**FILING, "source": "oge", "branch": "executive", "access_mode": "direct",
+              "source_url": "https://extapps2.oge.gov/retained.pdf"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    prior = {"filing_key": filing["filing_key"], "source_url": filing["source_url"], "version": VERSION,
+             "document_policy_version": DOCUMENT_POLICY_VERSION, "status": "retry_delayed",
+             "error_code": "MonitorError", "origin": "official_download", "attempts": 11,
+             "next_attempt_at": "2099-01-01T00:00:00Z"}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    prefix = (directory / "source-ocr.jsonl").read_bytes()
+    state_before = (directory / "state.json").read_bytes()
+    closed = []
+    monkeypatch.setattr(worker.requests.Session, "get", lambda *a, **k: SimpleNamespace(
+        status_code=status, close=lambda: closed.append(True)))
+    report = {}
+    run_pass(directory, "executive", ENV, health=report, extractor=lambda *a, **k: pytest.fail("HTTP error sent to OCR"))
+    receipt = tracker.read_jsonl(directory / "source-ocr.jsonl")[-1]
+    assert receipt["status"] == expected
+    assert receipt["error_code"] == f"source_http_{status}"
+    assert receipt["transport_policy_version"] == worker.TRANSPORT_POLICY_VERSION
+    assert receipt["attempts"] == 12 and closed == [True]
+    assert report["source_unavailable_remaining"] == (1 if status in {404, 410} else 0)
+    assert report["retry_remaining"] == (1 if status == 503 else 0)
+    assert (directory / "source-ocr.jsonl").read_bytes().startswith(prefix)
+    assert (directory / "state.json").read_bytes() == state_before
+    assert not (directory / "transactions.jsonl").exists()
+    run_pass(directory, "executive", ENV, loader=lambda *a: pytest.fail("corrected-policy backoff ignored"),
+             extractor=lambda *a, **k: pytest.fail("OCR repeated"))
+
+
+@pytest.mark.parametrize("change", [
+    {"error_code": "Timeout"}, {"origin": "user_upload"}, {"version": "old"},
+    {"source_url": "https://extapps2.oge.gov/other.pdf"},
+    {"transport_policy_version": "official-document-transport-v1"},
+])
+def test_transport_policy_upgrade_does_not_retry_unrelated_history(tmp_path, change):
+    directory = source_state(tmp_path)
+    filing = {**FILING, "source": "oge", "branch": "executive", "access_mode": "direct",
+              "source_url": "https://extapps2.oge.gov/retained.pdf"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    prior = {"filing_key": filing["filing_key"], "source_url": filing["source_url"], "version": VERSION,
+             "document_policy_version": DOCUMENT_POLICY_VERSION, "status": "retry_delayed",
+             "error_code": "MonitorError", "origin": "official_download", "attempts": 11,
+             "next_attempt_at": "2099-01-01T00:00:00Z", **change}
+    tracker.append_jsonl(directory / "source-ocr.jsonl", [prior])
+    run_pass(directory, "executive", ENV, loader=lambda *a: pytest.fail("unrelated backoff ignored"),
+             extractor=lambda *a, **k: pytest.fail("unexpected OCR"))
+    assert tracker.read_jsonl(directory / "source-ocr.jsonl") == [prior]
+
+
+@pytest.mark.parametrize("declared", ["101", None, "not-a-number", "1"])
+def test_direct_oge_pdf_byte_limit_is_bounded_and_reviewable(tmp_path, monkeypatch, declared):
+    from runtime_v2 import source_ocr_worker as worker
+    monkeypatch.setattr(worker, "MAX_BYTES", 100)
+    directory = source_state(tmp_path)
+    filing = {**FILING, "source": "oge", "branch": "executive", "access_mode": "direct",
+              "source_url": "https://extapps2.oge.gov/oversized.pdf"}
+    tracker.append_jsonl(directory / "filings.jsonl", [filing])
+    consumed, closed = [], []
+    def chunks(_):
+        consumed.append(True)
+        yield b"%PDF" + b"x" * 97
+    response = SimpleNamespace(status_code=200, headers={} if declared is None else {"Content-Length": declared},
+        raise_for_status=lambda: None, iter_content=chunks, close=lambda: closed.append(True))
+    monkeypatch.setattr(worker.requests.Session, "get", lambda *a, **k: response)
+    report = {}
+    run_pass(directory, "executive", ENV, health=report,
+             extractor=lambda *a, **k: pytest.fail("oversized document sent to OCR"))
+    receipt = tracker.read_jsonl(directory / "source-ocr.jsonl")[-1]
+    assert receipt["status"] == "needs_review" and receipt["error_code"] == "document_byte_limit"
+    assert report["review_remaining"] == 1 and report["retry_remaining"] == 0
+    assert report["documents_completed"] == 0 and not (directory / "transactions.jsonl").exists()
+    assert closed == [True]
+    assert consumed == ([] if declared == "101" else [True])
+
+
+def test_direct_oge_pdf_uses_bounded_bytes_and_preserves_content(tmp_path, monkeypatch):
+    from runtime_v2 import source_ocr_worker as worker
+    data = b"%PDF-test"
+    closed = []
+    response = SimpleNamespace(status_code=200, headers={"Content-Length": str(len(data))},
+        raise_for_status=lambda: None, iter_content=lambda _: iter([data[:4], data[4:]]),
+        close=lambda: closed.append(True))
+    monkeypatch.setattr(worker.requests.Session, "get", lambda *a, **k: response)
+    filing = {**FILING, "source": "oge", "branch": "executive", "access_mode": "direct",
+              "source_url": "https://extapps2.oge.gov/retained.pdf"}
+    assert worker.download(filing, SimpleNamespace(user_agent="TEST")) == data
+    assert closed == [True]

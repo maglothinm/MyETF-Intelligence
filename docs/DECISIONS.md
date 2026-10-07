@@ -2058,3 +2058,18 @@ this even before a receipt exists without inventing an OCR attempt. Preserve raw
 unobserved counts, old receipts, review acknowledgements and trusted transaction
 sets. No admission/page limits, writer ownership, historical notification rules,
 or approval boundaries change. Owner consent does not bypass a tool policy rejection.
+
+
+## 2026-10-07 — Source availability and admission limits are not OCR engine failures (#261)
+
+An explicit official HTTP404/410 is a missing source document, not a successful
+extraction or an internal OCR failure. The unchanged byte/page ceilings require
+review of oversized documents. Keep the original receipt and recheck periodically;
+never fabricate a replacement document or infer an HTTP status from MonitorError.
+Version a narrowly scoped one-time transport recheck for ambiguous legacy retries,
+then retain normal backoff and the existing batch/writer contracts.
+
+Show committed transaction-import progress independently of new optical extraction.
+Preserve the latest proven import in the dashboard even when subsequent passes
+append zero rows or encounter an independent failure. Never let displayed progress
+override a genuine failure, unconfirmed commit, stale heartbeat or unknown evidence.

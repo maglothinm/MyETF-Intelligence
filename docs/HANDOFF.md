@@ -1,5 +1,39 @@
 # PolitiTrack active handoff
 
+## October 7 #261 follow-up — Correct source-unavailable/size-limit reporting and expose imports
+
+The owner requested a complete repair after the Overview continued to show
+Executive OCR degraded. Read-only checks of all ten retained technical retries
+found nine official OGE URLs returning HTTP404 and the remaining Trump PDF
+returning HTTP200 with Content-Length 26,880,519 bytes (above the unchanged
+20 MiB ceiling). The prior generic resolver collapsed both into MonitorError.
+
+The follow-up source change preserves explicit official HTTP error codes, maps
+404/410 to source-access blockers, and streams direct OGE PDFs under the existing
+byte ceiling. Oversize documents remain review-required; transient HTTP/network,
+OCR, intake and cleanup failures remain technical failures. It does not loosen
+the automatic 30-page limit or manual upload policy.
+
+A transport-policy version allows one fresh, bounded recheck only for matching
+old official OGE MonitorError retry receipts. It does not classify by assumption,
+reinitialize state, rewrite earlier receipts or retry unrelated backoffs.
+After an attempt, normal retry/revalidation intervals apply. The existing five-
+document batch limit and sole Runtime v2 writer remain unchanged.
+
+Both Overview and Operations now show committed per-pass imports, extraction reuse,
+and the latest proven transaction import retained across later zero-import passes.
+Source-unavailable inventory is separate from engine failures; run tooltips show
+imports and outstanding technical retries. Unknown older counters remain unknown.
+
+The isolated branch is `codex/executive-ocr-health-20261007`, based on canonical
+main `c1690f1301d0230deee3491fec3f308d5e0a443a` (repository ID1349678672).
+Fifteen new focused Python regressions and eight Node health tests passed on Beast.
+Broader validation and exact-head CI are pending. This follow-up is not yet installed;
+the live application remains `e58c449c0cd198246b6a7b50cadd9f5dbef3dd9f`.
+The prior ten imports and continuity evidence below remain valid. Deployment must
+use the existing pinned native service boundary, a fresh frozen export, and post-
+deployment Executive/continuity/dashboard acceptance.
+
 ## October 7 #261 — Repair installed on Beast; ten real OCR transactions committed
 
 The owner launched the reviewed release through Administrator PowerShell after

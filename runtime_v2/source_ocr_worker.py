@@ -22,6 +22,9 @@ from scripts.oge_access import is_direct_oge_pdf_url, normalize_oge_listing_acce
 from scripts.source_ocr import VERSION, DOCUMENT_POLICY_VERSION, MAX_BYTES, MAX_PAGES, OCRError, extract, now
 from scripts.source_ocr_oge import PARSER_VERSION as OGE_PARSER_VERSION, OGETableError, parse_verified_oge
 
+TRANSPORT_POLICY_VERSION = "official-document-transport-v1"
+SOURCE_UNAVAILABLE_CODES = frozenset({"source_http_404", "source_http_410"})
+
 SENATE_LAYOUT_REVIEW_CODES = frozenset({"PaperFilingError", "page_image_download_requires_review"})
 
 
@@ -49,6 +52,10 @@ class OfficialSession(requests.Session):
             if response.status_code in {401, 403}:
                 response.close()
                 raise OCRError("access_required")
+            if response.status_code >= 400:
+                code = f"source_http_{response.status_code}"
+                response.close()
+                raise OCRError(code)
             return response
         raise OCRError("redirect_limit")
 
@@ -76,7 +83,7 @@ def download(filing, config):
             raise OCRError("access_required")
     with OfficialSession(source) as session:
         session.headers["User-Agent"] = config.user_agent
-        if source == "oge":
+        if source == "oge" and not is_direct_oge_pdf_url(report.get("document_url", "")):
             data = tracker.resolve_oge_pdf(session, report, config)
             if data is None:
                 raise OCRError("access_required")
@@ -84,6 +91,14 @@ def download(filing, config):
         response = session.get(filing["source_url"], timeout=(10, 30))
         try:
             response.raise_for_status()
+            # Reject oversized PDFs before downloading; a missing or inaccurate
+            # header still cannot bypass the streaming byte ceiling below.
+            try:
+                declared_size = int(response.headers.get("Content-Length", "0"))
+            except (TypeError, ValueError):
+                declared_size = 0
+            if declared_size > MAX_BYTES:
+                raise OCRError("document_byte_limit")
             chunks, total = [], 0
             for chunk in response.iter_content(64 * 1024):
                 total += len(chunk)
@@ -297,6 +312,18 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
                               and receipt.get("origin", "official_download") == "official_download")
                              or (receipt.get("error_code") == "access_required" and filing.get("source") == "oge"
                                  and is_direct_oge_pdf_url(str(filing.get("source_url") or "")))))
+        # Recheck only the old opaque OGE transport failures once under the
+        # corrected policy. Classification requires a fresh response; no old
+        # MonitorError is assumed to mean a missing or oversized document.
+        transport_retry = (filing.get("source") == "oge"
+                           and is_direct_oge_pdf_url(str(filing.get("source_url") or ""))
+                           and receipt.get("source_url") == filing.get("source_url")
+                           and receipt.get("version") == VERSION
+                           and receipt.get("origin", "official_download") == "official_download"
+                           and receipt.get("status") == "retry_delayed"
+                           and receipt.get("error_code") == "MonitorError"
+                           and receipt.get("transport_policy_version") != TRANSPORT_POLICY_VERSION)
+        policy_retry = policy_retry or transport_retry
         changed = receipt.get("source_url") != filing.get("source_url") or receipt.get("version") != VERSION
         parser_retry = (filing.get("source") == "oge"
                         and receipt.get("origin", "official_download") == "official_download"
@@ -340,6 +367,9 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         for target, status in (("review_remaining", "needs_review"), ("access_remaining", "access_required"), ("retry_remaining", "retry_delayed")):
             metrics[target] = sum(row.get("status") == status for row in current)
         metrics["access_remaining"] += sum(receipts.get(key, {}).get("status") != "access_required" for key in request_only)
+        metrics["source_unavailable_remaining"] = sum(
+            row.get("status") == "access_required" and row.get("error_code") in SOURCE_UNAVAILABLE_CODES
+            for row in current)
         metrics["request_only_remaining"] = len(request_only)
         metrics["unobserved_remaining"] = sum(not row for row in current)
         metrics["unobserved_access_remaining"] = sum(not receipts.get(key) for key in request_only)
@@ -357,6 +387,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
         prior = receipts.get(key, {})
         receipt = {"filing_key": key, "source_url": filing["source_url"], "version": VERSION,
                    "document_policy_version": DOCUMENT_POLICY_VERSION,
+                   "transport_policy_version": TRANSPORT_POLICY_VERSION,
                    "attempted_at": now(), "attempts": int(prior.get("attempts", 0)) + 1,
                    "origin": "user_upload" if upload else "official_download", "status": "retry_delayed"}
         if filing.get("source") == "oge":
@@ -451,7 +482,7 @@ def run_pass(directory: Path, branch: str, environment, pending_uploads=(), *, l
             invalid_document = code in {"document_byte_limit", "document_page_limit", "document_pixel_limit", "native_text_limit",
                                         "invalid_or_encrypted_pdf", "invalid_image", "unsupported_image_format", "document_inspection_limit"}
             layout_review = code in {"PaperFilingError", "page_image_download_requires_review", "unsupported_scanned_layout", "unsupported_confirmation_layout"}
-            receipt["status"] = "needs_review" if evidence is not None or invalid_document or layout_review else "not_applicable" if code == "native_html_not_applicable" else "access_required" if code in {"access_required", "SenateAccessDenied"} else "retry_delayed"
+            receipt["status"] = "needs_review" if evidence is not None or invalid_document or layout_review else "not_applicable" if code == "native_html_not_applicable" else "access_required" if code in {"access_required", "SenateAccessDenied"} | SOURCE_UNAVAILABLE_CODES else "retry_delayed"
             if receipt["status"] in {"retry_delayed", "access_required"}:
                 delay = min(7 * 86400, 300 * 2 ** min(receipt["attempts"], 11))
                 receipt["next_attempt_at"] = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat().replace("+00:00", "Z")

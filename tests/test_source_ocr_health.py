@@ -305,3 +305,31 @@ def test_uncommitted_or_invalid_document_does_not_advance_history(changes, run_c
     assert health["last_completed_pass_at"] is None
     assert health["last_success_at"] is None
     assert health["last_document_completed_at"] is None
+
+
+def test_latest_committed_import_remains_visible_after_zero_import_or_failed_pass():
+    imported = {**RUN, "id": "imported", "source_ocr_metrics": metrics(
+        transactions_appended=10, extractions_reused=5, documents_completed=0, retry_remaining=10)}
+    later = {**RUN, "id": "later", "source_ocr_metrics": metrics(
+        heartbeat_at="2026-09-17T19:59:30Z", finished_at="2026-09-17T19:59:30Z",
+        transactions_appended=0, source_unavailable_remaining=9, access_remaining=9, review_remaining=1)}
+    result = branch_health([later], NOW, history=[imported, later])
+    assert result["status"] == "success" and result["transactions_appended"] == 0
+    assert result["source_unavailable_remaining"] == 9
+    assert result["last_transaction_import_at"] == "2026-09-17T19:59:10Z"
+    assert result["last_transaction_import_count"] == 10
+    assert result["last_document_completed_at"] is None  # Cached interpretation is not a new extraction.
+    failed = {**later, "id": "failed", "status": "failure", "source_ocr_metrics": metrics(transactions_appended=999)}
+    result = branch_health([failed], NOW, history=[imported, later, failed])
+    assert result["status"] == "unknown"
+    assert result["last_transaction_import_count"] == 10
+
+
+def test_missing_new_source_counter_remains_unknown_and_invalid_import_is_not_published():
+    assert "source_unavailable_remaining" not in safe_metrics(metrics())
+    with pytest.raises(ValueError):
+        safe_metrics(metrics(source_unavailable_remaining=-1))
+    invalid = {**RUN, "state_evidence": False, "source_ocr_metrics": metrics(transactions_appended=10)}
+    result = branch_health([invalid], NOW)
+    assert result["last_transaction_import_at"] is None
+    assert result["last_transaction_import_count"] is None
