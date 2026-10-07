@@ -1,5 +1,38 @@
 # PolitiTrack active handoff
 
+## October 7 #261/#263 follow-up — OCR restored; import-history acceptance caught a missing anchor
+
+PR #263 installed at 14:00:19 UTC on Beast as
+`7c4fd4850466d38ef131da203d5c86626dbf8ee7`. The existing Executive writer completed
+two five-document passes at 14:01:44/14:01:53 UTC. All ten ambiguous retries were
+rechecked: nine fresh HTTP404 outcomes became access-required; the 26,880,519-byte
+PDF became document_byte_limit review-required. Technical retries are zero.
+The limits, source receipts, IDs, schedules, SHADOW and notification suppressions
+remain unchanged. Backup verification passed at 13:57:29 UTC. Database PID41008
+stayed running. Fresh frozen baseline: AI1444/Dashboard2915/Executive1115/
+Legislative2453, 7,927 headers.
+
+Dashboard2916 published at 14:03:42 UTC and reports healthy Executive OCR.
+Read-only continuity verification at 14:04:45 UTC preserved all 7,927 headers,
+17 JSONL prefixes, all original OCR evidence and filing/review/trade IDs.
+Executive1117 retains 529 seen trades. There are no additional imports in these
+two classification passes. The earlier ten imports are retained unchanged.
+
+Final live acceptance correctly FAILED its last-import assertion: the bounded
+history projection selected collector/completed/healthy/extraction anchors but
+omitted the earlier degraded-yet-committed transaction import. Do not claim the
+new history label is complete. The follow-up adds one provenance-validated
+transaction-import anchor to that read-only query and exercises the real
+PostgreSQL query beyond the seven-attempt window, including malformed, failed and
+mismatched receipt rejection. No data migration or writer change is needed.
+
+Branch `codex/executive-ocr-import-history-20261007` starts from the installed
+#263 merge. Validate the exact follow-up commit, install through the same native
+boundary, republish Dashboard and rerun the unchanged import-history assertion.
+Private evidence remains under
+`C:\Users\maglo\PolitiTrack-work\executive-ocr-health-operations`.
+The initial acceptance failure is preserved; it must not be relabeled as passed.
+
 ## October 7 #261 follow-up — Correct source-unavailable/size-limit reporting and expose imports
 
 The owner requested a complete repair after the Overview continued to show

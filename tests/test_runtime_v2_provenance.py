@@ -346,7 +346,7 @@ def test_postgres_success_history_is_independent_of_attempt_window_and_rejects_b
     ids = {}
 
     def seed(name, minutes, *, mode='production', kind='snapshot_provenance', status='success',
-             retries=0, ocr=True, document=False, mismatch=None):
+             retries=0, ocr=True, document=False, mismatch=None, transactions=0):
         nonlocal generation
         generation += 1
         run_id, snapshot_id = str(uuid.uuid4()), str(uuid.uuid4())
@@ -355,7 +355,8 @@ def test_postgres_success_history_is_independent_of_attempt_window_and_rejects_b
         digest = f'{generation:064x}'
         stage = {'enabled': True, 'stage': 'complete', 'started_at': started.isoformat(),
                  'heartbeat_at': finished.isoformat(), 'finished_at': finished.isoformat(),
-                 'intake_status': 'ok', 'cleanup_status': 'complete', 'retry_remaining': retries}
+                 'intake_status': 'ok', 'cleanup_status': 'complete', 'retry_remaining': retries,
+                 'transactions_appended': transactions}
         if document:
             stage['last_document_completed_at'] = (finished - timedelta(seconds=1)).isoformat()
         if mismatch == 'ocr_time':
@@ -386,17 +387,18 @@ def test_postgres_success_history_is_independent_of_attempt_window_and_rejects_b
         _create_predecessor_schema(cursor)
         cursor.execute('ALTER TABLE runtime_job_runs ADD COLUMN runtime_mode_evidence jsonb')
         healthy = seed('healthy', 360, document=True)
+        imported = seed('imported', 330, retries=10, transactions=10)
         completed = seed('completed', 300, retries=4, document=True)
         collected = seed('collector', 240, ocr=False)
         # Malformed OCR may accompany a valid collection, but cannot advance OCR.
-        collected = seed('bad_ocr', 230, mismatch='ocr_time', document=True)
+        collected = seed('bad_ocr', 230, mismatch='ocr_time', document=True, transactions=999)
         for i, mismatch in enumerate(['namespace', 'revision', 'chronology', 'hash']):
-            seed(mismatch, 220 - i, mismatch=mismatch)
+            seed(mismatch, 220 - i, mismatch=mismatch, transactions=999)
         seed('shadow', 210, mode='shadow')
         seed('legacy', 209, kind='legacy_unverified')
         seed('future', -1440)
         for i in range(20):
-            seed(f'failed{i}', 120 - i * 5, status='failure')
+            seed(f'failed{i}', 120 - i * 5, status='failure', transactions=999)
         store = PostgresSnapshotStore('postgresql://test')
         store._connect = lambda: SimpleNamespace(cursor=connection.cursor, close=lambda: None)
         cursor.execute('BEGIN READ ONLY')
@@ -406,12 +408,14 @@ def test_postgres_success_history_is_independent_of_attempt_window_and_rejects_b
         assert branch['available'] is True
         assert len(branch['attempts']) == 7
         assert {row['run_id'] for row in branch['successful_attempts']} == {
-            ids['healthy'], ids['completed'], ids['bad_ocr']}
+            ids['healthy'], ids['completed'], ids['bad_ocr'], ids['imported']}
         model = build_insights({'summary': {'generated_utc': as_of.isoformat()}, 'workflow_evidence': evidence})
         executive = model['health']['branches'][1]
         assert executive['last_success_utc'] == collected
         assert executive['source_ocr']['last_success_at'] == healthy
         assert executive['source_ocr']['last_completed_pass_at'] == completed
+        assert executive['source_ocr']['last_transaction_import_at'] == imported
+        assert executive['source_ocr']['last_transaction_import_count'] == 10
         expected_document = (datetime.fromisoformat(completed.replace('Z', '+00:00')) - timedelta(seconds=1)).isoformat().replace('+00:00', 'Z')
         assert executive['source_ocr']['last_document_completed_at'] == expected_document
         # The SQL read and dashboard derivation cannot mutate any receipts.

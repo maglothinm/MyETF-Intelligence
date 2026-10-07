@@ -588,7 +588,7 @@ class PostgresSnapshotStore:
         anchors: dict[str, dict[str, Any]] = {}
         as_of = datetime.now(timezone.utc)
         # No history cutoff: missing or malformed OCR telemetry cannot hide an
-        # earlier valid pass. Only four unique anchors leave this read boundary.
+        # earlier valid pass. Only five unique anchors leave this read boundary.
         for row in cursor.fetchall():
             attempt = _workflow_attempt(row, branch)
             anchors.setdefault("collector", attempt)
@@ -602,6 +602,7 @@ class PostgresSnapshotStore:
                 ("completed", "finished_at", True),
                 ("healthy", "finished_at", health["status"] in {"success", "stale"}),
                 ("document", "last_document_completed_at", bool(health.get("last_document_completed_at"))),
+                ("transaction_import", "finished_at", health.get("transactions_appended", 0) > 0),
             ):
                 if eligible:
                     previous = anchors.get(key)
