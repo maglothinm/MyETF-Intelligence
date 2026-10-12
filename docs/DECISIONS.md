@@ -2109,3 +2109,55 @@ transaction extraction, import a trade, change a technical/source status, bypass
 an admission limit, or acknowledge another person's queue. Changed source versions
 remain reviewable while all prior personal history is retained. Source/CI
 acceptance and installation/live acceptance remain separate evidence.
+
+## 2026-10-12 — Legacy dashboard copies require a fixed, verified cleanup boundary (#265)
+
+Automatic cache retirement applies only to directories owned by the current
+cache instance. Previously retained native copies need a separate one-time
+operation: inventory only exact `polititrack-site-*` candidates under the native
+runtime temporary directory during the established service freeze and export
+boundary. Record the fixed list, root and child identities, contents metadata,
+helper hash and consumer checks. Do not expand that list after services resume.
+
+Quarantine eligible copies on the same volume only after successful source
+installation. Retain the sealed inventory and durable move journal so an
+interrupted operation remains reviewable. After normal services resume, delete
+only the fixed quarantined entries whose identities and contents still match;
+preserve current publications, unrelated paths, new files and unverified or
+changed candidates. Native handle checks must reject reparse points and identity
+changes without preventing unrelated runtime temporary writes.
+
+A cleanup safety failure is explicit and does not undo a valid source release.
+The October 12 optional inventory stopped with `CacheSafetyError`, moved nothing
+and deleted nothing; the source installed successfully. A separately reviewed
+cache-only maintenance window may drain and pause the existing consumers for
+the same fixed inventory and quarantine checks, then resume them before deletion.
+It must not rerun the source installer or change configuration, snapshot heads
+or personal history. Its result requires a separate operational receipt.
+
+Neither tested cleanup code nor a disposable fixture establishes reclaimed
+production space. The observed historical cache accumulation is a real storage
+defect, while the available disk-space evidence does not establish disk exhaustion
+as the dashboard outage cause.
+
+### #265 housekeeping checkpoint after RDC transfer timeout
+
+The application repair, native publication and personal-review acceptance, and
+full continuity verification completed before the separate maintenance helper
+transfer timed out. No native maintenance action was invoked, and no second
+maintenance pause, quarantine or deletion began. The subsequent read-only hash
+and connectivity requests also timed out, with the final connectivity timeout
+at `12:19:24.703234Z`.
+The last direct native readiness observation was HTTP 200 at `12:10:57Z`;
+the device inventory initially retained an Online label with stale last-seen
+evidence and then listed Beast Offline at `12:27Z` with a 15-minute-old last-seen
+observation. This does not prove the computer's power state.
+
+Preserve the installed repair and both successful and interrupted receipts.
+When RDC connectivity returns, inspect queued or late command results and the
+actual helper file hash before issuing another operation. Revalidate the retained
+release/frozen/final evidence and current source, services, configuration and
+state, then use the reviewed cache-only verify/quarantine boundary and separate
+fixed-receipt deletion. Do not reinstall or rebaseline to resume housekeeping.
+Keep #265 open for this remaining cleanup and claim reclaimed space only from
+the actual completed deletion receipt.

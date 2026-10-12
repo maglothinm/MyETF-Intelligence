@@ -1,0 +1,620 @@
+{
+  "schema_version": 1,
+  "repository": {
+    "id": 1349678672,
+    "name": "maglothinm/MyETF-Intelligence",
+    "issue": 265,
+    "implementation_pr": 266
+  },
+  "status": "application_repair_installed_and_live_verified__legacy_cache_cleanup_waiting_for_remote_connection",
+  "source": {
+    "previous_installed": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+    "tested_head": "d64539dee1fbb7d120025ab213d8be8042fb8e37",
+    "ci_merge_head": "7f8f7d8710661e17ecae914cf4fff312848d429e",
+    "installed": "49c4229e69fe07b4570f2eccdc8ccb39cf566382",
+    "verified_common_tree": "82f3c4ef9f55cd4f40a98369bad2b5841c37f059"
+  },
+  "diagnosis": {
+    "original_screenshot": {
+      "endpoint": "http://127.0.0.1:8765/index.html#records",
+      "error": "DASHBOARD_UNAVAILABLE",
+      "exact_request_exception": "not retained in old handler logs"
+    },
+    "reproduced_before_release": {
+      "receipt": "dashboard-http-observation-20261012.json",
+      "sha256": "6d92539adfaabcfdefca4c93a49dae2c94fa0ccefc30f1c584f239bc7ff20745",
+      "samples": 101,
+      "http_503": 48,
+      "http_200": 53,
+      "all_503_had_dashboard_publisher_lock": true,
+      "first_503": "2026-10-12T11:32:05.038679Z",
+      "last_503": "2026-10-12T11:33:40.867342Z",
+      "first_recovered_200": "2026-10-12T11:33:42.886625Z",
+      "snapshot_headers_recorded": false
+    },
+    "legacy_cache_inventory": {
+      "observed_before_release": true,
+      "directories": 1436,
+      "files": 377493,
+      "bytes": 478284210369,
+      "receipt": "readonly-diagnostic-20261012T112455Z.json",
+      "sha256": "df8372fd289e60251a4848be6fb04d22a0ed073ee305565d7c7d6396d9bd4aa9",
+      "disk_exhaustion_observed": false
+    }
+  },
+  "ci": [
+    {
+      "workflow": "Runtime v2 safety tests",
+      "run": 38243123494,
+      "attempt": 1,
+      "job": 114790372620,
+      "conclusion": "success",
+      "pytest_passed": 916,
+      "pytest_skipped": 2,
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123494"
+    },
+    {
+      "workflow": "Source upload and OCR tests",
+      "run": 38243123539,
+      "attempt": 1,
+      "job": 114790359618,
+      "conclusion": "success",
+      "pytest_passed": 492,
+      "pytest_skipped": 1,
+      "node_checks": 8,
+      "review_sources_browser_widths": [
+        1280,
+        390
+      ],
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123539"
+    },
+    {
+      "workflow": "Investor Edge tests",
+      "run": 38243123520,
+      "attempt": 1,
+      "job": 114790359318,
+      "conclusion": "success",
+      "pytest_passed": 808,
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123520"
+    },
+    {
+      "workflow": "Current Opportunity offline tests",
+      "run": 38243123492,
+      "attempt": 1,
+      "conclusion": "success",
+      "matrix": [
+        {
+          "python": "3.11",
+          "job": 114790359530,
+          "pytest_passed": 579,
+          "pytest_skipped": 7
+        },
+        {
+          "python": "3.12",
+          "job": 114790359952,
+          "pytest_passed": 579,
+          "pytest_skipped": 7
+        }
+      ],
+      "url": "https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123492"
+    }
+  ],
+  "browser_artifact": {
+    "id": 11744211575,
+    "name": "source-ocr-browser-7f8f7d8710661e17ecae914cf4fff312848d429e",
+    "sha256": "3b3427067caa19dd6fcde62bf6168d077e94888071e009d4548277354a6a8408",
+    "run": 38243123539,
+    "attempt": 1,
+    "canonical_repository_and_head_repository_verified": true,
+    "download_digest_verified": true,
+    "test_only": true,
+    "real_account_or_source_writes": 0
+  },
+  "local_verification": {
+    "cache_runtime_api": {
+      "passed": 128,
+      "skipped": 23
+    },
+    "source_projection_dashboard": {
+      "passed": 120
+    },
+    "node_dom_scenarios": 90,
+    "native_release_continuity_tests": 56,
+    "legacy_cache_helper_tests": 35,
+    "native_cache_derivative_tests": 79,
+    "cache_maintenance_tests": 41
+  },
+  "backup": {
+    "directory": "routine-20261012T000713Z-91199b7d.base",
+    "bytes": 85258326874,
+    "manifest_sha256": "ae2059e7dc4f993732c7f63a7acded5b347f28575d2b2860bb5bc07ec9ca5c49",
+    "pg_verifybackup_version": "16.15",
+    "exit_code": 0,
+    "completed_utc": "2026-10-12T11:30:46.241Z",
+    "elapsed_seconds": 186.821,
+    "status_identity_manifest_receipt_unchanged": true,
+    "no_backup_rotation_lock_during_verification": true,
+    "receipt": "backup-reverification-20261012T112739Z.json",
+    "receipt_sha256": "770c834b841c9a1e4739b80ef889677091627de6d89d87796c1537fc072503ec"
+  },
+  "release": {
+    "repository_id": 1349678672,
+    "source_revision": "49c4229e69fe07b4570f2eccdc8ccb39cf566382",
+    "tested_source": "d64539dee1fbb7d120025ab213d8be8042fb8e37",
+    "installed_at": "2026-10-12T11:54:00.962706+00:00",
+    "previous_source": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+    "database_pid_unchanged": 7852,
+    "baseline": {
+      "cutoff": "2026-10-12T11:53:00.985186+00:00",
+      "heads": {
+        "ai": {
+          "generation": 1490,
+          "snapshot_id": "b7cead60-0eb4-4f5c-84ec-458e5334e3cd",
+          "sha256": "16dd19a34c7a049ffc4ecb293bdc9654557f8c9614c4dc8c70e4bcfddd6ff3a0",
+          "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+          "created_at": "2026-10-12 11:50:40.012921+00",
+          "file_count": 1764
+        },
+        "dashboard": {
+          "generation": 3012,
+          "snapshot_id": "b20912c7-6b43-4669-8c5f-a3900bdcaee3",
+          "sha256": "ff3cf1b2a36d78c1752be113e5cd7591093c5d50ca4f75fafb79890b37a0914a",
+          "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+          "created_at": "2026-10-12 11:48:46.672502+00",
+          "file_count": 267
+        },
+        "executive": {
+          "generation": 1164,
+          "snapshot_id": "8301dec0-4a9c-4cdb-9aeb-0a561e22f235",
+          "sha256": "863d5f53b4e62c76a77dcfdde299da3c6b6c50f120600263f1e2aa132d5d3786",
+          "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+          "created_at": "2026-10-12 11:41:18.151994+00",
+          "file_count": 344
+        },
+        "legislative": {
+          "generation": 2549,
+          "snapshot_id": "4f4b1819-c78a-44ff-8f05-d3264fd8455f",
+          "sha256": "f88a7da63c4971d5c511cc73764b11363a2a1d55bfb9552fdf140fcda58940f9",
+          "source_revision": "1fc7b71182aeb5eb7f47325635dde34d417c1180",
+          "created_at": "2026-10-12 11:50:16.288786+00",
+          "file_count": 931
+        }
+      },
+      "header_count": 8215,
+      "header_sha256": "90e291fa30c9c206470581ec792e700c5dbc7fb43f7b9a65ce8a7fd6a6810edb",
+      "broken_links": 0,
+      "round_trip_verified": true,
+      "database_transaction_read_only": true,
+      "personal_reviews": {
+        "file": "personal-review-continuity.json",
+        "sha256": "e9476e793698cfec065b6af9063f9fc6b76f777dd0da15709b031d70a74b2ba6",
+        "accounts": 3,
+        "acknowledgement_rows": 14,
+        "restore_tombstones": 1,
+        "audit_events": 15
+      },
+      "release_continuity_sha256": "99f7944dc4ec810d3215e02b42bef6c907dc57d6d25b868dc5a581745b126f22"
+    },
+    "opportunity_mode": "shadow",
+    "AI_alerts_suppressed": true,
+    "shadow_refresh_enabled": true,
+    "new_schedules": false,
+    "snapshot_heads_rewritten": false,
+    "real_case_acceptance": "pending",
+    "ready_http": 200,
+    "receipt_scope": "Installation phase only. The original installer recorded real_case_acceptance=pending; subsequent native publication and durable TEST-account acceptance completed and are recorded separately below."
+  },
+  "operations": {
+    "helper_sha256": {
+      "cache_cleanup_265.py": "8b4b18e36f288d613b85ee7c5c360fcc27dadc170f7c1118a2ccdc2f3d5d3959",
+      "release_265.py": "036048057e4bda10992179b74282a10719058070340debed0444137faf57695e",
+      "verify_265.py": "6180d04a64dbb58b4b454b1602268e497d7345b4dd277a601628e0eb52b4408c",
+      "publication_265.py": "71535cbff23892caaa175a8c154bc6a5be3d3fa02652ff5b6a20109957abba71",
+      "acceptance_265.py": "3a9582cb6e29b96c9dbe5e2effa485d73591cc71bc7ef9dd2a0dbe810400c5f5",
+      "cache_cleanup_265_native.py": "d288f1c32be9e45ee9242a795d053104b6a0d5d8e68d08da284647d0e5b5c096",
+      "cache_maintenance_265.py": "a10d075d2ad1ff2cca8136b92f2df56b8cb63f0aa3c8401e66f25b1882a6f654"
+    },
+    "engine_sha256": "f962b5ebadfe9b800998339815f7d628d65a129c6c7807a4fa9500f5ec39abc1",
+    "exporter_sha256": "9d4601693b7bc222654dc2b7d4b5949f1570f4f37811d64dcf27d9051589a4d1",
+    "apply_directory": "apply-20261012T115256.748241Z",
+    "release_receipt_sha256": "f78e89c5461d50d6278a763c5dc6e4026c1284512f94096c3aefec8d8186235e",
+    "portable_checkpoint": {
+      "filename": "polititrack-265-operations-checkpoint-20261012T122423Z.zip",
+      "sha256": "56661c4a4f2fa055a752e24e45778628de9e560e6b44619ab7539b3add21af00",
+      "size_bytes": 79963,
+      "contents": "11 Python scripts/tests, REVIEW.md, README.md and SHA-256 manifest; no configuration, native receipt payloads, cookies, credentials or bytecode caches.",
+      "maintenance_not_executed": true
+    }
+  },
+  "native_cache_fixture": {
+    "result": "passed",
+    "production_temp_touched": false,
+    "target_removed": true,
+    "concurrent_sibling_created_and_retained": true,
+    "marker_and_sentinel_preserved": true,
+    "receipt": "native-disposition-probe-8b4b18e3-01.json",
+    "receipt_sha256": "7de2f65198c996a6ebe60f3148c880385b4b21f09912b9fb628d44fb547776c5"
+  },
+  "legacy_cache_cleanup": {
+    "status": "not_started_after_source_installation__remote_connection_unresponsive",
+    "original_optional_inventory": {
+      "stopped_without_cache_changes": true,
+      "exception_type": "CacheSafetyError",
+      "diagnosis": "Current gate reproduced an unidentified psutil blocker for Windows protected Secure System. The original wrapper retained no gate detail, so this is not proof of the only blocker at the original attempt."
+    },
+    "native_identity_correction": {
+      "helper": "cache_cleanup_265_native.py",
+      "sha256": "d288f1c32be9e45ee9242a795d053104b6a0d5d8e68d08da284647d0e5b5c096",
+      "tests_passed": 79,
+      "readonly_native_gate_result": "passed",
+      "checked_at": "2026-10-12T12:09:03.496397Z",
+      "protected_process_attested": true,
+      "all_six_running_application_consumers_remained_blockers": true,
+      "services_running_before_and_after": true,
+      "receipt": "native-gate-readonly-20261012T120903Z-28d07987.json",
+      "receipt_sha256": "5a1926a2d92b16cdef3c97059628c76053c91c4714abec387c12c6b0cbb6d914"
+    },
+    "maintenance_wrapper": {
+      "helper": "cache_maintenance_265.py",
+      "sha256": "a10d075d2ad1ff2cca8136b92f2df56b8cb63f0aa3c8401e66f25b1882a6f654",
+      "tests_passed": 41,
+      "independently_reviewed": true,
+      "transfer_completion_verified": false,
+      "verify_invoked": false,
+      "quarantine_invoked": false
+    },
+    "observed_at": "2026-10-12T12:10:57.3001211Z",
+    "generated_cache_directories": 1439,
+    "post_installation_active_copies": 1,
+    "free_bytes": 554655260672,
+    "ready_http": 200,
+    "maintenance_service_pauses": 0,
+    "moved_directories": 0,
+    "deleted_directories": 0,
+    "reclaimed_bytes": 0,
+    "remote_connection": {
+      "device_list_status": "Offline",
+      "transfer": {
+        "call_id": "b097953f-33bb-4ed5-bfef-231d041c12b3",
+        "created_at": "2026-10-12T12:14:03.450082Z",
+        "completed_at": "2026-10-12T12:16:04.750431Z",
+        "result": "failed",
+        "error": "Timeout - no response from device"
+      },
+      "hash_read": {
+        "result": "MCP request timed out"
+      },
+      "ping": {
+        "call_id": "44bd8be4-7015-4137-9dec-c85f510ebe66",
+        "created_at": "2026-10-12T12:17:21.114416Z",
+        "completed_at": "2026-10-12T12:19:24.703234Z",
+        "result": "failed",
+        "error": "Timeout - no response from device"
+      },
+      "device_list_observed_at_minute": "2026-10-12T12:27Z",
+      "device_list_last_seen": "15 minutes ago",
+      "device_list_prior_status": "Online with stale last-seen"
+    },
+    "next_action": "Restore Desktop Commander connectivity; inspect retained call results and the maintenance-helper file hash; run its pinned read-only verify before quarantine; delete only from the resulting fixed receipt after services resume. Do not rerun the old-source installer."
+  },
+  "native_publication_acceptance": {
+    "repository_id": 1349678672,
+    "started_at": "2026-10-12T11:55:14.532910Z",
+    "source_revision": "49c4229e69fe07b4570f2eccdc8ccb39cf566382",
+    "writer": "existing Runtime v2 dashboard",
+    "before_generation": 3012,
+    "before_sha256": "ff3cf1b2a36d78c1752be113e5cd7591093c5d50ca4f75fafb79890b37a0914a",
+    "producer_exit_code": 0,
+    "after_generation": 3013,
+    "after_sha256": "de786ec50168b2eababdcb9d123d76f5ce4e5a31892f52f00927e24ac75e9d98",
+    "after_source_revision": "49c4229e69fe07b4570f2eccdc8ccb39cf566382",
+    "reads_during_publisher_lock": 51,
+    "reads_after_30_second_cache_interval_during_publisher_lock": 34,
+    "all_http_reads_200": true,
+    "result": "passed",
+    "finished_at": "2026-10-12T11:57:16.279734Z",
+    "receipt": "dashboard-publication-20261012T115514Z.json",
+    "receipt_sha256": "53800fb36cfcc414bee18cc9ada8baf224c11be90c60c4a60d8547a197932e27"
+  },
+  "native_review_acceptance": {
+    "result": "passed",
+    "started_at_utc": "2026-10-12T11:57:53.109145Z",
+    "finished_at_utc": "2026-10-12T11:57:56.260339Z",
+    "snapshot_sha256": "de786ec50168b2eababdcb9d123d76f5ce4e5a31892f52f00927e24ac75e9d98",
+    "source_asset_match": "app.js and styles.css; native line endings normalized",
+    "http": [
+      {
+        "method": "GET",
+        "path": "/healthz",
+        "status": 200,
+        "sha256": "3e8b7bde5cc2a4370caf07cf1a81f16a5dbae513f8a82f7366ddc02da4222225",
+        "bytes": 51
+      },
+      {
+        "method": "GET",
+        "path": "/readyz",
+        "status": 200,
+        "sha256": "546802dda16434c1c3149103defae8d4582f5c7718cc94215aad79b17b7550e3",
+        "bytes": 121
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "status": 200,
+        "sha256": "477243a782fee5a87482a40a9d9ebbb6c0903419ec9c643e7c3012404c809ff1",
+        "bytes": 27192
+      },
+      {
+        "method": "GET",
+        "path": "/index.html",
+        "status": 200,
+        "sha256": "477243a782fee5a87482a40a9d9ebbb6c0903419ec9c643e7c3012404c809ff1",
+        "bytes": 27192
+      },
+      {
+        "method": "GET",
+        "path": "/app.js",
+        "status": 200,
+        "sha256": "6dd083ba0c245e18e01dd3fe0b1272787b75970832809441f901a2ffe24de8a9",
+        "bytes": 183511
+      },
+      {
+        "method": "GET",
+        "path": "/styles.css",
+        "status": 200,
+        "sha256": "bb60edf6bab003f10458ae1ff14e4a0cbe0f02ac03f04cfc52e2964e62ec4d5c",
+        "bytes": 32360
+      },
+      {
+        "method": "GET",
+        "path": "/data/dashboard-insights.json",
+        "status": 200,
+        "sha256": "82e402cebff90219ee74971beb7f5bc57242db7dbbdf7ed87fdd815d6e10ca71",
+        "bytes": 422327
+      },
+      {
+        "method": "GET",
+        "path": "/data/pending-reviews.json",
+        "status": 200,
+        "sha256": "56b57e80b2ffaddfc2e6793ab5eacc63c6da7f78360c7e5493f3311089756d3d",
+        "bytes": 3655666
+      },
+      {
+        "method": "GET",
+        "path": "/readyz",
+        "status": 200,
+        "sha256": "546802dda16434c1c3149103defae8d4582f5c7718cc94215aad79b17b7550e3",
+        "bytes": 121
+      },
+      {
+        "method": "GET",
+        "path": "/api/reviews/session",
+        "status": 200,
+        "sha256": "d2e7b0af0bd3771fe52242f133d7685f2cbb4607ca13a4a24221933ca9f07b0f",
+        "bytes": 24
+      }
+    ],
+    "live_browser": {
+      "blocked_requests": [],
+      "checks": [
+        {
+          "clicked": false,
+          "detail_opened": false,
+          "layout": {
+            "body": 1265,
+            "document": 1265,
+            "height": 54.09375,
+            "left": 456,
+            "right": 551.15625,
+            "viewport": 1280
+          },
+          "row_action_present": true,
+          "screenshot": "live-source-review-1280-signed-out.png",
+          "width": 1280
+        },
+        {
+          "clicked": false,
+          "detail_opened": false,
+          "layout": {
+            "body": 375,
+            "document": 375,
+            "height": 54.09375,
+            "left": 228,
+            "right": 319.890625,
+            "viewport": 390
+          },
+          "row_action_present": true,
+          "screenshot": "live-source-review-390-signed-out.png",
+          "width": 390
+        }
+      ],
+      "fresh_signed_out_contexts": true,
+      "http_writes": 0,
+      "page_errors": [],
+      "result": "passed"
+    },
+    "durable_test": {
+      "result": "passed",
+      "owner_account_used": false,
+      "credentials_saved": false,
+      "steps": [
+        "new_test_account_invited_using_existing_admin_store_method",
+        "activated_exact_test_identity_with_empty_revision_zero",
+        "live_api_acknowledgement_committed_at_revision_one",
+        "fresh_session_login_and_state_read_retained_identity_and_timestamp",
+        "live_api_restore_committed_at_revision_two"
+      ],
+      "cleanup": {
+        "disabled_and_sessions_revoked": true,
+        "disabled_login_rejection_verified": true,
+        "disabled_session_rejection_verified": true,
+        "final_test_audit": {
+          "acknowledgement_rows": [
+            {
+              "acknowledged": false,
+              "revision": 2
+            }
+          ],
+          "enabled": false,
+          "events": [
+            {
+              "operation": "acknowledge",
+              "revision": 1
+            },
+            {
+              "operation": "restore",
+              "revision": 2
+            }
+          ],
+          "revision": 2,
+          "unrevoked_sessions": 0
+        },
+        "restore_committed": true
+      },
+      "original_account_state_unchanged": true,
+      "original_accounts_before": {
+        "runtime_review_accounts": {
+          "rows": 3,
+          "sha256": "56c6727acb6e0c6f828060ce4712366a17632d86e3824377b19e716411d1bfe9"
+        },
+        "runtime_review_acknowledgements": {
+          "rows": 14,
+          "sha256": "ea861f5795a4e0a0749fee764accdda66727b2bd1dea5e2dca276cb65cd7c0b8"
+        },
+        "runtime_review_events": {
+          "rows": 15,
+          "sha256": "d9a0a77b7e7c90aeee1b3afd7b5eb4b046abac071a0fd780e93667b6f33efce0"
+        }
+      },
+      "original_accounts_after": {
+        "runtime_review_accounts": {
+          "rows": 3,
+          "sha256": "56c6727acb6e0c6f828060ce4712366a17632d86e3824377b19e716411d1bfe9"
+        },
+        "runtime_review_acknowledgements": {
+          "rows": 14,
+          "sha256": "ea861f5795a4e0a0749fee764accdda66727b2bd1dea5e2dca276cb65cd7c0b8"
+        },
+        "runtime_review_events": {
+          "rows": 15,
+          "sha256": "d9a0a77b7e7c90aeee1b3afd7b5eb4b046abac071a0fd780e93667b6f33efce0"
+        }
+      }
+    },
+    "receipt": "live-acceptance-20261012T115750Z/acceptance-265-durable-test-result.json",
+    "receipt_sha256": "b619b3551483ec7cb5ee88420fdc8598226655eed6e11600db3257d01f150818",
+    "durable_checkpoint_sha256": "34fa204fe2190048fcc610b711ea23185a3097417e87fb759da505f776385e3f",
+    "evidence_scope": "Live Edge checked signed-out row actions and layout; CI exercised actual front-end clicks at both widths; native API separately verified durable acknowledgement and Restore."
+  },
+  "final_continuity": {
+    "result": "passed",
+    "receipt": "verified-after-20261012T115920.853499Z/acceptance.json",
+    "baseline_continuity_sha256": "99f7944dc4ec810d3215e02b42bef6c907dc57d6d25b868dc5a581745b126f22",
+    "broken_links": 0,
+    "database_pid_unchanged": 7852,
+    "personal_continuity": {
+      "acknowledgements_and_restore_tombstones_preserved": true,
+      "after": {
+        "accounts": 4,
+        "acknowledgement_rows": 15,
+        "audit_events": 17,
+        "restore_tombstones": 2
+      },
+      "before": {
+        "accounts": 3,
+        "acknowledgement_rows": 14,
+        "audit_events": 15,
+        "restore_tombstones": 1
+      },
+      "old_accounts_preserved": true,
+      "old_audit_events_preserved": true
+    },
+    "personal_evidence_sha256": "e5897493f93c8f0038240b12f7ce32e8d3d0ca51e1c2035935b2b79488aacee1",
+    "real_filing_acknowledgement_performed": false,
+    "release_script_sha256": "036048057e4bda10992179b74282a10719058070340debed0444137faf57695e",
+    "round_trip_verified": true,
+    "runtime_configuration_preserved_except_revision": true,
+    "snapshot_continuity": {
+      "appended_ledger_rows": {
+        "ai/analyses.jsonl": 0,
+        "ai/information-value-at-discovery.jsonl": 0,
+        "ai/runs.jsonl": 0,
+        "executive/filings.jsonl": 0,
+        "executive/historical-backfill.jsonl": 0,
+        "executive/pending-review.jsonl": 0,
+        "executive/purchases.jsonl": 0,
+        "executive/runs.jsonl": 0,
+        "executive/source-ocr.jsonl": 0,
+        "executive/transactions.jsonl": 0,
+        "legislative/filings.jsonl": 0,
+        "legislative/historical-backfill.jsonl": 0,
+        "legislative/pending-review.jsonl": 0,
+        "legislative/purchases.jsonl": 0,
+        "legislative/runs.jsonl": 0,
+        "legislative/source-ocr.jsonl": 0,
+        "legislative/transactions.jsonl": 0
+      },
+      "current_snapshot_headers": 8216,
+      "ledger_prefixes_preserved": [
+        "ai/analyses.jsonl",
+        "ai/information-value-at-discovery.jsonl",
+        "ai/runs.jsonl",
+        "executive/filings.jsonl",
+        "executive/historical-backfill.jsonl",
+        "executive/pending-review.jsonl",
+        "executive/purchases.jsonl",
+        "executive/runs.jsonl",
+        "executive/source-ocr.jsonl",
+        "executive/transactions.jsonl",
+        "legislative/filings.jsonl",
+        "legislative/historical-backfill.jsonl",
+        "legislative/pending-review.jsonl",
+        "legislative/purchases.jsonl",
+        "legislative/runs.jsonl",
+        "legislative/source-ocr.jsonl",
+        "legislative/transactions.jsonl"
+      ],
+      "old_snapshot_headers_preserved": 8215,
+      "original_ocr_evidence_files_preserved": 1258,
+      "seen_identity_counts": {
+        "executive/seen_filings": {
+          "after": 4178,
+          "before": 4178
+        },
+        "executive/seen_reviews": {
+          "after": 1568,
+          "before": 1568
+        },
+        "executive/seen_trades": {
+          "after": 734,
+          "before": 734
+        },
+        "legislative/seen_filings": {
+          "after": 1039,
+          "before": 1039
+        },
+        "legislative/seen_reviews": {
+          "after": 11,
+          "before": 11
+        },
+        "legislative/seen_trades": {
+          "after": 12426,
+          "before": 12426
+        }
+      }
+    },
+    "snapshot_generations": {
+      "ai": 1490,
+      "dashboard": 3013,
+      "executive": 1164,
+      "legislative": 2549
+    },
+    "snapshot_receipt_sha256": "005637b4be0c6bd69f4b46de383963c73dc664de7fb9720e677350d6b4838214",
+    "source_revision": "49c4229e69fe07b4570f2eccdc8ccb39cf566382",
+    "verification_script_sha256": "6180d04a64dbb58b4b454b1602268e497d7345b4dd277a601628e0eb52b4408c",
+    "verified_at": "2026-10-12T12:00:31.324574+00:00",
+    "evidence_scope": "This read-only verifier made no acknowledgement; the separate native acceptance used only the newly created TEST account.",
+    "receipt_sha256": "16a2a891aeb4ab175af7de580225d0ed25dd89374cae8a8cc53ada954baae1fc"
+  },
+  "finalized_at_utc": "2026-10-12T12:28:13Z"
+}

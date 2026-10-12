@@ -1,56 +1,194 @@
 # PolitiTrack active handoff
 
-## October 12 #265 — Dashboard availability and direct source-review acknowledgements
+## October 12 #265 — Native repair accepted; cache housekeeping awaiting RDC reconnection
 
-Active work is on `codex/dashboard-review-20261012`, based on canonical
-`main` `d77ccfcd5d86d9867c284ef75ab87968321963eb`, repository ID **1349678672**
-(`maglothinm/MyETF-Intelligence`). The owner supplied the local
-`/index.html#records` error `DASHBOARD_UNAVAILABLE` and requested acknowledgement
-of a manually reviewed filing directly from Review / Sources.
+PR [#266](https://github.com/maglothinm/MyETF-Intelligence/pull/266) is merged in
+canonical repository **1349678672**, `maglothinm/MyETF-Intelligence`. Beast installed
+`49c4229e69fe07b4570f2eccdc8ccb39cf566382` at
+`2026-10-12T11:54:00.962706Z`. The tested head
+`d64539dee1fbb7d120025ab213d8be8042fb8e37`, CI merge
+`7f8f7d8710661e17ecae914cf4fff312848d429e`, and installed merge share verified tree
+`82f3c4ef9f55cd4f40a98369bad2b5841c37f059`. The implementation began from
+`d77ccfcd5d86d9867c284ef75ab87968321963eb`; the active evidence-only branch is
+`codex/dashboard-review-receipts-20261012` from the installed merge.
 
-The web cache still took the publisher's exclusive advisory lock, despite the
-existing lock-free committed-snapshot read path. That contention can produce
-the exact reported response. The same path was identified as an unproven live
-cause in the September 20 continuity receipt. The generic response also covers
-database, archive and filesystem errors; today's precise Beast exception is
-not established by the screenshot or the retained web logs. Beast is reconnected
-and read-only live diagnosis is in progress.
+**Diagnosis:** the old web cache took the dashboard publisher's exclusive
+advisory lock. On Beast before release, 101 HTTP observations included **48
+HTTP 503 responses**, all while the dashboard publisher held that lock, and 53
+HTTP 200 responses outside it. Failures ran from `11:32:05.038679Z` through
+`11:33:40.867342Z`; the first recovered response was at `11:33:42.886625Z`.
+This reproduces the recurring availability defect in the live runtime. The
+precise exception for the owner's earlier screenshot was not retained by the
+old handler, so that particular request remains unproven. The generic response
+also covers database, archive and filesystem failures.
 
-The repair reads and validates committed immutable dashboard snapshots without
-competing for the writer lock, binds response bytes to the exact restored head,
-and retains failures for invalid or missing state. Direct review-row controls
-reuse durable authenticated personal history. An additive dashboard projection
-also makes OCR-only manual-review receipts eligible, with identities scoped to
-the source document version. This records human review without approving an
-extraction or importing transactions. No real filing has been acknowledged by
-this development session.
+The repair reads and validates the committed immutable dashboard without
+competing for the writer lock. Each response uses the exact restored head and
+hash; missing, corrupt or regressed state still fails closed. Leases protect
+active API readers and streamed responses while obsolete temporary directories
+owned by the current cache instance are retired. Historical directories from
+other instances require the separate bounded cleanup described below.
 
-**Current checkpoint:** implementation and independent code review are complete.
-Local checks passed: 128 cache/runtime/API tests (23 optional/PostgreSQL/native
-skips), 120 projection/dashboard tests, and all 90 generated-dashboard Node DOM
-checks. Canonical CI, including real PostgreSQL contention and Chromium desktop/
-mobile checks, is pending. Source/JSON/CSV consistency and unchanged producer
-fixture bytes were verified. No real filing was acknowledged by those checks.
+Review / Sources now exposes **Acknowledge manual review** and **Restore to
+active review** directly on eligible rows at `/#records/reviews`, using the
+existing authenticated personal-review API. Retained OCR-only `needs_review`
+receipts are also projected into that inventory with source-version identities.
+The action records human review, retains personal history and leaves the source
+receipt, extraction status and transaction ledger intact. It does not waive
+document limits or import transactions.
 
-The owner reconnected Beast. A fresh check at `2026-10-12T11:18:45Z` verified
-installed HEAD and configured source revision
-`1fc7b71182aeb5eb7f47325635dde34d417c1180`, the canonical origin, and the preserved
-untracked `legislative-source-status.json`. All three native services are Running/
-Automatic; Database service PID is 7852. C: has approximately 560 GB free and
-there are 1,435 `polititrack-site-*` temporary directories. `/readyz` returned
-HTTP 200 with snapshot SHA256
-`8a9fac80dbf0109ff43565357b87b858df621b7a3e76ba9aae26c98251935201`.
-This establishes recovery at that observation, not the cause of the earlier 503.
-No native service, configuration, snapshot, account or schedule has been changed.
+**Final canonical CI:** all four workflows passed on attempt 1 for the final
+tested source. Runtime v2 includes the real PostgreSQL contention regression;
+the Source OCR artifact includes isolated Acknowledge, reload, Restore and
+layout checks at 1280 and 390 pixels. These browser checks use TEST data and an
+isolated in-memory service, with no real account or source writes.
 
-**Next safe action:** publish the locally tested and independently reviewed
-change through canonical CI, then use the existing native release boundary
-on the reconnected Beast. Reinspect installed source, current writer locks and disk
-space; verify the current backup and obtain a fresh frozen export before an
-installation. Preserve all previous snapshot headers, ledger prefixes, filing/
-trade/review IDs, source limits and account history. Separately verify served
-dashboard responses and source-review behaviour. Keep #265 open until live
-acceptance succeeds; do not substitute an earlier dashboard or initialize state.
+| Workflow | Run | Result |
+| --- | --- | --- |
+| Runtime v2 safety | [38243123494](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123494) | 916 passed, 2 skipped |
+| Source upload and OCR | [38243123539](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123539) | 492 passed, 1 skipped; 8 Node checks; desktop/mobile passed |
+| Investor Edge | [38243123520](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123520) | 808 passed |
+| Current Opportunity | [38243123492](https://github.com/maglothinm/MyETF-Intelligence/actions/runs/38243123492) | 579 passed, 7 skipped on each of Python 3.11 and 3.12 |
+
+The verified browser artifact is `11744211575`, SHA256
+`3b3427067caa19dd6fcde62bf6168d077e94888071e009d4548277354a6a8408`.
+Local checks also passed: 128 cache/runtime/API tests (23 optional integration
+skips), 120 projection/dashboard tests and 90 generated-dashboard Node scenarios.
+The native release/continuity helpers passed 56 checks. The original cache helper
+passed 35 checks; the final native derivative passed 79 checks, and its native
+protected-process gate also passed separately. The maintenance wrapper passed
+41 checks and two code reviews. The Windows disposable-fixture deletion test
+also passed, including a concurrent sibling write; it did not touch production
+temporary files.
+
+**Native release:** the existing 85,258,326,874-byte nightly physical backup was
+independently reverified at `11:30:46.241Z`, `pg_verifybackup` 16.15 exit 0.
+The release used the existing pinned native service boundary and a new frozen
+export at `11:53:00.985186Z`: AI1490, Dashboard3012, Executive1164 and
+Legislative2549. All **8,215** historical headers had intact parent links and
+all four snapshots round-tripped exactly. The frozen personal-review baseline
+contains 3 accounts, 14 acknowledgement rows (13 acknowledged and 1 Restore
+tombstone), and 15 audit events. Its release continuity receipt SHA256 is
+`99f7944dc4ec810d3215e02b42bef6c907dc57d6d25b868dc5a581745b126f22`.
+
+Database service PID **7852** stayed unchanged. Only the configured source
+revision changed; SHADOW mode, the already-enabled refresh flag, both AI delivery
+suppressions and existing schedules were preserved. The inherited installer's
+generic refresh log is not evidence of a flag change. Readiness returned HTTP 200.
+
+**Live publication passed:** the existing normal dashboard writer ran from
+`11:55:14.532910Z` through `11:57:16.279734Z`, exited 0, and advanced
+Dashboard3012 to **3013**, from the installed source. During publication, **51
+HTTP reads returned 200** with the same actual publisher PID observed before
+and after each request. Of these, **34** occurred more than 35 seconds after
+the warm read, beyond the cache's 30-second refresh interval. All sampled reads
+returned 200 and the final served head matched the committed successor, SHA256
+`de786ec50168b2eababdcb9d123d76f5ce4e5a31892f52f00927e24ac75e9d98`.
+The private publication receipt is `dashboard-publication-20261012T115514Z.json`,
+SHA256 `53800fb36cfcc414bee18cc9ada8baf224c11be90c60c4a60d8547a197932e27`.
+
+**Native personal-review acceptance passed** at `11:57:53.109145–11:57:56.260339Z`.
+Health, readiness, root/index, assets, insights, pending reviews and signed-out
+session reads returned HTTP 200. Dashboard responses matched the verified
+Dashboard3013 hash. Served `app.js` and styles matched the installed source after
+CRLF normalization.
+Live Edge checks at 1280 and 390 pixels found the signed-out direct row action
+in the viewport, without detail navigation, page errors or blocked requests.
+Those live browser checks were read-only; actual frontend clicks, save/reload
+and Restore were exercised in the isolated CI fixture.
+
+Separately, the real native API completed Acknowledge at revision 1, logout,
+fresh sign-in with the saved review restored, and Restore at revision 2 in one
+new, isolated TEST account. The account was then disabled, all its sessions
+revoked, and disabled sign-in and session access rejected. Its one Restore
+tombstone and two audit events remain retained. Full-row fingerprints for all
+3 pre-existing accounts, 14 acknowledgement rows and 15 audit events matched
+before and after; no owner acknowledgement was changed. The sanitized native
+receipt is `acceptance-265-durable-test-result.json`, SHA256
+`b619b3551483ec7cb5ee88420fdc8598226655eed6e11600db3257d01f150818`.
+
+**Final continuity passed** at `12:00:31.324574Z`. At that verification cutoff,
+the read-only export retained all **8,215** headers from the `11:53:00.985186Z`
+frozen baseline within a total of **8,216**, with heads AI1490, Dashboard3013,
+Executive1164 and Legislative2549. All **17** JSONL prefixes and **1,258**
+OCR-evidence files were unchanged. The retained seen-ID counts were identical
+at the frozen and final verification cutoffs:
+
+| Namespace | Filing IDs | Review IDs | Trade IDs |
+| --- | ---: | ---: | ---: |
+| Executive | 4,178 | 1,568 | 734 |
+| Legislative | 1,039 | 11 | 12,426 |
+
+Personal accounts increased 3 → 4, acknowledgement rows 14 → 15, Restore
+tombstones 1 → 2 and audit events 15 → 17 solely through the disabled TEST
+account. All original accounts, acknowledgement history, audits and Restore
+tombstones were preserved. Configuration differed only in source revision,
+Database PID remained 7852, and the native services were running. The private acceptance is
+`verified-after-20261012T115920.853499Z/acceptance.json`, SHA256
+`16a2a891aeb4ab175af7de580225d0ed25dd89374cae8a8cc53ada954baae1fc`.
+The snapshot-continuity receipt SHA256 is
+`005637b4be0c6bd69f4b46de383963c73dc664de7fb9720e677350d6b4838214`
+and the personal-continuity receipt SHA256 is
+`e5897493f93c8f0038240b12f7ce32e8d3d0ca51e1c2035935b2b79488aacee1`.
+
+**Legacy cache reclamation remains open:** the pre-release read-only inventory
+found 1,436 old temporary dashboard directories, 377,493 files and
+478,284,210,369 bytes. The earlier `11:18:45Z` preflight had counted 1,435
+directories, about 560 GB free on C: and HTTP 200 readiness; neither observation
+established disk exhaustion. The optional release inventory stopped with
+`CacheSafetyError`; the source installation continued successfully and **zero
+directories were moved or deleted**. Subsequent read-only diagnosis reproduced
+an unidentified-process gate for Windows Secure System. The original failed
+inventory did not retain enough detail to establish that as its only blocker.
+The final native helper adds a narrowly verified identity fallback for that
+protected process; other unknown consumers still block maintenance.
+
+The reviewed native cache helper SHA256 is
+`d288f1c32be9e45ee9242a795d053104b6a0d5d8e68d08da284647d0e5b5c096`.
+The separate cache-only maintenance wrapper SHA256 is
+`a10d075d2ad1ff2cca8136b92f2df56b8cb63f0aa3c8401e66f25b1882a6f654`.
+It binds the completed release, frozen baseline and final acceptance; it reads
+snapshot metadata and personal history around inventory/quarantine, then resumes
+the original services independently. Deletion is a separate operation over the
+verified fixed quarantine receipt. No new full archive export or reinstall is
+part of this cache-only procedure.
+
+**Housekeeping interrupted before execution:** the RDC transfer of
+`cache_maintenance_265.py`, requested at `12:14:03.450082Z`, failed at
+`12:16:04.750431Z` with `Timeout - no response from device`. A subsequent read-only
+helper-hash command also timed out. The connectivity check requested at
+`12:17:21.114416Z` failed at `12:19:24.703234Z` with the same timeout. The device
+inventory initially listed Beast as Online with stale last-seen evidence; a final
+inventory check at `12:27Z` listed it Offline with a 15-minute-old last-seen
+observation. The inventory does not establish the computer's power state.
+The transferred helper's final bytes are unverified.
+**No native maintenance action was invoked:** neither maintenance `verify` nor
+`quarantine` ran, and no second service pause or deletion began. No reclaimed-space
+result is claimed.
+
+The last direct native observation was **HTTP 200 readiness at `12:10:57Z`**,
+1,439 temporary dashboard directories including one active post-install copy,
+and **554,655,260,672 free bytes** on C:. This is the last verified healthy
+observation, not a claim of current reachability through the stalled connection.
+The directory count is not a cleanup authorization list; obtain the actual fixed
+inventory through the reviewed maintenance boundary.
+
+Exact source, CI, backup, frozen-head and sanitized operational evidence:
+[`docs/validation/dashboard-source-reviews-20261012.json`](validation/dashboard-source-reviews-20261012.json).
+It records the completed application acceptance and interrupted housekeeping
+checkpoint separately.
+
+**Next safe action:** restore RDC connectivity, inspect queued or late command
+results and verify the transferred helper hash before issuing another maintenance
+command. Recheck the current installed source, services, configuration and state
+against the retained frozen and final receipts. Then run the reviewed maintenance
+`verify` → `quarantine` sequence and the separate deletion over that exact
+verified quarantine receipt; record actual moved, retained and deleted totals.
+Keep #265 open for this cleanup follow-through. The requested application repair,
+live publication, personal-review acceptance and full continuity checks are
+complete. Do not redeploy, rerun the old-source-only installer, select an earlier
+snapshot or initialize state. The October 7 sections below retain their historical
+evidence; their installed-source status is superseded by this October 12 release.
 
 ## October 7 #261 follow-through complete - OCR health and imported transactions visible
 
