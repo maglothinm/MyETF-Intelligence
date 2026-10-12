@@ -124,7 +124,8 @@ def create_blueprint(store: PersonalReviewStore, cache):
     @blueprint.post("/acknowledgements")
     def change():
         owner, data = account_for_change(), g.review_payload
-        identities = publication_identities(cache.refresh())
+        with cache.read() as publication:
+            identities = publication_identities(publication.root)
         review_id = data.get("review_id")
         if not isinstance(review_id, str) or identities.get(review_id) != data.get("logical_review_id") or review_id not in identities:
             raise ReviewError("REVIEW_CHANGED", "This review changed in the current publication. Refresh and try again.", 409)
@@ -137,7 +138,9 @@ def create_blueprint(store: PersonalReviewStore, cache):
         owner, data = account_for_change(), g.review_payload
         if data.get("version") != 1:
             raise ReviewError("INVALID_IMPORT", "This saved review format is not supported.")
-        result = store.import_legacy(owner["account_id"], data.get("acknowledged"), publication_identities(cache.refresh()))
+        with cache.read() as publication:
+            identities = publication_identities(publication.root)
+        result = store.import_legacy(owner["account_id"], data.get("acknowledged"), identities)
         return jsonify(authenticated=True, **result)
 
     return blueprint

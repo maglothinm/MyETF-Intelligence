@@ -94,6 +94,12 @@ REVIEW_FIELDS = (
     "review_id",
     "logical_review_id",
     "exception_code",
+    "review_kind",
+    "review_identity_status",
+    "ocr_status",
+    "ocr_error_code",
+    "ocr_document_sha256",
+    "ocr_review_version_kind",
     "observed_at_utc",
     "branch",
     "source",
@@ -360,20 +366,31 @@ def load_branch(directory: Path | None, branch: str) -> dict[str, Any]:
     runs = latest_by(read_jsonl(directory / "runs.jsonl"), "run_key")
     state = read_json_object(directory / "state.json")
 
-    ocr_receipts = {row.get("filing_key"): row for row in read_jsonl(directory / "source-ocr.jsonl")}
+    ocr_receipts = {row["filing_key"]: row for row in read_jsonl(directory / "source-ocr.jsonl")
+                    if isinstance(row.get("filing_key"), str) and row["filing_key"]}
     for item in filings:
         item.setdefault("branch", branch)
-        receipt = ocr_receipts.get(item.get("filing_key"), {})
+        key = item.get("filing_key")
+        receipt = ocr_receipts.get(key, {}) if isinstance(key, str) else {}
         if receipt:
+            evidence = receipt.get("evidence")
+            evidence = evidence if isinstance(evidence, Mapping) else {}
+            pages = evidence.get("completed_pages")
             item.update(ocr_status=receipt.get("status"), ocr_attempted_at=receipt.get("attempted_at"),
-                        ocr_completed_at=receipt.get("evidence", {}).get("ocr_completed_at"),
-                        ocr_page_count=receipt.get("evidence", {}).get("page_count"),
-                        ocr_completed_pages=len(receipt.get("evidence", {}).get("completed_pages", [])),
+                        ocr_completed_at=evidence.get("ocr_completed_at"),
+                        ocr_page_count=evidence.get("page_count"),
+                        ocr_completed_pages=len(pages) if isinstance(pages, list) else None,
                         ocr_error_code=receipt.get("error_code"), ocr_next_attempt_at=receipt.get("next_attempt_at"))
     for item in transactions:
         item.setdefault("branch", branch)
     for item in reviews:
         item.setdefault("branch", branch)
+    # OCR review receipts are a separate, versioned personal-review inventory.
+    # Project them without writing or replacing the pending-review ledger.
+    from scripts.source_ocr_reviews import project_source_ocr_reviews
+    retained_review_ids = {item.get("review_id") for item in reviews}
+    reviews.extend(item for item in project_source_ocr_reviews(filings, ocr_receipts, branch)
+                   if item["review_id"] not in retained_review_ids)
     for item in runs:
         item.setdefault("branch", branch)
 

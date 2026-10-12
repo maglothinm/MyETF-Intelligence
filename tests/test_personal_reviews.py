@@ -4,6 +4,7 @@ import os
 import secrets
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -193,18 +194,70 @@ def test_password_recovery_preserves_identity_and_reviews_and_revokes_old_sessio
         store.login("alice", PASSWORD)
 
 
-def app_for(store, tmp_path):
+def app_for(store, tmp_path, *, cache=None):
     (tmp_path / "data").mkdir(exist_ok=True)
     (tmp_path / "data/dashboard-insights.json").write_text(json.dumps({"reviews": {
         "manual_exception": 1, "manual_exception_ids": [REVIEW], "manual_exception_identities": {REVIEW: IDENTITY}}}))
     app = Flask(__name__)
     app.config.update(TESTING=True, RUNTIME_PERSONAL_REVIEWS_ENABLED=True, RUNTIME_REVIEW_ORIGIN=ORIGIN)
-    app.register_blueprint(create_blueprint(store, SimpleNamespace(refresh=lambda: tmp_path)))
+    publication_cache = cache or SimpleNamespace(read=lambda: nullcontext(SimpleNamespace(root=tmp_path)))
+    app.register_blueprint(create_blueprint(store, publication_cache))
     return app
 
 
 def post(client, path, payload):
     return client.post("/api/reviews/" + path, json=payload, headers=HEADERS, base_url=ORIGIN)
+
+
+@pytest.mark.parametrize("endpoint", ["acknowledgements", "import"])
+@pytest.mark.parametrize("malformed", [False, True])
+def test_review_publication_lease_covers_file_read_and_releases_on_errors(tmp_path, monkeypatch, endpoint, malformed):
+    from pathlib import Path
+
+    active = False
+    transitions, mutations = [], []
+
+    @contextmanager
+    def read():
+        nonlocal active
+        assert not active
+        active = True
+        transitions.append("acquire")
+        try:
+            yield SimpleNamespace(root=tmp_path)
+        finally:
+            active = False
+            transitions.append("release")
+
+    def mutate(*args, **kwargs):
+        assert not active, "Publication files need not remain leased during personal database writes"
+        mutations.append(endpoint)
+        return {"version": 1, "revision": 1, "acknowledged": []}
+
+    personal = SimpleNamespace(account_for_session=lambda _: {"account_id": "owner"},
+                               set_acknowledged=mutate, import_legacy=mutate)
+    app = app_for(personal, tmp_path, cache=SimpleNamespace(read=read))
+    target = tmp_path / "data/dashboard-insights.json"
+    original = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        if path == target:
+            assert active, "Review validation read an unleased publication"
+            if malformed:
+                return "{"
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read)
+    payload = {"expected_account_id": "owner", "version": 1, "acknowledged": True,
+               "review_id": REVIEW, "logical_review_id": IDENTITY,
+               "expected_revision": 0, "request_id": str(uuid.uuid4())}
+    if endpoint == "import":
+        payload["acknowledged"] = []
+    response = post(app.test_client(), endpoint, payload)
+    assert response.status_code == (503 if malformed else 200)
+    assert transitions == ["acquire", "release"]
+    assert mutations == ([] if malformed else [endpoint])
+    assert not active
 
 
 def test_browser_clear_then_login_recovers_only_the_signed_in_person(store, tmp_path):

@@ -57,7 +57,8 @@ def create_blueprint(accounts, cache, intake=None):
         return jsonify(code="OCR_UNAVAILABLE", message="The source inbox is temporarily unavailable."), 503
 
     def filings():
-        rows = json.loads((cache.refresh() / "data/filings.json").read_text(encoding="utf-8"))
+        with cache.read() as publication:
+            rows = json.loads((publication.root / "data/filings.json").read_text(encoding="utf-8"))
         if not isinstance(rows, list):
             raise ReviewError("INVENTORY_UNAVAILABLE", "Refresh the source inventory before uploading.", 503)
         return rows

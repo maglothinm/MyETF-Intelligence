@@ -229,10 +229,13 @@ class _DashboardLock:
 
 
 class _DashboardStore:
-    @contextmanager
-    def locked(self, namespace):
+    def latest_head(self, namespace):
         assert namespace == "dashboard"
-        yield _DashboardLock()
+        return _DashboardLock().head()
+
+    def restore_latest(self, namespace, destination):
+        assert namespace == "dashboard"
+        return _DashboardLock().restore(destination)
 
 
 def test_web_app_rejects_path_escape_and_serves_snapshot():
@@ -265,11 +268,12 @@ def test_large_dashboard_ledger_streams_complete_bytes(tmp_path, encoding, compr
                     stream.write(b"x" * 1024)
                 stream.write(b'"]')
 
-    class LargeStore:
-        @contextmanager
-        def locked(self, namespace):
+    class LargeStore(_DashboardStore):
+        def restore_latest(self, namespace, destination):
             assert namespace == "dashboard"
-            yield LargeLock()
+            result = LargeLock()
+            result.restore(destination)
+            return result.head()
 
     app = create_app({"TESTING": True}, store=LargeStore())
     with app.test_client() as client:

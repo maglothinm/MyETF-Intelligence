@@ -7,6 +7,41 @@ Clearing browser data signs the person out; signing in restores their history.
 Acknowledgement records that a person reviewed an exception. It does not resolve
 the parser defect, delete evidence, or change another person's queue.
 
+**Current runtime:** the owner's September 21 hosting decision moved the
+authoritative PostgreSQL database and services to Windows Beast. References to
+Cloud SQL and the original cloud rollout below are historical; they do not
+authorize restarting cloud hosting. Personal account and review history remain
+in the existing Runtime v2 database.
+
+## Direct review actions and source OCR versions (#265)
+
+Review / Sources exposes the authenticated **Acknowledge** and **Restore** actions
+on eligible review rows. Selecting one leaves the person in the review list and
+confirms success only after the existing personal-review API commits the change.
+Signed-out, stale-account, stale-revision and failed-save responses retain the
+existing account checks and never display a successful acknowledgement.
+
+The published review inventory also includes retained source OCR `needs_review`
+receipts, even when a collector did not append a separate parser exception.
+These are read-only dashboard projections; the source receipt, pending-review
+ledger, filing, transaction and producer snapshot contents are not edited by
+acknowledging a row. The distinct `source_ocr_manual_review` family does not inherit
+older parser acknowledgements merely because the filing name or URL matches.
+
+The source OCR logical identity binds the exact filing identity, retained source
+document hash and structured review reason. Unchanged source bytes and review
+family retain the acknowledgement across publication, ordinary retry and display
+wording changes. New document bytes or a new review family require another
+review; the prior personal history remains saved. When admission fails before
+the bytes can be hashed, the identity is limited to that real recorded attempt
+so a later unknown source version cannot inherit an old acknowledgement.
+Contradictory or malformed source identity remains explicitly ineligible for an
+acknowledgement rather than being guessed into another version.
+
+Acknowledgement records manual review. It does not approve extraction, resolve a
+parser/source error, waive document limits or import transactions. Those existing
+source correction and transaction review actions retain their separate purpose.
+
 ## Identity and retained evidence
 
 `scripts/review_identity.py` derives `logical_review_id` from source, a tagged

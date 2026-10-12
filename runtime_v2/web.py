@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import os
+import logging
+import shutil
 import tempfile
 import threading
 import time
 import zlib
+from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Mapping
 
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import safe_join
+from werkzeug.wsgi import ClosingIterator
 
-from .store import PostgresSnapshotStore, StateStoreError
+from .store import PostgresSnapshotStore, SnapshotHead, StateStoreError
 
 
 def _truthy(value: Any) -> bool:
@@ -59,44 +64,133 @@ def _stream_dashboard_response(response, target: Path):
     return response
 
 
+@dataclass(frozen=True)
+class DashboardPublication:
+    root: Path
+    head: SnapshotHead
+
+
 class DashboardCache:
     def __init__(self, store: PostgresSnapshotStore, refresh_seconds: int = 30):
         self.store = store
         self.refresh_seconds = max(5, refresh_seconds)
-        self._lock = threading.Lock()
-        self._active: Path | None = None
-        self._sha256 = ""
+        self._lock = threading.RLock()
+        self._publication: DashboardPublication | None = None
         self._next_check = 0.0
+        self._readers: dict[Path, int] = {}
+        self._retired: set[Path] = set()
 
     @property
     def active(self) -> Path | None:
-        return self._active
+        publication = self._publication
+        return publication.root if publication else None
 
     @property
     def sha256(self) -> str:
-        return self._sha256
+        publication = self._publication
+        return publication.head.snapshot_sha256 if publication else ""
 
     def refresh(self, *, force: bool = False) -> Path:
+        return self.refresh_publication(force=force).root
+
+    @contextmanager
+    def read(self, *, force: bool = False):
+        """Keep a verified publication alive through a file read or response body."""
+        with self._lock:
+            publication = self.refresh_publication(force=force)
+            self._readers[publication.root] = self._readers.get(publication.root, 0) + 1
+        try:
+            yield publication
+        finally:
+            with self._lock:
+                remaining = self._readers[publication.root] - 1
+                if remaining:
+                    self._readers[publication.root] = remaining
+                else:
+                    del self._readers[publication.root]
+                self._prune_retired()
+
+    def _prune_retired(self) -> None:
+        """Remove only this instance's unused copies, never another process's cache."""
+        current = self._publication.root if self._publication else None
+        for root in tuple(self._retired):
+            if root == current or self._readers.get(root, 0):
+                continue
+            try:
+                shutil.rmtree(root)
+            except FileNotFoundError:
+                self._retired.discard(root)
+            except OSError as exc:
+                # Windows can briefly retain an open file handle after a response
+                # closes. Keep this owned path queued; don't fail a verified read.
+                logging.getLogger(__name__).warning(
+                    "dashboard_cache_cleanup_deferred exception_type=%s", type(exc).__name__,
+                )
+            else:
+                self._retired.discard(root)
+
+    @staticmethod
+    def _assert_forward(head: SnapshotHead, previous: SnapshotHead | None) -> None:
+        if previous is not None and (
+            head.generation < previous.generation
+            or (
+                head.generation == previous.generation
+                and (head.snapshot_id, head.snapshot_sha256)
+                != (previous.snapshot_id, previous.snapshot_sha256)
+            )
+        ):
+            raise StateStoreError("dashboard head regressed or changed an immutable generation")
+
+    def refresh_publication(self, *, force: bool = False) -> DashboardPublication:
+        """Return one verified directory and its matching committed snapshot head."""
         now = time.monotonic()
-        if not force and self._active is not None and now < self._next_check:
-            return self._active
+        publication = self._publication
+        if not force and publication is not None and now < self._next_check:
+            return publication
         with self._lock:
             now = time.monotonic()
-            if not force and self._active is not None and now < self._next_check:
-                return self._active
-            with self.store.locked("dashboard") as locked:
-                head = locked.head()
+            publication = self._publication
+            if not force and publication is not None and now < self._next_check:
+                return publication
+            destination: Path | None = None
+            try:
+                # Readers observe an immutable committed head while the sole
+                # publisher builds its successor. They must not compete for the
+                # publisher's exclusive advisory lock.
+                head = self.store.latest_head("dashboard")
                 if head is None:
                     raise StateStoreError("no published Runtime v2 dashboard exists")
-                if self._active is None or head.snapshot_sha256 != self._sha256:
+                self._assert_forward(head, publication.head if publication else None)
+                if (
+                    publication is None
+                    or head.snapshot_sha256 != publication.head.snapshot_sha256
+                    or not (publication.root / "index.html").is_file()
+                ):
                     destination = Path(tempfile.mkdtemp(prefix="polititrack-site-"))
-                    locked.restore(destination)
+                    restored = self.store.restore_latest("dashboard", destination)
+                    self._assert_forward(restored, head)
                     if not (destination / "index.html").is_file():
                         raise StateStoreError("dashboard snapshot has no index.html")
-                    self._active = destination
-                    self._sha256 = head.snapshot_sha256
+                    # The publisher can advance between the metadata probe and
+                    # restore. Only the restore's exact head describes these bytes.
+                    publication = DashboardPublication(destination, restored)
+                else:
+                    publication = DashboardPublication(publication.root, head)
+                previous = self._publication
+                self._publication = publication
+                if previous is not None and previous.root != publication.root:
+                    self._retired.add(previous.root)
+                self._prune_retired()
+            except Exception:
+                if destination is not None:
+                    self._retired.add(destination)
+                    self._prune_retired()
+                # A failed forced check also invalidates the ordinary cache TTL;
+                # following requests must not hide a known verification failure.
+                self._next_check = 0.0
+                raise
             self._next_check = now + self.refresh_seconds
-            return self._active
+            return publication
 
 
 def create_app(
@@ -154,30 +248,86 @@ def create_app(
     @app.get("/readyz")
     def ready():
         try:
-            cache.refresh()
-        except Exception:
+            with cache.read() as publication:
+                return jsonify(status="ready", dashboard=True, snapshot_sha256=publication.head.snapshot_sha256)
+        except Exception as exc:
+            app.logger.error("dashboard_refresh_failed exception_type=%s", type(exc).__name__)
             return jsonify(status="unavailable", dashboard=False), 503
-        return jsonify(status="ready", dashboard=True, snapshot_sha256=cache.sha256)
 
     @app.get("/")
     @app.get("/<path:filename>")
     def dashboard(filename: str = "index.html"):
+        lease = cache.read()
         try:
-            root = cache.refresh()
-        except Exception:
+            publication = lease.__enter__()
+        except Exception as exc:
+            app.logger.error("dashboard_refresh_failed exception_type=%s", type(exc).__name__)
             return jsonify(code="DASHBOARD_UNAVAILABLE", message="The latest verified dashboard is unavailable."), 503
-        candidate = safe_join(str(root), filename)
-        if candidate is None:
-            return jsonify(code="NOT_FOUND", message="The requested dashboard resource does not exist."), 404
-        target = Path(candidate)
-        if not target.is_file():
-            if "." not in Path(filename).name:
-                target = root / "index.html"
-            if not target.is_file():
+        released = False
+        release_guard = threading.Lock()
+
+        def release():
+            nonlocal released
+            with release_guard:
+                if released:
+                    return
+                released = True
+            lease.__exit__(None, None, None)
+
+        response = None
+        try:
+            root = publication.root
+            candidate = safe_join(str(root), filename)
+            if candidate is None:
+                release()
                 return jsonify(code="NOT_FOUND", message="The requested dashboard resource does not exist."), 404
-        response = _stream_dashboard_response(send_from_directory(root, target.relative_to(root).as_posix()), target)
-        response.headers["X-PolitiTrack-Snapshot"] = cache.sha256
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        return response
+            target = Path(candidate)
+            if not target.is_file():
+                if "." not in Path(filename).name:
+                    target = root / "index.html"
+                if not target.is_file():
+                    release()
+                    return jsonify(code="NOT_FOUND", message="The requested dashboard resource does not exist."), 404
+            response = send_from_directory(root, target.relative_to(root).as_posix())
+            response = _stream_dashboard_response(response, target)
+            response.headers["X-PolitiTrack-Snapshot"] = publication.head.snapshot_sha256
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            body = response.response
+            body_closed = False
+            close_guard = threading.Lock()
+
+            def close_body():
+                nonlocal body_closed
+                with close_guard:
+                    if body_closed:
+                        return
+                    body_closed = True
+                try:
+                    close = getattr(body, "close", None)
+                    if close:
+                        close()
+                finally:
+                    release()
+
+            def leased_body():
+                try:
+                    yield from body
+                finally:
+                    close_body()
+
+            # Direct-passthrough WSGI bodies can bypass Response.close callbacks.
+            # Cover exhaustion, client disconnect, and a body never iterated.
+            response.response = ClosingIterator(leased_body(), close_body)
+            response.call_on_close(close_body)
+            if request.method == "HEAD" or response.status_code in {204, 304}:
+                close_body()
+            return response
+        except Exception:
+            try:
+                if response is not None:
+                    response.close()
+            finally:
+                release()
+            raise
 
     return app

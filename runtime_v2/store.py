@@ -470,6 +470,16 @@ class PostgresSnapshotStore:
             finally:
                 connection.close()
 
+    def latest_head(self, namespace: str) -> SnapshotHead | None:
+        """Read committed head metadata without taking its producer's writer lock."""
+        if namespace not in NAMESPACES:
+            raise StateStoreError("unknown runtime state namespace")
+        connection = self._connect()
+        try:
+            return LockedNamespace(connection, namespace).head()
+        finally:
+            connection.close()
+
     def restore_latest(self, namespace: str, destination: Path) -> SnapshotHead:
         """Restore one immutable committed head without taking its writer lock.
 
