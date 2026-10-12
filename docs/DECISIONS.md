@@ -2073,3 +2073,39 @@ Show committed transaction-import progress independently of new optical extracti
 Preserve the latest proven import in the dashboard even when subsequent passes
 append zero rows or encounter an independent failure. Never let displayed progress
 override a genuine failure, unconfirmed commit, stale heartbeat or unknown evidence.
+
+## 2026-10-12 — Dashboard reads must not contend with publication (#265)
+
+Read a committed immutable dashboard snapshot without taking its producer's
+exclusive advisory lock. Validate its archive and manifest, and bind each
+response to the exact head returned by that restore. A metadata probe is only a
+change detector; it must not label bytes restored from a different generation.
+Reject missing, corrupt or regressed heads without silently selecting an older
+publication. Log a sanitized failure type so a generic dashboard error can be
+distinguished from a writer collision, database failure or filesystem failure.
+
+Retire only temporary publication directories owned by this cache instance, and
+only after every leased API read or streamed response has finished. Retain the
+current publication and protect in-flight readers. Failed staging directories
+are disposable; PostgreSQL snapshots, backups and arbitrary existing temporary
+directories are outside this cleanup boundary.
+
+## 2026-10-12 — Manual review belongs on the source review row (#265)
+
+Expose Acknowledge and Restore directly on Review / Sources using the existing
+authenticated, per-account, revision-checked personal review API. Success follows
+the durable commit. Keep account isolation, idempotency, Restore tombstones and
+the existing legacy parser identities unchanged.
+
+Project retained OCR `needs_review` receipts into the dashboard's review inventory
+without appending or rewriting producer evidence. Give each such review a distinct
+source-version identity tied to exact filing identity and retained document hash;
+when the document's bytes are unknown, use the actual receipt's attempt evidence
+conservatively so a later unknown version cannot inherit an old acknowledgement.
+Do not transfer legacy parser acknowledgements to this different review family.
+
+Acknowledging means the person reviewed that version. It does not approve OCR
+transaction extraction, import a trade, change a technical/source status, bypass
+an admission limit, or acknowledge another person's queue. Changed source versions
+remain reviewable while all prior personal history is retained. Source/CI
+acceptance and installation/live acceptance remain separate evidence.

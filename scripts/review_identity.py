@@ -15,8 +15,10 @@ from typing import Any, Mapping
 PAPER_REVIEW = "paper_filing_manual_review"
 UNPARSEABLE_TABLE = "unparseable_transaction_table"
 ACCESS_REQUIRED = "disclosure_access_required"
+SOURCE_OCR_REVIEW = "source_ocr_manual_review"
+SOURCE_OCR_UNAVAILABLE = "source_ocr_review_identity_unavailable"
 PARSER_CODES = frozenset({PAPER_REVIEW, UNPARSEABLE_TABLE,
-                          "missing_required_transaction_fields", "unsupported_disclosure_format"})
+                          "missing_required_transaction_fields", "unsupported_disclosure_format", SOURCE_OCR_REVIEW})
 
 
 def exception_code(row: Mapping[str, Any]) -> str:

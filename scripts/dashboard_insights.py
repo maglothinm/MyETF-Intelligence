@@ -19,12 +19,12 @@ from urllib.parse import parse_qsl, urlsplit
 
 try:
     from .source_ocr_health import branch_health, safe_metrics
-    from .review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
+    from .review_identity import ACCESS_REQUIRED, PARSER_CODES, SOURCE_OCR_UNAVAILABLE, exception_code, logical_review_id
     from .collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                       nonproduction_evidence, overall_status, production_run, trigger_source)
 except ImportError:  # pragma: no cover - direct-script execution
     from source_ocr_health import branch_health, safe_metrics
-    from review_identity import ACCESS_REQUIRED, PARSER_CODES, exception_code, logical_review_id
+    from review_identity import ACCESS_REQUIRED, PARSER_CODES, SOURCE_OCR_UNAVAILABLE, exception_code, logical_review_id
     from collector_freshness import (FRESHNESS_POLICY, REQUIRED_BRANCHES, branch_freshness,
                                      nonproduction_evidence, overall_status, production_run, trigger_source)
 
@@ -204,6 +204,8 @@ def _filing_identity(row: Mapping[str, Any]) -> tuple[str, str]:
 def review_category(row: Mapping[str, Any], filing: Mapping[str, Any] | None = None) -> str:
     """Separate request inventory from parser exceptions using retained fields."""
     code = row.get("exception_code")
+    if code == SOURCE_OCR_UNAVAILABLE:
+        return "other"
     if code == ACCESS_REQUIRED:
         return "access_required"
     if code in PARSER_CODES:
@@ -326,7 +328,7 @@ def _flat_record(row: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, A
 
 
 _FILING_PUBLIC = ("filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "status", "access_mode")
-_REVIEW_PUBLIC = ("review_id", "logical_review_id", "exception_code", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
+_REVIEW_PUBLIC = ("review_id", "logical_review_id", "exception_code", "review_kind", "review_identity_status", "ocr_error_code", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "title", "agency", "reason")
 _SIGNAL_PUBLIC = ("analysis_id", "trade_id", "filing_key", "filing_id", "filing_resolution", "source", "branch", "report_id", "filer", "owner", "ticker", "asset", "amount", "transaction_type", "classification")
 
 

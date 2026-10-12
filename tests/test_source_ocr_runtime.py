@@ -387,7 +387,8 @@ def test_upload_api_requires_owner_origin_account_and_existing_filing(intake,tmp
     (root/"data/filings.json").write_text(json.dumps([FILING]))
     account={"account_id":"owner"}
     app=Flask(__name__);app.config.update(RUNTIME_SOURCE_OCR_ENABLED=True,RUNTIME_SOURCE_OCR_ACCOUNT_IDS="owner",RUNTIME_REVIEW_ORIGIN="https://dashboard.test")
-    app.register_blueprint(create_blueprint(SimpleNamespace(account_for_session=lambda token:account if token=="valid" else None),SimpleNamespace(refresh=lambda:root),intake))
+    from contextlib import nullcontext
+    app.register_blueprint(create_blueprint(SimpleNamespace(account_for_session=lambda token:account if token=="valid" else None),SimpleNamespace(read=lambda:nullcontext(SimpleNamespace(root=root))),intake))
     client=app.test_client()
     assert client.get("/api/source-ocr/status").status_code==401
     client.set_cookie(COOKIE,"valid")
@@ -403,6 +404,55 @@ def test_upload_api_requires_owner_origin_account_and_existing_filing(intake,tmp
     assert intake.pending("legislative")[0]["page_count"] == 37
     app.config["RUNTIME_SOURCE_OCR_ACCOUNT_IDS"] = "different-owner"
     assert client.post(url, data=multipage_source(37), headers=headers).status_code == 403
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_source_inventory_lease_covers_file_read_and_releases_on_errors(tmp_path, monkeypatch, malformed):
+    from contextlib import contextmanager
+    from pathlib import Path
+    from flask import Flask
+    from runtime_v2.source_ocr_api import create_blueprint
+
+    root = tmp_path / "site"
+    (root / "data").mkdir(parents=True)
+    target = root / "data/filings.json"
+    target.write_text(json.dumps([FILING]))
+    active = False
+    transitions = []
+
+    @contextmanager
+    def read():
+        nonlocal active
+        active = True
+        transitions.append("acquire")
+        try:
+            yield SimpleNamespace(root=root)
+        finally:
+            active = False
+            transitions.append("release")
+
+    def inbox_read(_):
+        assert not active, "Parsed filing data does not require a lease during an inbox read"
+        return []
+
+    original = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        if path == target:
+            assert active, "Source inventory read an unleased publication"
+            if malformed:
+                return "{"
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read)
+    app = Flask(__name__)
+    app.config.update(RUNTIME_SOURCE_OCR_ENABLED=True, RUNTIME_SOURCE_OCR_ACCOUNT_IDS="owner")
+    accounts = SimpleNamespace(account_for_session=lambda _: {"account_id": "owner"})
+    app.register_blueprint(create_blueprint(accounts, SimpleNamespace(read=read), SimpleNamespace(read=inbox_read)))
+    response = app.test_client().get("/api/source-ocr/status")
+    assert response.status_code == (503 if malformed else 200)
+    assert transitions == ["acquire", "release"]
+    assert not active
 
 
 def test_evidence_disk_failure_aborts_instead_of_acknowledging(tmp_path,monkeypatch):

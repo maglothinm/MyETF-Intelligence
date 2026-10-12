@@ -230,7 +230,8 @@ def main(argv: list[str] | None = None) -> int:
             payload = json.loads(base64.b64decode(args.payload_base64, validate=True))
             if not isinstance(payload, dict) or payload.get("version") != 1:
                 raise ReviewError("INVALID_IMPORT", "Recovery data must use the existing version-1 format.")
-            identities = publication_identities(DashboardCache(store).refresh())
+            with DashboardCache(store).read() as publication:
+                identities = publication_identities(publication.root)
             result = personal.import_legacy(args.account_id, payload.get("acknowledged"), identities, source="owner_recovery")
         print(json.dumps(result, sort_keys=True))
         return 0

@@ -1,5 +1,31 @@
 # PolitiTrack project state
 
+## October 12 #265 — Dashboard/source-review repair tested locally; live preflight resumed
+
+The owner reports a recurring `DASHBOARD_UNAVAILABLE` response at the native
+dashboard and requests direct acknowledgement on Review / Sources. The
+canonical source baseline is `d77ccfcd5d86d9867c284ef75ab87968321963eb`, repository
+ID **1349678672**. The web reader's exclusive dashboard writer lock is a concrete
+availability defect; a lock-free immutable read already exists elsewhere in the
+store. The route's generic failure response prevents the screenshot alone from
+distinguishing lock contention from database, archive or filesystem failures.
+
+Implementation and independent review are complete on
+`codex/dashboard-review-20261012`, with durable personal review controls extended
+to read-only OCR review projections and leased cleanup of obsolete dashboard
+copies. Local checks passed: 128 runtime/API tests with 23 optional integration
+skips, 120 projection/dashboard tests, and 90 generated-dashboard DOM scenarios.
+Canonical CI, including real PostgreSQL and Chromium, remains pending.
+
+The owner reconnected Beast. The `11:18:45 UTC` preflight verifies installed and
+configured source `1fc7b71182aeb5eb7f47325635dde34d417c1180`, all native services
+Running/Automatic, approximately 560 GB free on C:, and 1,435 retained temporary
+dashboard directories. `/readyz` returned HTTP 200. The earlier screenshot alone
+does not identify its exact exception. No live service, database, source limit,
+account review or schedule was changed by this preflight.
+Native PostgreSQL heads remain authoritative; no GitHub recovery artifact was
+selected, restored or replaced. See the active [handoff](HANDOFF.md) and #265.
+
 ## October 7 #261 follow-through complete - OCR health and imported transactions visible
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`, `main`.

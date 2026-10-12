@@ -1333,6 +1333,111 @@ async function signIn(env,name='alice'){
   await waitFor(()=>env.byId('review-account-button').textContent===name&&!env.byId('review-account-submit').disabled,'sign in');
 }
 
+function sourceReviewFixture(data){
+  reviewFixture(data);
+  const filing=data.filings[0];
+  Object.assign(filing,{source:'oge',branch:'executive',report_id:'fixture-source-review',filer:'Fixture Executive Official',
+    ocr_status:'needs_review',ocr_error_code:'upload_confirmation_required'});
+  const base={...data['pending-reviews'][0],source:filing.source,branch:filing.branch,report_id:filing.report_id,
+    filer:filing.filer,source_url:filing.source_url,filing_key:filing.filing_key,filing_available:true};
+  publishReviews(data,[
+    {...base,review_id:'legacy-source-review',logical_review_id:'review-logical-v1:'+'a'.repeat(32),exception_code:'paper_filing_manual_review'},
+    {...base,review_id:'ocr-source-review',logical_review_id:'review-logical-v1:'+'b'.repeat(32),
+      exception_code:'source_ocr_manual_review',review_kind:'source_ocr',review_identity_status:'available',
+      ocr_status:'needs_review',ocr_error_code:'upload_confirmation_required',reason:'Source OCR requires manual review: upload confirmation required.'},
+    {...base,review_id:'orphan-source-review',logical_review_id:'review-logical-v1:'+'c'.repeat(32),filing_available:false,filing_key:''},
+    {...base,review_id:'access-source-review',category:'access_required'},
+    {...base,review_id:'unavailable-source-review',category:'other',review_kind:'source_ocr',review_identity_status:'unavailable'},
+    {...base,review_id:'TEST-source-review',is_synthetic_test:true}
+  ]);
+}
+
+const sourceReviewButton=(env,id,panel='reviews')=>[...env.byId(panel+'-body').querySelectorAll('[data-review-ack]')].find(button=>button.dataset.reviewAck===id);
+
+test('source review queue acknowledges directly after commit, ignores repeat clicks, and restores from source detail',async t=>{
+  const server=createReviewServer(),env=await dashboard({change:sourceReviewFixture,reviewServer:server,hash:'#records/reviews'});t.after(env.close);
+  await waitFor(()=>sourceReviewButton(env,'ocr-source-review'),'direct review controls');
+  const before=copy(env.data),hash=env.window.location.hash;
+  assert.equal(env.byId('reviews-body').querySelectorAll('[data-review-ack]').length,3);
+  assert.match(sourceReviewButton(env,'ocr-source-review').closest('td').textContent,/Source OCR review/);
+  assert.equal(sourceReviewButton(env,'access-source-review'),undefined);
+  assert.equal(sourceReviewButton(env,'unavailable-source-review'),undefined);
+  assert.equal(sourceReviewButton(env,'TEST-source-review'),undefined);
+  let release;server.beforeSave=()=>new Promise(resolve=>{release=resolve;});
+  sourceReviewButton(env,'ocr-source-review').click();
+  await waitFor(()=>release,'source acknowledgement pending');
+  sourceReviewButton(env,'ocr-source-review').click();
+  assert.equal(server.requests.filter(request=>request.route==='acknowledgements').length,1);
+  assert.equal(env.byId('attention-exceptions').textContent,'3');
+  assert.equal(savedReviews(env).length,0);
+  assert.equal(env.window.location.hash,hash,'The direct action must not navigate to a source record');
+  release();await waitFor(()=>savedReviews(env).length===1&&!sourceReviewButton(env,'ocr-source-review').disabled,'source save committed');
+  server.beforeSave=null;
+  assert.equal(sourceReviewButton(env,'ocr-source-review').textContent,'Restore to active review');
+  assert.match(env.byId('review-save-note').textContent,/acknowledged and saved/);
+  assert.equal(sourceReviewButton(env,'legacy-source-review').dataset.acknowledged,'false','Legacy review is a distinct decision');
+  assert.deepEqual(env.data,before,'Personal acknowledgement cannot approve uploads or change source evidence');
+  await env.refresh();
+  assert.equal(sourceReviewButton(env,'ocr-source-review').dataset.acknowledged,'true');
+  await env.navigate('#records/filings?filing='+encodeURIComponent(env.data.filings[0].filing_key),()=>sourceReviewButton(env,'ocr-source-review','filings'));
+  const detail=sourceReviewButton(env,'ocr-source-review','filings');
+  assert.equal(detail.textContent,'Restore to active review');
+  assert.equal(sourceReviewButton(env,'legacy-source-review','filings').dataset.acknowledged,'false');
+  detail.click();await waitFor(()=>savedReviews(env).length===0&&!sourceReviewButton(env,'ocr-source-review','filings').disabled,'restore source review');
+  assert.equal(env.doc.activeElement.dataset.reviewAckSurface,'filings-detail','Focus remains on the visible source action');
+  assert.equal(env.byId('attention-exceptions').textContent,'3');
+  assert.deepEqual(env.errors,[]);
+});
+
+test('direct source detail loads the validated review inventory and preserves context through sign-in',async t=>{
+  const hash='#records/filings?filing=fixture-0';
+  const env=await dashboard({change:sourceReviewFixture,signedOut:true,hash});t.after(env.close);
+  await waitFor(()=>sourceReviewButton(env,'ocr-source-review','filings'),'source detail review inventory');
+  assert.ok(env.requests.includes('pending-reviews'));
+  assert.equal(sourceReviewButton(env,'ocr-source-review','filings').textContent,'Sign in to acknowledge');
+  sourceReviewButton(env,'ocr-source-review','filings').click();
+  assert.equal(env.byId('review-account-dialog').open,true);
+  assert.equal(env.reviewServer.requests.filter(request=>request.route==='acknowledgements').length,0);
+  await signIn(env);
+  assert.equal(env.window.location.hash,hash);
+  assert.equal(sourceReviewButton(env,'ocr-source-review','filings').textContent,'Acknowledge manual review');
+  sourceReviewButton(env,'ocr-source-review','filings').click();await waitFor(()=>savedReviews(env).length===1&&!sourceReviewButton(env,'ocr-source-review','filings').disabled,'signed in source save');
+  assert.equal(env.data.filings[0].ocr_status,'needs_review');
+  assert.deepEqual(env.errors,[]);
+});
+
+test('direct source acknowledgement failure keeps prior state and successful filtered saves have visible feedback and restore',async t=>{
+  const server=createReviewServer();server.failSave=true;
+  const env=await dashboard({change:sourceReviewFixture,reviewServer:server,hash:'#records/reviews?category=manual_exception'});t.after(env.close);
+  await waitFor(()=>sourceReviewButton(env,'ocr-source-review'),'source manual filter');
+  sourceReviewButton(env,'ocr-source-review').click();
+  await waitFor(()=>!env.byId('review-save-note').hidden&&!sourceReviewButton(env,'ocr-source-review').disabled,'failed source save');
+  assert.equal(savedReviews(env).length,0);
+  assert.equal(env.byId('attention-exceptions').textContent,'3');
+  assert.match(env.byId('review-save-note').textContent,/unavailable/);
+  assert.doesNotMatch(env.byId('review-save-note').textContent,/saved to your account/);
+  server.failSave=false;sourceReviewButton(env,'ocr-source-review').click();
+  await waitFor(()=>savedReviews(env).length===1&&sourceReviewButton(env,'ocr-source-review')===undefined,'filtered save');
+  assert.match(env.byId('review-save-note').textContent,/acknowledged and saved/);
+  assert.equal(env.doc.activeElement.id,'toggle-acknowledged-reviews');
+  env.byId('toggle-acknowledged-reviews').click();
+  assert.equal(sourceReviewButton(env,'ocr-source-review').textContent,'Restore to active review');
+});
+
+test('a direct source save from a stale revision refreshes account state without acknowledging the wrong review',async t=>{
+  const env=await dashboard({change:sourceReviewFixture,hash:'#records/reviews'});t.after(env.close);
+  await waitFor(()=>sourceReviewButton(env,'ocr-source-review'),'source review action');
+  const person=env.reviewServer.people.get('alice'),legacy=env.data['pending-reviews'][0];
+  person.rows.set(legacy.logical_review_id,{id:legacy.review_id,logical_review_id:legacy.logical_review_id,acknowledged_at_utc:'2026-08-30T12:00:00Z'});
+  person.revision++;
+  sourceReviewButton(env,'ocr-source-review').click();
+  await waitFor(()=>!env.byId('review-save-note').hidden&&!sourceReviewButton(env,'ocr-source-review').disabled,'stale source review rejection');
+  assert.match(env.byId('review-save-note').textContent,/changed in another session/);
+  assert.equal(sourceReviewButton(env,'legacy-source-review').dataset.acknowledged,'true');
+  assert.equal(sourceReviewButton(env,'ocr-source-review').dataset.acknowledged,'false');
+  assert.equal(savedReviews(env).length,1);
+});
+
 test('account acknowledgement survives clearing all browser storage, reload and signing in again',async t=>{
   const server=createReviewServer();
   const env=await dashboard({change:stableReviewFixture,reviewServer:server});t.after(env.close);

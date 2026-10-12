@@ -14,13 +14,14 @@
   const filterLabel=field=>field==="category"?"Review status":title(field);
   const allLabel=field=>field==="source"?"All Sources":field==="category"?"All review statuses":`All ${title(field).toLowerCase()}`;
   const state={model:null,data:{},tables:{},edge:null,loading:false,section:"overview",record:"filings",showAcknowledgedReviews:false,nextRefreshAt:Date.now()+300000,renderedAt:null,healthViewKey:null,changes:{},refreshError:false};
-  let reviewAcknowledgements=[],reviewSavePending=false,reviewMessage="";
+  let reviewAcknowledgements=[],reviewSavePending=false,reviewMessage="",reviewSaveResult="";
   let runControls=null,runAccountId=null;
   let reviewActivation=new URLSearchParams(location.hash.startsWith("#review-account?")?location.hash.split("?",2)[1]:"").get("activate")||"";
   if(reviewActivation)history.replaceState(null,"","#records/reviews?category=manual_exception");
   const personalReviews=new PolitiTrackPersonalReviews({onChange:value=>{
     reviewAcknowledgements=value.acknowledged;
     const accountId=value.status==="ready"?value.account.id:null;
+    if(accountId!==runAccountId)reviewSaveResult="";
     if(runControls&&accountId!==runAccountId){runAccountId=accountId;runControls.changedAccount();if(state.section==="operations")runControls.load();}
     if(value.status!=="ready")state.showAcknowledgedReviews=false;
     renderReviewAccount();if(state.model)renderReviewAcknowledgementViews();
@@ -72,9 +73,15 @@
     el("review-legacy-import").hidden=!ready||!legacy;
     el("review-legacy-note").textContent=ready&&legacy?`${legacy.acknowledged.length} older acknowledgements were saved on this browser. Import them into ${account.username} only if they belong to you. Later restores in your account will be preserved.`:"";
     el("review-account-error").textContent=reviewMessage;el("review-account-error").hidden=!reviewMessage;
-    el("review-save-note").textContent=reviewMessage;el("review-save-note").hidden=!reviewMessage;
+    el("review-save-note").textContent=reviewMessage||reviewSaveResult;el("review-save-note").hidden=!(reviewMessage||reviewSaveResult);
   }
   const reviewAcknowledgedAt=row=>row?.category==="manual_exception"?acknowledgementFor(row.review_id,row.logical_review_id||state.model?.reviews?.manual_exception_identities?.[row.review_id])?.acknowledged_at_utc||"":"";
+  function reviewAcknowledgementControl(row,surface){
+    if(row.category!=="manual_exception"||row.is_synthetic_test===true)return "";
+    const at=reviewAcknowledgedAt(row),label=reviewSavePending?"Saving…":personalReviews.state.status!=="ready"?"Sign in to acknowledge":at?"Restore to active review":"Acknowledge manual review";
+    const context=[row.filer,row.report_id,row.review_kind==="source_ocr"?`Source OCR · ${title(row.ocr_error_code||"manual review")}`:"Parser exception"].filter(Boolean).join(" · ");
+    return `<div class="review-acknowledgement-control">${surface!=="list"?`<small>${esc(context)}</small>`:""}<button type="button" data-review-ack="${esc(row.review_id)}" data-review-ack-surface="${esc(surface)}" data-acknowledged="${at?"true":"false"}" aria-label="${esc(label+" for "+context)}" ${reviewSavePending?"disabled":""}>${label}</button></div>`;
+  }
   function manualReviewStats(model=state.model){
     const ids=Array.isArray(model?.reviews?.manual_exception_ids)?model.reviews.manual_exception_ids:[];
     const acknowledged=ids.filter(id=>acknowledgementFor(id,model.reviews.manual_exception_identities?.[id])).length;
@@ -89,22 +96,30 @@
   }
   function renderExceptionInventory(model=state.model){
     if(!model)return;const bad=model.health.branches.filter(b=>b.status!=="success");
-    el("exceptions-list").innerHTML=bad.map(b=>`<div class="activity-row"><span class="${b.status}" aria-hidden="true">${b.status==="stale"?"◷":b.status==="unknown"?"◌":"!"}</span><div><strong>${esc(PT.branchLabel(b.branch))}: ${statusText(b.status)}</strong><p>${esc(b.errors.join("; ")||PT.healthDetail(b))}</p>${link(b.run_url,"Run evidence")}</div></div>`).join("")+model.reviews.latest.filter(r=>r.category==="manual_exception"&&!reviewAcknowledgedAt(r)).slice(0,2).map(r=>`<div class="activity-row"><span class="caution" aria-hidden="true">!</span><div><strong>Manual Parser Exception · ${esc(r.filer||"Unknown filer")}</strong><p>${esc(r.reason)}</p><a href="#records/reviews?category=manual_exception">Inspect parser exceptions →</a></div></div>`).join("")+`<div class="activity-row"><span aria-hidden="true">ⓘ</span><div><strong>${number(model.reviews.access_required)} access/request-required records</strong><p>Disclosure access inventory, not a red system failure. ${number(model.reviews.other)} other/uncategorized review items.</p></div></div>`;
+    el("exceptions-list").innerHTML=bad.map(b=>`<div class="activity-row"><span class="${b.status}" aria-hidden="true">${b.status==="stale"?"◷":b.status==="unknown"?"◌":"!"}</span><div><strong>${esc(PT.branchLabel(b.branch))}: ${statusText(b.status)}</strong><p>${esc(b.errors.join("; ")||PT.healthDetail(b))}</p>${link(b.run_url,"Run evidence")}</div></div>`).join("")+model.reviews.latest.filter(r=>r.category==="manual_exception"&&!reviewAcknowledgedAt(r)).slice(0,2).map(r=>`<div class="activity-row"><span class="caution" aria-hidden="true">!</span><div><strong>${r.review_kind==="source_ocr"?"Source OCR review":"Manual Parser Exception"} · ${esc(r.filer||"Unknown filer")}</strong><p>${esc(r.reason)}</p><a href="#records/reviews?category=manual_exception">Inspect manual reviews →</a></div></div>`).join("")+`<div class="activity-row"><span aria-hidden="true">ⓘ</span><div><strong>${number(model.reviews.access_required)} access/request-required records</strong><p>Disclosure access inventory, not a red system failure. ${number(model.reviews.other)} other/uncategorized review items.</p></div></div>`;
   }
-  function renderReviewAcknowledgementViews(focusId=""){
+  function renderReviewAcknowledgementViews(focusId="",surface=""){
     renderReviewAttention();renderExceptionInventory();
     if(Array.isArray(state.data.reviews))renderTable("reviews");else reviewSummary();
     if(Array.isArray(state.data.filings))renderTable("filings");
-    if(focusId){const replacement=[...document.querySelectorAll("[data-review-ack]")].find(node=>node.dataset.reviewAck===focusId);replacement?.focus({preventScroll:true});}
+    if(focusId&&state.section==="records"&&!document.querySelector("dialog[open]")){
+      const matches=[...document.querySelectorAll("[data-review-ack]")].filter(node=>node.dataset.reviewAck===focusId&&!node.closest("[hidden]"));
+      const replacement=matches.find(node=>node.dataset.reviewAckSurface===surface)||matches[0];
+      const target=replacement||(state.record==="reviews"?(el("toggle-acknowledged-reviews")||el("reviews-count-label")):null);
+      if(target){if(!replacement&&target.tagName!=="BUTTON")target.setAttribute("tabindex","-1");target.focus({preventScroll:true});}
+    }
   }
-  async function setReviewAcknowledged(id,acknowledged){
+  async function setReviewAcknowledged(id,acknowledged,surface){
     if(reviewSavePending||!state.model?.reviews?.manual_exception_ids?.includes(id))return;
     if(personalReviews.state.status!=="ready"){openDialog("review-account-dialog");return;}
-    const identity=state.model.reviews.manual_exception_identities?.[id]||"";
-    reviewSavePending=true;reviewMessage="";renderReviewAccount();renderReviewAcknowledgementViews(id);
-    try{await personalReviews.save(id,identity,acknowledged);}
+    const identity=state.model.reviews.manual_exception_identities?.[id]||"",accountId=personalReviews.state.account.id;
+    reviewSavePending=true;reviewMessage="";reviewSaveResult="";renderReviewAccount();renderReviewAcknowledgementViews(id,surface);
+    try{await personalReviews.save(id,identity,acknowledged);
+      if(personalReviews.state.account?.id===accountId&&personalReviews.state.status==="ready"&&Boolean(acknowledgementFor(id,identity))===acknowledged)
+        reviewSaveResult=acknowledged?"Manual review acknowledged and saved to your account.":"Restored to your active manual reviews.";
+    }
     catch(error){reviewMessage=error.message;if(error.code==="SIGN_IN_REQUIRED")openDialog("review-account-dialog");}
-    finally{reviewSavePending=false;renderReviewAccount();renderReviewAcknowledgementViews(id);}
+    finally{reviewSavePending=false;renderReviewAccount();renderReviewAcknowledgementViews(id,surface);}
   }
   const dateLabel=key=>({filed_date:"Filing date",transaction_date:"Transaction date",observed_at_utc:"PolitiTrack observation date",first_seen_utc:"First observed date",analyzed_at_utc:"Analysis date",opened_at_utc:"Position opened date",last_updated_utc:"Valuation date",finished_utc:"Run finished date",started_utc:"Run started date"}[key]||title(key));
   function resetTable(key){
@@ -166,7 +181,7 @@
   function cell(row,field,type){let v=get(row,field);if(["investor_edge_relevant_followable_alpha","investor_edge_sector_alpha","investor_edge_score"].includes(field)&&(["insufficient_data","unavailable","disabled","error","neutral"].includes(row.investor_edge_status)||row.investor_edge?.minimum_sample_met===false))v=null;if(field==="final_score")v=v??row.score;
     if(type==="review")return `<a class="record-link" href="${esc(reviewHref(row))}"><strong>${esc(row.filer||"Unknown filer")}</strong><small>${esc(row.report_id||row.review_id||"Record ID unavailable")}</small><span>Inspect record →</span></a><small>${esc([row.title,row.agency].filter(Boolean).join(" · "))}</small>${row.is_synthetic_test===true?'<small class="caution">TEST / SIMULATED</small>':""}`;
     if(type==="age")return `${esc(date(v))}<small>${esc(age(v))}</small>`;
-    if(field==="category"){const acknowledged=reviewAcknowledgedAt(row);return `<span class="badge ${v==="manual_exception"?"caution":""}">${esc(reviewLabels[v]||"Uncategorized")}</span>${acknowledged?`<small class="success">✓ Acknowledged by you ${esc(date(acknowledged))}</small>`:""}`;}
+    if(field==="category"){const acknowledged=reviewAcknowledgedAt(row);return `<span class="badge ${v==="manual_exception"?"caution":""}">${esc(row.review_kind==="source_ocr"?"Source OCR review":reviewLabels[v]||"Uncategorized")}</span>${row.review_kind==="source_ocr"&&row.review_identity_status==="unavailable"?"<small>Acknowledgement unavailable</small>":""}${acknowledged?`<small class="success">✓ Acknowledged by you ${esc(date(acknowledged))}</small>`:""}${reviewAcknowledgementControl(row,"list")}`;}
     if(field==="source"||field==="branch")return esc(title(v||"Unavailable"));
     if(type==="date")return esc(date(v));if(type==="money")return esc(money(v));if(type==="percent")return esc(percent(v));if(type==="number")return esc(number(v));if(type==="link")return field==="run_url"?link(v,"Open run"):PT.filingActions(row);
     if(type==="discovery"){
@@ -191,7 +206,7 @@
   }
   function recordDetails(row,key){
     const review=key==="reviews",retainedReviews=(review?[row]:(state.data.reviews||[]).filter(r=>r.filing_available===true&&r.filing_key===row.filing_key)).filter(r=>r.is_synthetic_test!==true),manualReviews=retainedReviews.filter(r=>r.category==="manual_exception"),acknowledged=manualReviews.map(reviewAcknowledgedAt).filter(Boolean);
-    const acknowledgementControls=manualReviews.map(item=>{const at=reviewAcknowledgedAt(item);return `<button type="button" data-review-ack="${esc(item.review_id)}" data-acknowledged="${at?"true":"false"}" ${reviewSavePending?"disabled":""}>${reviewSavePending?"Saving…":personalReviews.state.status!=="ready"?"Sign in to acknowledge":at?"Restore to active review":"Acknowledge manual review"}</button>`;}).join("");
+    const acknowledgementControls=manualReviews.map(item=>reviewAcknowledgementControl(item,key+"-detail")).join("");
     return `<tr class="record-details"><td colspan="${definitions[key].columns.length}"><h3 tabindex="-1" id="selected-${key}-title">Selected source record · ${esc(row.filer||row.report_id||"Unknown filer")}</h3><dl class="facts">${fact("Filing / source ID",row.report_id)}${fact("Retained record ID",review?row.review_id:row.filing_key)}${fact("Source / branch",[title(row.source),title(row.branch)].join(" / "))}${fact("Coverage status",title(row.filing_status||row.status||"Unavailable"))}${fact("Document date",date(row.filed_date))}${fact("Observed by PolitiTrack",date(row.observed_at_utc||row.first_seen_utc))}${fact("Review status",review?reviewLabels[row.category]:retainedReviews.length?reviewLabels[retainedReviews[0].category]:title(row.status))}${manualReviews.length?fact("Your acknowledgement",personalReviews.state.status!=="ready"?"Sign in to see your saved status":acknowledged.length===manualReviews.length?`Saved to your account ${date(acknowledged[0])}`:"Needs acknowledgement"):""}</dl><p class="record-reason">${esc(retainedReviews.map(r=>r.reason).filter(Boolean).join(" · ")||row.review_reason||"No retained review reason.")}</p>${PT.filingActions(row)}${window.PT.sourceOcrActions ? window.PT.sourceOcrActions(row) : ""}${acknowledgementControls?`<div class="review-acknowledgement-actions">${acknowledgementControls}</div>`:""}<p class="chart-note">${review?"No matching filing is retained in this publication. This is the original review record. ":""}${manualReviews.length?`Acknowledgements are saved to your personal account and remain available after browser data is cleared. They do not resolve, delete, or modify the production review record. `:""}Source uploads are staged for the existing producer; they do not directly overwrite published evidence.</p><a href="#records/reviews?category=manual_exception">Back to active Manual Parser Exceptions →</a></td></tr>`;
   }
   function renderTable(key){const def=definitions[key],t=state.tables[key],data=state.data[key];if(!Array.isArray(data))return;
@@ -237,6 +252,7 @@
     for(const key of ["filings","transactions","reviews"])el(`panel-${key}`).hidden=key!==state.record;
     document.querySelectorAll("[data-record]").forEach(a=>{if(a.dataset.record===state.record)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
     el("review-categories").hidden=state.record!=="reviews";
+    if(section==="records"&&state.record==="filings"&&state.tables.filings.selected)await loadTable("reviews");
     if(section==="investor-edge")await loadEdge();if(section==="records")await loadTable(state.record);if(section==="signals")await loadTable("ai");if(section==="agent")await loadTable("portfolio");if(section==="operations")await loadTable("runs");
     // Do not let a slow route move a newer page or steal an open dialog's focus.
     if(location.hash!==navigationHash||document.querySelector("dialog[open]"))return;
@@ -347,7 +363,7 @@
     const same=e.target.closest('a[href^="#records/"]');if(same&&same.getAttribute("href")===location.hash)navigate();
   });
   document.addEventListener("click",e=>{const a=e.target.closest("[data-ack]"),s=e.target.closest("[data-snooze]");if(a)notificationAction(()=>notifications.acknowledge(a.dataset.ack));if(s)notificationAction(()=>notifications.snooze(s.dataset.snooze,60));if(e.target.closest("[data-notification-link]"))el("notifications-dialog").close();});
-  document.addEventListener("click",e=>{const button=e.target.closest("[data-review-ack]");if(button)setReviewAcknowledged(button.dataset.reviewAck,button.dataset.acknowledged!=="true");});
+  document.addEventListener("click",e=>{const button=e.target.closest("[data-review-ack]");if(button)setReviewAcknowledged(button.dataset.reviewAck,button.dataset.acknowledged!=="true",button.dataset.reviewAckSurface);});
   el("acknowledge-all").onclick=()=>notificationAction(()=>notifications.acknowledge("all"));
   el("mute-categories").addEventListener("change",e=>{if(e.target.dataset.mute){const category=e.target.dataset.mute,muted=e.target.checked;notificationAction(()=>notifications.mute(category,muted));}});
   el("sound-mode").onchange=e=>notificationAction(()=>notifications.setSettings({mode:e.target.value}));el("sound-volume").onchange=e=>notificationAction(()=>notifications.setSettings({volume:Number(e.target.value)/100}));

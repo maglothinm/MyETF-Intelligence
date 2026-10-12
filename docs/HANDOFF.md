@@ -1,5 +1,57 @@
 # PolitiTrack active handoff
 
+## October 12 #265 — Dashboard availability and direct source-review acknowledgements
+
+Active work is on `codex/dashboard-review-20261012`, based on canonical
+`main` `d77ccfcd5d86d9867c284ef75ab87968321963eb`, repository ID **1349678672**
+(`maglothinm/MyETF-Intelligence`). The owner supplied the local
+`/index.html#records` error `DASHBOARD_UNAVAILABLE` and requested acknowledgement
+of a manually reviewed filing directly from Review / Sources.
+
+The web cache still took the publisher's exclusive advisory lock, despite the
+existing lock-free committed-snapshot read path. That contention can produce
+the exact reported response. The same path was identified as an unproven live
+cause in the September 20 continuity receipt. The generic response also covers
+database, archive and filesystem errors; today's precise Beast exception is
+not established by the screenshot or the retained web logs. Beast is reconnected
+and read-only live diagnosis is in progress.
+
+The repair reads and validates committed immutable dashboard snapshots without
+competing for the writer lock, binds response bytes to the exact restored head,
+and retains failures for invalid or missing state. Direct review-row controls
+reuse durable authenticated personal history. An additive dashboard projection
+also makes OCR-only manual-review receipts eligible, with identities scoped to
+the source document version. This records human review without approving an
+extraction or importing transactions. No real filing has been acknowledged by
+this development session.
+
+**Current checkpoint:** implementation and independent code review are complete.
+Local checks passed: 128 cache/runtime/API tests (23 optional/PostgreSQL/native
+skips), 120 projection/dashboard tests, and all 90 generated-dashboard Node DOM
+checks. Canonical CI, including real PostgreSQL contention and Chromium desktop/
+mobile checks, is pending. Source/JSON/CSV consistency and unchanged producer
+fixture bytes were verified. No real filing was acknowledged by those checks.
+
+The owner reconnected Beast. A fresh check at `2026-10-12T11:18:45Z` verified
+installed HEAD and configured source revision
+`1fc7b71182aeb5eb7f47325635dde34d417c1180`, the canonical origin, and the preserved
+untracked `legislative-source-status.json`. All three native services are Running/
+Automatic; Database service PID is 7852. C: has approximately 560 GB free and
+there are 1,435 `polititrack-site-*` temporary directories. `/readyz` returned
+HTTP 200 with snapshot SHA256
+`8a9fac80dbf0109ff43565357b87b858df621b7a3e76ba9aae26c98251935201`.
+This establishes recovery at that observation, not the cause of the earlier 503.
+No native service, configuration, snapshot, account or schedule has been changed.
+
+**Next safe action:** publish the locally tested and independently reviewed
+change through canonical CI, then use the existing native release boundary
+on the reconnected Beast. Reinspect installed source, current writer locks and disk
+space; verify the current backup and obtain a fresh frozen export before an
+installation. Preserve all previous snapshot headers, ledger prefixes, filing/
+trade/review IDs, source limits and account history. Separately verify served
+dashboard responses and source-review behaviour. Keep #265 open until live
+acceptance succeeds; do not substitute an earlier dashboard or initialize state.
+
 ## October 7 #261 follow-through complete - OCR health and imported transactions visible
 
 Canonical repository ID **1349678672**, `maglothinm/MyETF-Intelligence`, `main`.
